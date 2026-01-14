@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Configuração atualizada para o Prisma 7 aceitar a URL da Render no build
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
+});
 
 export async function POST(req: Request) {
   try {
@@ -36,7 +43,6 @@ export async function POST(req: Request) {
     await prisma.workout.deleteMany({ where: { userId: userId } });
 
     // 2. Mapeia e garante que o exercício exista na biblioteca
-    // Usamos o loop 'for' para evitar problemas de concorrência com o Prisma
     const exerciciosCriados = [];
     for (const ex of exerciciosParaSalvar) {
       const dbEx = await prisma.exercise.upsert({
@@ -52,7 +58,7 @@ export async function POST(req: Request) {
         title: ex.title,
         reps: ex.reps,
         notes: ex.notes,
-        exerciseId: dbEx.id // Referência direta para evitar erro de objeto aninhado
+        exerciseId: dbEx.id 
       });
     }
 
@@ -79,3 +85,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Erro ao salvar no banco" }, { status: 500 });
   }
 }
+
+// Força a rota a ser dinâmica para evitar erro de coleta de dados no build da Render
+export const dynamic = 'force-dynamic';
