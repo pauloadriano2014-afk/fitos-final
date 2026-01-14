@@ -1,28 +1,37 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Inicializa a IA
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// 1. Verificação da Chave
+const apiKey = process.env.GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(apiKey || '');
 
 export async function POST(req: Request) {
   try {
     const { image } = await req.json();
 
     if (!image) {
+      console.error("ERRO: Nenhuma imagem recebida no backend.");
       return NextResponse.json({ error: "Imagem não fornecida" }, { status: 400 });
     }
 
-    // O NOME DO MODELO DEVE SER EXATAMENTE ESTE PARA A VERSÃO ESTÁVEL
+    if (!apiKey) {
+      console.error("ERRO: GEMINI_API_KEY não configurada na Render!");
+      return NextResponse.json({ error: "Chave de API ausente" }, { status: 500 });
+    }
+
+    // 2. Modelo Estável
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const prompt = "Analise esta foto de um rótulo de suplemento/alimento e extraia os ingredientes e tabela nutricional. Identifique se há substâncias nocivas ou excesso de açúcares.";
+    // 3. Limpeza da imagem base64
+    const base64Data = image.includes(',') ? image.split(',')[1] : image;
 
-    // Ajuste na estrutura da chamada para evitar o erro de v1beta
+    console.log("🚀 Iniciando chamada ao Gemini...");
+
     const result = await model.generateContent([
-      prompt,
+      "Analise este rótulo e extraia os ingredientes principais e se há algo nocivo.",
       {
         inlineData: {
-          data: image.split(',')[1], // Remove o prefixo data:image/jpeg;base64,
+          data: base64Data,
           mimeType: "image/jpeg",
         },
       },
@@ -31,10 +40,12 @@ export async function POST(req: Request) {
     const response = await result.response;
     const text = response.text();
 
+    console.log("✅ Análise concluída com sucesso!");
     return NextResponse.json({ analysis: text });
 
   } catch (error: any) {
-    console.error("Erro na IA:", error);
+    // ESTE LOG VAI APARECER NA RENDER DIZENDO O MOTIVO REAL
+    console.error("❌ ERRO DETALHADO NA IA:", error.message || error);
     return NextResponse.json({ 
       error: "Erro na análise", 
       details: error.message 
