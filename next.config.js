@@ -1,12 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Ignora erros de linting e tipos para não travar o build na Render
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  // ... outras configs ...
+  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: true },
+  // ADICIONE ESSA LINHA ABAIXO:
+  staticPageGenerationTimeout: 1000, 
+};
+
   
   // Configurações de CORS que você já utiliza
   async headers() {
