@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 
 // Configuração atualizada para o Prisma 7 aceitar a URL da Render no build
 const prisma = new PrismaClient({
-  datasource: {
+  datasources: { // Correto para a v5
     db: {
       url: process.env.DATABASE_URL,
     },
