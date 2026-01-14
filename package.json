@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build || echo 'Ignorando erro de coleta de dados'",
-    "start": "next start"
-  },
+  "dev": "next dev",
+  "build": "next build --no-lint",
+  "start": "next start"
+},
+
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^7.2.0",
