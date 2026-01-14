@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  name        String?  // Nome Completo
+  birthDate   String?  // Data de Nascimento
+  phone       String?  // WhatsApp
+  gender      String?  // Masculino, Feminino, Outro
+  role        String   @default("USER") // ADMIN ou USER
+  createdAt   DateTime @default(now())
+  
+  workouts    Workout[]
+  anamneses   Anamnese[] // Mudei para plural para suportar histórico
+}
+
+model Exercise {
+  id              String            @id @default(uuid())
+  name            String            @unique
+  category        String
+  videoUrl        String?
+  instructions    String?
+  createdAt       DateTime          @default(now())
+  workoutExercise WorkoutExercise[]
+}
+
+model Workout {
+  id        String            @id @default(uuid())
+  name      String            // Ex: "Treino A - Peito e Tríceps"
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises WorkoutExercise[]
+  createdAt DateTime          @default(now())
+}
+
+model WorkoutExercise {
+  id         String   @id @default(uuid())
+  workoutId  String
+  workout    Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise   Exercise @relation(fields: [exerciseId], references: [id])
+  title      String?  // Caso queira dar um nome customizado ao exercício no treino
+  sets       Int      @default(3)
+  reps       String   @default("12") // Mudei para String para aceitar "3x12" ou "Até a falha"
+  notes      String?  // Observações (ex: Descanso de 60s)
+}
+
+model Anamnese {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  objetivo        String   // Hipertrofia, Emagrecimento, etc.
+  nivel           String   // Iniciante, Intermediário, Avançado
+  frequencia      Int      // Vezes por semana
+  tempoDisponivel Int      @default(60) // <-- ADICIONADO PARA SALVAR O TEMPO DE TREINO
+  limitacoes      String[] // ["Joelho", "Lombar"]
+  equipamentos    String[] // ["Halteres", "Máquinas"]
+  peso            Float?   // Adicionado Peso
+  altura          Float?   // Adicionado Altura
+  createdAt       DateTime @default(now())
+}

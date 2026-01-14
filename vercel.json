@@ -1,0 +1,14 @@
+{
+  "deploymentAnalyzer": {
+    "enabled": false
+  },
+  "projectSettings": {
+    "framework": "nextjs"
+  },
+  "security": {
+    "deploymentProtection": {
+      "standard": false,
+      "all": false
+    }
+  }
+}
