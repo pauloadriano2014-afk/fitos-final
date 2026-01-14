@@ -6,31 +6,35 @@ const genAI = new GoogleGenerativeAI(apiKey || '');
 
 export async function POST(req: Request) {
   try {
-    const { image } = await req.json();
+    const formData = await req.formData();
+    const file = formData.get('video') as Blob;
+    const exerciseName = formData.get('exerciseName') || 'Exercício';
+    const userLevel = formData.get('userLevel') || 'Iniciante';
 
-    if (!image) {
-      return NextResponse.json({ error: "Imagem não fornecida" }, { status: 400 });
+    if (!file) {
+      return NextResponse.json({ error: "Arquivo não enviado" }, { status: 400 });
     }
 
     if (!apiKey) {
-      console.error("ERRO: GEMINI_API_KEY não encontrada no ambiente.");
+      console.error("ERRO: GEMINI_API_KEY ausente na Render.");
       return NextResponse.json({ error: "Configuração de API ausente" }, { status: 500 });
     }
 
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // Detecta o tipo da imagem ou assume jpeg por padrão
-    const mimeType = image.match(/data:([^;]+);/)?.[1] || "image/jpeg";
-    const base64Data = image.includes(',') ? image.split(',')[1] : image;
+    // Converter Blob para Buffer para o Gemini
+    const arrayBuffer = await file.arrayBuffer();
+    const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    console.log(`🚀 Tentando análise com tipo: ${mimeType}`);
+    console.log(`🚀 Analisando biomecânica: ${exerciseName} para nível ${userLevel}`);
 
     const result = await model.generateContent([
-      "Analise este rótulo de produto. Liste os ingredientes e faça uma breve análise de saúde.",
+      `Você é um Coach de musculação. Analise este vídeo de execução do exercício ${exerciseName}. 
+       O aluno é nível ${userLevel}. Dê um feedback curto, motivador e focado em 1 ponto de melhoria biomecânica.`,
       {
         inlineData: {
           data: base64Data,
-          mimeType: mimeType,
+          mimeType: file.type || "video/mp4",
         },
       },
     ]);
@@ -38,13 +42,12 @@ export async function POST(req: Request) {
     const response = await result.response;
     const text = response.text();
 
-    return NextResponse.json({ analysis: text });
+    return NextResponse.json({ feedback: text });
 
   } catch (error: any) {
     console.error("❌ ERRO NO BACKEND:", error.message || error);
-    // Retorna o erro real para o seu log do celular ver
     return NextResponse.json({ 
-      error: "Erro na IA", 
+      error: "Erro na análise da IA", 
       details: error.message 
     }, { status: 500 });
   }
