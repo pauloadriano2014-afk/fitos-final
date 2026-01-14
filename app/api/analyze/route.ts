@@ -11,15 +11,15 @@ export async function POST(req: Request) {
 
     if (!file) return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
 
-    // MUDANÇA TOTAL: Usando a versão experimental estável que aceita vídeo sem erro 404
+    // O MODELO QUE FUNCIONOU - GEMINI 2.0 FLASH EXPERIMENTAL
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash-latest" 
+      model: "gemini-2.0-flash-exp" 
     });
 
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    console.log("🚀 Tentativa com gemini-1.5-flash-latest...");
+    console.log("🚀 Usando o Gemini 2.0 Flash (O Futuro!)...");
 
     const result = await model.generateContent([
       {
@@ -36,9 +36,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("❌ ERRO NA RENDER:", error.message);
-    
-    // Se falhar o flash-latest, tentaremos um fallback automático para o pro no próximo passo, 
-    // mas o flash-latest com a biblioteca atualizada deve matar o 404.
     return NextResponse.json({ 
       error: "Erro na IA", 
       details: error.message 
