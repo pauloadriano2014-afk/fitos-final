@@ -8,27 +8,25 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get('video') as Blob;
     const exercise = formData.get('exerciseName') || 'Exercício';
+    const level = formData.get('userLevel') || 'Iniciante';
 
     if (!file) return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
 
-    // O MODELO QUE FUNCIONOU - GEMINI 2.0 FLASH EXPERIMENTAL
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.0-flash-exp" 
-    });
+    // GEMINI 2.0 FLASH - O MODELO QUE DEU CERTO!
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    console.log("🚀 Usando o Gemini 2.0 Flash (O Futuro!)...");
+    const prompt = `Você é um Personal Trainer de elite. Analise a biomecânica deste vídeo de ${exercise}. 
+    O aluno é nível ${level}. 
+    IMPORTANTE: Se o vídeo estiver escuro, cortado ou não mostrar o corpo todo, peça para gravar novamente.
+    Se estiver visível, dê 2 dicas técnicas específicas sobre ângulo, cadência ou postura. 
+    Seja direto e motivador. Máximo 40 palavras.`;
 
     const result = await model.generateContent([
-      {
-        inlineData: {
-          data: base64Data,
-          mimeType: "video/mp4",
-        },
-      },
-      `Feedback biomecânico curto para o exercício ${exercise}.`,
+      { inlineData: { data: base64Data, mimeType: "video/mp4" } },
+      prompt,
     ]);
 
     const response = await result.response;
@@ -36,10 +34,7 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("❌ ERRO NA RENDER:", error.message);
-    return NextResponse.json({ 
-      error: "Erro na IA", 
-      details: error.message 
-    }, { status: 500 });
+    return NextResponse.json({ error: "Erro na IA", details: error.message }, { status: 500 });
   }
 }
 
