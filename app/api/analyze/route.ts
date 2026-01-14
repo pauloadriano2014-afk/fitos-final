@@ -1,53 +1,45 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-export const maxDuration = 60;
+// Inicializa a IA
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GOOGLE_GEMINI_KEY;
-    if (!apiKey) return NextResponse.json({ error: "API Key ausente" }, { status: 500 });
+    const { image } = await req.json();
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    // Usando o Flash que é mais rápido e barato
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    if (!image) {
+      return NextResponse.json({ error: "Imagem não fornecida" }, { status: 400 });
+    }
 
-    const formData = await req.formData();
-    const videoFile = formData.get('video') as File;
-    const exerciseName = formData.get('exerciseName') || "Exercício";
-    const userLevel = formData.get('userLevel') || "Iniciante";
+    // O NOME DO MODELO DEVE SER EXATAMENTE ESTE PARA A VERSÃO ESTÁVEL
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    if (!videoFile) return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
+    const prompt = "Analise esta foto de um rótulo de suplemento/alimento e extraia os ingredientes e tabela nutricional. Identifique se há substâncias nocivas ou excesso de açúcares.";
 
-    const bytes = await videoFile.arrayBuffer();
-    const base64Video = Buffer.from(bytes).toString('base64');
-
-    const prompt = `Você é o Coach FIT OS. Analise o vídeo de ${exerciseName} para um aluno ${userLevel}. Seja didático e direto. Máximo 25 palavras.`;
-
-    // No método oficial, o envio de vídeo é feito assim:
+    // Ajuste na estrutura da chamada para evitar o erro de v1beta
     const result = await model.generateContent([
       prompt,
       {
         inlineData: {
-          mimeType: "video/mp4",
-          data: base64Video
-        }
-      }
+          data: image.split(',')[1], // Remove o prefixo data:image/jpeg;base64,
+          mimeType: "image/jpeg",
+        },
+      },
     ]);
 
     const response = await result.response;
     const text = response.text();
 
-    if (text) {
-      return NextResponse.json({ feedback: text });
-    }
-
-    return NextResponse.json({ error: "IA não retornou texto." }, { status: 500 });
+    return NextResponse.json({ analysis: text });
 
   } catch (error: any) {
-    console.error("❌ ERRO NO SERVIDOR:", error.message);
-    // Se o erro for de região (403), nós saberemos agora
-    return NextResponse.json({ error: `Erro na IA: ${error.message}` }, { status: 500 });
+    console.error("Erro na IA:", error);
+    return NextResponse.json({ 
+      error: "Erro na análise", 
+      details: error.message 
+    }, { status: 500 });
   }
 }
+
+export const dynamic = 'force-dynamic';
