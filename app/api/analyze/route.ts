@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Forçamos a versão 'v1' (estável) para evitar o erro do v1beta
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
@@ -10,20 +9,17 @@ export async function POST(req: Request) {
     const file = formData.get('video') as Blob;
     const exercise = formData.get('exerciseName') || 'Exercício';
 
-    if (!file) {
-      return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
-    }
+    if (!file) return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
 
-    // A mágica está aqui: apiVersion: 'v1'
-    const model = genAI.getGenerativeModel(
-      { model: "gemini-1.5-flash" },
-      { apiVersion: 'v1' } 
-    );
+    // MUDANÇA TOTAL: Usando a versão experimental estável que aceita vídeo sem erro 404
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash-latest" 
+    });
 
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    console.log("🚀 Enviando vídeo para análise estável (v1)...");
+    console.log("🚀 Tentativa com gemini-1.5-flash-latest...");
 
     const result = await model.generateContent([
       {
@@ -32,16 +28,17 @@ export async function POST(req: Request) {
           mimeType: "video/mp4",
         },
       },
-      `Analise a biomecânica do exercício ${exercise} e dê um feedback curto e motivador.`,
+      `Feedback biomecânico curto para o exercício ${exercise}.`,
     ]);
 
     const response = await result.response;
-    const text = response.text();
-
-    return NextResponse.json({ feedback: text });
+    return NextResponse.json({ feedback: response.text() });
 
   } catch (error: any) {
     console.error("❌ ERRO NA RENDER:", error.message);
+    
+    // Se falhar o flash-latest, tentaremos um fallback automático para o pro no próximo passo, 
+    // mas o flash-latest com a biblioteca atualizada deve matar o 404.
     return NextResponse.json({ 
       error: "Erro na IA", 
       details: error.message 
