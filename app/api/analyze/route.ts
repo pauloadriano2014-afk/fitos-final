@@ -12,31 +12,32 @@ export async function POST(req: Request) {
     const userLevel = formData.get('userLevel') || 'Iniciante';
 
     if (!file) {
-      return NextResponse.json({ error: "Arquivo não enviado" }, { status: 400 });
+      return NextResponse.json({ error: "Arquivo de vídeo não recebido" }, { status: 400 });
     }
 
     if (!apiKey) {
-      console.error("ERRO: GEMINI_API_KEY ausente na Render.");
-      return NextResponse.json({ error: "Configuração de API ausente" }, { status: 500 });
+      return NextResponse.json({ error: "Configuração de API (Chave) ausente na Render" }, { status: 500 });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // MUDANÇA AQUI: Usando o modelo PRO que é mais robusto para vídeos diretos
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
-    // Converter Blob para Buffer para o Gemini
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    console.log(`🚀 Analisando biomecânica: ${exerciseName} para nível ${userLevel}`);
+    console.log(`🚀 Analisando vídeo de ${exerciseName} no modelo PRO...`);
 
     const result = await model.generateContent([
-      `Você é um Coach de musculação. Analise este vídeo de execução do exercício ${exerciseName}. 
-       O aluno é nível ${userLevel}. Dê um feedback curto, motivador e focado em 1 ponto de melhoria biomecânica.`,
       {
         inlineData: {
           data: base64Data,
-          mimeType: file.type || "video/mp4",
+          mimeType: "video/mp4",
         },
       },
+      `Você é um Personal Trainer especialista em biomecânica. 
+       Analise a execução do exercício ${exerciseName} neste vídeo. 
+       O aluno é nível ${userLevel}. 
+       Dê um feedback direto, curto (máximo 3 frases) e motivador sobre a técnica.`,
     ]);
 
     const response = await result.response;
@@ -45,9 +46,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ feedback: text });
 
   } catch (error: any) {
-    console.error("❌ ERRO NO BACKEND:", error.message || error);
+    console.error("❌ ERRO NO BACKEND:", error.message);
     return NextResponse.json({ 
-      error: "Erro na análise da IA", 
+      error: "Erro na análise", 
       details: error.message 
     }, { status: 500 });
   }
