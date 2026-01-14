@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// 1. Verificação da Chave
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey || '');
 
@@ -10,29 +9,28 @@ export async function POST(req: Request) {
     const { image } = await req.json();
 
     if (!image) {
-      console.error("ERRO: Nenhuma imagem recebida no backend.");
       return NextResponse.json({ error: "Imagem não fornecida" }, { status: 400 });
     }
 
     if (!apiKey) {
-      console.error("ERRO: GEMINI_API_KEY não configurada na Render!");
-      return NextResponse.json({ error: "Chave de API ausente" }, { status: 500 });
+      console.error("ERRO: GEMINI_API_KEY não encontrada no ambiente.");
+      return NextResponse.json({ error: "Configuração de API ausente" }, { status: 500 });
     }
 
-    // 2. Modelo Estável
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // 3. Limpeza da imagem base64
+    // Detecta o tipo da imagem ou assume jpeg por padrão
+    const mimeType = image.match(/data:([^;]+);/)?.[1] || "image/jpeg";
     const base64Data = image.includes(',') ? image.split(',')[1] : image;
 
-    console.log("🚀 Iniciando chamada ao Gemini...");
+    console.log(`🚀 Tentando análise com tipo: ${mimeType}`);
 
     const result = await model.generateContent([
-      "Analise este rótulo e extraia os ingredientes principais e se há algo nocivo.",
+      "Analise este rótulo de produto. Liste os ingredientes e faça uma breve análise de saúde.",
       {
         inlineData: {
           data: base64Data,
-          mimeType: "image/jpeg",
+          mimeType: mimeType,
         },
       },
     ]);
@@ -40,14 +38,13 @@ export async function POST(req: Request) {
     const response = await result.response;
     const text = response.text();
 
-    console.log("✅ Análise concluída com sucesso!");
     return NextResponse.json({ analysis: text });
 
   } catch (error: any) {
-    // ESTE LOG VAI APARECER NA RENDER DIZENDO O MOTIVO REAL
-    console.error("❌ ERRO DETALHADO NA IA:", error.message || error);
+    console.error("❌ ERRO NO BACKEND:", error.message || error);
+    // Retorna o erro real para o seu log do celular ver
     return NextResponse.json({ 
-      error: "Erro na análise", 
+      error: "Erro na IA", 
       details: error.message 
     }, { status: 500 });
   }
