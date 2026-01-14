@@ -1,28 +1,29 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Força a inicialização limpa
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(apiKey || '');
+// Forçamos a versão 'v1' (estável) para evitar o erro do v1beta
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get('video') as Blob;
-    
+    const exercise = formData.get('exerciseName') || 'Exercício';
+
     if (!file) {
       return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
     }
 
-    if (!apiKey) {
-      return NextResponse.json({ error: "Falta GEMINI_API_KEY na Render" }, { status: 500 });
-    }
-
-    // Usando a versão estável que o Google recomenda para evitar o erro 404
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // A mágica está aqui: apiVersion: 'v1'
+    const model = genAI.getGenerativeModel(
+      { model: "gemini-1.5-flash" },
+      { apiVersion: 'v1' } 
+    );
 
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
+
+    console.log("🚀 Enviando vídeo para análise estável (v1)...");
 
     const result = await model.generateContent([
       {
@@ -31,15 +32,20 @@ export async function POST(req: Request) {
           mimeType: "video/mp4",
         },
       },
-      "Analise a execução técnica deste exercício de musculação e dê um feedback curto.",
+      `Analise a biomecânica do exercício ${exercise} e dê um feedback curto e motivador.`,
     ]);
 
     const response = await result.response;
-    return NextResponse.json({ feedback: response.text() });
+    const text = response.text();
+
+    return NextResponse.json({ feedback: text });
 
   } catch (error: any) {
-    console.error("ERRO:", error.message);
-    return NextResponse.json({ error: "Erro na IA", details: error.message }, { status: 500 });
+    console.error("❌ ERRO NA RENDER:", error.message);
+    return NextResponse.json({ 
+      error: "Erro na IA", 
+      details: error.message 
+    }, { status: 500 });
   }
 }
 
