@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// Força a inicialização limpa
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey || '');
 
@@ -8,24 +9,20 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get('video') as Blob;
-    const exerciseName = formData.get('exerciseName') || 'Exercício';
-    const userLevel = formData.get('userLevel') || 'Iniciante';
-
+    
     if (!file) {
-      return NextResponse.json({ error: "Arquivo de vídeo não recebido" }, { status: 400 });
+      return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
     }
 
     if (!apiKey) {
-      return NextResponse.json({ error: "Configuração de API (Chave) ausente na Render" }, { status: 500 });
+      return NextResponse.json({ error: "Falta GEMINI_API_KEY na Render" }, { status: 500 });
     }
 
-    // MUDANÇA AQUI: Usando o modelo PRO que é mais robusto para vídeos diretos
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    // Usando a versão estável que o Google recomenda para evitar o erro 404
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
-
-    console.log(`🚀 Analisando vídeo de ${exerciseName} no modelo PRO...`);
 
     const result = await model.generateContent([
       {
@@ -34,23 +31,15 @@ export async function POST(req: Request) {
           mimeType: "video/mp4",
         },
       },
-      `Você é um Personal Trainer especialista em biomecânica. 
-       Analise a execução do exercício ${exerciseName} neste vídeo. 
-       O aluno é nível ${userLevel}. 
-       Dê um feedback direto, curto (máximo 3 frases) e motivador sobre a técnica.`,
+      "Analise a execução técnica deste exercício de musculação e dê um feedback curto.",
     ]);
 
     const response = await result.response;
-    const text = response.text();
-
-    return NextResponse.json({ feedback: text });
+    return NextResponse.json({ feedback: response.text() });
 
   } catch (error: any) {
-    console.error("❌ ERRO NO BACKEND:", error.message);
-    return NextResponse.json({ 
-      error: "Erro na análise", 
-      details: error.message 
-    }, { status: 500 });
+    console.error("ERRO:", error.message);
+    return NextResponse.json({ error: "Erro na IA", details: error.message }, { status: 500 });
   }
 }
 
