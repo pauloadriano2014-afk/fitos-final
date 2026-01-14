@@ -11,7 +11,7 @@ export async function POST(req: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     // Usando o Flash que é mais rápido e barato
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
     const formData = await req.formData();
     const videoFile = formData.get('video') as File;
