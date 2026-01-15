@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
+// GET: Busca o treino do aluno
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -14,7 +15,7 @@ export async function GET(req: Request) {
     }
 
     const workouts = await prisma.workout.findMany({
-      where: { userId: userId },
+      where: { userId: userId }, // FILTRO POR USUÁRIO GARANTIDO
       include: {
         exercises: {
           include: {
@@ -32,6 +33,7 @@ export async function GET(req: Request) {
   }
 }
 
+// POST: Você (Admin) cria o treino para o aluno
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -44,6 +46,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Dados insuficientes (userId ou exercícios faltando)" }, { status: 400 });
     }
 
+    // OPCIONAL: Deletar treino anterior com o mesmo nome para o mesmo aluno (evita duplicidade)
+    await prisma.workout.deleteMany({
+      where: {
+        userId: userId,
+        name: finalWorkoutName
+      }
+    });
+
     // OPERAÇÃO BLINDADA COM TRATAMENTO DE TIPOS
     const newWorkout = await prisma.workout.create({
       data: {
@@ -51,10 +61,10 @@ export async function POST(req: Request) {
         userId: userId,
         exercises: {
           create: exercises.map((ex: any) => ({
-            exerciseId: ex.exerciseId, // Agora o Mobile envia exatamente essa chave
-            sets: parseInt(ex.sets) || 3, // Converte String para Int (Evita erro Prisma)
-            reps: String(ex.reps) || "12", // Converte para String
-            notes: ex.technique || ex.notes || "" // Mapeia técnica para notes
+            exerciseId: ex.exerciseId, 
+            sets: parseInt(ex.sets) || 3, 
+            reps: String(ex.reps) || "12", 
+            notes: ex.technique || ex.notes || "" 
           })),
         },
       },
