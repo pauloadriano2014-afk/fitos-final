@@ -4,7 +4,6 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-// GET: Busca o treino do aluno
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -19,7 +18,7 @@ export async function GET(req: Request) {
       include: {
         exercises: {
           include: {
-            exercise: true // Traz os detalhes do exercício (nome, categoria, video)
+            exercise: true 
           }
         }
       },
@@ -33,15 +32,11 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Você (Admin) cria o treino para o aluno
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    
-    // Log para depuração no Render
     console.log("Recebendo payload de treino:", JSON.stringify(body, null, 2));
 
-    // Mapeamento: O mobile envia 'workoutName' ou 'name'. O mobile envia 'userId'.
     const { userId, name, workoutName, exercises } = body; 
     const finalWorkoutName = workoutName || name || "Novo Treino";
 
@@ -49,19 +44,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Dados insuficientes (userId ou exercícios faltando)" }, { status: 400 });
     }
 
+    // OPERAÇÃO BLINDADA COM TRATAMENTO DE TIPOS
     const newWorkout = await prisma.workout.create({
       data: {
         name: finalWorkoutName,
         userId: userId,
         exercises: {
           create: exercises.map((ex: any) => ({
-            // Mapeia o 'id' que vem da biblioteca para o 'exerciseId' do banco
-            exerciseId: ex.id || ex.exerciseId,
-            // Garante que sets seja Int e reps seja String (conforme seu Schema)
-            sets: parseInt(ex.sets) || 3,
-            reps: String(ex.reps) || "12",
-            // Salva a técnica no campo 'notes'
-            notes: ex.technique || ex.notes || ""
+            exerciseId: ex.exerciseId, // Agora o Mobile envia exatamente essa chave
+            sets: parseInt(ex.sets) || 3, // Converte String para Int (Evita erro Prisma)
+            reps: String(ex.reps) || "12", // Converte para String
+            notes: ex.technique || ex.notes || "" // Mapeia técnica para notes
           })),
         },
       },
@@ -76,7 +69,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(newWorkout);
   } catch (error: any) {
-    console.error("Erro detalhado ao criar treino:", error);
+    console.error("Erro detalhado ao criar treino:", error.message);
     return NextResponse.json({ 
       error: "Erro ao criar treino", 
       details: error.message 
