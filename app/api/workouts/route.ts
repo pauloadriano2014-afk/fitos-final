@@ -37,29 +37,49 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, name, exercises } = body; 
-    // exercises deve ser um array de: { exerciseId: string, sets: number, reps: number }
+    
+    // Log para depuração no Render
+    console.log("Recebendo payload de treino:", JSON.stringify(body, null, 2));
+
+    // Mapeamento: O mobile envia 'workoutName' ou 'name'. O mobile envia 'userId'.
+    const { userId, name, workoutName, exercises } = body; 
+    const finalWorkoutName = workoutName || name || "Novo Treino";
+
+    if (!userId || !exercises) {
+      return NextResponse.json({ error: "Dados insuficientes (userId ou exercícios faltando)" }, { status: 400 });
+    }
 
     const newWorkout = await prisma.workout.create({
       data: {
-        name: name,
+        name: finalWorkoutName,
         userId: userId,
         exercises: {
           create: exercises.map((ex: any) => ({
-            exerciseId: ex.exerciseId,
-            sets: ex.sets || 3,
-            reps: ex.reps || 12,
+            // Mapeia o 'id' que vem da biblioteca para o 'exerciseId' do banco
+            exerciseId: ex.id || ex.exerciseId,
+            // Garante que sets seja Int e reps seja String (conforme seu Schema)
+            sets: parseInt(ex.sets) || 3,
+            reps: String(ex.reps) || "12",
+            // Salva a técnica no campo 'notes'
+            notes: ex.technique || ex.notes || ""
           })),
         },
       },
       include: {
-        exercises: true
+        exercises: {
+          include: {
+            exercise: true
+          }
+        }
       }
     });
 
     return NextResponse.json(newWorkout);
-  } catch (error) {
-    console.error("Erro ao criar treino:", error);
-    return NextResponse.json({ error: "Erro ao criar treino" }, { status: 500 });
+  } catch (error: any) {
+    console.error("Erro detalhado ao criar treino:", error);
+    return NextResponse.json({ 
+      error: "Erro ao criar treino", 
+      details: error.message 
+    }, { status: 500 });
   }
 }
