@@ -58,13 +58,25 @@ model Anamnese {
   id              String   @id @default(uuid())
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  objetivo        String   // Hipertrofia, Emagrecimento, etc.
-  nivel           String   // Iniciante, Intermediário, Avançado
-  frequencia      Int      // Vezes por semana
-  tempoDisponivel Int      @default(60) // <-- ADICIONADO PARA SALVAR O TEMPO DE TREINO
+  
+  // 1. Métricas
+  peso            Float
+  altura          Float
+  imc             Float?   // Calcularemos no App e salvaremos aqui
+  aguaIdeal       Float?   // Calcularemos no App e salvaremos aqui
+
+  // 2. Perfil
+  objetivo        String   // Hipertrofia, Emagrecimento...
+  nivel           String   // Iniciante, Atleta...
+  
+  // 3. Disponibilidade
+  frequencia      Int      // 1 a 7 dias
+  tempoDisponivel Int      @default(60) // Minutos
+
+  // 4. Saúde (Arrays de String)
   limitacoes      String[] // ["Joelho", "Lombar"]
-  equipamentos    String[] // ["Halteres", "Máquinas"]
-  peso            Float?   // Adicionado Peso
-  altura          Float?   // Adicionado Altura
+  cirurgias       String[] // ["Silicone", "Cesárea"]
+  equipamentos    String[] // Mantive caso queira usar no futuro, se não, pode remover
+
   createdAt       DateTime @default(now())
 }
