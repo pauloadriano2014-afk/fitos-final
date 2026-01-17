@@ -2,20 +2,25 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-export const dynamic = 'force-dynamic'; // Garante que a verificação seja em tempo real
+export const dynamic = 'force-dynamic'; // Garante verificação em tempo real
 
 export async function POST(req: Request) {
   try {
     const { email, password } = await req.json();
     console.log(`Tentativa de login para: ${email}`);
 
+    // AQUI ESTÁ A CORREÇÃO MÁGICA 👇
     const user = await prisma.user.findUnique({ 
-      where: { email } 
+      where: { email },
+      include: { 
+        anamneses: true // Traz o histórico para o App saber que ele já é aluno!
+      }
     });
 
     if (user && user.password === password) {
-      // Retornamos o usuário sem a senha por segurança
+      // Remove a senha por segurança antes de enviar
       const { password: _, ...userWithoutPassword } = user;
+      
       return NextResponse.json({ user: userWithoutPassword });
     }
 
