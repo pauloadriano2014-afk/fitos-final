@@ -4,31 +4,24 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const prisma = new PrismaClient();
 
-// Se não tiver chave, nem tenta iniciar a IA para não crashar feio
+// Inicia a IA de forma segura
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
+// Aumenta o tempo limite de execução (importante para IA)
 export const maxDuration = 60; 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    // 0. VERIFICAÇÃO DE SEGURANÇA BÁSICA
     if (!genAI) {
-      console.error("CRÍTICO: GEMINI_API_KEY não configurada no servidor.");
-      return NextResponse.json({ error: "Erro de configuração de servidor (API KEY)." }, { status: 500 });
+      console.error("CRÍTICO: GEMINI_API_KEY ausente.");
+      return NextResponse.json({ error: "Configuração de servidor inválida." }, { status: 500 });
     }
 
-    const body = await req.json();
-    const { userId } = body;
+    const { userId } = await req.json();
 
-    if (!userId) {
-      return NextResponse.json({ error: "ID do usuário obrigatório" }, { status: 400 });
-    }
-
-    console.log(`--- INICIANDO GERAÇÃO PARA: ${userId} ---`);
-
-    // 1. BUSCA DADOS
+    // 1. Busca dados do Aluno
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: { anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } }
@@ -40,21 +33,17 @@ export async function POST(req: Request) {
 
     const anamnese = user.anamneses[0];
 
-    // 2. BUSCA EXERCÍCIOS (Limitado para não estourar token se o banco for gigante)
-    // Pegamos apenas nome e categoria para economizar tokens
+    // 2. Busca Exercícios (Apenas Nomes para economizar tokens)
     const allExercises = await prisma.exercise.findMany({
       select: { name: true, category: true }
     });
 
-    if (allExercises.length === 0) {
-        return NextResponse.json({ error: "Banco de exercícios vazio. Rode o seed." }, { status: 500 });
-    }
-
+    // Agrupa por categoria para a IA entender melhor o contexto
     const exercisesList = allExercises.map(e => `- ${e.name} (${e.category})`).join('\n');
 
-    // 3. PROMPT OTIMIZADO
+    // 3. Prompt (Mantive suas regras de negócio)
     const prompt = `
-      Você é a FITO AI. Crie um treino periodizado JSON.
+      Você é a FITO AI. Crie um treino JSON usando APENAS os exercícios da lista abaixo.
       
       ALUNO:
       - Nível: ${anamnese.experiencia}
@@ -63,24 +52,23 @@ export async function POST(req: Request) {
       - Tempo: ${anamnese.tempoDisponivel}min
       - Limitações: ${anamnese.limitacoes || "Nenhuma"}
 
-      ACERVO (USE APENAS ESTES NOMES):
+      LISTA MESTRA DE EXERCÍCIOS (USE APENAS ESTES NOMES EXATOS):
       ${exercisesList}
 
       REGRAS:
       - 3 dias: A (Perna), B (Peito/Ombro/Tri), C (Costa/Bi/Abs).
       - 4 dias: A (Perna Quads), B (Superior 1), C (Perna Post), D (Superior 2).
-      - 5 dias: ABCDE ou ABC Sequencial.
-      - Lesão Joelho? Substitua agachamento por Leg Press.
-      - Lesão Ombro? Evite desenvolvimento por trás.
+      - 5 dias: ABC Sequencial (Iniciante) ou ABCDE (Avançado).
+      - Respeite as lesões citadas.
 
-      SAÍDA OBRIGATÓRIA (JSON PURO):
+      FORMATO DE RESPOSTA OBRIGATÓRIO (JSON PURO):
       {
-        "name": "Nome do Treino",
+        "name": "Nome do Protocolo",
         "goal": "${anamnese.objetivo}",
         "level": "${anamnese.experiencia}",
         "exercises": [
           {
-            "name": "Nome Exato da Lista",
+            "name": "Nome Exato da Lista Mestra",
             "sets": 3,
             "reps": "12",
             "rest": 60,
@@ -93,38 +81,28 @@ export async function POST(req: Request) {
       }
     `;
 
-    // 4. GERAÇÃO
-    console.log("Enviando prompt para o Gemini...");
+    console.log("Enviando prompt para IA...");
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const rawText = response.text();
 
-    console.log("Resposta recebida da IA (Primeiros 100 chars):", rawText.substring(0, 100));
+    console.log("Resposta IA recebida. Tamanho:", rawText.length);
 
-    // 5. LIMPEZA CIRÚRGICA DO JSON (A CORREÇÃO DO ERRO <)
-    // Encontra onde começa o primeiro '{' e onde termina o último '}'
+    // 4. Limpeza Cirúrgica do JSON
     const jsonStartIndex = rawText.indexOf('{');
     const jsonEndIndex = rawText.lastIndexOf('}') + 1;
 
     if (jsonStartIndex === -1 || jsonEndIndex === -1) {
-        console.error("IA não retornou um JSON válido:", rawText);
-        throw new Error("Formato inválido da IA");
+        throw new Error("IA não retornou um JSON válido.");
     }
 
     const cleanJson = rawText.substring(jsonStartIndex, jsonEndIndex);
-    let workoutPlan;
-    
-    try {
-        workoutPlan = JSON.parse(cleanJson);
-    } catch (e) {
-        console.error("Falha ao fazer parse do JSON limpo:", cleanJson);
-        throw new Error("Erro de Sintaxe no JSON da IA");
-    }
+    const workoutPlan = JSON.parse(cleanJson);
 
-    // 6. SALVA NO BANCO
-    // Limpa treino anterior para não acumular lixo no teste
+    // 5. Salvar no Banco
+    // Limpa treino anterior para evitar duplicidade
     await prisma.workout.deleteMany({ where: { userId } });
 
     const newWorkout = await prisma.workout.create({
@@ -135,7 +113,7 @@ export async function POST(req: Request) {
         level: workoutPlan.level,
         exercises: {
           create: workoutPlan.exercises.map((ex: any) => ({
-            name: ex.name, 
+            name: ex.name, // Nome vindo da IA
             sets: Number(ex.sets) || 3,
             reps: String(ex.reps) || "12",
             rest: Number(ex.rest) || 60,
@@ -148,15 +126,12 @@ export async function POST(req: Request) {
       }
     });
 
-    console.log("Treino salvo com sucesso! ID:", newWorkout.id);
+    console.log("Treino salvo com ID:", newWorkout.id);
     return NextResponse.json({ success: true, workoutId: newWorkout.id });
 
   } catch (error: any) {
-    console.error("ERRO FATAL NO BACKEND:", error);
-    // Retorna erro JSON legível, não HTML
-    return NextResponse.json(
-        { error: error.message || "Erro interno no servidor" }, 
-        { status: 500 }
-    );
+    console.error("ERRO NO BACKEND:", error);
+    // Retorna JSON de erro, nunca HTML, para o App não crashar com "<"
+    return NextResponse.json({ error: error.message || "Erro interno." }, { status: 500 });
   }
 }
