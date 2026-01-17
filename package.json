@@ -10,14 +10,20 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "5.22.0",
-    "@types/node": "20.12.12",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "dotenv": "^17.2.3",
     "next": "14.2.3",
     "prisma": "5.22.0",
     "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "typescript": "5.4.5"
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }
