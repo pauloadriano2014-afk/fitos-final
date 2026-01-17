@@ -1,19 +1,24 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
+// 👇 A LINHA MÁGICA: Obriga o Next.js a ler o banco SEMPRE, sem cache.
+export const dynamic = 'force-dynamic'; 
+
 const prisma = new PrismaClient();
 
 export async function GET() {
   try {
-    // Buscamos todos os usuários cadastrados sem exceção para garantir a listagem
     const users = await prisma.user.findMany({
       orderBy: {
-        createdAt: 'desc'
+        createdAt: 'desc' // Mostra os mais recentes no topo
+      },
+      // DICA: O include abaixo traz a anamnese junto, útil pro Admin ver quem já preencheu
+      include: {
+        anamneses: true 
       }
     });
 
-    // Log interno para monitoramento no painel da Render
-    console.log("Usuários listados para o Admin:", users.length);
+    console.log("Usuários listados para o Admin (Tempo Real):", users.length);
 
     return NextResponse.json(users);
   } catch (error) {
