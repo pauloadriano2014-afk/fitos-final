@@ -7,23 +7,29 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     
-    // Desestruturando TUDO que o Front-end novo manda
+    // Desestruturando TUDO: O que já existia + Novos campos VIP
     const { 
       userId, 
       peso, 
       altura,
-      imc,          // Novo
-      aguaIdeal,    // Novo
+      imc,
+      aguaIdeal,
       objetivo, 
       nivel, 
       frequencia, 
       tempoDisponivel,
       limitacoes, 
-      cirurgias,    // Novo
-      equipamentos 
+      cirurgias,
+      equipamentos,
+      
+      // --- NOVOS CAMPOS VIP (NUTRIÇÃO) ---
+      refeicoesDia,
+      alergias,
+      alimentosAversao, // O que ele não gosta
+      suplementos
     } = body;
 
-    // Validação básica de segurança
+    // Validação básica de segurança (Mantida)
     if (!userId || !peso || !altura) {
       return NextResponse.json({ error: "Dados obrigatórios faltando" }, { status: 400 });
     }
@@ -31,7 +37,8 @@ export async function POST(req: Request) {
     const novaAnamnese = await prisma.anamnese.create({
       data: {
         userId,
-        // Convertendo para garantir que são números (Float)
+        
+        // --- DADOS FÍSICOS (Mantidos) ---
         peso: parseFloat(peso),
         altura: parseFloat(altura),
         imc: imc ? parseFloat(imc) : null,
@@ -45,10 +52,17 @@ export async function POST(req: Request) {
         frequencia: Number(frequencia),
         tempoDisponivel: Number(tempoDisponivel),
         
-        // Arrays de String (Listas) - Se vier nulo, salva array vazio
+        // Arrays Antigos
         limitacoes: limitacoes || [],
         cirurgias: cirurgias || [],
         equipamentos: equipamentos || [],
+
+        // --- NOVOS DADOS VIP (Adicionados) ---
+        // Se o usuário for COMUM, esses dados virão vazios/nulos, e tudo bem:
+        refeicoesDia: refeicoesDia ? Number(refeicoesDia) : null,
+        alergias: alergias || [],
+        alimentosAversao: alimentosAversao || [],
+        suplementos: suplementos || []
       },
     });
 
