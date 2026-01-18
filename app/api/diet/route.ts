@@ -9,7 +9,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
 
-    if (!userId) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 });
+    if (!userId) return NextResponse.json({ error: "UserId obrigatório" }, { status: 400 });
 
     const diet = await prisma.diet.findUnique({
       where: { userId },
@@ -18,42 +18,71 @@ export async function GET(req: Request) {
 
     return NextResponse.json(diet || { matches: false });
   } catch (error) {
-    return NextResponse.json({ error: "Erro ao buscar" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao buscar dieta" }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    // Garantindo que pegamos tudo
+    console.log("Recebendo payload de dieta:", JSON.stringify(body)); // LOG PARA DEBUG NA RENDER
+
     const { userId, calories, protein, carbs, fats, water, meals } = body;
 
-    // 1. Salva/Atualiza a Dieta (Meta)
+    if (!userId) return NextResponse.json({ error: "UserId faltando no payload" }, { status: 400 });
+
+    // 1. Garante que os Macros são números inteiros
+    const safeCalories = parseInt(String(calories)) || 2000;
+    const safeProtein = parseInt(String(protein)) || 150;
+    const safeCarbs = parseInt(String(carbs)) || 200;
+    const safeFats = parseInt(String(fats)) || 60;
+    const safeWater = parseInt(String(water)) || 3000;
+
+    // 2. Salva/Atualiza a Meta (Diet)
     const diet = await prisma.diet.upsert({
       where: { userId },
-      update: { calories, protein, carbs, fats, water },
-      create: { userId, calories, protein, carbs, fats, water }
+      update: { 
+        calories: safeCalories, 
+        protein: safeProtein, 
+        carbs: safeCarbs, 
+        fats: safeFats, 
+        water: safeWater 
+      },
+      create: { 
+        userId, 
+        calories: safeCalories, 
+        protein: safeProtein, 
+        carbs: safeCarbs, 
+        fats: safeFats, 
+        water: safeWater 
+      }
     });
 
-    // 2. Limpa refeições antigas para evitar duplicidade
+    // 3. Atualiza as Refeições (Delete All + Create All)
+    // Isso evita problemas de IDs perdidos ou duplicados
     await prisma.meal.deleteMany({ where: { dietId: diet.id } });
 
-    // 3. Salva as novas com o HORÁRIO
-    if (meals && meals.length > 0) {
+    if (meals && Array.isArray(meals) && meals.length > 0) {
+      const mealsToSave = meals.map((m: any, idx: number) => ({
+        dietId: diet.id,
+        name: m.name || "Refeição", // Nunca deixa nulo
+        time: m.time || "00:00",    // Nunca deixa nulo
+        content: m.content || "",   // Nunca deixa nulo (Isso quebrava antes)
+        order: idx
+      }));
+
       await prisma.meal.createMany({
-        data: meals.map((m: any, idx: number) => ({
-          dietId: diet.id,
-          name: m.name,
-          time: m.time || "00:00", // <--- O SEGREDO: Garante que nunca vá vazio
-          content: m.content,
-          order: idx
-        }))
+        data: mealsToSave
       });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, dietId: diet.id });
+
   } catch (error: any) {
-    console.error("Erro ao salvar dieta:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("ERRO FATAL AO SALVAR DIETA:", error);
+    return NextResponse.json({ 
+        error: "Erro no servidor: " + error.message, 
+        details: error.meta 
+    }, { status: 500 });
   }
 }
