@@ -14,7 +14,15 @@ export async function GET(req: Request) {
       where: { userId },
       include: { meals: { orderBy: { order: 'asc' } } }
     });
-    return NextResponse.json(diet || { matches: false });
+
+    return new NextResponse(JSON.stringify(diet || { matches: false }), {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
   } catch (error) {
     return NextResponse.json({ error: "Erro ao buscar" }, { status: 500 });
   }
@@ -27,46 +35,32 @@ export async function POST(req: Request) {
 
     if (!userId) return NextResponse.json({ error: "UserId ausente" }, { status: 400 });
 
-    // UPSERT: Se existe atualiza, se não existe cria.
-    // Usamos Number() para garantir que vá como Inteiro para o Postgres
-    const diet = await prisma.diet.upsert({
-      where: { userId },
-      update: {
-        calories: Number(calories) || 0,
-        protein: Number(protein) || 0,
-        carbs: Number(carbs) || 0,
-        fats: Number(fats) || 0,
-        water: Number(water) || 0,
-      },
-      create: {
-        userId,
-        calories: Number(calories) || 0,
-        protein: Number(protein) || 0,
-        carbs: Number(carbs) || 0,
-        fats: Number(fats) || 0,
-        water: Number(water) || 0,
-      }
-    });
-
-    // Limpa as refeições antigas vinculadas a esta dieta
-    await prisma.meal.deleteMany({ where: { dietId: diet.id } });
-
-    // Cria as novas garantindo que nenhum campo seja nulo (o banco não aceita nulo)
-    if (meals && Array.isArray(meals) && meals.length > 0) {
-      await prisma.meal.createMany({
-        data: meals.map((m: any, idx: number) => ({
-          dietId: diet.id,
-          name: String(m.name || "Refeição"),
-          time: String(m.time || "00:00"),
-          content: String(m.content || ""),
-          order: idx
-        }))
-      });
-    }
+    // LÓGICA DE TRANSAÇÃO: Ou deleta e cria tudo, ou não faz nada.
+    await prisma.$transaction([
+        prisma.meal.deleteMany({ where: { diet: { userId } } }),
+        prisma.diet.deleteMany({ where: { userId } }),
+        prisma.diet.create({
+          data: {
+            userId,
+            calories: Number(calories) || 0,
+            protein: Number(protein) || 0,
+            carbs: Number(carbs) || 0,
+            fats: Number(fats) || 0,
+            water: Number(water) || 0,
+            meals: {
+              create: meals.map((m: any, idx: number) => ({
+                name: String(m.name || "Refeição"),
+                time: String(m.time || "00:00"),
+                content: String(m.content || ""),
+                order: idx
+              }))
+            }
+          }
+        })
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error("ERRO NO POST:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
