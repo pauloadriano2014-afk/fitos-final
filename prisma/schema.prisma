@@ -17,12 +17,17 @@ model User {
   gender    String?  
   
   // Controle de Acesso
-  plan_tier String   @default("standard") // "vip" ou "standard"
-  role      String   @default("USER") // "ADMIN" ou "USER"
+  plan_tier String   @default("standard") // Mantive para não perder dados antigos
+  role      String   @default("USER")     // "ADMIN" ou "USER"
+  
+  // 👇 NOVO CAMPO: Usado pelo Admin para definir "PERFORMANCE" ou "ELITE"
+  plan      String   @default("PERFORMANCE") 
+  
   createdAt DateTime @default(now())
   
   workouts  Workout[]
   anamneses Anamnese[]
+  diet      Diet?     // 👇 Relação com a Dieta
 }
 
 model Exercise {
@@ -40,11 +45,11 @@ model Workout {
   id        String   @id @default(uuid())
   name      String   
   
-  // Campos de metadados gerados pela IA
-  goal      String?  // Hipertrofia, Emagrecimento...
-  level     String?  // Iniciante, Avançado...
+  // Campos de metadados
+  goal      String?  
+  level     String?  
 
-  // A TRAVA DE SEGURANÇA (VIP = false, Standard = true)
+  // A TRAVA DE SEGURANÇA
   isVisible Boolean  @default(true) 
 
   userId    String
@@ -65,41 +70,72 @@ model WorkoutExercise {
   sets       Int      @default(3)
   reps       String   @default("12") 
   
-  // --- CAMPOS CORRIGIDOS E ESSENCIAIS ---
-  notes      String?  // Apenas observações de texto (ex: "Cuidado com a lombar")
-  technique  String?  // Onde salvamos: "DROPSET", "RESTPAUSE", etc.
-  day        String   @default("A") // Onde salvamos a divisão: "A", "B", "C"...
+  // Campos técnicos
+  notes      String?  
+  technique  String?  
+  day        String   @default("A") 
 }
 
 model Anamnese {
-  id              String   @id @default(uuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   // 1. Métricas
-  peso            Float
-  altura          Float
-  imc             Float?   
-  aguaIdeal       Float?   
+  peso             Float
+  altura           Float
+  imc              Float?   
+  aguaIdeal        Float?   
 
   // 2. Perfil
-  objetivo        String   
-  nivel           String   
+  objetivo         String   
+  nivel            String   
   
   // 3. Disponibilidade
-  frequencia      Int      
-  tempoDisponivel Int      @default(60) 
+  frequencia       Int      
+  tempoDisponivel  Int      @default(60) 
 
-  // 4. Saúde (Arrays de String)
-  limitacoes      String[] 
-  cirurgias       String[] 
-  equipamentos    String[] 
+  // 4. Saúde
+  limitacoes       String[] 
+  cirurgias        String[] 
+  equipamentos     String[] 
 
-  // 5. NUTRIÇÃO (CAMPOS VIP)
+  // 5. Nutrição
   refeicoesDia     Int?     @default(3)
   alergias         String[] 
   alimentosAversao String[] 
   suplementos      String[] 
 
   createdAt        DateTime @default(now())
+}
+
+// 👇 NOVOS MODELS PARA O GUIA ALIMENTAR (DIETA) 👇
+
+model Diet {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Metas (Macros)
+  calories  Int      @default(2000)
+  protein   Int      @default(150)
+  carbs     Int      @default(200)
+  fats      Int      @default(60)
+  water     Int      @default(3000)
+  
+  meals     Meal[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Meal {
+  id        String @id @default(uuid())
+  dietId    String
+  diet      Diet   @relation(fields: [dietId], references: [id], onDelete: Cascade)
+  
+  name      String // Ex: "Café da Manhã"
+  time      String // Ex: "07:00"
+  content   String // O texto livre que você vai digitar
+  order     Int    @default(0) // Para manter a ordem das refeições
 }
