@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// --- SINGLETON PATTERN (Evita "Too many connections" na Render) ---
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+
 export const dynamic = 'force-dynamic';
 
 // =====================================================================
-// 1. BANCO DE TREINOS OTIMIZADO (COM VARIAÇÕES 1 e 2)
+// 1. BANCO DE TREINOS BASE (COMPLETO PARA 1 a 6 DIAS)
 // =====================================================================
 
 const TREINOS_BASE: any = {
-  // --- TREINO A1: EMPURRAR (Peito, Ombro, Tríceps) ---
+  // --- A1: EMPURRAR (Foco Peito) ---
   a1: {
     day: 'A', focus: 'Empurrar (Foco Peito)',
     exercises: [
@@ -24,7 +28,7 @@ const TREINOS_BASE: any = {
     ]
   },
 
-  // --- TREINO B1: PUXAR (Costas, Bíceps) ---
+  // --- B1: PUXAR (Vertical) ---
   b1: {
     day: 'B', focus: 'Puxar (Vertical)',
     exercises: [
@@ -32,13 +36,13 @@ const TREINOS_BASE: any = {
       { name: 'Puxada frente aberta', sets: 4, reps: '12', category: 'Costas' },
       { name: 'Puxada triângulo', sets: 3, reps: '12', category: 'Costas' },
       { name: 'Remada curvada c/barra', sets: 3, reps: '10', category: 'Costas' },
-      { name: 'Voador invertido', sets: 3, reps: '15', category: 'Costas' }, // Posterior de ombro entra no dia de costas
+      { name: 'Voador invertido', sets: 3, reps: '15', category: 'Costas' },
       { name: 'Rosca direta c/barra curvada', sets: 4, reps: '12', category: 'Bíceps' },
       { name: 'Rosca martelo', sets: 3, reps: '12', category: 'Bíceps' }
     ]
   },
 
-  // --- TREINO C1: PERNAS (Foco Quadríceps) ---
+  // --- C1: PERNAS (Foco Quadríceps) ---
   c1: {
     day: 'C', focus: 'Pernas (Foco Quadríceps)',
     exercises: [
@@ -52,7 +56,7 @@ const TREINOS_BASE: any = {
     ]
   },
 
-  // --- TREINO A2 (D): VARIAÇÃO EMPURRAR (Foco Ombros/Superior) ---
+  // --- A2 (D): VARIAÇÃO EMPURRAR (Foco Ombros) ---
   a2: {
     day: 'D', focus: 'Empurrar (Variação)',
     exercises: [
@@ -66,7 +70,7 @@ const TREINOS_BASE: any = {
     ]
   },
 
-  // --- TREINO B2 (E): VARIAÇÃO PUXAR (Foco Horizontal/Espessura) ---
+  // --- B2 (E): VARIAÇÃO PUXAR (Horizontal) ---
   b2: {
     day: 'E', focus: 'Puxar (Variação)',
     exercises: [
@@ -80,7 +84,7 @@ const TREINOS_BASE: any = {
     ]
   },
 
-  // --- TREINO C2 (F): VARIAÇÃO PERNAS (Foco Posterior/Glúteo) ---
+  // --- C2 (F): VARIAÇÃO PERNAS (Foco Posterior) ---
   c2: {
     day: 'F', focus: 'Pernas (Foco Posterior)',
     exercises: [
@@ -94,7 +98,7 @@ const TREINOS_BASE: any = {
     ]
   },
 
-  // --- FULLBODY (1-2 Dias) ---
+  // --- FULLBODY (Fallback) ---
   fullbody: [
     {
       day: 'A', focus: 'Fullbody',
@@ -113,54 +117,55 @@ const TREINOS_BASE: any = {
 };
 
 // =====================================================================
-// 2. MOTOR DE ORDENAÇÃO INTELIGENTE (CORRIGE A ORDEM "ESCROTA")
+// 2. ORDENAÇÃO INTELIGENTE (Prioridade Total)
 // =====================================================================
 
 function ordenarExercicios(exercises: any[]) {
-  // Define a prioridade dos grupos musculares na ficha
   const prioridade: any = {
-    'Mobilidade': 1, // Sempre primeiro
-    'Pernas': 2,     // Grandes
-    'Costas': 3,
-    'Peito': 4,
-    'Ombros': 5,     // Pequenos
-    'Tríceps': 6,
-    'Bíceps': 7,
-    'Abdômen': 8,
-    'Cardio': 9
+    'mobilidade': 1, 
+    'pernas': 2,
+    'costas': 3,
+    'peito': 4,
+    'ombros': 5,
+    'tríceps': 6, 'triceps': 6,
+    'bíceps': 7, 'biceps': 7,
+    'abdômen': 8, 'abdomen': 8,
+    'cardio': 9
   };
 
   return exercises.sort((a, b) => {
-    // 1. Ordena por Grupo Muscular
-    const pA = prioridade[a.category] || 99;
-    const pB = prioridade[b.category] || 99;
+    // Normaliza para garantir match (ex: "Mobilidade" vira "mobilidade")
+    const catA = (a.category || '').toLowerCase();
+    const catB = (b.category || '').toLowerCase();
 
+    const pA = prioridade[catA] || 99;
+    const pB = prioridade[catB] || 99;
+
+    // 1. Ordem por Grupo
     if (pA !== pB) return pA - pB;
 
-    // 2. Regras de Ouro dentro do mesmo grupo
-    
-    // Regra: Costas -> Puxadas antes de Remadas
-    if (a.category === 'Costas' && b.category === 'Costas') {
+    // 2. Regra Específica: Costas (Puxada ANTES de Remada)
+    if (catA === 'costas' && catB === 'costas') {
       const aEhPuxada = a.name.toLowerCase().includes('puxada') || a.name.toLowerCase().includes('barra');
       const bEhPuxada = b.name.toLowerCase().includes('puxada') || b.name.toLowerCase().includes('barra');
-      if (aEhPuxada && !bEhPuxada) return -1; // A vem primeiro
-      if (!aEhPuxada && bEhPuxada) return 1;  // B vem primeiro
+      if (aEhPuxada && !bEhPuxada) return -1;
+      if (!aEhPuxada && bEhPuxada) return 1;
     }
 
-    // Regra: Peito -> Supinos (Multi) antes de Isoladores
-    if (a.category === 'Peito' && b.category === 'Peito') {
+    // 3. Regra Específica: Peito (Supino ANTES de Voador)
+    if (catA === 'peito' && catB === 'peito') {
       const aEhSupino = a.name.toLowerCase().includes('supino');
       const bEhSupino = b.name.toLowerCase().includes('supino');
       if (aEhSupino && !bEhSupino) return -1;
       if (!aEhSupino && bEhSupino) return 1;
     }
 
-    return 0; // Mantém ordem original se empatar
+    return 0;
   });
 }
 
 // =====================================================================
-// 3. FILTROS E AJUSTES (SEGURANÇA E TÉCNICA)
+// 3. FILTROS E AJUSTES
 // =====================================================================
 
 function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[]) {
@@ -217,7 +222,7 @@ function ajustarPorTempo(treino: any[], tempo: number, objetivo: string) {
   return treino.map((dia: any) => {
     let sliced = dia.exercises.slice(0, 5).map((ex: any) => ({ ...ex, restTime: 45 }));
     
-    // HIIT Finalizador se for emagrecimento
+    // HIIT Finalizador
     if (objetivo === 'Emagrecimento' || objetivo === 'Definição') {
          if(sliced[sliced.length-1].category !== 'Mobilidade') {
              sliced[sliced.length-1] = { 
@@ -248,6 +253,7 @@ function aplicarTecnicas(treino: any[], nivel: string) {
 // =====================================================================
 
 export async function POST(req: Request) {
+  console.log("Iniciando Geração..."); 
   try {
     const { userId } = await req.json();
     if (!userId) return NextResponse.json({ error: "UserId obrigatório" }, { status: 400 });
@@ -267,22 +273,25 @@ export async function POST(req: Request) {
     const limitacoes = anamnese.limitacoes || [];
     const cirurgias = anamnese.cirurgias || [];
 
-    // 1. SELEÇÃO DE TEMPLATE (Lógica Expandida)
+    // 1. SELEÇÃO DE TEMPLATE (Agora com A1..C2 definidos)
     let template = [];
+
+    // Proteção se TREINOS_BASE não tiver as chaves (mas agora tem)
+    const baseA1 = TREINOS_BASE.a1 || TREINOS_BASE.abc[0];
+    const baseB1 = TREINOS_BASE.b1 || TREINOS_BASE.abc[1];
+    const baseC1 = TREINOS_BASE.c1 || TREINOS_BASE.abc[2];
 
     if (dias <= 2) {
         template = TREINOS_BASE.fullbody;
     } 
     else if (dias === 3) {
-        // A1, B1, C1
-        template = [TREINOS_BASE.a1, TREINOS_BASE.b1, TREINOS_BASE.c1];
+        template = [baseA1, baseB1, baseC1];
     }
     else if (dias === 4) {
-        // ABCD
-        template = [TREINOS_BASE.a1, TREINOS_BASE.b1, TREINOS_BASE.c1, { ...TREINOS_BASE.a2, day: 'D' }];
+        template = [baseA1, baseB1, baseC1, { ...TREINOS_BASE.a2, day: 'D' }];
     }
     else if (dias >= 5) {
-        // A1, B1, C1, A2, B2, C2 (Variação Total)
+        // Agora vai funcionar porque a1, b1... estão definidos lá em cima
         template = [
             TREINOS_BASE.a1, 
             TREINOS_BASE.b1, 
@@ -291,15 +300,15 @@ export async function POST(req: Request) {
             TREINOS_BASE.b2, 
             TREINOS_BASE.c2 
         ];
-        if (dias === 5) template.pop(); // Remove o F se for só 5 dias
+        if (dias === 5) template.pop();
     }
 
-    // 2. Filtros
+    // 2. Filtros e Ajustes
     let treinoFinal = filtrarLesoes(template, limitacoes, cirurgias);
     treinoFinal = ajustarPorTempo(treinoFinal, tempo, objetivo);
     treinoFinal = aplicarTecnicas(treinoFinal, nivel);
 
-    // 3. ORDENAÇÃO (AQUI APLICAMOS A ORDEM CORRETA)
+    // 3. ORDENAÇÃO (Aqui a mágica acontece)
     treinoFinal = treinoFinal.map((dia: any) => ({
         ...dia,
         exercises: ordenarExercicios(dia.exercises)
@@ -307,19 +316,23 @@ export async function POST(req: Request) {
 
     // 4. Busca e Salva
     const dbExercises = await prisma.exercise.findMany();
+    // Safety check
+    if (dbExercises.length === 0) return NextResponse.json({ error: "Banco vazio" }, { status: 500 });
+
     const exercisesMap = new Map(dbExercises.map(e => [e.name.toLowerCase().trim(), e.id]));
     const fallbackId = dbExercises[0]?.id;
 
     const exercisesToSave = [];
 
     for (const dia of treinoFinal) {
+      if(!dia || !dia.exercises) continue;
+      
       for (const ex of dia.exercises) {
         let realId = exercisesMap.get(ex.name.toLowerCase().trim());
         if (!realId) {
             const match = dbExercises.find(d => d.name.toLowerCase().includes(ex.name.toLowerCase().split(' ')[0]));
             realId = match ? match.id : fallbackId;
         }
-
         if (realId) {
             exercisesToSave.push({
                 exerciseId: realId,
@@ -347,6 +360,7 @@ export async function POST(req: Request) {
       }
     });
 
+    console.log("Sucesso ID:", workout.id);
     return NextResponse.json({ success: true, workoutId: workout.id });
 
   } catch (error: any) {
