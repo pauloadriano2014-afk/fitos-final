@@ -16,10 +16,9 @@ model User {
   phone     String?  
   gender    String?  
   
-  // NOVO CAMPO IMPORTANTE
+  // Controle de Acesso
   plan_tier String   @default("standard") // "vip" ou "standard"
-  
-  role      String   @default("USER") // ADMIN ou USER
+  role      String   @default("USER") // "ADMIN" ou "USER"
   createdAt DateTime @default(now())
   
   workouts  Workout[]
@@ -27,12 +26,13 @@ model User {
 }
 
 model Exercise {
-  id              String            @id @default(uuid())
-  name            String            @unique
-  category        String
-  videoUrl        String?
-  instructions    String?
-  createdAt       DateTime          @default(now())
+  id           String   @id @default(uuid())
+  name         String   @unique
+  category     String
+  videoUrl     String?
+  instructions String?
+  createdAt    DateTime @default(now())
+  
   workoutExercise WorkoutExercise[]
 }
 
@@ -40,6 +40,10 @@ model Workout {
   id        String   @id @default(uuid())
   name      String   
   
+  // Campos de metadados gerados pela IA
+  goal      String?  // Hipertrofia, Emagrecimento...
+  level     String?  // Iniciante, Avançado...
+
   // A TRAVA DE SEGURANÇA (VIP = false, Standard = true)
   isVisible Boolean  @default(true) 
 
@@ -55,11 +59,15 @@ model WorkoutExercise {
   workout    Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
   exerciseId String
   exercise   Exercise @relation(fields: [exerciseId], references: [id])
+  
   title      String?  
   sets       Int      @default(3)
   reps       String   @default("12") 
-  notes      String?  
-  day        String   @default("A") // Armazena "A", "B", "C"...
+  
+  // --- CAMPOS CORRIGIDOS E ESSENCIAIS ---
+  notes      String?  // Apenas observações de texto (ex: "Cuidado com a lombar")
+  technique  String?  // Onde salvamos: "DROPSET", "RESTPAUSE", etc.
+  day        String   @default("A") // Onde salvamos a divisão: "A", "B", "C"...
 }
 
 model Anamnese {
@@ -86,11 +94,11 @@ model Anamnese {
   cirurgias       String[] 
   equipamentos    String[] 
 
-  // 5. NUTRIÇÃO (NOVOS CAMPOS VIP)
+  // 5. NUTRIÇÃO (CAMPOS VIP)
   refeicoesDia     Int?     @default(3)
-  alergias         String[] // Ex: ["Gluten", "Lactose"]
-  alimentosAversao String[] // O que ele odeia comer
-  suplementos      String[] // O que ele já toma
+  alergias         String[] 
+  alimentosAversao String[] 
+  suplementos      String[] 
 
   createdAt        DateTime @default(now())
 }
