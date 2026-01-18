@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-// GET: Busca o treino (Com ordenação e dados corretos)
+// GET: Busca o treino
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -17,7 +17,6 @@ export async function GET(req: Request) {
       include: {
         exercises: {
           include: { exercise: true },
-          // Ordena por dia (A, B) e depois por ordem de criação
           orderBy: [{ day: 'asc' }, { id: 'asc' }]
         }
       },
@@ -33,18 +32,22 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Salva o Treino (Correção da Técnica e Dia)
+// POST: Salva o Treino
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    console.log("POST /api/workout payload:", JSON.stringify(body));
+
     const { userId, name, exercises } = body; 
 
-    if (!userId || !exercises) return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
+    if (!userId || !exercises) {
+        return NextResponse.json({ error: "Dados incompletos (userId/exercises)" }, { status: 400 });
+    }
 
     // 1. Limpa treino anterior
     await prisma.workout.deleteMany({ where: { userId: userId } });
 
-    // 2. Cria novo com os campos certos
+    // 2. Cria novo treino
     const newWorkout = await prisma.workout.create({
       data: {
         name: name || "Treino Personalizado",
@@ -55,18 +58,22 @@ export async function POST(req: Request) {
             sets: parseInt(ex.sets) || 3, 
             reps: String(ex.reps) || "12", 
             
-            // CORREÇÃO AQUI: Salvando cada coisa no seu lugar
-            notes: ex.notes || "",         // Texto livre
-            technique: ex.technique || "", // "DROPSET", etc
-            day: ex.day || "A"             // Dia da semana
+            // CAMPOS CRÍTICOS
+            notes: ex.notes || "",         
+            technique: ex.technique || "", 
+            day: ex.day || "A",
+            restTime: parseInt(ex.restTime) || 60
           })),
         },
       }
     });
 
+    console.log("Treino salvo com sucesso. ID:", newWorkout.id);
     return NextResponse.json(newWorkout);
+
   } catch (error: any) {
-    console.error("Erro POST Workout:", error.message);
+    console.error("Erro POST Workout:", error);
+    // Retorna JSON legível mesmo no erro
     return NextResponse.json({ error: "Erro ao salvar: " + error.message }, { status: 500 });
   }
 }

@@ -9,7 +9,6 @@ export const dynamic = 'force-dynamic';
 // =====================================================================
 
 const TREINOS_BASE: any = {
-  // --- 1 ou 2 DIAS: FULLBODY ---
   fullbody: [
     {
       day: 'A', focus: 'Corpo Todo',
@@ -26,8 +25,6 @@ const TREINOS_BASE: any = {
       ]
     }
   ],
-
-  // --- 3, 5, 6, 7 DIAS: ABC (Ciclo Contínuo) ---
   abc: [
     {
       day: 'A', focus: 'Pernas Completas',
@@ -67,8 +64,6 @@ const TREINOS_BASE: any = {
       ]
     }
   ],
-
-  // --- 4 DIAS: ABCD ---
   abcd: [
     {
       day: 'A', focus: 'Quadríceps e Glúteos',
@@ -120,58 +115,45 @@ const TREINOS_BASE: any = {
 };
 
 // =====================================================================
-// 2. MOTOR DE FILTRAGEM (TODAS AS OPÇÕES DA ANAMNESE)
+// 2. MOTOR DE FILTRAGEM
 // =====================================================================
 
 function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[]) {
-  // Junta tudo num array único de "problemas" para facilitar a busca
   const problemas = [...(limitacoes || []), ...(cirurgias || [])]
     .map(t => t.toLowerCase().trim())
     .filter(t => t !== 'nenhuma');
 
   if (problemas.length === 0) return treino;
 
-  console.log("Aplicando filtros para:", problemas);
-
   return treino.map(dia => {
     const newExercises = dia.exercises.map((ex: any) => {
       let modificado = { ...ex };
       const nomeEx = ex.name.toLowerCase();
 
-      // ---------------------------------------------------------
-      // 1. JOELHO / LCA / MENISCO
-      // Evitar: Impacto, Agachamento profundo pesado, Extensora pesada
-      // ---------------------------------------------------------
+      // JOELHO
       if (problemas.some(p => p.includes('joelho') || p.includes('lca') || p.includes('menisco'))) {
         if (nomeEx.includes('agachamento') || nomeEx.includes('afundo') || nomeEx.includes('búlgaro') || nomeEx.includes('passada') || nomeEx.includes('burpee')) {
           modificado = { ...modificado, name: 'Elevação pélvica máquina', notes: 'Substituído (Proteção Joelho)' };
         }
         if (nomeEx.includes('extensora')) {
-          // Mantém, mas com isometria, ou troca se for crítico (aqui vamos trocar para garantir)
           modificado = { ...modificado, name: 'Mesa flexora', notes: 'Foco Posterior (Pupa Joelho)' }; 
         }
       }
 
-      // ---------------------------------------------------------
-      // 2. LOMBAR / HÉRNIA / COLUNA
-      // Evitar: Carga axial (barra nas costas), Terra, Stiff pesado, Remada Curvada
-      // ---------------------------------------------------------
+      // LOMBAR
       if (problemas.some(p => p.includes('lombar') || p.includes('hérnia') || p.includes('coluna'))) {
         if (nomeEx.includes('agachamento') || nomeEx.includes('terra') || nomeEx.includes('stiff') || nomeEx.includes('desenvolvimento') && !nomeEx.includes('máquina')) {
           modificado = { ...modificado, name: 'Leg press 45°', notes: 'Coluna apoiada (Segurança Lombar)' };
         }
         if (nomeEx.includes('remada curvada') || nomeEx.includes('cavalinho')) {
-          modificado = { ...modificado, name: 'Remada baixa c/triângulo', notes: 'Coluna estável (Segurança Lombar)' };
+          modificado = { ...modificado, name: 'Remada baixa c/triângulo', notes: 'Coluna estável' };
         }
         if (nomeEx.includes('abdominal supra')) {
            modificado = { ...modificado, name: 'Prancha isométrica', notes: 'Core Estático' };
         }
       }
 
-      // ---------------------------------------------------------
-      // 3. OMBRO / MANGUITO
-      // Evitar: Desenvolvimento pesado, Puxada nuca, Elevação acima da cabeça
-      // ---------------------------------------------------------
+      // OMBRO
       if (problemas.some(p => p.includes('ombro') || p.includes('manguito'))) {
         if (nomeEx.includes('desenvolvimento') || nomeEx.includes('supino inclinado')) {
           modificado = { ...modificado, name: 'Elevação lateral', notes: 'Carga controlada (Ombro)' };
@@ -181,39 +163,30 @@ function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[])
         }
       }
 
-      // ---------------------------------------------------------
-      // 4. PUNHO (WRIST)
-      // Evitar: Flexão de braço, Barra reta (Rosca), Apoio direto
-      // ---------------------------------------------------------
+      // PUNHO
       if (problemas.some(p => p.includes('punho'))) {
         if (nomeEx.includes('flexão de braços') || nomeEx.includes('burpee') || nomeEx.includes('prancha')) {
           modificado = { ...modificado, name: 'Voador frontal', notes: 'Sem apoio de punho' };
         }
         if (nomeEx.includes('rosca direta') && nomeEx.includes('barra')) {
-          modificado = { ...modificado, name: 'Rosca martelo', notes: 'Pegada neutra (Alivio Punho)' };
+          modificado = { ...modificado, name: 'Rosca martelo', notes: 'Pegada neutra' };
         }
         if (nomeEx.includes('tríceps testa')) {
            modificado = { ...modificado, name: 'Tríceps corda', notes: 'Pegada neutra' };
         }
       }
 
-      // ---------------------------------------------------------
-      // 5. QUADRIL (HIP)
-      // Evitar: Passada, Afundo, Agachamento profundo
-      // ---------------------------------------------------------
+      // QUADRIL
       if (problemas.some(p => p.includes('quadril'))) {
         if (nomeEx.includes('agachamento') || nomeEx.includes('afundo') || nomeEx.includes('passada') || nomeEx.includes('búlgaro')) {
           modificado = { ...modificado, name: 'Leg press 45°', notes: 'Quadril estável' };
         }
         if (nomeEx.includes('terra')) {
-           modificado = { ...modificado, name: 'Mesa flexora', notes: 'Sem carga axial no quadril' };
+           modificado = { ...modificado, name: 'Mesa flexora', notes: 'Sem carga axial' };
         }
       }
 
-      // ---------------------------------------------------------
-      // 6. TORNOZELO
-      // Evitar: Panturrilha em pé pesada, Agachamento profundo (dorsiflexão), Salto
-      // ---------------------------------------------------------
+      // TORNOZELO
       if (problemas.some(p => p.includes('tornozelo'))) {
         if (nomeEx.includes('agachamento') || nomeEx.includes('burpee') || nomeEx.includes('polichinelo')) {
           modificado = { ...modificado, name: 'Leg press horizontal', notes: 'Sem mobilidade tornozelo' };
@@ -223,10 +196,7 @@ function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[])
         }
       }
 
-      // ---------------------------------------------------------
-      // 7. CERVICAL
-      // Evitar: Barra nas costas (Agachamento), Abdominal puxando pescoço
-      // ---------------------------------------------------------
+      // CERVICAL
       if (problemas.some(p => p.includes('cervical'))) {
         if (nomeEx.includes('agachamento') && nomeEx.includes('barra')) {
           modificado = { ...modificado, name: 'Agachamento com halteres', notes: 'Sem barra na nuca' };
@@ -236,34 +206,24 @@ function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[])
         }
       }
 
-      // ---------------------------------------------------------
-      // 8. COTOVELOS
-      // Evitar: Tríceps Testa, Francês (Extensão total sob carga)
-      // ---------------------------------------------------------
+      // COTOVELOS
       if (problemas.some(p => p.includes('cotovelo'))) {
         if (nomeEx.includes('testa') || nomeEx.includes('francês')) {
           modificado = { ...modificado, name: 'Tríceps corda', notes: 'Menor estresse articular' };
         }
       }
 
-      // ---------------------------------------------------------
-      // 9. ABDOMINOPLASTIA / CESÁREA (Cirurgias Abdominais)
-      // Evitar: Distensão abdominal excessiva, Abdominal completo intenso
-      // ---------------------------------------------------------
+      // ABDOMINOPLASTIA / CESÁREA
       if (problemas.some(p => p.includes('abdominoplastia') || p.includes('cesárea'))) {
         if (nomeEx.includes('abdominal') || nomeEx.includes('prancha')) {
-          modificado = { ...modificado, name: 'Elevação pélvica máquina', notes: 'Core estabilizado (Pós-cirúrgico)' };
+          modificado = { ...modificado, name: 'Elevação pélvica máquina', notes: 'Core estabilizado' };
         }
         if (nomeEx.includes('agachamento') || nomeEx.includes('terra')) {
-           // Evita pressão intra-abdominal excessiva
            modificado = { ...modificado, name: 'Cadeira extensora', notes: 'Menor pressão abdominal' };
         }
       }
 
-      // ---------------------------------------------------------
-      // 10. PRÓTESE DE SILICONE
-      // Evitar: Supino Barra (risco impacto), Voador (alongamento excessivo)
-      // ---------------------------------------------------------
+      // SILICONE / PRÓTESE
       if (problemas.some(p => p.includes('silicone') || p.includes('prótese'))) {
         if (nomeEx.includes('supino') && nomeEx.includes('barra')) {
           modificado = { ...modificado, name: 'Supino reto c/halteres', notes: 'Segurança (Prótese)' };
@@ -291,10 +251,9 @@ function ajustarPorTempo(treino: any[], tempo: number, objetivo: string, dias: n
 
     if ((objetivo === 'Emagrecimento' || objetivo === 'Definição') && dias >= 3) {
         const lastIndex = newExercises.length - 1;
-        // Só substitui se o último não for um exercício essencial de reabilitação (Mobilidade)
         if(newExercises[lastIndex].category !== 'Mobilidade') {
             newExercises[lastIndex] = {
-                name: 'Polichinelo', // Polichinelo é mais seguro que Burpee para a maioria
+                name: 'Polichinelo',
                 sets: 3,
                 reps: '1 min',
                 category: 'Cardio',
@@ -323,12 +282,10 @@ function aplicarTecnicas(treino: any[], nivel: string) {
     }
 
     if (nivelStr === 'avançado') {
-      // Bi-set (Exercícios 2 e 3 se forem do mesmo grupo e não forem perigosos)
       if (newExercises.length >= 3 && newExercises[1].category === newExercises[2].category) {
         newExercises[1].technique = 'BISET';
         newExercises[2].technique = 'BISET';
       }
-      // Rest-pause no penúltimo
       const penultimo = newExercises.length - 2;
       if (newExercises[penultimo] && !['Cardio', 'Mobilidade'].includes(newExercises[penultimo].category)) {
           newExercises[penultimo].technique = 'RESTPAUSE';
@@ -361,7 +318,6 @@ export async function POST(req: Request) {
     const nivel = anamnese.nivel || 'Iniciante';
     const objetivo = anamnese.objetivo || 'Hipertrofia';
     
-    // Arrays de lesões
     const limitacoes = anamnese.limitacoes || [];
     const cirurgias = anamnese.cirurgias || [];
 
@@ -372,14 +328,13 @@ export async function POST(req: Request) {
     else if (dias === 4) template = TREINOS_BASE.abcd;
     else template = TREINOS_BASE.abc; 
 
-    // 2. Filtros (CASCA DE SEGURANÇA TOTAL)
+    // 2. Filtros
     let treinoFinal = filtrarLesoes(template, limitacoes, cirurgias);
     treinoFinal = ajustarPorTempo(treinoFinal, tempo, objetivo, dias);
     treinoFinal = aplicarTecnicas(treinoFinal, nivel);
 
     // 3. Busca IDs
     const dbExercises = await prisma.exercise.findMany();
-    // Mapa: nome_lower -> id
     const exercisesMap = new Map(dbExercises.map(e => [e.name.toLowerCase().trim(), e.id]));
     const fallbackId = dbExercises[0]?.id; 
 
@@ -389,7 +344,6 @@ export async function POST(req: Request) {
       for (const ex of dia.exercises) {
         let realId = exercisesMap.get(ex.name.toLowerCase().trim());
         
-        // Tentativa de Match Parcial se não achar exato
         if (!realId) {
             const match = dbExercises.find(d => ex.name.toLowerCase().includes(d.name.toLowerCase()) || d.name.toLowerCase().includes(ex.name.toLowerCase()));
             realId = match ? match.id : fallbackId;
@@ -403,7 +357,8 @@ export async function POST(req: Request) {
                 reps: String(ex.reps),
                 technique: ex.technique || "",
                 notes: ex.notes || "",
-                restTime: ex.restTime || 60 
+                // 👇 A CORREÇÃO FINAL: Garante 60 se não tiver valor
+                restTime: ex.restTime ? Number(ex.restTime) : 60 
             });
         }
       }
