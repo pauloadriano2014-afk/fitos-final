@@ -62,6 +62,7 @@ model WorkoutExercise {
   notes      String?  
   technique  String?  
   day        String   @default("A") 
+  order      Int      @default(0) // <--- ADICIONE ESTA LINHA
 }
 
 model Anamnese {
