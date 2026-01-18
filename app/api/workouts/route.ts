@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-// GET: Busca o treino (Com ordenação correta)
+// GET: Busca o treino (Com ordenação e dados corretos)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -16,14 +16,15 @@ export async function GET(req: Request) {
       where: { userId: userId },
       include: {
         exercises: {
-          include: { exercise: true }, // Traz detalhes do exercício
-          orderBy: [{ day: 'asc' }, { id: 'asc' }] // Ordena: A, B, C... e depois por ordem de inserção
+          include: { exercise: true },
+          // Ordena por dia (A, B) e depois por ordem de criação
+          orderBy: [{ day: 'asc' }, { id: 'asc' }]
         }
       },
       orderBy: { createdAt: 'desc' }
     });
 
-    if (!workout) return NextResponse.json(null); // Retorna nulo se não tiver treino
+    if (!workout) return NextResponse.json(null);
 
     return NextResponse.json(workout);
   } catch (error) {
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Salva o Treino
+// POST: Salva o Treino (Correção da Técnica e Dia)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -40,10 +41,10 @@ export async function POST(req: Request) {
 
     if (!userId || !exercises) return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
 
-    // Limpa anterior
+    // 1. Limpa treino anterior
     await prisma.workout.deleteMany({ where: { userId: userId } });
 
-    // Cria novo
+    // 2. Cria novo com os campos certos
     const newWorkout = await prisma.workout.create({
       data: {
         name: name || "Treino Personalizado",
@@ -53,10 +54,11 @@ export async function POST(req: Request) {
             exerciseId: ex.exerciseId, 
             sets: parseInt(ex.sets) || 3, 
             reps: String(ex.reps) || "12", 
-            notes: ex.notes || ex.technique || "", // Garante que a técnica seja salva
             
-            // 👇 AQUI ESTAVA O ERRO! Adicionei esta linha:
-            day: ex.day || "A" 
+            // CORREÇÃO AQUI: Salvando cada coisa no seu lugar
+            notes: ex.notes || "",         // Texto livre
+            technique: ex.technique || "", // "DROPSET", etc
+            day: ex.day || "A"             // Dia da semana
           })),
         },
       }
@@ -65,6 +67,6 @@ export async function POST(req: Request) {
     return NextResponse.json(newWorkout);
   } catch (error: any) {
     console.error("Erro POST Workout:", error.message);
-    return NextResponse.json({ error: "Erro ao salvar" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao salvar: " + error.message }, { status: 500 });
   }
 }
