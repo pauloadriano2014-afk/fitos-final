@@ -8,9 +8,8 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 export const dynamic = 'force-dynamic';
 
 // =====================================================================
-// 1. BANCO DE TREINOS (Mantido e Completo)
+// 1. BANCO DE TREINOS
 // =====================================================================
-
 const TREINOS_BASE: any = {
   a1: {
     day: 'A', focus: 'Empurrar (Foco Peito)',
@@ -91,103 +90,100 @@ const TREINOS_BASE: any = {
 };
 
 // =====================================================================
-// 2. DISTRIBUIÇÃO DE TÉCNICAS (INTELIGÊNCIA REAL)
+// 2. ORDENAÇÃO POR BALDES (INFALÍVEL)
+// =====================================================================
+
+function ordenarPorBaldes(exercises: any[]) {
+  // 1. Cria os baldes vazios
+  const mob = [];
+  const grandes = []; // Perna, Peito, Costas
+  const pequenos = []; // Ombro, Triceps, Biceps
+  const finalizadores = []; // Abs, Cardio
+
+  for (const ex of exercises) {
+    const nome = ex.name.toLowerCase();
+    const cat = (ex.category || '').toLowerCase();
+
+    // REGRA SUPREMA: SE TIVER "MOBILIDADE" NO NOME, VAI PRO TOPO
+    if (nome.includes('mobilidade') || nome.includes('alongamento') || cat.includes('mobilidade')) {
+      mob.push(ex);
+      continue;
+    }
+
+    // REGRA 2: MUSCULOS
+    if (cat.includes('perna') || cat.includes('costas') || cat.includes('peito')) {
+        grandes.push(ex);
+    } 
+    else if (cat.includes('ombro') || cat.includes('tríceps') || cat.includes('triceps') || cat.includes('bíceps') || cat.includes('biceps')) {
+        pequenos.push(ex);
+    } 
+    else {
+        finalizadores.push(ex);
+    }
+  }
+
+  // 3. Ordena dentro dos baldes (Ex: Supino antes de Voador)
+  // Função auxiliar de ordenação interna
+  const sortInternal = (a: any, b: any) => {
+     // Costas: Puxada antes de Remada
+     if(a.category === 'Costas' && b.category === 'Costas') {
+         const aVert = a.name.includes('Puxada') || a.name.includes('Barra');
+         const bVert = b.name.includes('Puxada') || b.name.includes('Barra');
+         if(aVert && !bVert) return -1;
+         if(!aVert && bVert) return 1;
+     }
+     // Peito: Supino antes de Isolador
+     if(a.category === 'Peito' && b.category === 'Peito') {
+         const aPress = a.name.includes('Supino');
+         const bPress = b.name.includes('Supino');
+         if(aPress && !bPress) return -1;
+         if(!aPress && bPress) return 1;
+     }
+     return 0;
+  };
+
+  grandes.sort(sortInternal);
+  pequenos.sort(sortInternal);
+
+  // 4. Cola tudo na ordem correta
+  return [...mob, ...grandes, ...pequenos, ...finalizadores];
+}
+
+// =====================================================================
+// 3. TÉCNICAS E FILTROS
 // =====================================================================
 
 function aplicarTecnicas(treino: any[], nivel: string) {
   const nivelStr = nivel ? nivel.toLowerCase() : 'iniciante';
-  
-  if (nivelStr !== 'avançado' && nivelStr !== 'intermediário') return treino;
+  if (nivelStr !== 'avançado') return treino;
 
   return treino.map((dia: any) => {
+    // Agora que está ordenado, sabemos posições exatas
+    const exMob = dia.exercises[0]; // Mobilidade
+    const exPrincipal = dia.exercises[1]; // Primeiro Grande (Agacha/Supino/Puxada)
+    const exSecundario = dia.exercises[2]; 
+    const exUltimo = dia.exercises[dia.exercises.length - 2]; // Penúltimo (antes do abs)
+
     let newExercises = dia.exercises.map((ex: any) => ({ ...ex }));
-    const exercisesCount = newExercises.length;
 
-    newExercises = newExercises.map((ex: any, index: number) => {
-      const nome = ex.name.toLowerCase();
-      const cat = ex.category;
+    // REST-PAUSE no exercício principal (índice 1)
+    if (newExercises[1] && !newExercises[1].name.includes('Mobilidade')) {
+        newExercises[1].technique = 'RESTPAUSE';
+        newExercises[1].notes = 'Carga máxima + pausa curta';
+    }
 
-      // 1. REST-PAUSE: No primeiro exercício "pesado" (index 1, pois 0 é mobilidade)
-      if (index === 1 && !nome.includes('mobilidade') && nivelStr === 'avançado') {
-        return { ...ex, technique: 'RESTPAUSE', notes: 'Carga alta, pausas curtas' };
-      }
-
-      // 2. CLUSTER SET: Para exercícios de máquina pesados no meio do treino
-      if ((nome.includes('leg press') || nome.includes('supino máquina') || nome.includes('puxada')) && index > 1 && nivelStr === 'avançado') {
-         return { ...ex, technique: 'CLUSTERSET', notes: '4 reps, pausa 15s, repete...' };
-      }
-
-      // 3. DROP-SET: No último exercício de cada grupo muscular principal
-      // Ex: Último de Peito ou Último de Pernas do dia
-      const isLastOfGroup = !newExercises[index + 1] || newExercises[index + 1].category !== cat;
-      if (isLastOfGroup && (cat === 'Peito' || cat === 'Pernas' || cat === 'Ombros') && index > 1) {
-         return { ...ex, technique: 'DROPSET', notes: 'Falha total na última série' };
-      }
-
-      // 4. MÉTODO 21: Para Bíceps e Tríceps Isolados
-      if ((nome.includes('rosca direta') || nome.includes('tríceps corda') || nome.includes('scott')) && nivelStr === 'avançado') {
-         return { ...ex, technique: '21', notes: '7 baixo, 7 alto, 7 completo' };
-      }
-
-      return ex;
-    });
+    // DROP-SET no último exercício de músculo (frequentemente o penúltimo da lista)
+    if (newExercises.length > 4) {
+        const target = newExercises.length - 2; 
+        if(newExercises[target].category !== 'Abdômen') {
+            newExercises[target].technique = 'DROPSET';
+            newExercises[target].notes = 'Falha total';
+        }
+    }
 
     return { ...dia, exercises: newExercises };
   });
 }
-
-// =====================================================================
-// 3. ORDENAÇÃO MILITAR (Mantida)
-// =====================================================================
-
-function ordenarExercicios(exercises: any[]) {
-  const prioridade: any = {
-    'mobilidade': 0, 'pernas': 1, 'costas': 2, 'peito': 3, 'ombros': 4,
-    'tríceps': 5, 'triceps': 5, 'bíceps': 6, 'biceps': 6, 'abdômen': 7, 'cardio': 8
-  };
-
-  return exercises.sort((a, b) => {
-    const nomeA = a.name.toLowerCase();
-    const nomeB = b.name.toLowerCase();
-    const catA = (a.category || '').toLowerCase();
-    const catB = (b.category || '').toLowerCase();
-
-    const aIsMob = nomeA.includes('mobilidade') || nomeA.includes('alongamento') || catA === 'mobilidade';
-    const bIsMob = nomeB.includes('mobilidade') || nomeB.includes('alongamento') || catB === 'mobilidade';
-    
-    if (aIsMob && !bIsMob) return -1;
-    if (!aIsMob && bIsMob) return 1;
-
-    const pA = prioridade[catA] || 99;
-    const pB = prioridade[catB] || 99;
-    if (pA !== pB) return pA - pB;
-
-    if (catA === 'peito' && catB === 'peito') {
-        const aPress = nomeA.includes('supino') || nomeA.includes('flexão');
-        const bPress = nomeB.includes('supino') || nomeB.includes('flexão');
-        if (aPress && !bPress) return -1;
-        if (!aPress && bPress) return 1;
-    }
-    if (catA === 'costas' && catB === 'costas') {
-        const aVert = nomeA.includes('puxada') || nomeA.includes('barra');
-        const bVert = nomeB.includes('puxada') || nomeB.includes('barra');
-        if (aVert && !bVert) return -1;
-        if (!aVert && bVert) return 1;
-    }
-    if (catA === 'ombros' && catB === 'ombros') {
-        const aPress = nomeA.includes('desenvolvimento');
-        const bPress = nomeB.includes('desenvolvimento');
-        if (aPress && !bPress) return -1;
-        if (!aPress && bPress) return 1;
-    }
-
-    return 0;
-  });
-}
-
-// =====================================================================
-// 4. FILTROS E AJUSTES
-// =====================================================================
 
 function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[]) {
   const problemas = [...(limitacoes || []), ...(cirurgias || [])].map(t => t.toLowerCase().trim()).filter(t => t !== 'nenhuma');
@@ -198,24 +194,17 @@ function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[])
       let modificado = { ...ex };
       const nomeEx = ex.name.toLowerCase();
 
-      if (problemas.some(p => p.includes('joelho') || p.includes('lca') || p.includes('menisco'))) {
-        if (nomeEx.includes('agachamento') || nomeEx.includes('afundo') || nomeEx.includes('búlgaro')) {
-           return { ...modificado, name: 'Elevação pélvica máquina', notes: 'Proteção Joelho' };
-        }
+      if (problemas.some(p => p.includes('joelho') || p.includes('lca'))) {
+        if (nomeEx.includes('agachamento') || nomeEx.includes('afundo')) return { ...modificado, name: 'Elevação pélvica máquina', notes: 'Substituído (Joelho)' };
         if (nomeEx.includes('extensora')) return { ...modificado, name: 'Mesa flexora', notes: 'Foco Posterior' };
       }
-      if (problemas.some(p => p.includes('lombar') || p.includes('hérnia') || p.includes('coluna'))) {
-        if (nomeEx.includes('agachamento') || nomeEx.includes('terra') || nomeEx.includes('stiff') || nomeEx.includes('remada curvada')) {
-           return { ...modificado, name: 'Puxada frente aberta', notes: 'Proteção Coluna' };
-        }
-      }
-      if (problemas.some(p => p.includes('silicone') || p.includes('prótese'))) {
-        if (nomeEx.includes('supino') && nomeEx.includes('barra')) return { ...modificado, name: 'Supino reto c/halteres', notes: 'Segurança Prótese' };
-        if (nomeEx.includes('voador') || nomeEx.includes('crucifixo')) return { ...modificado, name: 'Supino máquina', notes: 'Segurança Prótese' };
+      if (problemas.some(p => p.includes('lombar') || p.includes('hérnia'))) {
+        if (nomeEx.includes('agachamento') || nomeEx.includes('terra') || nomeEx.includes('remada curvada')) return { ...modificado, name: 'Puxada frente aberta', notes: 'Substituído (Coluna)' };
       }
       return modificado;
     });
-
+    
+    // Remove duplicatas
     const nomesVistos = new Set();
     newExercises = newExercises.filter((ex: any) => {
         if (nomesVistos.has(ex.name)) return false;
@@ -227,21 +216,16 @@ function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[])
   });
 }
 
-function ajustarPorTempo(treino: any[], tempo: number, objetivo: string) {
+function ajustarPorTempo(treino: any[], tempo: number) {
   if (tempo > 45) return treino;
-  return treino.map((dia: any) => {
-    let sliced = dia.exercises.slice(0, 5).map((ex: any) => ({ ...ex, restTime: 45 }));
-    if (objetivo === 'Emagrecimento' || objetivo === 'Definição') {
-         if(sliced[sliced.length-1].category !== 'Mobilidade') {
-             sliced[sliced.length-1] = { name: 'Polichinelo', sets: 3, reps: '1 min', category: 'Cardio', restTime: 30, notes: 'HIIT Final' };
-         }
-    }
-    return { ...dia, exercises: sliced };
-  });
+  return treino.map((dia: any) => ({
+    ...dia,
+    exercises: dia.exercises.slice(0, 5).map((ex: any) => ({ ...ex, restTime: 45 }))
+  }));
 }
 
 // =====================================================================
-// 5. EXECUÇÃO
+// 4. EXECUÇÃO
 // =====================================================================
 
 export async function POST(req: Request) {
@@ -264,8 +248,8 @@ export async function POST(req: Request) {
     const limitacoes = anamnese.limitacoes || [];
     const cirurgias = anamnese.cirurgias || [];
 
+    // SELEÇÃO
     let template = [];
-    // Garante fallback se faltar chave
     const A1 = TREINOS_BASE.a1 || TREINOS_BASE.fullbody[0];
     const B1 = TREINOS_BASE.b1 || TREINOS_BASE.fullbody[0];
     const C1 = TREINOS_BASE.c1 || TREINOS_BASE.fullbody[0];
@@ -281,18 +265,20 @@ export async function POST(req: Request) {
         if (dias === 5) template.pop();
     }
 
+    // 1. FILTRA
     let treinoFinal = filtrarLesoes(template, limitacoes, cirurgias);
-    treinoFinal = ajustarPorTempo(treinoFinal, tempo, objetivo);
-    
-    // ORDENA PRIMEIRO (Para garantir que o Multiarticular seja o index 1)
+    treinoFinal = ajustarPorTempo(treinoFinal, tempo);
+
+    // 2. ORDENA (Agora usando BALDES)
     treinoFinal = treinoFinal.map((dia: any) => ({
         ...dia,
-        exercises: ordenarExercicios(dia.exercises)
+        exercises: ordenarPorBaldes(dia.exercises)
     }));
 
-    // APLICA TÉCNICAS DEPOIS (Para pegar o exercício certo)
+    // 3. TÉCNICAS (Agora que a ordem está garantida)
     treinoFinal = aplicarTecnicas(treinoFinal, nivel);
 
+    // 4. SALVA
     const dbExercises = await prisma.exercise.findMany();
     const exercisesMap = new Map(dbExercises.map(e => [e.name.toLowerCase().trim(), e.id]));
     const fallbackId = dbExercises[0]?.id;
