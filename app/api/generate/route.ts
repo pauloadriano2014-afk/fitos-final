@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
-// --- SINGLETON PATTERN (Evita "Too many connections" na Render) ---
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
@@ -9,68 +8,59 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 export const dynamic = 'force-dynamic';
 
 // =====================================================================
-// 1. BANCO DE TREINOS BASE (COMPLETO PARA 1 a 6 DIAS)
+// 1. BANCO DE TREINOS (Mantido e Completo)
 // =====================================================================
 
 const TREINOS_BASE: any = {
-  // --- A1: EMPURRAR (Foco Peito) ---
   a1: {
     day: 'A', focus: 'Empurrar (Foco Peito)',
     exercises: [
       { name: 'Mobilidade de ombro c/bastão', sets: 1, reps: '1 min', category: 'Mobilidade' },
-      { name: 'Supino reto c/barra', sets: 4, reps: '10', category: 'Peito' },
-      { name: 'Supino inclinado c/halteres', sets: 3, reps: '12', category: 'Peito' },
-      { name: 'Voador frontal', sets: 3, reps: '15', category: 'Peito' },
-      { name: 'Desenvolvimento c/halteres', sets: 3, reps: '12', category: 'Ombros' },
-      { name: 'Elevação lateral', sets: 3, reps: '15', category: 'Ombros' },
+      { name: 'Supino reto c/barra', sets: 4, reps: '8', category: 'Peito' },
+      { name: 'Supino inclinado c/halteres', sets: 3, reps: '10', category: 'Peito' },
+      { name: 'Voador frontal', sets: 3, reps: '12', category: 'Peito' },
+      { name: 'Desenvolvimento c/halteres', sets: 3, reps: '10', category: 'Ombros' },
+      { name: 'Elevação lateral', sets: 4, reps: '12', category: 'Ombros' },
       { name: 'Tríceps corda', sets: 4, reps: '12', category: 'Tríceps' },
       { name: 'Tríceps francês', sets: 3, reps: '12', category: 'Tríceps' }
     ]
   },
-
-  // --- B1: PUXAR (Vertical) ---
   b1: {
     day: 'B', focus: 'Puxar (Vertical)',
     exercises: [
       { name: 'Alongamento dinâmico de peitoral', sets: 1, reps: '1 min', category: 'Mobilidade' },
-      { name: 'Puxada frente aberta', sets: 4, reps: '12', category: 'Costas' },
-      { name: 'Puxada triângulo', sets: 3, reps: '12', category: 'Costas' },
+      { name: 'Puxada frente aberta', sets: 4, reps: '10', category: 'Costas' },
+      { name: 'Puxada triângulo', sets: 3, reps: '10', category: 'Costas' },
       { name: 'Remada curvada c/barra', sets: 3, reps: '10', category: 'Costas' },
-      { name: 'Voador invertido', sets: 3, reps: '15', category: 'Costas' },
-      { name: 'Rosca direta c/barra curvada', sets: 4, reps: '12', category: 'Bíceps' },
+      { name: 'Voador invertido', sets: 3, reps: '12', category: 'Costas' },
+      { name: 'Rosca direta c/barra curvada', sets: 4, reps: '10', category: 'Bíceps' },
       { name: 'Rosca martelo', sets: 3, reps: '12', category: 'Bíceps' }
     ]
   },
-
-  // --- C1: PERNAS (Foco Quadríceps) ---
   c1: {
     day: 'C', focus: 'Pernas (Foco Quadríceps)',
     exercises: [
       { name: 'Mobilidade de quadril 90/90', sets: 1, reps: '1 min', category: 'Mobilidade' },
-      { name: 'Agachamento livre c/barra', sets: 4, reps: '10', category: 'Pernas' },
-      { name: 'Leg press 45°', sets: 4, reps: '12', category: 'Pernas' },
-      { name: 'Cadeira extensora', sets: 3, reps: '15', category: 'Pernas' },
+      { name: 'Agachamento livre c/barra', sets: 4, reps: '8', category: 'Pernas' },
+      { name: 'Leg press 45°', sets: 4, reps: '10', category: 'Pernas' },
+      { name: 'Cadeira extensora', sets: 3, reps: '12', category: 'Pernas' },
       { name: 'Mesa flexora', sets: 4, reps: '12', category: 'Pernas' },
       { name: 'Panturrilha em pé', sets: 4, reps: '15', category: 'Pernas' },
-      { name: 'Prancha abdominal', sets: 3, reps: '40s', category: 'Abdômen' }
+      { name: 'Prancha abdominal', sets: 3, reps: '45s', category: 'Abdômen' }
     ]
   },
-
-  // --- A2 (D): VARIAÇÃO EMPURRAR (Foco Ombros) ---
   a2: {
     day: 'D', focus: 'Empurrar (Variação)',
     exercises: [
       { name: 'Mobilidade de ombro c/bastão', sets: 1, reps: '1 min', category: 'Mobilidade' },
-      { name: 'Desenvolvimento máquina', sets: 4, reps: '10', category: 'Ombros' },
-      { name: 'Elevação lateral no cross', sets: 4, reps: '12', category: 'Ombros' },
       { name: 'Supino reto c/halteres', sets: 4, reps: '10', category: 'Peito' },
       { name: 'Crucifixo máquina', sets: 3, reps: '12', category: 'Peito' },
-      { name: 'Tríceps testa c/barra H', sets: 4, reps: '12', category: 'Tríceps' },
+      { name: 'Desenvolvimento máquina', sets: 4, reps: '10', category: 'Ombros' },
+      { name: 'Elevação lateral no cross', sets: 4, reps: '12', category: 'Ombros' },
+      { name: 'Tríceps testa c/barra H', sets: 4, reps: '10', category: 'Tríceps' },
       { name: 'Tríceps banco', sets: 3, reps: 'Falha', category: 'Tríceps' }
     ]
   },
-
-  // --- B2 (E): VARIAÇÃO PUXAR (Horizontal) ---
   b2: {
     day: 'E', focus: 'Puxar (Variação)',
     exercises: [
@@ -79,12 +69,10 @@ const TREINOS_BASE: any = {
       { name: 'Remada cavalinho', sets: 4, reps: '10', category: 'Costas' },
       { name: 'Serrote', sets: 3, reps: '12', category: 'Costas' },
       { name: 'Face pull', sets: 3, reps: '15', category: 'Costas' },
-      { name: 'Rosca Scott', sets: 4, reps: '12', category: 'Bíceps' },
+      { name: 'Rosca Scott', sets: 4, reps: '10', category: 'Bíceps' },
       { name: 'Rosca alternada c/halteres', sets: 3, reps: '12', category: 'Bíceps' }
     ]
   },
-
-  // --- C2 (F): VARIAÇÃO PERNAS (Foco Posterior) ---
   c2: {
     day: 'F', focus: 'Pernas (Foco Posterior)',
     exercises: [
@@ -97,67 +85,100 @@ const TREINOS_BASE: any = {
       { name: 'Abdominal infra', sets: 3, reps: '15', category: 'Abdômen' }
     ]
   },
-
-  // --- FULLBODY (Fallback) ---
   fullbody: [
-    {
-      day: 'A', focus: 'Fullbody',
-      exercises: [
-        { name: 'Mobilidade de quadril 90/90', sets: 1, reps: '1 min', category: 'Mobilidade' },
-        { name: 'Agachamento livre c/barra', sets: 3, reps: '12', category: 'Pernas' },
-        { name: 'Supino reto c/barra', sets: 3, reps: '12', category: 'Peito' },
-        { name: 'Puxada frente aberta', sets: 3, reps: '12', category: 'Costas' },
-        { name: 'Desenvolvimento c/halteres', sets: 3, reps: '12', category: 'Ombros' },
-        { name: 'Rosca direta', sets: 3, reps: '12', category: 'Bíceps' },
-        { name: 'Tríceps corda', sets: 3, reps: '12', category: 'Tríceps' },
-        { name: 'Prancha abdominal', sets: 3, reps: '30s', category: 'Abdômen' }
-      ]
-    }
+    { day: 'A', focus: 'Fullbody', exercises: [{ name: 'Agachamento', sets: 3, reps: '12', category: 'Pernas' }] }
   ]
 };
 
 // =====================================================================
-// 2. ORDENAÇÃO INTELIGENTE (Prioridade Total)
+// 2. DISTRIBUIÇÃO DE TÉCNICAS (INTELIGÊNCIA REAL)
+// =====================================================================
+
+function aplicarTecnicas(treino: any[], nivel: string) {
+  const nivelStr = nivel ? nivel.toLowerCase() : 'iniciante';
+  
+  if (nivelStr !== 'avançado' && nivelStr !== 'intermediário') return treino;
+
+  return treino.map((dia: any) => {
+    let newExercises = dia.exercises.map((ex: any) => ({ ...ex }));
+    const exercisesCount = newExercises.length;
+
+    newExercises = newExercises.map((ex: any, index: number) => {
+      const nome = ex.name.toLowerCase();
+      const cat = ex.category;
+
+      // 1. REST-PAUSE: No primeiro exercício "pesado" (index 1, pois 0 é mobilidade)
+      if (index === 1 && !nome.includes('mobilidade') && nivelStr === 'avançado') {
+        return { ...ex, technique: 'RESTPAUSE', notes: 'Carga alta, pausas curtas' };
+      }
+
+      // 2. CLUSTER SET: Para exercícios de máquina pesados no meio do treino
+      if ((nome.includes('leg press') || nome.includes('supino máquina') || nome.includes('puxada')) && index > 1 && nivelStr === 'avançado') {
+         return { ...ex, technique: 'CLUSTERSET', notes: '4 reps, pausa 15s, repete...' };
+      }
+
+      // 3. DROP-SET: No último exercício de cada grupo muscular principal
+      // Ex: Último de Peito ou Último de Pernas do dia
+      const isLastOfGroup = !newExercises[index + 1] || newExercises[index + 1].category !== cat;
+      if (isLastOfGroup && (cat === 'Peito' || cat === 'Pernas' || cat === 'Ombros') && index > 1) {
+         return { ...ex, technique: 'DROPSET', notes: 'Falha total na última série' };
+      }
+
+      // 4. MÉTODO 21: Para Bíceps e Tríceps Isolados
+      if ((nome.includes('rosca direta') || nome.includes('tríceps corda') || nome.includes('scott')) && nivelStr === 'avançado') {
+         return { ...ex, technique: '21', notes: '7 baixo, 7 alto, 7 completo' };
+      }
+
+      return ex;
+    });
+
+    return { ...dia, exercises: newExercises };
+  });
+}
+
+// =====================================================================
+// 3. ORDENAÇÃO MILITAR (Mantida)
 // =====================================================================
 
 function ordenarExercicios(exercises: any[]) {
   const prioridade: any = {
-    'mobilidade': 1, 
-    'pernas': 2,
-    'costas': 3,
-    'peito': 4,
-    'ombros': 5,
-    'tríceps': 6, 'triceps': 6,
-    'bíceps': 7, 'biceps': 7,
-    'abdômen': 8, 'abdomen': 8,
-    'cardio': 9
+    'mobilidade': 0, 'pernas': 1, 'costas': 2, 'peito': 3, 'ombros': 4,
+    'tríceps': 5, 'triceps': 5, 'bíceps': 6, 'biceps': 6, 'abdômen': 7, 'cardio': 8
   };
 
   return exercises.sort((a, b) => {
-    // Normaliza para garantir match (ex: "Mobilidade" vira "mobilidade")
+    const nomeA = a.name.toLowerCase();
+    const nomeB = b.name.toLowerCase();
     const catA = (a.category || '').toLowerCase();
     const catB = (b.category || '').toLowerCase();
 
+    const aIsMob = nomeA.includes('mobilidade') || nomeA.includes('alongamento') || catA === 'mobilidade';
+    const bIsMob = nomeB.includes('mobilidade') || nomeB.includes('alongamento') || catB === 'mobilidade';
+    
+    if (aIsMob && !bIsMob) return -1;
+    if (!aIsMob && bIsMob) return 1;
+
     const pA = prioridade[catA] || 99;
     const pB = prioridade[catB] || 99;
-
-    // 1. Ordem por Grupo
     if (pA !== pB) return pA - pB;
 
-    // 2. Regra Específica: Costas (Puxada ANTES de Remada)
-    if (catA === 'costas' && catB === 'costas') {
-      const aEhPuxada = a.name.toLowerCase().includes('puxada') || a.name.toLowerCase().includes('barra');
-      const bEhPuxada = b.name.toLowerCase().includes('puxada') || b.name.toLowerCase().includes('barra');
-      if (aEhPuxada && !bEhPuxada) return -1;
-      if (!aEhPuxada && bEhPuxada) return 1;
-    }
-
-    // 3. Regra Específica: Peito (Supino ANTES de Voador)
     if (catA === 'peito' && catB === 'peito') {
-      const aEhSupino = a.name.toLowerCase().includes('supino');
-      const bEhSupino = b.name.toLowerCase().includes('supino');
-      if (aEhSupino && !bEhSupino) return -1;
-      if (!aEhSupino && bEhSupino) return 1;
+        const aPress = nomeA.includes('supino') || nomeA.includes('flexão');
+        const bPress = nomeB.includes('supino') || nomeB.includes('flexão');
+        if (aPress && !bPress) return -1;
+        if (!aPress && bPress) return 1;
+    }
+    if (catA === 'costas' && catB === 'costas') {
+        const aVert = nomeA.includes('puxada') || nomeA.includes('barra');
+        const bVert = nomeB.includes('puxada') || nomeB.includes('barra');
+        if (aVert && !bVert) return -1;
+        if (!aVert && bVert) return 1;
+    }
+    if (catA === 'ombros' && catB === 'ombros') {
+        const aPress = nomeA.includes('desenvolvimento');
+        const bPress = nomeB.includes('desenvolvimento');
+        if (aPress && !bPress) return -1;
+        if (!aPress && bPress) return 1;
     }
 
     return 0;
@@ -165,7 +186,7 @@ function ordenarExercicios(exercises: any[]) {
 }
 
 // =====================================================================
-// 3. FILTROS E AJUSTES
+// 4. FILTROS E AJUSTES
 // =====================================================================
 
 function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[]) {
@@ -177,34 +198,24 @@ function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[])
       let modificado = { ...ex };
       const nomeEx = ex.name.toLowerCase();
 
-      // JOELHO
       if (problemas.some(p => p.includes('joelho') || p.includes('lca') || p.includes('menisco'))) {
         if (nomeEx.includes('agachamento') || nomeEx.includes('afundo') || nomeEx.includes('búlgaro')) {
-           return { ...modificado, name: 'Elevação pélvica máquina', notes: 'Substituído (Proteção Joelho)' };
+           return { ...modificado, name: 'Elevação pélvica máquina', notes: 'Proteção Joelho' };
         }
-        if (nomeEx.includes('extensora')) {
-           return { ...modificado, name: 'Mesa flexora', notes: 'Foco Posterior (Pupa Joelho)' };
-        }
+        if (nomeEx.includes('extensora')) return { ...modificado, name: 'Mesa flexora', notes: 'Foco Posterior' };
       }
-      // LOMBAR
       if (problemas.some(p => p.includes('lombar') || p.includes('hérnia') || p.includes('coluna'))) {
         if (nomeEx.includes('agachamento') || nomeEx.includes('terra') || nomeEx.includes('stiff') || nomeEx.includes('remada curvada')) {
-           return { ...modificado, name: 'Puxada frente aberta', notes: 'Substituído (Coluna)' };
+           return { ...modificado, name: 'Puxada frente aberta', notes: 'Proteção Coluna' };
         }
       }
-      // SILICONE
       if (problemas.some(p => p.includes('silicone') || p.includes('prótese'))) {
         if (nomeEx.includes('supino') && nomeEx.includes('barra')) return { ...modificado, name: 'Supino reto c/halteres', notes: 'Segurança Prótese' };
         if (nomeEx.includes('voador') || nomeEx.includes('crucifixo')) return { ...modificado, name: 'Supino máquina', notes: 'Segurança Prótese' };
       }
-      // QUADRIL
-      if (problemas.some(p => p.includes('quadril'))) {
-         if (nomeEx.includes('agachamento') || nomeEx.includes('afundo')) return { ...modificado, name: 'Leg press 45°', notes: 'Quadril estável' };
-      }
       return modificado;
     });
 
-    // Remove duplicatas
     const nomesVistos = new Set();
     newExercises = newExercises.filter((ex: any) => {
         if (nomesVistos.has(ex.name)) return false;
@@ -218,42 +229,22 @@ function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[])
 
 function ajustarPorTempo(treino: any[], tempo: number, objetivo: string) {
   if (tempo > 45) return treino;
-
   return treino.map((dia: any) => {
     let sliced = dia.exercises.slice(0, 5).map((ex: any) => ({ ...ex, restTime: 45 }));
-    
-    // HIIT Finalizador
     if (objetivo === 'Emagrecimento' || objetivo === 'Definição') {
          if(sliced[sliced.length-1].category !== 'Mobilidade') {
-             sliced[sliced.length-1] = { 
-                 name: 'Polichinelo', sets: 3, reps: '1 min', category: 'Cardio', restTime: 30, notes: 'HIIT Final' 
-             };
+             sliced[sliced.length-1] = { name: 'Polichinelo', sets: 3, reps: '1 min', category: 'Cardio', restTime: 30, notes: 'HIIT Final' };
          }
     }
     return { ...dia, exercises: sliced };
   });
 }
 
-function aplicarTecnicas(treino: any[], nivel: string) {
-  const nivelStr = nivel ? nivel.toLowerCase() : 'iniciante';
-  return treino.map((dia: any) => {
-    const newExercises = dia.exercises.map((ex: any) => ({ ...ex }));
-    if (nivelStr === 'avançado') {
-        if (newExercises[1] && newExercises[2] && newExercises[1].category === newExercises[2].category) {
-            newExercises[1].technique = 'BISET';
-            newExercises[2].technique = 'BISET';
-        }
-    }
-    return { ...dia, exercises: newExercises };
-  });
-}
-
 // =====================================================================
-// 4. EXECUÇÃO DA ROTA
+// 5. EXECUÇÃO
 // =====================================================================
 
 export async function POST(req: Request) {
-  console.log("Iniciando Geração..."); 
   try {
     const { userId } = await req.json();
     if (!userId) return NextResponse.json({ error: "UserId obrigatório" }, { status: 400 });
@@ -273,52 +264,36 @@ export async function POST(req: Request) {
     const limitacoes = anamnese.limitacoes || [];
     const cirurgias = anamnese.cirurgias || [];
 
-    // 1. SELEÇÃO DE TEMPLATE (Agora com A1..C2 definidos)
     let template = [];
+    // Garante fallback se faltar chave
+    const A1 = TREINOS_BASE.a1 || TREINOS_BASE.fullbody[0];
+    const B1 = TREINOS_BASE.b1 || TREINOS_BASE.fullbody[0];
+    const C1 = TREINOS_BASE.c1 || TREINOS_BASE.fullbody[0];
 
-    // Proteção se TREINOS_BASE não tiver as chaves (mas agora tem)
-    const baseA1 = TREINOS_BASE.a1 || TREINOS_BASE.abc[0];
-    const baseB1 = TREINOS_BASE.b1 || TREINOS_BASE.abc[1];
-    const baseC1 = TREINOS_BASE.c1 || TREINOS_BASE.abc[2];
-
-    if (dias <= 2) {
-        template = TREINOS_BASE.fullbody;
-    } 
-    else if (dias === 3) {
-        template = [baseA1, baseB1, baseC1];
-    }
-    else if (dias === 4) {
-        template = [baseA1, baseB1, baseC1, { ...TREINOS_BASE.a2, day: 'D' }];
-    }
+    if (dias <= 2) template = TREINOS_BASE.fullbody;
+    else if (dias === 3) template = [A1, B1, C1];
+    else if (dias === 4) template = [A1, B1, C1, { ...TREINOS_BASE.a2, day: 'D' }];
     else if (dias >= 5) {
-        // Agora vai funcionar porque a1, b1... estão definidos lá em cima
         template = [
-            TREINOS_BASE.a1, 
-            TREINOS_BASE.b1, 
-            TREINOS_BASE.c1, 
-            TREINOS_BASE.a2, 
-            TREINOS_BASE.b2, 
-            TREINOS_BASE.c2 
+            TREINOS_BASE.a1, TREINOS_BASE.b1, TREINOS_BASE.c1,
+            TREINOS_BASE.a2, TREINOS_BASE.b2, TREINOS_BASE.c2 
         ];
         if (dias === 5) template.pop();
     }
 
-    // 2. Filtros e Ajustes
     let treinoFinal = filtrarLesoes(template, limitacoes, cirurgias);
     treinoFinal = ajustarPorTempo(treinoFinal, tempo, objetivo);
-    treinoFinal = aplicarTecnicas(treinoFinal, nivel);
-
-    // 3. ORDENAÇÃO (Aqui a mágica acontece)
+    
+    // ORDENA PRIMEIRO (Para garantir que o Multiarticular seja o index 1)
     treinoFinal = treinoFinal.map((dia: any) => ({
         ...dia,
         exercises: ordenarExercicios(dia.exercises)
     }));
 
-    // 4. Busca e Salva
-    const dbExercises = await prisma.exercise.findMany();
-    // Safety check
-    if (dbExercises.length === 0) return NextResponse.json({ error: "Banco vazio" }, { status: 500 });
+    // APLICA TÉCNICAS DEPOIS (Para pegar o exercício certo)
+    treinoFinal = aplicarTecnicas(treinoFinal, nivel);
 
+    const dbExercises = await prisma.exercise.findMany();
     const exercisesMap = new Map(dbExercises.map(e => [e.name.toLowerCase().trim(), e.id]));
     const fallbackId = dbExercises[0]?.id;
 
@@ -326,7 +301,6 @@ export async function POST(req: Request) {
 
     for (const dia of treinoFinal) {
       if(!dia || !dia.exercises) continue;
-      
       for (const ex of dia.exercises) {
         let realId = exercisesMap.get(ex.name.toLowerCase().trim());
         if (!realId) {
@@ -360,7 +334,6 @@ export async function POST(req: Request) {
       }
     });
 
-    console.log("Sucesso ID:", workout.id);
     return NextResponse.json({ success: true, workoutId: workout.id });
 
   } catch (error: any) {
