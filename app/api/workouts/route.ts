@@ -4,85 +4,67 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-// GET: Busca o treino do aluno
+// GET: Busca o treino (Com ordenação correta)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
 
-    if (!userId) {
-      return NextResponse.json({ error: "ID do usuário não fornecido" }, { status: 400 });
-    }
+    if (!userId) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 });
 
-    const workouts = await prisma.workout.findMany({
-      where: { userId: userId }, // FILTRO POR USUÁRIO GARANTIDO
+    const workout = await prisma.workout.findFirst({
+      where: { userId: userId },
       include: {
         exercises: {
-          include: {
-            exercise: true 
-          }
+          include: { exercise: true }, // Traz detalhes do exercício
+          orderBy: [{ day: 'asc' }, { id: 'asc' }] // Ordena: A, B, C... e depois por ordem de inserção
         }
       },
       orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json(workouts);
+    if (!workout) return NextResponse.json(null); // Retorna nulo se não tiver treino
+
+    return NextResponse.json(workout);
   } catch (error) {
-    console.error("Erro ao buscar treinos:", error);
-    return NextResponse.json({ error: "Erro interno ao buscar treinos" }, { status: 500 });
+    console.error("Erro GET Workout:", error);
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 }
 
-// POST: Você (Admin) cria o treino para o aluno
+// POST: Salva o Treino
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log("Recebendo payload de treino:", JSON.stringify(body, null, 2));
+    const { userId, name, exercises } = body; 
 
-    const { userId, name, workoutName, exercises } = body; 
-    const finalWorkoutName = workoutName || name || "Novo Treino";
+    if (!userId || !exercises) return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
 
-    if (!userId || !exercises) {
-      return NextResponse.json({ error: "Dados insuficientes (userId ou exercícios faltando)" }, { status: 400 });
-    }
+    // Limpa anterior
+    await prisma.workout.deleteMany({ where: { userId: userId } });
 
-    // OPCIONAL: Deletar treino anterior com o mesmo nome para o mesmo aluno (evita duplicidade)
-    await prisma.workout.deleteMany({
-      where: {
-        userId: userId,
-        name: finalWorkoutName
-      }
-    });
-
-    // OPERAÇÃO BLINDADA COM TRATAMENTO DE TIPOS
+    // Cria novo
     const newWorkout = await prisma.workout.create({
       data: {
-        name: finalWorkoutName,
+        name: name || "Treino Personalizado",
         userId: userId,
         exercises: {
           create: exercises.map((ex: any) => ({
             exerciseId: ex.exerciseId, 
             sets: parseInt(ex.sets) || 3, 
             reps: String(ex.reps) || "12", 
-            notes: ex.technique || ex.notes || "" 
+            notes: ex.notes || ex.technique || "", // Garante que a técnica seja salva
+            
+            // 👇 AQUI ESTAVA O ERRO! Adicionei esta linha:
+            day: ex.day || "A" 
           })),
         },
-      },
-      include: {
-        exercises: {
-          include: {
-            exercise: true
-          }
-        }
       }
     });
 
     return NextResponse.json(newWorkout);
   } catch (error: any) {
-    console.error("Erro detalhado ao criar treino:", error.message);
-    return NextResponse.json({ 
-      error: "Erro ao criar treino", 
-      details: error.message 
-    }, { status: 500 });
+    console.error("Erro POST Workout:", error.message);
+    return NextResponse.json({ error: "Erro ao salvar" }, { status: 500 });
   }
 }

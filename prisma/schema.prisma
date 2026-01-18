@@ -59,6 +59,7 @@ model WorkoutExercise {
   sets       Int      @default(3)
   reps       String   @default("12") 
   notes      String?  
+  day        String   @default("A") // Armazena "A", "B", "C"...
 }
 
 model Anamnese {
