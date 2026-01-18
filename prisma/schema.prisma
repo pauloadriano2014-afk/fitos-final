@@ -59,6 +59,7 @@ model WorkoutExercise {
   workout    Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
   exerciseId String
   exercise   Exercise @relation(fields: [exerciseId], references: [id])
+  restTime   Int      @default(60)
   
   title      String?  
   sets       Int      @default(3)
