@@ -7,9 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ... (MANTENHA OS MODELS User, Exercise, Workout, WorkoutExercise, Anamnese, Diet, Meal IGUAIS) ...
-// ... (Estou colando apenas o novo modelo abaixo para economizar espaço, mas mantenha tudo o que você já tem acima) ...
-
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -24,16 +21,17 @@ model User {
   createdAt DateTime @default(now())
   workouts  Workout[]
   anamneses Anamnese[]
-  diet      Diet?     
+  diet      Diet?      
+  history   WorkoutHistory[] // Relacionamento novo
 }
 
 model Exercise {
-  id           String   @id @default(uuid())
-  name         String   @unique
-  category     String
-  videoUrl     String?
-  instructions String?
-  createdAt    DateTime @default(now())
+  id             String   @id @default(uuid())
+  name           String   @unique
+  category       String
+  videoUrl       String?
+  instructions   String?
+  createdAt      DateTime @default(now())
   workoutExercise WorkoutExercise[]
 }
 
@@ -62,29 +60,29 @@ model WorkoutExercise {
   notes      String?  
   technique  String?  
   day        String   @default("A") 
-  order      Int      @default(0) // <--- ADICIONE ESTA LINHA
+  order      Int      @default(0) // CAMPO IMPORTANTE DE ORDEM
 }
 
 model Anamnese {
-  id               String   @id @default(uuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  peso             Float
-  altura           Float
-  imc              Float?   
-  aguaIdeal        Float?   
-  objetivo         String   
-  nivel            String   
-  frequencia       Int      
-  tempoDisponivel  Int      @default(60) 
-  limitacoes       String[] 
-  cirurgias        String[] 
-  equipamentos     String[] 
-  refeicoesDia     Int?     @default(3)
-  alergias         String[] 
-  alimentosAversao String[] 
-  suplementos      String[] 
-  createdAt        DateTime @default(now())
+  id                 String   @id @default(uuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  peso               Float
+  altura             Float
+  imc                Float?   
+  aguaIdeal          Float?   
+  objetivo           String   
+  nivel              String   
+  frequencia         Int      
+  tempoDisponivel    Int      @default(60) 
+  limitacoes         String[] 
+  cirurgias          String[] 
+  equipamentos       String[] 
+  refeicoesDia       Int?     @default(3)
+  alergias           String[] 
+  alimentosAversao   String[] 
+  suplementos        String[] 
+  createdAt          DateTime @default(now())
 }
 
 model Diet {
@@ -111,15 +109,34 @@ model Meal {
   order     Int    @default(0) 
 }
 
-// 👇 NOVO MODELO DE TEMPLATE 👇
 model WorkoutTemplate {
   id        String   @id @default(uuid())
-  name      String   // Ex: "Hipertrofia Iniciante A"
-  goal      String   // "Hipertrofia", "Emagrecimento"...
-  level     String   // "Iniciante", "Avançado"...
-  
-  // Guardamos a estrutura inteira do treino (exercícios, séries, reps) como JSON
+  name      String   
+  goal      String   
+  level     String   
   data      String   @db.Text 
-  
   createdAt DateTime @default(now())
+}
+
+// 👇 HISTÓRICO DE TREINOS REALIZADOS 👇
+model WorkoutHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String   
+  date      DateTime @default(now())
+  xpEarned  Int      @default(0)
+  duration  Int?     
+  details   ExerciseHistory[]
+}
+
+model ExerciseHistory {
+  id               String         @id @default(uuid())
+  workoutHistoryId String
+  workoutHistory   WorkoutHistory @relation(fields: [workoutHistoryId], references: [id], onDelete: Cascade)
+  exerciseId       String
+  exerciseName     String
+  setNumber        Int
+  weight           Float  
+  reps             String 
 }
