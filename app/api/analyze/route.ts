@@ -6,31 +6,29 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
-    const file = formData.get('video') as Blob;
+    const file = formData.get('video');
     const exercise = formData.get('exerciseName') || 'Exercício';
     const level = formData.get('userLevel') || 'Iniciante';
 
-    if (!file) return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
+    if (!file || !(file instanceof Blob)) {
+        return NextResponse.json({ error: "Vídeo inválido ou não recebido" }, { status: 400 });
+    }
 
-    // GEMINI 2.0 FLASH - MANTENDO O MOTOR DO FUTURO
+    console.log(`🎥 Recebido vídeo de ${file.size} bytes para ${exercise}`);
+
+    // GEMINI 2.0 FLASH
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
+    // Conversão segura do Blob para Base64
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    // PROMPT REFINADO: Agora ele espera que o aluno esteja no ângulo correto
-    const prompt = `Você é um Especialista em Biomecânica de Musculação. 
-    Analise o exercício: ${exercise}.
+    const prompt = `Atue como um Treinador de Elite. Analise este vídeo do exercício ${exercise}.
     Nível do Aluno: ${level}.
-
-    REGRAS DE ANÁLISE:
-    1. VALIDAÇÃO: Se o vídeo não mostrar o exercício ${exercise}, diga: "Este exercício não parece ser ${exercise}. Verifique o movimento."
-    2. FOCO BIOMECÂNICO:
-       - Se Iniciante: Foque em segurança (coluna, base dos pés, pegada).
-       - Se Intermediário: Foque em controle (cadência da descida, balanço excessivo).
-       - Se Avançado: Foque em detalhes técnicos (amplitude máxima, torque, estabilização escapular).
-    3. RIGOR: Seja direto, técnico e firme. Sem elogios ou frases motivacionais.
-    4. LIMITE: Máximo 35 palavras.`;
+    Seja curto e grosso (máximo 2 frases).
+    1. Se a técnica estiver perigosa, ALERTE.
+    2. Se estiver boa, dê uma dica de refinamento.
+    3. Se não for o exercício ${exercise}, avise.`;
 
     const result = await model.generateContent([
       { inlineData: { data: base64Data, mimeType: "video/mp4" } },
@@ -38,11 +36,14 @@ export async function POST(req: Request) {
     ]);
 
     const response = await result.response;
-    return NextResponse.json({ feedback: response.text() });
+    const text = response.text();
+    
+    console.log("✅ Análise concluída:", text);
+    return NextResponse.json({ feedback: text });
 
   } catch (error: any) {
-    console.error("❌ ERRO NA RENDER:", error.message);
-    return NextResponse.json({ error: "Erro na IA", details: error.message }, { status: 500 });
+    console.error("❌ ERRO SCANNER:", error.message);
+    return NextResponse.json({ error: "Erro na análise de IA", details: error.message }, { status: 500 });
   }
 }
 
