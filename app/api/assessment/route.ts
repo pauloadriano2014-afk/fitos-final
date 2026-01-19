@@ -4,10 +4,8 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-// Função Mágica: Corrige vírgula, texto vazio e undefined
 const safeFloat = (val: any) => {
     if (val === '' || val === null || val === undefined) return null;
-    // Se for string, troca vírgula por ponto
     const str = String(val).replace(',', '.');
     const num = parseFloat(str);
     return isNaN(num) ? null : num;
@@ -43,13 +41,18 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, date, weight, height, photos, neck, shoulders, chest, arms, forearms, waist, abdomen, hips, thighs, calves, method, foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh, bodyFat, muscleMass, visceralFat, notes, folds, measures } = body;
+    const { 
+        userId, date, weight, height, photos, method, 
+        bodyFat, muscleMass, visceralFat, notes, 
+        folds, measures,
+        neck, shoulders, chest, arms, forearms, waist, abdomen, hips, thighs, calves,
+        foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh 
+    } = body;
 
     if (!userId || !weight) {
-        return NextResponse.json({ error: "Peso é obrigatório" }, { status: 400 });
+        return NextResponse.json({ error: "Peso e ID são obrigatórios" }, { status: 400 });
     }
 
-    // Unifica dados se vierem dentro de objetos (folds/measures) ou soltos
     const f = folds || {};
     const m = measures || {};
 
@@ -57,31 +60,31 @@ export async function POST(req: Request) {
         data: {
             userId,
             date: date ? new Date(date) : new Date(),
-            weight: Number(String(weight).replace(',', '.')), // Garante peso correto
+            weight: Number(String(weight).replace(',', '.')),
             height: safeFloat(height),
             photos: photos || [],
             
-            // Nível 2 - Medidas
-            neck: safeFloat(neck || m.neck),
-            shoulders: safeFloat(shoulders || m.shoulders),
-            chest: safeFloat(chest || m.chest),
-            arms: safeFloat(arms || m.arms),
-            forearms: safeFloat(forearms || m.forearms),
-            waist: safeFloat(waist || m.waist),
-            abdomen: safeFloat(abdomen || m.abdomen),
-            hips: safeFloat(hips || m.hips),
-            thighs: safeFloat(thighs || m.thighs),
-            calves: safeFloat(calves || m.calves),
+            // Medidas
+            neck: safeFloat(m.neck || neck),
+            shoulders: safeFloat(m.shoulders || shoulders),
+            chest: safeFloat(m.chest || chest),
+            arms: safeFloat(m.arms || arms),
+            forearms: safeFloat(m.forearms || forearms),
+            waist: safeFloat(m.waist || waist),
+            abdomen: safeFloat(m.abdomen || abdomen),
+            hips: safeFloat(m.hips || hips),
+            thighs: safeFloat(m.thighs || thighs),
+            calves: safeFloat(m.calves || calves),
 
-            // Nível 3 - Pollock
+            // Pollock
             method: method || "MANUAL",
-            foldTriceps: safeFloat(foldTriceps || f.triceps),
-            foldSubscapular: safeFloat(foldSubscapular || f.subscapular),
-            foldChest: safeFloat(foldChest || f.chest),
-            foldAxillary: safeFloat(foldAxillary || f.axillary),
-            foldSuprailiac: safeFloat(foldSuprailiac || f.suprailiac),
-            foldAbdominal: safeFloat(foldAbdominal || f.abdominal),
-            foldThigh: safeFloat(foldThigh || f.thigh),
+            foldTriceps: safeFloat(f.triceps || foldTriceps),
+            foldSubscapular: safeFloat(f.subscapular || foldSubscapular),
+            foldChest: safeFloat(f.chest || foldChest),
+            foldAxillary: safeFloat(f.axillary || foldAxillary),
+            foldSuprailiac: safeFloat(f.suprailiac || foldSuprailiac),
+            foldAbdominal: safeFloat(f.abdominal || foldAbdominal),
+            foldThigh: safeFloat(f.thigh || foldThigh),
 
             // Resultados
             bodyFat: safeFloat(bodyFat),
@@ -95,7 +98,24 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Erro Backend:", error);
-    // Retorna o erro real para o App mostrar no Alert
-    return NextResponse.json({ error: error.message || "Erro desconhecido no servidor" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Erro interno" }, { status: 500 });
   }
+}
+
+// 👇 NOVA FUNÇÃO DELETE 👇
+export async function DELETE(req: Request) {
+    try {
+        const { searchParams } = new URL(req.url);
+        const id = searchParams.get('id');
+
+        if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+
+        await prisma.assessment.delete({
+            where: { id }
+        });
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        return NextResponse.json({ error: "Erro ao excluir" }, { status: 500 });
+    }
 }
