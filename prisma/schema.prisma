@@ -19,6 +19,9 @@ model User {
   role      String   @default("USER")
   plan      String   @default("PERFORMANCE") 
   createdAt DateTime @default(now())
+
+  // 👇 NOVO CAMPO PARA GAMIFICATION
+  currentXP Int      @default(0)
   
   // Relacionamentos
   workouts    Workout[]
