@@ -4,73 +4,85 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-// GET: Busca treino ATIVO para o aluno
+// GET: Busca lista de treinos OU um treino específico
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
-    const archived = searchParams.get('archived'); // Opcional: buscar arquivados
+    const workoutId = searchParams.get('workoutId'); // Novo parâmetro para buscar um específico
+    const archived = searchParams.get('archived') === 'true';
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
 
-    // Se pedir arquivados, busca lista. Se não, busca o ATIVO.
-    if (archived === 'true') {
-        const workouts = await prisma.workout.findMany({
-            where: { userId, archived: true },
-            orderBy: { endDate: 'desc' }
+    // --- CENÁRIO 1: Busca Detalhes de um Treino Específico (Clicou na Pasta) ---
+    if (workoutId) {
+        const workout = await prisma.workout.findUnique({
+            where: { id: workoutId },
+            include: { 
+                exercises: { 
+                    include: { exercise: true },
+                    orderBy: { order: 'asc' } 
+                } 
+            }
         });
-        return NextResponse.json(workouts);
-    }
 
-    // Busca o treino ATIVO (não arquivado) mais recente
-    const workout = await prisma.workout.findFirst({
-      where: { 
-          userId, 
-          archived: false 
-      },
-      include: { 
-        exercises: { 
-          include: { exercise: true },
-          orderBy: { order: 'asc' } 
-        } 
-      },
-      orderBy: { createdAt: 'desc' } // Pega o último criado se tiver mais de um ativo
-    });
+        if (!workout) return NextResponse.json({ error: "Workout not found" }, { status: 404 });
 
-    if (!workout) return NextResponse.json({});
+        // Busca histórico de cargas para preencher o "Anterior: 20kg"
+        const history = await prisma.workoutHistory.findMany({
+            where: { userId },
+            orderBy: { date: 'desc' },
+            take: 20,
+            include: { details: true }
+        });
 
-    // Busca histórico de cargas (mantido igual)
-    const history = await prisma.workoutHistory.findMany({
-        where: { userId },
-        orderBy: { date: 'desc' },
-        take: 10,
-        include: { details: true }
-    });
-
-    const lastWeightsMap: any = {};
-    if (history.length > 0) {
-        history.reverse().forEach(h => {
-            h.details.forEach(d => {
-                if (!lastWeightsMap[d.exerciseId]) lastWeightsMap[d.exerciseId] = {};
-                lastWeightsMap[d.exerciseId][d.setNumber] = d.weight;
+        const lastWeightsMap: any = {};
+        if (history.length > 0) {
+            history.reverse().forEach(h => {
+                h.details.forEach(d => {
+                    if (!lastWeightsMap[d.exerciseId]) lastWeightsMap[d.exerciseId] = {};
+                    lastWeightsMap[d.exerciseId][d.setNumber] = d.weight;
+                });
             });
-        });
+        }
+
+        return NextResponse.json({ ...workout, lastWeights: lastWeightsMap });
     }
 
-    return NextResponse.json({ ...workout, lastWeights: lastWeightsMap });
+    // --- CENÁRIO 2: Busca a LISTA de Periodizações (Tela Inicial de Treinos) ---
+    const workouts = await prisma.workout.findMany({
+        where: { 
+            userId, 
+            archived: archived // Se não passar nada, busca os ativos (archived=false)
+        },
+        orderBy: { createdAt: 'desc' },
+        // Selecionamos apenas o necessário para montar os cards
+        select: {
+            id: true,
+            name: true,
+            goal: true,
+            level: true,
+            startDate: true,
+            endDate: true,
+            createdAt: true
+        }
+    });
+
+    return NextResponse.json(workouts);
 
   } catch (error) {
+    console.error("Erro GET workout:", error);
     return NextResponse.json({ error: "Erro ao buscar treino" }, { status: 500 });
   }
 }
 
-// POST: Cria ou Atualiza treino com DATAS
+// POST: Cria ou Atualiza treino (Mantido com suporte a datas)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { userId, name, exercises, startDate, endDate, archiveCurrent } = body;
 
-    // Se a flag "archiveCurrent" vier true, arquivamos o treino atual antes de criar o novo
+    // Se mandar arquivar, esconde os anteriores
     if (archiveCurrent) {
         await prisma.workout.updateMany({
             where: { userId, archived: false },
@@ -78,12 +90,14 @@ export async function POST(req: Request) {
         });
     }
 
-    // Busca treino ativo ou cria novo
+    // Tenta achar o treino ativo mais recente para editar, ou cria um novo
     let workout = await prisma.workout.findFirst({ 
-        where: { userId, archived: false } 
+        where: { userId, archived: false },
+        orderBy: { createdAt: 'desc' }
     });
 
-    if (!workout) {
+    // Se não existir ativo ou se foi pedido para arquivar (criar novo ciclo)
+    if (!workout || archiveCurrent) {
       workout = await prisma.workout.create({
         data: { 
             userId, 
@@ -94,7 +108,7 @@ export async function POST(req: Request) {
         }
       });
     } else {
-        // Atualiza dados do treino existente
+        // Atualiza metadados do treino existente
         await prisma.workout.update({
             where: { id: workout.id },
             data: {
@@ -105,6 +119,7 @@ export async function POST(req: Request) {
         });
     }
 
+    // Atualiza os exercícios (Apaga os do dia e recria)
     const daysToUpdate = [...new Set(exercises.map((e: any) => e.day))];
 
     await prisma.$transaction(async (tx) => {
