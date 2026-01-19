@@ -20,35 +20,39 @@ model User {
   plan      String   @default("PERFORMANCE") 
   createdAt DateTime @default(now())
   
-  // Relacionamentos de Treino
-  workouts  Workout[]
-  anamneses Anamnese[]
-  history   WorkoutHistory[] // Histórico de Cargas e XP
+  // Relacionamentos
+  workouts    Workout[]
+  anamneses   Anamnese[]
+  history     WorkoutHistory[] // Histórico de Cargas e XP
+  assessments Assessment[]     // Nova tabela de Avaliação Física
 }
 
 model Exercise {
-  id             String   @id @default(uuid())
-  name           String   @unique
-  category       String
-  videoUrl       String?
-  instructions   String?
-  createdAt      DateTime @default(now())
+  id              String   @id @default(uuid())
+  name            String   @unique
+  category        String
+  videoUrl        String?
+  instructions    String?
+  createdAt       DateTime @default(now())
   workoutExercise WorkoutExercise[]
 }
 
 model Workout {
-  id        String   @id @default(uuid())
-  name      String   
-  goal      String?  
-  level     String?  
-  isVisible Boolean  @default(true)
-  startDate DateTime? @default(now()) // Data de início do planejamento
-  endDate   DateTime? // Data de fim (vencimento)
-  archived  Boolean   @default(false) // Se true, vai para o arquivo morto 
+  id        String    @id @default(uuid())
+  name      String    
+  goal      String?   
+  level     String?   
+  isVisible Boolean   @default(true)
+  
+  // Planejamento e Arquivamento
+  startDate DateTime? @default(now()) 
+  endDate   DateTime? 
+  archived  Boolean   @default(false) 
+  
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercises WorkoutExercise[]
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 }
 
 model WorkoutExercise {
@@ -64,7 +68,7 @@ model WorkoutExercise {
   notes      String?  
   technique  String?  
   day        String   @default("A") 
-  order      Int      @default(0) // Mantém a ordem dos exercícios
+  order      Int      @default(0) 
 }
 
 model Anamnese {
@@ -72,7 +76,7 @@ model Anamnese {
   userId             String
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  // Dados Físicos e de Treino (Nutrição removida)
+  // Dados Físicos Iniciais
   peso               Float
   altura             Float
   imc                Float?   
@@ -96,7 +100,7 @@ model WorkoutTemplate {
   createdAt DateTime @default(now())
 }
 
-// Histórico para Gamification
+// Histórico de Treinos Realizados (Gamification)
 model WorkoutHistory {
   id        String   @id @default(uuid())
   userId    String
@@ -117,4 +121,48 @@ model ExerciseHistory {
   setNumber        Int
   weight           Float  
   reps             String 
+}
+
+// 👇 NOVA TABELA: AVALIAÇÃO FÍSICA MODULAR 👇
+model Assessment {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date          DateTime @default(now())
+  
+  // --- NÍVEL 1: BÁSICO (Obrigatório) ---
+  weight        Float    // Peso em kg
+  height        Float?   // Altura em cm 
+  photos        String[] // URLs das fotos
+  
+  // --- NÍVEL 2: MEDIDAS / PERÍMETROS (cm) ---
+  neck          Float?   // Pescoço
+  shoulders     Float?   // Ombros
+  chest         Float?   // Peitoral
+  arms          Float?   // Braço
+  forearms      Float?   // Antebraço
+  waist         Float?   // Cintura
+  abdomen       Float?   // Abdômen
+  hips          Float?   // Quadril
+  thighs        Float?   // Coxa
+  calves        Float?   // Panturrilha
+  
+  // --- NÍVEL 3: COMPOSIÇÃO / POLLOCK (mm) ---
+  method        String?  // "POLLOCK_7", "BIO", "MANUAL"
+  
+  foldTriceps     Float?
+  foldSubscapular Float?
+  foldChest       Float?
+  foldAxillary    Float?
+  foldSuprailiac  Float?
+  foldAbdominal   Float?
+  foldThigh       Float?
+  
+  // Resultados Finais
+  bodyFat       Float?   // % Gordura
+  visceralFat   Float?   // Gordura Visceral
+  muscleMass    Float?   // Massa Magra
+  
+  notes         String?  // Observações
+  createdAt     DateTime @default(now())
 }
