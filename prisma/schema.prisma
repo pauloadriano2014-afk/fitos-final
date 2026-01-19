@@ -19,10 +19,11 @@ model User {
   role      String   @default("USER")
   plan      String   @default("PERFORMANCE") 
   createdAt DateTime @default(now())
+  
+  // Relacionamentos de Treino
   workouts  Workout[]
   anamneses Anamnese[]
-  diet      Diet?      
-  history   WorkoutHistory[] // Relacionamento novo
+  history   WorkoutHistory[] // Histórico de Cargas e XP
 }
 
 model Exercise {
@@ -60,17 +61,18 @@ model WorkoutExercise {
   notes      String?  
   technique  String?  
   day        String   @default("A") 
-  order      Int      @default(0) // CAMPO IMPORTANTE DE ORDEM
+  order      Int      @default(0) // Mantém a ordem dos exercícios
 }
 
 model Anamnese {
   id                 String   @id @default(uuid())
   userId             String
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Dados Físicos e de Treino (Nutrição removida)
   peso               Float
   altura             Float
   imc                Float?   
-  aguaIdeal          Float?   
   objetivo           String   
   nivel              String   
   frequencia         Int      
@@ -78,35 +80,8 @@ model Anamnese {
   limitacoes         String[] 
   cirurgias          String[] 
   equipamentos       String[] 
-  refeicoesDia       Int?     @default(3)
-  alergias           String[] 
-  alimentosAversao   String[] 
-  suplementos        String[] 
+  
   createdAt          DateTime @default(now())
-}
-
-model Diet {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  calories  Int      @default(2000)
-  protein   Int      @default(150)
-  carbs     Int      @default(200)
-  fats      Int      @default(60)
-  water     Int      @default(3000)
-  meals     Meal[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Meal {
-  id        String @id @default(uuid())
-  dietId    String
-  diet      Diet   @relation(fields: [dietId], references: [id], onDelete: Cascade)
-  name      String 
-  time      String 
-  content   String 
-  order     Int    @default(0) 
 }
 
 model WorkoutTemplate {
@@ -118,7 +93,7 @@ model WorkoutTemplate {
   createdAt DateTime @default(now())
 }
 
-// 👇 HISTÓRICO DE TREINOS REALIZADOS 👇
+// Histórico para Gamification
 model WorkoutHistory {
   id        String   @id @default(uuid())
   userId    String
