@@ -41,7 +41,10 @@ model Workout {
   name      String   
   goal      String?  
   level     String?  
-  isVisible Boolean  @default(true) 
+  isVisible Boolean  @default(true)
+  startDate DateTime? @default(now()) // Data de início do planejamento
+  endDate   DateTime? // Data de fim (vencimento)
+  archived  Boolean   @default(false) // Se true, vai para o arquivo morto 
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercises WorkoutExercise[]
