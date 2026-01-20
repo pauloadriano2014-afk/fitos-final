@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
-    const workoutId = searchParams.get('workoutId'); // Novo parâmetro para buscar um específico
+    const workoutId = searchParams.get('workoutId'); 
     const archived = searchParams.get('archived') === 'true';
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
@@ -20,7 +20,10 @@ export async function GET(req: Request) {
             where: { id: workoutId },
             include: { 
                 exercises: { 
-                    include: { exercise: true },
+                    include: { 
+                        exercise: true,
+                        substitute: true // <--- CORREÇÃO: Traz os dados do substituto
+                    },
                     orderBy: { order: 'asc' } 
                 } 
             }
@@ -53,18 +56,16 @@ export async function GET(req: Request) {
     const workouts = await prisma.workout.findMany({
         where: { 
             userId, 
-            archived: archived // Se não passar nada, busca os ativos (archived=false)
+            archived: archived 
         },
         orderBy: { createdAt: 'desc' },
-        // Selecionamos apenas o necessário para montar os cards
-        select: {
-            id: true,
-            name: true,
-            goal: true,
-            level: true,
-            startDate: true,
-            endDate: true,
-            createdAt: true
+        include: { // Adicionei include aqui para garantir que carregue tudo se precisar
+            exercises: {
+                include: {
+                    exercise: true,
+                    substitute: true // <--- CORREÇÃO
+                }
+            }
         }
     });
 
@@ -76,7 +77,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Cria ou Atualiza treino (Mantido com suporte a datas)
+// POST: Cria ou Atualiza treino
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -139,7 +140,9 @@ export async function POST(req: Request) {
               reps: String(ex.reps),
               restTime: Number(ex.restTime),
               technique: ex.technique,
-              order: i
+              order: i,
+              // 👇 AQUI ESTAVA FALTANDO SALVAR O SUBSTITUTO 👇
+              substituteId: ex.substituteId || null 
             }
           });
         }
@@ -148,6 +151,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    console.error("Erro POST workout:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
