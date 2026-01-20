@@ -7,8 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, workoutName, exercisesData, duration } = body;
-    // exercisesData deve vir como: [{ exerciseId, name, sets: [{weight: 10, reps: '12', index: 1}] }]
+    const { userId, workoutName, exercisesData, duration, rpe, feedback } = body;
 
     if (!userId) return NextResponse.json({ error: "User ID missing" }, { status: 400 });
 
@@ -26,16 +25,14 @@ export async function POST(req: Request) {
     // 2. Calcula Progressão
     if (previousHistory && exercisesData) {
         exercisesData.forEach((currEx: any) => {
-            // Acha o mesmo exercício no treino passado
             const prevExStats = previousHistory.details.filter(d => d.exerciseId === currEx.exerciseId);
             
             if (prevExStats.length > 0 && currEx.sets) {
-                // Compara a carga média ou máxima
                 const maxWeightCurrent = Math.max(...currEx.sets.map((s:any) => parseFloat(s.weight) || 0));
                 const maxWeightPrev = Math.max(...prevExStats.map(s => s.weight));
 
                 if (maxWeightCurrent > maxWeightPrev) {
-                    xpBonus += 20; // 20 XP por exercício que subiu carga
+                    xpBonus += 20; 
                     progressionCount++;
                 }
             }
@@ -44,13 +41,16 @@ export async function POST(req: Request) {
 
     const totalXp = xpBase + xpBonus;
 
-    // 3. Salva o Histórico Novo
+    // 3. Salva o Histórico Novo (COM RPE E FEEDBACK)
     const history = await prisma.workoutHistory.create({
         data: {
             userId,
             name: workoutName,
             xpEarned: totalXp,
             duration: duration || 0,
+            rpe: rpe ? Number(rpe) : null,
+            feedback: feedback || null,
+            progressions: progressionCount,
             details: {
                 create: exercisesData.flatMap((ex: any) => 
                     ex.sets.map((s: any) => ({
@@ -65,15 +65,20 @@ export async function POST(req: Request) {
         }
     });
 
-    // 4. Atualiza o User (XP acumulado) - Opcional se tiver tabela de XP separada
-    // Aqui estou assumindo que você não tem campo XP no User, mas se tiver, descomente:
-    // await prisma.user.update({ where: { id: userId }, data: { xp: { increment: totalXp } } });
+    // 4. Atualiza o XP do User
+    const user = await prisma.user.update({
+        where: { id: userId },
+        data: { 
+            currentXP: { increment: totalXp } 
+        }
+    });
 
     return NextResponse.json({ 
         success: true, 
         xpGained: totalXp, 
         bonus: xpBonus,
-        progressions: progressionCount 
+        progressions: progressionCount,
+        newTotalXP: user.currentXP
     });
 
   } catch (error: any) {

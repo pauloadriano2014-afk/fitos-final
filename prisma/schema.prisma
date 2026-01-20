@@ -29,7 +29,7 @@ model User {
   anamneses   Anamnese[]
   history     WorkoutHistory[] 
   assessments Assessment[]     
-  checkIns    CheckIn[]        // <--- CORREÇÃO: Faltava este campo
+  checkIns    CheckIn[]        
 }
 
 model Exercise {
@@ -41,10 +41,7 @@ model Exercise {
   createdAt    DateTime @default(now())
   
   // Relacionamentos
-  // 1. Quando este exercício é o principal da ficha
   workoutExercises WorkoutExercise[] 
-
-  // 2. Quando este exercício é usado como substituto de outro (CORREÇÃO AQUI)
   asSubstitute     WorkoutExercise[] @relation("SubstituteRelation")
 }
 
@@ -124,14 +121,16 @@ model WorkoutHistory {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  name      String   // Ex: "Treino A - Peito"
-  workoutName String? // Nome da ficha original (Backup)
+  name      String   
+  workoutName String? 
   date      DateTime @default(now())
   xpEarned  Int      @default(0)
   duration  Int?     
-  
-  // Para mostrar no feed se bateu recordes
   progressions Int     @default(0) 
+
+  // 👇 NOVOS CAMPOS
+  rpe         Int?     // 1-10
+  feedback    String?  // Texto do aluno
 
   details   ExerciseHistory[]
 }
@@ -144,7 +143,6 @@ model ExerciseHistory {
   exerciseId       String
   exerciseName     String
   
-  // Detalhes da série feita
   setNumber        Int
   weight           Float  
   reps             String 
