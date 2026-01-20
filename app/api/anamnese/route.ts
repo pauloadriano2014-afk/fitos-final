@@ -13,7 +13,7 @@ export async function POST(req: Request) {
       peso, 
       altura,
       imc,
-      aguaIdeal, // Agora existe no banco
+      aguaIdeal,
       objetivo, 
       nivel, 
       frequencia, 
@@ -25,17 +25,19 @@ export async function POST(req: Request) {
 
     console.log("Recebendo Anamnese para:", userId);
 
+    // Validação simples
     if (!userId || !peso || !altura) {
       return NextResponse.json({ error: "Dados obrigatórios faltando (Peso/Altura)" }, { status: 400 });
     }
 
+    // 1. SALVA A ANAMNESE (Isso estava certo)
     const novaAnamnese = await prisma.anamnese.create({
       data: {
         userId,
         peso: parseFloat(peso),
         altura: parseFloat(altura),
         imc: imc ? parseFloat(imc) : null,
-        aguaIdeal: aguaIdeal ? parseFloat(aguaIdeal) : null, // Salva corretamente
+        aguaIdeal: aguaIdeal ? parseFloat(aguaIdeal) : null,
         
         objetivo: objetivo || "Não informado",
         nivel: nivel || "Iniciante",
@@ -43,19 +45,16 @@ export async function POST(req: Request) {
         frequencia: Number(frequencia) || 3,
         tempoDisponivel: Number(tempoDisponivel) || 60,
         
-        // Garante array
         limitacoes: Array.isArray(limitacoes) ? limitacoes : [],
         cirurgias: Array.isArray(cirurgias) ? cirurgias : [],
         equipamentos: Array.isArray(equipamentos) ? equipamentos : [],
       },
     });
 
-    // Atualiza User
-    await prisma.user.update({
-        where: { id: userId },
-        data: { goal: objetivo, level: nivel }
-    });
+    // 🔴 REMOVI AQUI O "prisma.user.update" QUE DAVA ERRO 🔴
+    // O objetivo e nível já estão salvos na Anamnese, não precisa salvar no User.
 
+    console.log("✅ Anamnese Salva com Sucesso ID:", novaAnamnese.id);
     return NextResponse.json(novaAnamnese);
 
   } catch (error: any) {
