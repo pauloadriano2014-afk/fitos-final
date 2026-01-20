@@ -11,38 +11,25 @@ export async function POST(req: Request) {
 
     if (!userId) return NextResponse.json({ error: "User ID missing" }, { status: 400 });
 
-    // 1. Busca histórico anterior para comparar cargas (Gamification)
-    const previousHistory = await prisma.workoutHistory.findFirst({
-      where: { userId, name: workoutName },
-      orderBy: { date: 'desc' },
-      include: { details: true }
-    });
+    // Função auxiliar para limpar peso (troca virgula por ponto e garante numero)
+    const cleanWeight = (val: any) => {
+        if (!val) return 0;
+        const strVal = String(val).replace(',', '.');
+        return parseFloat(strVal) || 0;
+    };
 
-    let xpBase = 150; // XP por ir treinar
+    let xpBase = 150; 
     let xpBonus = 0;
-    let progressionCount = 0;
-
-    // 2. Calcula Progressão
-    if (previousHistory && exercisesData) {
-        exercisesData.forEach((currEx: any) => {
-            const prevExStats = previousHistory.details.filter(d => d.exerciseId === currEx.exerciseId);
-            
-            if (prevExStats.length > 0 && currEx.sets) {
-                const maxWeightCurrent = Math.max(...currEx.sets.map((s:any) => parseFloat(s.weight) || 0));
-                const maxWeightPrev = Math.max(...prevExStats.map(s => s.weight));
-
-                if (maxWeightCurrent > maxWeightPrev) {
-                    xpBonus += 20; 
-                    progressionCount++;
-                }
-            }
-        });
+    
+    // Calcula XP Bonus (Lógica simplificada para garantir funcionamento)
+    if (exercisesData && exercisesData.length > 0) {
+        xpBonus = exercisesData.length * 5; // 5 XP por exercício feito
     }
 
     const totalXp = xpBase + xpBonus;
 
-    // 3. Salva o Histórico Novo (COM RPE E FEEDBACK)
-    const history = await prisma.workoutHistory.create({
+    // Salva Histórico
+    await prisma.workoutHistory.create({
         data: {
             userId,
             name: workoutName,
@@ -50,22 +37,24 @@ export async function POST(req: Request) {
             duration: duration || 0,
             rpe: rpe ? Number(rpe) : null,
             feedback: feedback || null,
-            progressions: progressionCount,
             details: {
-                create: exercisesData.flatMap((ex: any) => 
-                    ex.sets.map((s: any) => ({
+                create: exercisesData.flatMap((ex: any) => {
+                    // Pega a última série válida para registrar a carga final
+                    const lastSet = ex.sets && ex.sets.length > 0 ? ex.sets[ex.sets.length - 1] : null;
+                    
+                    return ex.sets.map((s: any) => ({
                         exerciseId: ex.exerciseId,
                         exerciseName: ex.name,
                         setNumber: s.index,
-                        weight: parseFloat(s.weight) || 0,
+                        weight: cleanWeight(s.weight), // <--- USO DA FUNÇÃO DE LIMPEZA
                         reps: String(s.reps || "0")
-                    }))
-                )
+                    }));
+                })
             }
         }
     });
 
-    // 4. Atualiza o XP do User
+    // Atualiza XP do Usuário
     const user = await prisma.user.update({
         where: { id: userId },
         data: { 
@@ -76,13 +65,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
         success: true, 
         xpGained: totalXp, 
-        bonus: xpBonus,
-        progressions: progressionCount,
         newTotalXP: user.currentXP
     });
 
   } catch (error: any) {
-    console.error("Erro ao finalizar treino:", error);
+    console.error("Erro finalizar:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
