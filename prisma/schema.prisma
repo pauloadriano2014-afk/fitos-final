@@ -11,33 +11,41 @@ model User {
   id        String   @id @default(uuid())
   email     String   @unique
   password  String
-  name      String?  
-  birthDate String?  
-  phone     String?  
-  gender    String?  
+  name      String?
+  birthDate String?
+  phone     String?
+  gender    String?
   plan_tier String   @default("standard")
-  role      String   @default("USER")
-  plan      String   @default("PERFORMANCE") 
+  role      String   @default("USER") // ADMIN ou USER
+  plan      String   @default("PERFORMANCE") // FREE, ELITE, VIP
+  active    Boolean  @default(true) // Controle de acesso
   createdAt DateTime @default(now())
 
-  // 👇 NOVO CAMPO PARA GAMIFICATION
+  // 👇 GAMIFICATION
   currentXP Int      @default(0)
   
   // Relacionamentos
   workouts    Workout[]
   anamneses   Anamnese[]
-  history     WorkoutHistory[] // Histórico de Cargas e XP
-  assessments Assessment[]     // Nova tabela de Avaliação Física
+  history     WorkoutHistory[] 
+  assessments Assessment[]     
+  checkIns    CheckIn[]        // <--- CORREÇÃO: Faltava este campo
 }
 
 model Exercise {
-  id              String   @id @default(uuid())
-  name            String   @unique
-  category        String
-  videoUrl        String?
-  instructions    String?
-  createdAt       DateTime @default(now())
-  workoutExercise WorkoutExercise[]
+  id           String   @id @default(uuid())
+  name         String   @unique
+  category     String
+  videoUrl     String?
+  instructions String?
+  createdAt    DateTime @default(now())
+  
+  // Relacionamentos
+  // 1. Quando este exercício é o principal da ficha
+  workoutExercises WorkoutExercise[] 
+
+  // 2. Quando este exercício é usado como substituto de outro (CORREÇÃO AQUI)
+  asSubstitute     WorkoutExercise[] @relation("SubstituteRelation")
 }
 
 model Workout {
@@ -59,39 +67,46 @@ model Workout {
 }
 
 model WorkoutExercise {
-  id         String   @id @default(uuid())
-  workoutId  String
-  workout    Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  workoutId String
+  workout   Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  
+  // Exercício Principal
   exerciseId String
   exercise   Exercise @relation(fields: [exerciseId], references: [id])
-  restTime   Int      @default(60)
-  title      String?  
-  sets       Int      @default(3)
-  reps       String   @default("12") 
-  notes      String?  
-  technique  String?  
-  day        String   @default("A") 
-  order      Int      @default(0) 
+  
+  // Exercício Substituto (Opcional)
+  substituteId String?
+  substitute   Exercise? @relation("SubstituteRelation", fields: [substituteId], references: [id])
+
+  restTime  Int      @default(60)
+  title     String?  
+  sets      Int      @default(3)
+  reps      String   @default("12") 
+  notes     String?  
+  technique String?  
+  day       String   @default("A") 
+  order     Int      @default(0) 
 }
 
 model Anamnese {
-  id                 String   @id @default(uuid())
-  userId             String
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   // Dados Físicos Iniciais
-  peso               Float
-  altura             Float
-  imc                Float?   
-  objetivo           String   
-  nivel              String   
-  frequencia         Int      
-  tempoDisponivel    Int      @default(60) 
-  limitacoes         String[] 
-  cirurgias          String[] 
-  equipamentos       String[] 
+  peso            Float
+  altura          Float
+  imc             Float?    
+  objetivo        String    
+  nivel           String    
+  frequencia      Int      
+  tempoDisponivel Int      @default(60) 
+  limitacoes      String[] 
+  cirurgias       String[] 
+  equipamentos    String[] 
   
-  createdAt          DateTime @default(now())
+  createdAt       DateTime @default(now())
 }
 
 model WorkoutTemplate {
@@ -108,10 +123,16 @@ model WorkoutHistory {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String   
+  
+  name      String   // Ex: "Treino A - Peito"
+  workoutName String? // Nome da ficha original (Backup)
   date      DateTime @default(now())
   xpEarned  Int      @default(0)
   duration  Int?     
+  
+  // Para mostrar no feed se bateu recordes
+  progressions Int     @default(0) 
+
   details   ExerciseHistory[]
 }
 
@@ -119,53 +140,74 @@ model ExerciseHistory {
   id               String         @id @default(uuid())
   workoutHistoryId String
   workoutHistory   WorkoutHistory @relation(fields: [workoutHistoryId], references: [id], onDelete: Cascade)
+  
   exerciseId       String
   exerciseName     String
+  
+  // Detalhes da série feita
   setNumber        Int
   weight           Float  
   reps             String 
 }
 
-// 👇 NOVA TABELA: AVALIAÇÃO FÍSICA MODULAR 👇
+// AVALIAÇÃO FÍSICA
 model Assessment {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date          DateTime @default(now())
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date           DateTime @default(now())
   
-  // --- NÍVEL 1: BÁSICO (Obrigatório) ---
-  weight        Float    // Peso em kg
-  height        Float?   // Altura em cm 
-  photos        String[] // URLs das fotos
+  // NÍVEL 1: BÁSICO
+  weight         Float    
+  height         Float?   
+  photos         String[] 
   
-  // --- NÍVEL 2: MEDIDAS / PERÍMETROS (cm) ---
-  neck          Float?   // Pescoço
-  shoulders     Float?   // Ombros
-  chest         Float?   // Peitoral
-  arms          Float?   // Braço
-  forearms      Float?   // Antebraço
-  waist         Float?   // Cintura
-  abdomen       Float?   // Abdômen
-  hips          Float?   // Quadril
-  thighs        Float?   // Coxa
-  calves        Float?   // Panturrilha
+  // NÍVEL 2: MEDIDAS (cm)
+  neck           Float?   
+  shoulders      Float?   
+  chest          Float?   
+  arms           Float?   
+  forearms       Float?   
+  waist          Float?   
+  abdomen        Float?   
+  hips           Float?   
+  thighs         Float?   
+  calves         Float?   
   
-  // --- NÍVEL 3: COMPOSIÇÃO / POLLOCK (mm) ---
-  method        String?  // "POLLOCK_7", "BIO", "MANUAL"
+  // NÍVEL 3: COMPOSIÇÃO / POLLOCK (mm)
+  method         String?  // "POLLOCK_7", "BIO", "MANUAL"
   
-  foldTriceps     Float?
-  foldSubscapular Float?
-  foldChest       Float?
-  foldAxillary    Float?
-  foldSuprailiac  Float?
-  foldAbdominal   Float?
-  foldThigh       Float?
+  foldTriceps      Float?
+  foldSubscapular  Float?
+  foldChest        Float?
+  foldAxillary     Float?
+  foldSuprailiac   Float?
+  foldAbdominal    Float?
+  foldThigh        Float?
   
   // Resultados Finais
-  bodyFat       Float?   // % Gordura
-  visceralFat   Float?   // Gordura Visceral
-  muscleMass    Float?   // Massa Magra
+  bodyFat        Float?   
+  visceralFat    Float?   
+  muscleMass     Float?   
   
-  notes         String?  // Observações
-  createdAt     DateTime @default(now())
+  notes          String?  
+  createdAt      DateTime @default(now())
+}
+
+// CHECK-IN DO ALUNO
+model CheckIn {
+  id         String   @id @default(uuid())
+  date       DateTime @default(now())
+  
+  weight     Float?
+  feedback   String?  
+  
+  photoFront String? 
+  photoBack  String?
+  photoSide  String?
+  
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime @default(now())
 }

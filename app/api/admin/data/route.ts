@@ -6,19 +6,33 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
+    // 1. Busca todos os usuários
     const users = await prisma.user.findMany({
       where: { role: 'USER' },
-      select: { id: true, name: true, email: true, plan: true }, // <--- ADICIONE PLAN: TRUE
-      orderBy: { createdAt: 'desc' }
-    });
-
-    // Busca biblioteca de exercícios para você escolher
-    const exercises = await prisma.exercise.findMany({
       orderBy: { name: 'asc' }
     });
 
-    return NextResponse.json({ users, exercises });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // 2. Busca os últimos 15 históricos de treino (O FEED)
+    const recentLogs = await prisma.workoutHistory.findMany({
+      take: 15,
+      orderBy: { date: 'desc' },
+      include: {
+        user: { select: { name: true, email: true } } // Traz o nome de quem treinou
+      }
+    });
+
+    // 3. Busca exercícios (para a biblioteca)
+    const exercises = await prisma.exercise.findMany({
+        orderBy: { name: 'asc' }
+    });
+
+    return NextResponse.json({ 
+        users, 
+        recentLogs, // <--- NOVO CAMPO
+        exercises 
+    });
+
+  } catch (error) {
+    return NextResponse.json({ error: "Erro ao carregar dados admin" }, { status: 500 });
   }
 }
