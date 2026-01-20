@@ -13,6 +13,7 @@
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "dotenv": "^17.2.3",
+    "expo-server-sdk": "^4.0.0",
     "next": "14.2.3",
     "prisma": "5.22.0",
     "react": "18.2.0",
