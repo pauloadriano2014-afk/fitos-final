@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { Expo } from 'expo-server-sdk'; // <--- BIBLIOTECA NOVA
+import { Expo } from 'expo-server-sdk';
 
 const prisma = new PrismaClient();
-const expo = new Expo(); // <--- INICIALIZA O DISPARADOR
+const expo = new Expo();
 export const dynamic = 'force-dynamic';
 
 // GET: Busca lista de treinos OU um treino específico
@@ -16,6 +16,7 @@ export async function GET(req: Request) {
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
 
+    // --- CENÁRIO 1: BUSCANDO UM TREINO ESPECÍFICO (Detalhes) ---
     if (workoutId) {
         const workout = await prisma.workout.findUnique({
             where: { id: workoutId },
@@ -29,6 +30,7 @@ export async function GET(req: Request) {
 
         if (!workout) return NextResponse.json({ error: "Workout not found" }, { status: 404 });
 
+        // 1. Busca histórico para os PESOS (Lógica que já existia)
         const history = await prisma.workoutHistory.findMany({
             where: { userId },
             orderBy: { date: 'desc' },
@@ -36,6 +38,21 @@ export async function GET(req: Request) {
             include: { details: true }
         });
 
+        // =====================================================================
+        // 🔥 2. ADICIONADO: BUSCA O ÚLTIMO LOG DE CONCLUSÃO (PARA O METRO) 🔥
+        // =====================================================================
+        // Nota: Se sua tabela de histórico se chama 'WorkoutLog', troque 'progress' por 'workoutLog'
+        const lastLog = await prisma.progress.findFirst({
+            where: { 
+                userId: userId,
+                workoutId: workoutId 
+            },
+            orderBy: { date: 'desc' }, // Pega o mais recente
+            select: { day: true, date: true } // Só precisamos saber o dia (A, B...)
+        });
+        // =====================================================================
+
+        // Processa os pesos (Lógica que já existia)
         const lastWeightsMap: any = {};
         if (history.length > 0) {
             history.reverse().forEach(h => {
@@ -46,9 +63,15 @@ export async function GET(req: Request) {
             });
         }
 
-        return NextResponse.json({ ...workout, lastWeights: lastWeightsMap });
+        // Retorna tudo, incluindo o lastLog novo
+        return NextResponse.json({ 
+            ...workout, 
+            lastWeights: lastWeightsMap,
+            lastLog: lastLog || null // <--- ENVIA O DADO QUE FALTAVA
+        });
     }
 
+    // --- CENÁRIO 2: LISTA DE TREINOS ---
     const workouts = await prisma.workout.findMany({
         where: { userId, archived: archived },
         orderBy: { createdAt: 'desc' },
@@ -131,25 +154,21 @@ export async function POST(req: Request) {
       }
     });
 
-    // --- 👇 LÓGICA DE NOTIFICAÇÃO (NOVO) 👇 ---
-    
-    // 1. Busca o Token do Usuário
+    // --- LÓGICA DE NOTIFICAÇÃO ---
     const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { pushToken: true, name: true }
     });
 
     if (user && user.pushToken && Expo.isExpoPushToken(user.pushToken)) {
-        // 2. Prepara a mensagem
         const messages = [{
             to: user.pushToken,
-            sound: 'default',
+            sound: 'default' as const, // Correção de tipo para TS
             title: '🔥 Treino Novo Disponível!',
             body: `${user.name ? user.name.split(' ')[0] : 'Atleta'}, seu coach acabou de atualizar sua planilha. Bora treinar!`,
-            data: { workoutId: workout.id }, // Dados extras se quiser navegar direto depois
+            data: { workoutId: workout.id }, 
         }];
 
-        // 3. Envia (sem travar a resposta da API se der erro)
         try {
             await expo.sendPushNotificationsAsync(messages);
             console.log("Notificação enviada para", user.name);
@@ -157,7 +176,6 @@ export async function POST(req: Request) {
             console.error("Erro ao enviar push:", pushError);
         }
     }
-    // ------------------------------------------
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
