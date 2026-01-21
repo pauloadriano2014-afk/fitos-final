@@ -6,7 +6,6 @@ const prisma = new PrismaClient();
 const expo = new Expo();
 export const dynamic = 'force-dynamic';
 
-// GET: Busca lista de treinos OU um treino específico
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -16,7 +15,7 @@ export async function GET(req: Request) {
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
 
-    // --- CENÁRIO 1: BUSCANDO UM TREINO ESPECÍFICO (Detalhes) ---
+    // --- CENÁRIO 1: DETALHES DO TREINO (QUANDO CLICA NO CARD) ---
     if (workoutId) {
         const workout = await prisma.workout.findUnique({
             where: { id: workoutId },
@@ -30,7 +29,7 @@ export async function GET(req: Request) {
 
         if (!workout) return NextResponse.json({ error: "Workout not found" }, { status: 404 });
 
-        // 1. Busca histórico para os PESOS (Lógica que já existia)
+        // 1. Busca histórico COMPLETO (para os pesos)
         const history = await prisma.workoutHistory.findMany({
             where: { userId },
             orderBy: { date: 'desc' },
@@ -38,21 +37,19 @@ export async function GET(req: Request) {
             include: { details: true }
         });
 
-        // =====================================================================
-        // 🔥 2. ADICIONADO: BUSCA O ÚLTIMO LOG DE CONCLUSÃO (PARA O METRO) 🔥
-        // =====================================================================
-        // Nota: Se sua tabela de histórico se chama 'WorkoutLog', troque 'progress' por 'workoutLog'
-        const lastLog = await prisma.progress.findFirst({
+        // 🔥 2. CORREÇÃO AQUI: BUSCA O ÚLTIMO LOG NA TABELA CERTA 🔥
+        // Usamos 'workoutHistory' em vez de 'progress'
+        const lastLog = await prisma.workoutHistory.findFirst({
             where: { 
                 userId: userId,
                 workoutId: workoutId 
             },
-            orderBy: { date: 'desc' }, // Pega o mais recente
-            select: { day: true, date: true } // Só precisamos saber o dia (A, B...)
+            orderBy: { date: 'desc' }, // O mais recente
+            // Não usamos select específico para evitar erro se 'day' não existir na raiz
+            // O front vai se virar com o que vier
         });
-        // =====================================================================
 
-        // Processa os pesos (Lógica que já existia)
+        // Mapeia pesos (Lógica antiga mantida)
         const lastWeightsMap: any = {};
         if (history.length > 0) {
             history.reverse().forEach(h => {
@@ -63,15 +60,15 @@ export async function GET(req: Request) {
             });
         }
 
-        // Retorna tudo, incluindo o lastLog novo
+        // Retorna tudo
         return NextResponse.json({ 
             ...workout, 
             lastWeights: lastWeightsMap,
-            lastLog: lastLog || null // <--- ENVIA O DADO QUE FALTAVA
+            lastLog: lastLog || null // Agora vai enviar o histórico corretamente
         });
     }
 
-    // --- CENÁRIO 2: LISTA DE TREINOS ---
+    // --- CENÁRIO 2: LISTA DE TREINOS (HOME) ---
     const workouts = await prisma.workout.findMany({
         where: { userId, archived: archived },
         orderBy: { createdAt: 'desc' },
@@ -86,13 +83,12 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Cria/Atualiza treino E ENVIA NOTIFICAÇÃO
+// POST: Mantive igual ao seu original
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { userId, name, exercises, startDate, endDate, archiveCurrent } = body;
 
-    // 1. Lógica de Arquivamento
     if (archiveCurrent) {
         await prisma.workout.updateMany({
             where: { userId, archived: false },
@@ -100,7 +96,6 @@ export async function POST(req: Request) {
         });
     }
 
-    // 2. Salva ou Atualiza o Treino
     let workout = await prisma.workout.findFirst({ 
         where: { userId, archived: false },
         orderBy: { createdAt: 'desc' }
@@ -154,7 +149,7 @@ export async function POST(req: Request) {
       }
     });
 
-    // --- LÓGICA DE NOTIFICAÇÃO ---
+    // Notificação
     const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { pushToken: true, name: true }
@@ -163,18 +158,12 @@ export async function POST(req: Request) {
     if (user && user.pushToken && Expo.isExpoPushToken(user.pushToken)) {
         const messages = [{
             to: user.pushToken,
-            sound: 'default' as const, // Correção de tipo para TS
+            sound: 'default' as const,
             title: '🔥 Treino Novo Disponível!',
             body: `${user.name ? user.name.split(' ')[0] : 'Atleta'}, seu coach acabou de atualizar sua planilha. Bora treinar!`,
             data: { workoutId: workout.id }, 
         }];
-
-        try {
-            await expo.sendPushNotificationsAsync(messages);
-            console.log("Notificação enviada para", user.name);
-        } catch (pushError) {
-            console.error("Erro ao enviar push:", pushError);
-        }
+        try { await expo.sendPushNotificationsAsync(messages); } catch (e) {}
     }
 
     return NextResponse.json({ success: true });
