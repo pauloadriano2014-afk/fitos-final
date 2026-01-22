@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// POST: Aluno envia Check-in
+// POST: Aluno envia Check-in (Mantido igual, está ótimo)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     const checkIn = await prisma.checkIn.create({
       data: {
         userId,
-        weight: Number(weight),
+        weight: parseFloat(weight) || null,
         feedback,
         photoFront,
         photoBack,
@@ -23,29 +23,46 @@ export async function POST(req: Request) {
       }
     });
 
-    // Opcional: Se enviou peso, atualiza o peso atual do usuário também
+    // Atualiza o peso atual no perfil do usuário também, para facilitar cálculos futuros
     if (weight) {
-        // Você pode criar uma lógica para adicionar na tabela Assessment automaticamente se quiser
+        await prisma.user.update({
+            where: { id: userId },
+            data: { currentWeight: parseFloat(weight) }
+        }).catch(e => console.log("Erro ao atualizar peso user:", e));
     }
 
     return NextResponse.json({ success: true, id: checkIn.id });
 
   } catch (error) {
+    console.error("Erro Checkin POST:", error);
     return NextResponse.json({ error: "Erro ao enviar check-in" }, { status: 500 });
   }
 }
 
-// GET: Buscar histórico de check-ins de um usuário
+// GET: Flexível (Histórico do Aluno OU Lista Geral pro Admin)
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
 
-    if (!userId) return NextResponse.json({ error: "User ID required" }, { status: 400 });
+    try {
+        // Se tiver userId, filtra por ele. Se não, traz tudo (para o Admin)
+        const whereClause = userId ? { userId } : {};
 
-    const checkins = await prisma.checkIn.findMany({
-        where: { userId },
-        orderBy: { date: 'desc' }
-    });
+        const checkins = await prisma.checkIn.findMany({
+            where: whereClause,
+            orderBy: { date: 'desc' },
+            // 🔥 O PULO DO GATO: Traz o nome do aluno junto!
+            include: {
+                user: {
+                    select: { name: true, email: true }
+                }
+            },
+            take: 50 // Limita aos últimos 50 para não pesar o admin
+        });
 
-    return NextResponse.json(checkins);
+        return NextResponse.json(checkins);
+    } catch (error) {
+        console.error("Erro Checkin GET:", error);
+        return NextResponse.json({ error: "Erro ao buscar check-ins" }, { status: 500 });
+    }
 }
