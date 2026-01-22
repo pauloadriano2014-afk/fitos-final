@@ -15,7 +15,7 @@ export async function GET(req: Request) {
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
 
-    // --- CENÁRIO 1: DETALHES DO TREINO (QUANDO CLICA NO CARD) ---
+    // --- CENÁRIO 1: DETALHES DO TREINO ---
     if (workoutId) {
         const workout = await prisma.workout.findUnique({
             where: { id: workoutId },
@@ -29,7 +29,8 @@ export async function GET(req: Request) {
 
         if (!workout) return NextResponse.json({ error: "Workout not found" }, { status: 404 });
 
-        // 1. Busca histórico COMPLETO (para os pesos)
+        // 1. Busca histórico recente (Últimos 10 treinos)
+        // NÃO filtramos por workoutId aqui porque a coluna não existe no schema
         const history = await prisma.workoutHistory.findMany({
             where: { userId },
             orderBy: { date: 'desc' },
@@ -37,22 +38,36 @@ export async function GET(req: Request) {
             include: { details: true }
         });
 
-        // 🔥 2. CORREÇÃO AQUI: BUSCA O ÚLTIMO LOG NA TABELA CERTA 🔥
-        // Usamos 'workoutHistory' em vez de 'progress'
-        const lastLog = await prisma.workoutHistory.findFirst({
-            where: { 
-                userId: userId,
-                workoutId: workoutId 
-            },
-            orderBy: { date: 'desc' }, // O mais recente
-            // Não usamos select específico para evitar erro se 'day' não existir na raiz
-            // O front vai se virar com o que vier
-        });
+        // 🔥 2. LÓGICA DE DETETIVE NO BACKEND 🔥
+        // Vamos descobrir qual foi o último dia feito lendo os nomes
+        let calculatedLastLog = null;
+
+        for (const log of history) {
+            const name = (log.workoutName || log.name || "").toUpperCase();
+            
+            // Procura padrões como "TREINO A", "TREINO B" ou apenas "A", "B" se estiver isolado
+            // Regex procura a letra A-F
+            const match = name.match(/TREINO\s+([A-F])/i) || name.match(/\b([A-F])\b/i);
+            
+            if (match) {
+                // Achamos! Ex: O cara fez o "TREINO B" ontem.
+                calculatedLastLog = {
+                    day: match[1].toUpperCase(), // "B"
+                    date: log.date
+                };
+                break; // Para no primeiro que achar (o mais recente)
+            }
+            
+            // Fallback para nomes mapeados (Ex: "PERNAS" -> C)
+            if (name.includes('SUPERIORES')) { calculatedLastLog = { day: 'A', date: log.date }; break; }
+            if (name.includes('COSTAS')) { calculatedLastLog = { day: 'B', date: log.date }; break; }
+            if (name.includes('PERNAS')) { calculatedLastLog = { day: 'C', date: log.date }; break; }
+        }
 
         // Mapeia pesos (Lógica antiga mantida)
         const lastWeightsMap: any = {};
         if (history.length > 0) {
-            history.reverse().forEach(h => {
+            history.slice().reverse().forEach(h => { // slice para não mutar o array original
                 h.details.forEach(d => {
                     if (!lastWeightsMap[d.exerciseId]) lastWeightsMap[d.exerciseId] = {};
                     lastWeightsMap[d.exerciseId][d.setNumber] = d.weight;
@@ -60,15 +75,14 @@ export async function GET(req: Request) {
             });
         }
 
-        // Retorna tudo
         return NextResponse.json({ 
             ...workout, 
             lastWeights: lastWeightsMap,
-            lastLog: lastLog || null // Agora vai enviar o histórico corretamente
+            lastLog: calculatedLastLog // <--- Agora enviamos o dia calculado (ex: { day: 'A' })
         });
     }
 
-    // --- CENÁRIO 2: LISTA DE TREINOS (HOME) ---
+    // --- CENÁRIO 2: LISTA DE TREINOS ---
     const workouts = await prisma.workout.findMany({
         where: { userId, archived: archived },
         orderBy: { createdAt: 'desc' },
@@ -83,7 +97,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Mantive igual ao seu original
+// POST: Mantive igual ao original
 export async function POST(req: Request) {
   try {
     const body = await req.json();
