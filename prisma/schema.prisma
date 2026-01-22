@@ -22,9 +22,12 @@ model User {
   plan      String   @default("PERFORMANCE") // FREE, ELITE, VIP
   active    Boolean  @default(true)
   
+  // Dados Rápidos (Cache)
+  currentWeight Float? // Peso atualizado pelo check-in ou avaliação
+  
   // Gamification & Notificações
   currentXP Int      @default(0)
-  pushToken String?  // <--- IMPORTANTE: Para as notificações funcionarem
+  pushToken String?  // Para notificações OneSignal/Expo
   
   createdAt DateTime @default(now())
 
@@ -99,7 +102,7 @@ model Anamnese {
   peso            Float
   altura          Float
   imc             Float?    
-  aguaIdeal       Float?    // <--- CORREÇÃO: Campo adicionado
+  aguaIdeal       Float?    
   
   // Objetivos
   objetivo        String    
@@ -128,21 +131,21 @@ model WorkoutTemplate {
 
 // Histórico de Treinos (Gamification)
 model WorkoutHistory {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  name        String    
-  workoutName String? 
-  date        DateTime @default(now())
-  xpEarned    Int      @default(0)
-  duration    Int?      
-  progressions Int     @default(0) 
+  name         String    
+  workoutName  String? 
+  date         DateTime @default(now())
+  xpEarned     Int      @default(0)
+  duration     Int?      
+  progressions Int      @default(0) 
 
-  rpe         Int?     
-  feedback    String?  
+  rpe          Int?      
+  feedback     String?  
 
-  details     ExerciseHistory[]
+  details      ExerciseHistory[]
 }
 
 model ExerciseHistory {
@@ -185,13 +188,13 @@ model Assessment {
   // Nível 3: Composição (mm)
   method          String?  // "POLLOCK_7", "BIO", "MANUAL"
   
-  foldTriceps       Float?
-  foldSubscapular   Float?
-  foldChest         Float?
-  foldAxillary      Float?
-  foldSuprailiac    Float?
-  foldAbdominal     Float?
-  foldThigh         Float?
+  foldTriceps     Float?
+  foldSubscapular Float?
+  foldChest       Float?
+  foldAxillary    Float?
+  foldSuprailiac  Float?
+  foldAbdominal   Float?
+  foldThigh       Float?
   
   // Resultados
   bodyFat         Float?    
@@ -218,4 +221,13 @@ model CheckIn {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt    DateTime @default(now())
+}
+
+// 🔥 NOVO: Mural de Avisos do Admin
+model Notice {
+  id        String   @id @default(uuid())
+  title     String
+  content   String   @db.Text
+  active    Boolean  @default(true)
+  date      DateTime @default(now())
 }
