@@ -3,12 +3,13 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// 1. GET: Busca os vídeos para o App (Feed)
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
 
-    // 1. Busca todos os vídeos
+    // Busca todos os vídeos
     const allContent = await prisma.content.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
       }
     });
 
-    // 2. Se tiver userId, verifica quais ele curtiu
+    // Se tiver userId, verifica quais ele curtiu
     let userLikes: string[] = [];
     if (userId) {
       const likes = await prisma.contentLike.findMany({
@@ -26,8 +27,7 @@ export async function GET(request: Request) {
       userLikes = likes.map((l) => l.contentId);
     }
 
-    // 3. Agrupa por Categoria
-    // Definindo o tipo para o mapa
+    // Agrupa por Categoria
     type CategoryGroup = {
       id: string;
       title: string;
@@ -58,7 +58,38 @@ export async function GET(request: Request) {
     return NextResponse.json(responseData);
 
   } catch (error) {
-    console.error("Erro PA FLIX:", error);
+    console.error("Erro PA FLIX (GET):", error);
     return NextResponse.json({ error: "Erro ao buscar conteúdos" }, { status: 500 });
+  }
+}
+
+// 2. POST: Cria novos vídeos (Para o Admin)
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { title, subtitle, category, videoUrl, thumbUrl, duration, description } = body;
+
+    // Validação básica
+    if (!title || !videoUrl || !category) {
+        return NextResponse.json({ error: "Campos obrigatórios faltando" }, { status: 400 });
+    }
+
+    const newContent = await prisma.content.create({
+      data: {
+        title,
+        subtitle,
+        category, // Ex: 'TECNICA', 'MINDSET'
+        videoUrl,
+        thumbUrl,
+        duration,
+        description: description || "" // Opcional
+      }
+    });
+
+    return NextResponse.json(newContent);
+
+  } catch (error) {
+    console.error("Erro PA FLIX (POST):", error);
+    return NextResponse.json({ error: "Erro ao criar conteúdo" }, { status: 500 });
   }
 }
