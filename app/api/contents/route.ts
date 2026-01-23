@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { sendNotificationToAll } from '../../utils/sendNotification'; // <--- Importe aqui
 
 const prisma = new PrismaClient();
 
@@ -63,7 +64,7 @@ export async function GET(request: Request) {
   }
 }
 
-// 2. POST: Cria novos vídeos (Para o Admin)
+// 2. POST: Cria novos vídeos e NOTIFICA
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -85,6 +86,15 @@ export async function POST(request: Request) {
         description: description || "" // Opcional
       }
     });
+
+    // 🔥 AQUI ESTÁ A MÁGICA: ENVIA NOTIFICAÇÃO
+    // Não usamos 'await' para liberar a resposta pro admin rápido.
+    // O servidor processa o envio em background.
+    sendNotificationToAll(
+        "🎬 Nova Aula no PA FLIX!",
+        `Corre pra ver: "${title}" acabou de sair na categoria ${category}.`,
+        { screen: 'PA FLIX', videoId: newContent.id }
+    );
 
     return NextResponse.json(newContent);
 
