@@ -36,7 +36,9 @@ model User {
   anamneses   Anamnese[]
   history     WorkoutHistory[] 
   assessments Assessment[]      
-  checkIns    CheckIn[]         
+  checkIns    CheckIn[]
+  contentLikes    ContentLike[]
+  contentComments ContentComment[]         
 }
 
 model Exercise {
@@ -230,4 +232,51 @@ model Notice {
   content   String   @db.Text
   active    Boolean  @default(true)
   date      DateTime @default(now())
+}
+
+// 🔥 PA FLIX (Área de Conteúdo e Comunidade)
+model Content {
+  id          String   @id @default(uuid())
+  title       String
+  subtitle    String?
+  description String?  @db.Text
+  
+  category    String   // Ex: 'TECNICA', 'MINDSET', 'NUTRICAO'
+  
+  videoUrl    String   // Link do vídeo (Cloudflare/YouTube)
+  thumbUrl    String?  // Capa do vídeo
+  duration    String?  // Ex: "12 min"
+  
+  createdAt   DateTime @default(now())
+  
+  // Relações Sociais
+  likes       ContentLike[]
+  comments    ContentComment[]
+}
+
+model ContentLike {
+  id        String   @id @default(uuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  @@unique([userId, contentId]) // Um usuário só pode curtir 1x o mesmo vídeo
+}
+
+model ContentComment {
+  id        String   @id @default(uuid())
+  text      String   @db.Text
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
 }
