@@ -15,40 +15,43 @@ model User {
   birthDate String?
   phone     String?
   gender    String?
-  
+   
   // Controle de Acesso e Planos
   plan_tier String   @default("standard")
   role      String   @default("USER") // ADMIN ou USER
   plan      String   @default("PERFORMANCE") // FREE, ELITE, VIP
   active    Boolean  @default(true)
-  
+   
   // Dados Rápidos (Cache)
   currentWeight Float? // Peso atualizado pelo check-in ou avaliação
-  
+   
   // Gamification & Notificações
   currentXP Int      @default(0)
   pushToken String?  // Para notificações OneSignal/Expo
-  
+   
   createdAt DateTime @default(now())
 
   // Relacionamentos
   workouts    Workout[]
   anamneses   Anamnese[]
   history     WorkoutHistory[] 
-  assessments Assessment[]      
+  assessments Assessment[]       
   checkIns    CheckIn[]
+  
+  // PA FLIX & Comunidade
   contentLikes    ContentLike[]
-  contentComments ContentComment[]         
+  contentComments ContentComment[]
+  contentCompletions ContentCompletion[] // 🔥 NOVO: Histórico de aulas assistidas
 }
 
 model Exercise {
-  id           String   @id @default(uuid())
-  name         String   @unique
-  category     String
-  videoUrl     String?
+  id            String   @id @default(uuid())
+  name          String   @unique
+  category      String
+  videoUrl      String?
   instructions String?
-  createdAt    DateTime @default(now())
-  
+  createdAt     DateTime @default(now())
+   
   // Relacionamentos
   workoutExercises WorkoutExercise[] 
   asSubstitute     WorkoutExercise[] @relation("SubstituteRelation")
@@ -60,12 +63,12 @@ model Workout {
   goal      String?   
   level     String?   
   isVisible Boolean   @default(true)
-  
+   
   // Planejamento
   startDate DateTime? @default(now()) 
   endDate   DateTime? 
   archived  Boolean   @default(false) 
-  
+   
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercises WorkoutExercise[]
@@ -76,11 +79,11 @@ model WorkoutExercise {
   id        String   @id @default(uuid())
   workoutId String
   workout   Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  
+   
   // Exercício Principal
   exerciseId String
   exercise   Exercise @relation(fields: [exerciseId], references: [id])
-  
+   
   // Exercício Substituto (Opcional)
   substituteId String?
   substitute   Exercise? @relation("SubstituteRelation", fields: [substituteId], references: [id])
@@ -99,26 +102,26 @@ model Anamnese {
   id              String   @id @default(uuid())
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+   
   // Dados Físicos
   peso            Float
   altura          Float
   imc             Float?    
   aguaIdeal       Float?    
-  
+   
   // Objetivos
   objetivo        String    
   nivel           String    
-  
+   
   // Rotina
   frequencia      Int       
   tempoDisponivel Int      @default(60) 
-  
+   
   // Saúde (Arrays)
   limitacoes      String[] 
   cirurgias       String[] 
   equipamentos    String[] 
-  
+   
   createdAt       DateTime @default(now())
 }
 
@@ -133,31 +136,31 @@ model WorkoutTemplate {
 
 // Histórico de Treinos (Gamification)
 model WorkoutHistory {
-  id           String   @id @default(uuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  name         String    
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   
+  name           String    
   workoutName  String? 
-  date         DateTime @default(now())
-  xpEarned     Int      @default(0)
-  duration     Int?      
+  date           DateTime @default(now())
+  xpEarned       Int      @default(0)
+  duration       Int?      
   progressions Int      @default(0) 
 
-  rpe          Int?      
-  feedback     String?  
+  rpe            Int?      
+  feedback       String?  
 
-  details      ExerciseHistory[]
+  details        ExerciseHistory[]
 }
 
 model ExerciseHistory {
   id               String         @id @default(uuid())
   workoutHistoryId String
   workoutHistory   WorkoutHistory @relation(fields: [workoutHistoryId], references: [id], onDelete: Cascade)
-  
+   
   exerciseId       String
   exerciseName     String
-  
+   
   setNumber        Int
   weight           Float  
   reps             String 
@@ -169,12 +172,12 @@ model Assessment {
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   date            DateTime @default(now())
-  
+   
   // Nível 1: Básico
   weight          Float    
   height          Float?    
   photos          String[] 
-  
+   
   // Nível 2: Medidas (cm)
   neck            Float?    
   shoulders       Float?    
@@ -186,10 +189,10 @@ model Assessment {
   hips            Float?    
   thighs          Float?    
   calves          Float?    
-  
+   
   // Nível 3: Composição (mm)
   method          String?  // "POLLOCK_7", "BIO", "MANUAL"
-  
+   
   foldTriceps     Float?
   foldSubscapular Float?
   foldChest       Float?
@@ -197,35 +200,35 @@ model Assessment {
   foldSuprailiac  Float?
   foldAbdominal   Float?
   foldThigh       Float?
-  
+   
   // Resultados
   bodyFat         Float?    
   visceralFat     Float?    
   muscleMass      Float?    
-  
+   
   notes           String?   
   createdAt       DateTime @default(now())
 }
 
 // Check-in Diário/Semanal
 model CheckIn {
-  id           String   @id @default(uuid())
-  date         DateTime @default(now())
-  
-  weight       Float?
-  feedback     String?  
-  
-  photoFront   String? 
-  photoBack    String?
-  photoSide    String?
-  
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String   @id @default(uuid())
+  date          DateTime @default(now())
+   
+  weight        Float?
+  feedback      String?  
+   
+  photoFront    String? 
+  photoBack     String?
+  photoSide     String?
+   
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
 }
 
-// 🔥 NOVO: Mural de Avisos do Admin
+// Mural de Avisos do Admin
 model Notice {
   id        String   @id @default(uuid())
   title     String
@@ -240,37 +243,51 @@ model Content {
   title       String
   subtitle    String?
   description String?  @db.Text
-  
+   
   category    String   // Ex: 'TECNICA', 'MINDSET', 'NUTRICAO'
-  
+   
   videoUrl    String   // Link do vídeo (Cloudflare/YouTube)
   thumbUrl    String?  // Capa do vídeo
   duration    String?  // Ex: "12 min"
-  
+   
   createdAt   DateTime @default(now())
-  
+   
   // Relações Sociais
   likes       ContentLike[]
   comments    ContentComment[]
+  completions ContentCompletion[] // 🔥 NOVO: Relação com quem assistiu
 }
 
 model ContentLike {
   id        String   @id @default(uuid())
-  
+   
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+   
   contentId String
   content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
-  
+   
   createdAt DateTime @default(now())
 
-  @@unique([userId, contentId]) // Um usuário só pode curtir 1x o mesmo vídeo
+  @@unique([userId, contentId])
 }
 
 model ContentComment {
   id        String   @id @default(uuid())
   text      String   @db.Text
+   
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+   
+  createdAt DateTime @default(now())
+}
+
+// 🔥 NOVO MODELO: Controle de XP por vídeo assistido
+model ContentCompletion {
+  id        String   @id @default(uuid())
   
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -279,4 +296,6 @@ model ContentComment {
   content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
   
   createdAt DateTime @default(now())
+
+  @@unique([userId, contentId]) // Garante que o usuário só ganhe XP 1x por vídeo
 }
