@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
     // 2. Busca Treino Ativo (O último criado que não está arquivado)
     const activeWorkout = await prisma.workout.findFirst({
-      where: { userId: userId, archive: false },
+      where: { userId: userId, archived: false },
       orderBy: { createdAt: 'desc' },
       include: { exercises: true } // Inclui exercícios para contar quantos são
     });

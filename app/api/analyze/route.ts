@@ -21,16 +21,23 @@ export async function POST(req: Request) {
     const file = formData.get('video') as File;
     const exercise = formData.get('exerciseName') || 'Exercício';
     
-    // Nível removido do frontend, assumimos padrão universal
-    const level = 'Geral (Linguagem Universal)';
-
     if (!file) {
       return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
     }
 
+    // 🛡️ TRAVA DE SEGURANÇA CRÍTICA: Limite de 15MB
+    // O Render Starter tem apenas 512MB de RAM. Se receber 30MB, ele morre.
+    if (file.size > 15 * 1024 * 1024) { 
+        console.error("❌ ERRO: Arquivo muito grande:", file.size);
+        return NextResponse.json({ 
+            error: "Vídeo muito grande.", 
+            details: "Por favor, limite a gravação a 10 segundos no app." 
+        }, { status: 413 });
+    }
+
     console.log(`🎥 1. Recebendo vídeo: ${file.name} (${file.size} bytes)`);
 
-    // --- PASSO 1: SALVAR EM DISCO (Para não estourar RAM do servidor) ---
+    // --- PASSO 1: SALVAR EM DISCO ---
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     
@@ -50,13 +57,12 @@ export async function POST(req: Request) {
 
     console.log(`✅ 4. Upload concluído. URI: ${uploadResponse.file.uri}`);
 
-    // --- PASSO 3: ESPERAR PROCESSAMENTO (Obrigatório para vídeo) ---
+    // --- PASSO 3: ESPERAR PROCESSAMENTO ---
     let fileState = await fileManager.getFile(uploadResponse.file.name);
     
-    // Loop de verificação (Polling)
     while (fileState.state === "PROCESSING") {
       console.log("⏳ Processando vídeo no Google...");
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Espera 2s
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       fileState = await fileManager.getFile(uploadResponse.file.name);
     }
 
@@ -65,15 +71,16 @@ export async function POST(req: Request) {
     }
 
     // --- PASSO 4: ANÁLISE ---
-    // Usando Flash 2.0 (Mais rápido, barato e eficiente para vídeo)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    // ⚠️ IMPORTANTE: 'gemini-2.0-flash-exp' foi deletado pelo Google e retorna 404.
+    // Usamos 'gemini-1.5-flash' que é Estável, Rápido e Oficial.
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `Atue como um Treinador de Elite e Biomecânico. Analise este vídeo de ${exercise}.
     
     OBJETIVO: Dar um feedback de segurança e técnica que QUALQUER pessoa entenda (do iniciante ao avançado).
-    Seja didático, direto e motivador. Evite "biquês" (termos técnicos) desnecessários.
+    Seja didático, direto e motivador. Evite termos muito complexos.
     
-    Retorne APENAS um JSON puro (sem markdown, sem crases) neste formato estrito:
+    Retorne APENAS um JSON puro (sem markdown) neste formato estrito:
     {
       "feedback": "Seu feedback principal aqui. Se houver erro, explique como corrigir. (Máx 25 palavras)",
       "score": 0 a 10 (Seja criterioso com a segurança),
@@ -91,18 +98,14 @@ export async function POST(req: Request) {
     ]);
 
     const responseText = result.response.text();
-    
-    // Limpeza do JSON (caso venha com ```json ou espaços extras)
     const cleanedText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
     
     console.log("🤖 5. Resposta IA:", cleanedText);
 
-    // Tenta parsear para garantir que é JSON válido
     let jsonResponse;
     try {
         jsonResponse = JSON.parse(cleanedText);
     } catch (e) {
-        // Se falhar o JSON, manda como texto no feedback para não quebrar o app
         jsonResponse = { 
             feedback: cleanedText,
             score: 0,
@@ -120,8 +123,7 @@ export async function POST(req: Request) {
     }, { status: 500 });
 
   } finally {
-    // --- PASSO 5: FAXINA (Apagar arquivo do servidor) ---
-    // Importante para não lotar o disco do Render
+    // --- PASSO 5: FAXINA ---
     try {
         if (tempFilePath && fs.existsSync(tempFilePath)) {
             fs.unlinkSync(tempFilePath);
