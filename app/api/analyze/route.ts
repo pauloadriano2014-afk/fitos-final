@@ -61,28 +61,32 @@ export async function POST(req: Request) {
     // --- ANÁLISE (Prompt Detalhado - Coach Paulo Team) ---
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    const prompt = `ATENÇÃO: Você é o 'Coach Paulo Team', um especialista em biomecânica e musculação de elite.
+    const prompt = `ATENÇÃO: Você é o 'Coach Paulo Team'.
     
-    O aluno enviou este vídeo afirmando ser a execução do exercício: "${exercise}".
+    O aluno enviou este vídeo do exercício: "${exercise}".
 
-    SUA MISSÃO (SIGA RIGOROSAMENTE):
+    SIGA ESTE PROTOCOLO DE 3 ETAPAS RIGOROSAS:
 
-    1. IDENTIFICAÇÃO VISUAL (O Filtro Anti-Fraude):
-       - Assista ao vídeo. O que está acontecendo?
-       - É um ser humano fazendo musculação? É realmente o exercício "${exercise}"?
-       - Se for um animal (cavalo, cachorro), uma parede, um teto, ou um exercício completamente diferente (ex: filmou o pé em vez de Supino), REPROVE.
-       - NÃO invente feedback técnico se o vídeo não mostrar o exercício claro.
+    🚨 1. VISIBILIDADE (O Teste da Luz Apagada):
+    - O vídeo está escuro? É apenas um vulto ou borrão preto?
+    - Se você não consegue ver os detalhes do músculo ou articulação: REPROVE IMEDIATAMENTE.
+    - NÃO TENTE ADIVINHAR. Se não vê, não analise.
+    - Feedback Obrigatório se escuro: "Vídeo muito escuro. Não consigo avaliar sua segurança. Acenda a luz e grave novamente."
 
-    2. ANÁLISE TÉCNICA (Se o vídeo estiver correto):
-       - Avalie a segurança (coluna, articulações).
-       - Avalie a cadência e amplitude.
-       - Seja direto, técnico mas acessível.
+    🚨 2. IDENTIFICAÇÃO DO MOVIMENTO:
+    - O movimento corresponde ao "${exercise}"?
+    - CASO ESPECÍFICO (Elevação Lateral): O braço deve subir para o LADO (abdução), longe do corpo. Se o cotovelo for para trás do tronco, isso é uma REMADA, está ERRADO.
+    - Se for um exercício diferente do nome: REPROVE.
 
-    Retorne APENAS um JSON puro (sem markdown) neste formato estrito:
+    🚨 3. ANÁLISE TÉCNICA (Só se passou nas etapas 1 e 2):
+    - Avalie postura, cadência e segurança.
+    - Dê uma dica de ouro para melhorar.
+
+    Retorne APENAS um JSON puro:
     {
-      "feedback": "Seu veredito aqui. (Se for o vídeo errado, diga: 'Isso não é um ${exercise}, estou vendo [o que você viu]. Grave corretamente.'). (Máx 30 palavras)",
-      "score": 0 a 10 (Dê 0 se for vídeo errado/fraude),
-      "correction": "Ação corretiva imediata ou 'Envie o vídeo certo'."
+      "feedback": "Seu veredito (Máx 30 palavras). Se estiver escuro, mande acender a luz.",
+      "score": 0 a 10 (Dê 0 se estiver escuro ou exercício errado),
+      "correction": "Ação corretiva imediata."
     }`;
 
     const result = await model.generateContent([
