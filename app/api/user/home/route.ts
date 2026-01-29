@@ -19,28 +19,41 @@ export async function GET(req: Request) {
 
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    // 2. Busca Treino Ativo (O último criado que não está arquivado)
+    // 2. Busca Treino Ativo
+    // NOTA: Se seu banco usa 'archived', mantenha assim. Se der erro, troque para 'archive'
     const activeWorkout = await prisma.workout.findFirst({
-      where: { userId: userId, archived: false },
+      where: { userId: userId, archived: false }, 
       orderBy: { createdAt: 'desc' },
-      include: { exercises: true } // Inclui exercícios para contar quantos são
+      include: { exercises: true } 
     });
 
-    // 3. Busca Último Histórico (Para saber qual letra sugerir: A, B, C...)
+    // 3. Busca Último Histórico
     const lastLog = await prisma.workoutHistory.findFirst({
       where: { userId: userId },
       orderBy: { date: 'desc' }
     });
 
-    // Lógica simples de sugestão (Se fez A, sugere B. Se fez último, volta pro A)
+    // Lógica de sugestão BLINDADA 🛡️
     let nextDay = 'A';
-    if (lastLog && activeWorkout) {
-        // Pega as letras disponíveis no treino (Ex: ['A', 'B', 'C'])
+    
+    if (lastLog && activeWorkout && activeWorkout.exercises.length > 0) {
+        // Pega as letras disponíveis (A, B, C...)
         const days = Array.from(new Set(activeWorkout.exercises.map(e => e.day))).sort();
         
-        // Descobre qual foi a letra do último treino logado (Ex: "Treino de Hipertrofia - Dia A")
-        const lastDayChar = lastLog.workoutName.split('Dia ')[1]?.trim(); 
+        // 🛡️ CORREÇÃO DO CRASH AQUI:
+        // Garante que workoutName existe. Se for null, vira string vazia "".
+        const safeWorkoutName = lastLog.workoutName || ""; 
         
+        // Tenta extrair a letra apenas se o nome tiver o formato esperado
+        let lastDayChar = null;
+        if (safeWorkoutName.includes('Dia ')) {
+            const parts = safeWorkoutName.split('Dia ');
+            if (parts.length > 1) {
+                lastDayChar = parts[1].trim();
+            }
+        }
+        
+        // Se achou a letra e ela existe no treino atual, calcula a próxima
         if (lastDayChar && days.includes(lastDayChar)) {
             const currentIndex = days.indexOf(lastDayChar);
             const nextIndex = (currentIndex + 1) % days.length; // Loop: A -> B -> C -> A
@@ -60,7 +73,11 @@ export async function GET(req: Request) {
     });
 
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Erro ao carregar Home" }, { status: 500 });
+    console.error("ERRO CRÍTICO NA HOME:", error);
+    // Retorna JSON de erro limpo para não travar o app com tela branca
+    return NextResponse.json({ 
+        error: "Erro ao carregar Home", 
+        details: error.message 
+    }, { status: 500 });
   }
 }
