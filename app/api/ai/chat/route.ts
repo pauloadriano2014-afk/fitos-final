@@ -1,20 +1,18 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// 🔥 Ele vai buscar a chave que você já usa no Render/Env
+// Inicia o Gemini com sua chave
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Essa linha é CRÍTICA para o Next.js não travar em produção
+// Linha vital para o Next.js no Render
 export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
   try {
-    // Pegamos os dados que o App mandou
     const body = await req.json();
     const { message, userName, userGender, userGoal, userLevel } = body;
 
     // --- PERSONALIDADE DO COACH ---
-    // Aqui a gente "hipnotiza" a IA para ela ser o PA Coach
     const systemPrompt = `
       ATUAR COMO: "PA Coach AI", o personal trainer virtual do app Fit OS.
       
@@ -34,8 +32,8 @@ export async function POST(req) {
       Se o aluno apenas cumprimentar, responda com uma frase de impacto motivacional ligada ao objetivo dele.
     `;
 
-    // Configura o modelo (Flash é o mais rápido para chat)
-    const model = genAI.getModel({ 
+    // 🔥 CORREÇÃO AQUI: É .getGenerativeModel (e não .getModel)
+    const model = genAI.getGenerativeModel({ 
         model: "gemini-1.5-flash",
         systemInstruction: systemPrompt
     });
