@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import prisma from '@/lib/prisma'; // Certifique-se que o caminho está certo para o seu projeto
 
-// Usa a chave existente (que funcionou no scanner)
+// Usa a chave existente
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,8 @@ export const dynamic = 'force-dynamic';
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { message, userName, userGender, userGoal, userLevel } = body;
+    // Adicionamos userId aqui para saber quem perguntou
+    const { message, userName, userGender, userGoal, userLevel, userId } = body;
 
     // --- PERSONA: COACH IA PA TEAM ---
     const systemPrompt = `
@@ -41,7 +43,7 @@ export async function POST(req) {
       Se o aluno vier com "preguiça", dê um choque de realidade: "Resultado não vem de vontade, vem de constância. Vá treinar."
     `;
 
-    // Usa o Gemini 2.0 Flash Experimental (O que funcionou para você)
+    // Usa o Gemini 2.0 Flash (Versão que funcionou para você)
     const model = genAI.getGenerativeModel({ 
         model: "gemini-2.0-flash", 
         systemInstruction: systemPrompt
@@ -51,18 +53,41 @@ export async function POST(req) {
     const response = await result.response;
     const text = response.text();
 
+    // --- SALVAR NO BANCO DE DADOS (Espionagem do Bem 🕵️‍♂️) ---
+    if (userId) {
+      try {
+        await prisma.aiLog.create({
+          data: {
+            userId: userId,
+            question: message,
+            answer: text
+          }
+        });
+      } catch (dbError) {
+        // Se der erro ao salvar, apenas loga no console, mas NÃO trava a resposta pro aluno
+        console.error("Erro ao salvar log da IA:", dbError);
+      }
+    }
+
     return NextResponse.json({ reply: text });
 
   } catch (error) {
     console.error("Erro Principal IA:", error.message);
     
     // Fallback de Segurança (Se o 2.0 falhar, tenta o 1.5)
+    // Precisamos redefinir o systemPrompt aqui ou torná-lo acessível, 
+    // mas para simplificar, em caso de erro fatal, retornamos mensagem de erro amigável
+    // ou tentamos o backup simples.
+    
     try {
+        // Redefinindo brevemente para o fallback não quebrar
+        const systemPromptBackup = `Atuar como Coach de Musculação PA TEAM. Seja direto e técnico.`;
+        
         const modelBackup = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
-            systemInstruction: systemPrompt
+            systemInstruction: systemPromptBackup
         });
-        const resultBackup = await modelBackup.generateContent(message);
+        const resultBackup = await modelBackup.generateContent(message); // message vem do escopo acima
         const responseBackup = await resultBackup.response;
         return NextResponse.json({ reply: responseBackup.text() });
     } catch (finalError) {

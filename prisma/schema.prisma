@@ -15,6 +15,7 @@ model User {
   birthDate String?
   phone     String?
   gender    String?
+  aiLogs        AiLog[]
    
   // Controle de Acesso e Planos
   plan_tier String   @default("standard")
@@ -235,6 +236,15 @@ model Notice {
   content   String   @db.Text
   active    Boolean  @default(true)
   date      DateTime @default(now())
+}
+
+model AiLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  question  String
+  answer    String
+  createdAt DateTime @default(now())
 }
 
 // 🔥 PA FLIX (Área de Conteúdo e Comunidade)
