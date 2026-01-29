@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Inicia o Gemini com sua chave
+// Usa a MESMA chave que funcionou no scanner
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Linha vital para o Next.js no Render
 export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
@@ -12,33 +11,23 @@ export async function POST(req) {
     const body = await req.json();
     const { message, userName, userGender, userGoal, userLevel } = body;
 
-    // --- PERSONALIDADE DO COACH ---
     const systemPrompt = `
-      ATUAR COMO: "PA Coach AI", o personal trainer virtual do app Fit OS.
+      ATUAR COMO: "PA Coach AI", personal trainer do app Fit OS.
+      ALUNO: ${userName || 'Atleta'} (${userGender || 'Neutro'}), Nível ${userLevel || 'Iniciante'}, Objetivo: ${userGoal || 'Geral'}.
       
-      CONTEXTO DO ALUNO:
-      - Nome: ${userName || 'Atleta'}
-      - Gênero: ${userGender || 'Neutro'}
-      - Objetivo: ${userGoal || 'Saúde geral'}
-      - Nível XP: ${userLevel || 'Iniciante'}
-
-      DIRETRIZES DE RESPOSTA:
-      1. TOM DE VOZ: Motivador, enérgico e levemente informal (Use gírias de academia como "monstro", "pra cima", "foco", mas sem exagerar).
-      2. ADAPTAÇÃO: Se for mulher, use termos femininos (campeã, guerreira). Se for homem, masculinos (campeão, parceiro).
-      3. EXPERTISE: Você entende tudo de biomecânica, nutrição (básico) e mindset.
-      4. SEGURANÇA: Nunca prescreva anabolizantes ou dietas extremas. Recomende sempre "consistência" e "beber água".
-      5. FORMATO: Respostas curtas e diretas (máximo 3 frases se possível). O aluno está no celular.
-      
-      Se o aluno apenas cumprimentar, responda com uma frase de impacto motivacional ligada ao objetivo dele.
+      REGRAS:
+      1. Seja motivador, breve e use gírias de academia ("monstro", "foco", "pra cima").
+      2. Nunca prescreva esteroides/anabolizantes.
+      3. Respostas curtas (max 3 frases) e diretas.
     `;
 
-    // 🔥 CORREÇÃO AQUI: É .getGenerativeModel (e não .getModel)
+    // 🔥 AQUI ESTÁ A CORREÇÃO: Usando o Gemini 2.0 Flash Experimental
+    // Se o scanner rodou com 2.0, esse aqui vai voar!
     const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
+        model: "gemini-2.0-flash", 
         systemInstruction: systemPrompt
     });
 
-    // Gera a resposta
     const result = await model.generateContent(message);
     const response = await result.response;
     const text = response.text();
@@ -46,10 +35,23 @@ export async function POST(req) {
     return NextResponse.json({ reply: text });
 
   } catch (error) {
-    console.error("Erro no PA Coach AI:", error);
-    return NextResponse.json(
-      { reply: "Opa, o servidor tá puxando ferro pesado agora e não conseguiu responder. Tenta de novo já já!" }, 
-      { status: 500 }
-    );
+    console.error("Erro IA (Tentando fallback):", error.message);
+    
+    // FALLBACK DE SEGURANÇA
+    // Se por acaso o 2.0 falhar (instabilidade), tenta o 1.5 Flash como reserva
+    try {
+        const modelBackup = genAI.getGenerativeModel({ 
+            model: "gemini-1.5-flash",
+            systemInstruction: systemPrompt
+        });
+        const resultBackup = await modelBackup.generateContent(message);
+        const responseBackup = await resultBackup.response;
+        return NextResponse.json({ reply: responseBackup.text() });
+    } catch (finalError) {
+        return NextResponse.json(
+            { reply: "O servidor tá em manutenção no supino agora. Tenta já já! (Erro de Modelo)" }, 
+            { status: 500 }
+        );
+    }
   }
 }
