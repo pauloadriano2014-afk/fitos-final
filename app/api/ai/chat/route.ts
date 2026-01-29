@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import prisma from '@/lib/prisma'; // Certifique-se que o caminho está certo para o seu projeto
+import prisma from '../../../../lib/prisma'; // Certifique-se que o caminho está certo para o seu projeto
 
 // Usa a chave existente
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
