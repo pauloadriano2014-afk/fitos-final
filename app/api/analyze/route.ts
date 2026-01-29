@@ -25,13 +25,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
     }
 
-    // 🛡️ TRAVA DE SEGURANÇA CRÍTICA: Limite de 15MB
+    // 🛡️ TRAVA DE SEGURANÇA CRÍTICA: Limite de 45MB
     // O Render Starter tem apenas 512MB de RAM. Se receber 30MB, ele morre.
-    if (file.size > 15 * 1024 * 1024) { 
+    if (file.size > 45 * 1024 * 1024) { 
         console.error("❌ ERRO: Arquivo muito grande:", file.size);
         return NextResponse.json({ 
             error: "Vídeo muito grande.", 
-            details: "Por favor, limite a gravação a 10 segundos no app." 
+            details: "Tente gravar um vídeo mais curto (max 7s)." 
         }, { status: 413 });
     }
 
