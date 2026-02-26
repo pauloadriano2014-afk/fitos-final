@@ -12,87 +12,96 @@ const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY || '');
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
+// 🔥 CORREÇÃO 1: Adicionado ": Request" para o TypeScript entender a requisição
 export async function POST(req: Request) {
   let tempFilePath = '';
 
   try {
     const formData = await req.formData();
     const file = formData.get('video') as File;
-    const exercise = formData.get('exerciseName') || 'Exercício';
+    const exercise = formData.get('exerciseName') as string || 'Exercício';
     
     if (!file) return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
 
-    // Trava de segurança 45MB (Para aguentar vídeos de iPhone)
-    if (file.size > 45 * 1024 * 1024) { 
+    // Trava de segurança aumentada para 50MB
+    if (file.size > 50 * 1024 * 1024) { 
         return NextResponse.json({ 
             error: "Vídeo muito pesado.", 
-            details: "Tente gravar um vídeo mais curto (max 6-7s)." 
+            details: "Tente gravar um vídeo mais curto (max 10s)." 
         }, { status: 413 });
     }
 
-    console.log(`🎥 1. Recebendo vídeo: ${file.name} (${file.size} bytes)`);
+    console.log(`🎥 1. Recebendo vídeo: ${file.name} (${file.size} bytes, tipo: ${file.type})`);
+
+    // --- DESCOBRIR O FORMATO REAL DO ARQUIVO ---
+    const actualMimeType = file.type || "video/mp4";
+    const extension = actualMimeType.includes("quicktime") ? ".mov" : ".mp4";
 
     // --- SALVAR EM DISCO ---
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const fileName = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}.mp4`;
+    const fileName = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}${extension}`;
     tempFilePath = path.join(os.tmpdir(), fileName);
     fs.writeFileSync(tempFilePath, buffer);
 
     // --- UPLOAD PARA GOOGLE ---
-    console.log("🚀 2. Enviando para Google AI...");
+    console.log(`🚀 2. Enviando para Google AI como ${actualMimeType}...`);
     const uploadResponse = await fileManager.uploadFile(tempFilePath, {
-      mimeType: "video/mp4",
+      mimeType: actualMimeType, 
       displayName: `Analysis ${exercise}`,
     });
 
     console.log(`✅ 3. Upload concluído. URI: ${uploadResponse.file.uri}`);
 
-    // --- AGUARDAR PROCESSAMENTO ---
+    // --- AGUARDAR PROCESSAMENTO BLINDADO (ATÉ 60s) ---
     let fileState = await fileManager.getFile(uploadResponse.file.name);
+    let tentativas = 0;
+    
     while (fileState.state === "PROCESSING") {
-      console.log("⏳ Processando vídeo...");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      tentativas++;
+      console.log(`⏳ Processando vídeo no Google... (Tentativa ${tentativas}/20)`);
+      
+      // Espera 3 segundos antes de perguntar de novo
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      
       fileState = await fileManager.getFile(uploadResponse.file.name);
+      
+      if (tentativas >= 20) {
+        throw new Error("O Google demorou demais para processar esse arquivo.");
+      }
     }
 
-    if (fileState.state === "FAILED") throw new Error("O Google falhou ao processar o vídeo.");
+    if (fileState.state === "FAILED") {
+        throw new Error("O Google falhou ao processar o formato do vídeo. Gravação incompatível.");
+    }
 
-    // --- ANÁLISE (Prompt Detalhado - Coach Paulo Team) ---
+    console.log("🟢 Vídeo pronto! Extraindo análise técnica...");
+
+    // --- ANÁLISE ---
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `ATENÇÃO: Você é o 'Coach Paulo Team'.
-    
     O aluno enviou este vídeo do exercício: "${exercise}".
-
     SIGA ESTE PROTOCOLO DE 3 ETAPAS RIGOROSAS:
-
-    🚨 1. VISIBILIDADE (O Teste da Luz Apagada):
-    - O vídeo está escuro? É apenas um vulto ou borrão preto?
-    - Se você não consegue ver os detalhes do músculo ou articulação: REPROVE IMEDIATAMENTE.
-    - NÃO TENTE ADIVINHAR. Se não vê, não analise.
-    - Feedback Obrigatório se escuro: "Vídeo muito escuro. Não consigo avaliar sua segurança. Acenda a luz e grave novamente."
-
+    🚨 1. VISIBILIDADE:
+    - O vídeo está escuro? É apenas um vulto ou borrão preto? Se não vê, não analise.
+    - Feedback: "Vídeo escuro. Não consigo avaliar. Acenda a luz."
     🚨 2. IDENTIFICAÇÃO DO MOVIMENTO:
-    - O movimento corresponde ao "${exercise}"?
-    - CASO ESPECÍFICO (Elevação Lateral): O braço deve subir para o LADO (abdução), longe do corpo. Se o cotovelo for para trás do tronco, isso é uma REMADA, está ERRADO.
-    - Se for um exercício diferente do nome: REPROVE.
-
-    🚨 3. ANÁLISE TÉCNICA (Só se passou nas etapas 1 e 2):
+    - O movimento corresponde ao "${exercise}"? Se for diferente, reprove.
+    🚨 3. ANÁLISE TÉCNICA:
     - Avalie postura, cadência e segurança.
     - Dê uma dica de ouro para melhorar.
-
     Retorne APENAS um JSON puro:
     {
-      "feedback": "Seu veredito (Máx 30 palavras). Se estiver escuro, mande acender a luz.",
-      "score": 0 a 10 (Dê 0 se estiver escuro ou exercício errado),
-      "correction": "Ação corretiva imediata."
+      "feedback": "Seu veredito (Máx 30 palavras).",
+      "score": 0 a 10,
+      "correction": "Ação corretiva."
     }`;
 
     const result = await model.generateContent([
       {
         fileData: {
-          mimeType: uploadResponse.file.mimeType,
+          mimeType: actualMimeType,
           fileUri: uploadResponse.file.uri
         }
       },
@@ -106,31 +115,20 @@ export async function POST(req: Request) {
     try {
         jsonResponse = JSON.parse(cleanedText);
     } catch (e) {
-        // Fallback caso a IA não mande JSON perfeito
         jsonResponse = { 
             feedback: cleanedText, 
             score: 0, 
-            correction: "Não foi possível estruturar a resposta. Tente novamente." 
+            correction: "Não foi possível estruturar a resposta." 
         };
     }
 
     return NextResponse.json(jsonResponse);
 
+  // 🔥 CORREÇÃO 2: Adicionado ": any" para liberar a extração do erro
   } catch (error: any) {
     console.error("❌ ERRO NO SERVER:", error);
-    
-    // Tratamento específico para erro de modelo (caso o 2.0 saia do ar no futuro)
-    if (error.message?.includes('404') || error.message?.includes('not found')) {
-        return NextResponse.json({ 
-            error: "Erro na IA.", 
-            details: "Modelo indisponível no momento." 
-        }, { status: 500 });
-    }
-
-    return NextResponse.json({ error: "Erro interno.", details: error.message }, { status: 500 });
-
+    return NextResponse.json({ error: "Erro interno", details: error.message }, { status: 500 });
   } finally {
-    // Limpeza
     if (tempFilePath && fs.existsSync(tempFilePath)) {
         try { fs.unlinkSync(tempFilePath); } catch (e) { console.error("Erro ao limpar temp:", e); }
     }
