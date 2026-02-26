@@ -108,8 +108,12 @@ export async function POST(req: Request) {
       { text: prompt }
     ]);
 
-    const cleanedText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    console.log("🤖 Resposta IA:", cleanedText);
+    // 🔥 EXTRATOR DE JSON BRUTO (Ignora o papo furado da IA)
+    const rawText = result.response.text();
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    const cleanedText = jsonMatch ? jsonMatch[0] : rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    console.log("🤖 Resposta IA (Limpa):", cleanedText);
 
     let jsonResponse;
     try {
@@ -118,7 +122,7 @@ export async function POST(req: Request) {
         jsonResponse = { 
             feedback: cleanedText, 
             score: 0, 
-            correction: "Não foi possível estruturar a resposta." 
+            correction: "Não foi possível estruturar a resposta. Tente novamente." 
         };
     }
 
