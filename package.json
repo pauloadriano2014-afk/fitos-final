@@ -14,13 +14,17 @@
     "@types/react-dom": "18.3.0",
     "dotenv": "^17.2.3",
     "expo-server-sdk": "^4.0.0",
+    "multer": "^2.1.0",
     "next": "14.2.3",
+    "openai": "^6.25.0",
+    "pdf-parse": "^2.4.5",
     "prisma": "5.22.0",
     "react": "18.2.0",
     "react-dom": "18.2.0"
   },
   "devDependencies": {
     "@types/node": "^25.0.9",
+    "@types/pdf-parse": "^1.1.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
