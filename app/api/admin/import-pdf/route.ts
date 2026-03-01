@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
 
-// Força a rota a ser dinâmica (necessário para uploads no Next.js)
+// 🔥 O SEGREDO AQUI: Trocamos o 'import' moderno pelo 'require' tradicional
+const pdfParse = require('pdf-parse');
+
 export const dynamic = 'force-dynamic';
 
 const openai = new OpenAI({
@@ -18,7 +19,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Nenhum arquivo PDF foi enviado." }, { status: 400 });
     }
 
-    // Converter o File do Next.js para Buffer (exigência do pdf-parse)
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     const pdfData = await pdfParse(buffer);
     const extractedText = pdfData.text;
 
-    // Prompt Cirúrgico para a IA focado na estrutura do seu Frontend
+    // Prompt Cirúrgico para a IA
     const systemPrompt = `
     Você é um assistente de Personal Trainer especialista em estruturação de dados. 
     Vou enviar o texto extraído de um treino em PDF gerado pelo aplicativo MFIT.
@@ -50,20 +50,17 @@ export async function POST(req: Request) {
             "observation": "Qualquer instrução extra (ex: Carga: 20kg. Contração 2 seg.)"
           }
         ]
-      },
-      "dayNames": { "A": "Costas e bíceps", "B": "Glúteos e Quadríceps" }
+      }
     }
 
     REGRAS DE EXTRAÇÃO:
     1. exercisesByDay: Use as chaves "A", "B", "C", etc., para cada dia de treino.
-    2. dayNames: Mapeie a letra do dia para o título muscular original que estava no PDF.
-    3. sets e reps: Separe o formato '3/15-12-10' (sets: "3", reps: "15-12-10").
-    4. restTime: Extraia apenas o número (ex: '45s' -> "45"). Se não houver, use "60".
-    5. technique: Leia as "Instruções" e o contexto. Use APENAS os valores: "DROPSET", "RESTPAUSE", "BISET", "21", "CLUSTERSET", "GVT" ou "NORMAL".
-    6. BISET: Se houver "Exercícios combinados" ou "Alterne esses exercícios", os próximos dois exercícios pertencem a um BISET. Atribua "BISET" no campo technique do array 'blocks' deles.
+    2. sets e reps: Separe o formato '3/15-12-10' (sets: "3", reps: "15-12-10").
+    3. restTime: Extraia apenas o número (ex: '45s' -> "45"). Se não houver, use "60".
+    4. technique: Leia as "Instruções" e o contexto. Use APENAS os valores: "DROPSET", "RESTPAUSE", "BISET", "21", "CLUSTERSET", "GVT" ou "NORMAL".
+    5. BISET: Se houver "Exercícios combinados" ou "Alterne esses exercícios", os próximos dois exercícios pertencem a um BISET. Atribua "BISET" no campo technique do array 'blocks' deles.
     `;
 
-    // Chamada à OpenAI forçando resposta em JSON
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       response_format: { type: "json_object" },
@@ -71,7 +68,7 @@ export async function POST(req: Request) {
         { role: "system", content: systemPrompt },
         { role: "user", content: `Texto do PDF:\n\n${extractedText}` }
       ],
-      temperature: 0.1 // Temperatura baixa para respostas exatas
+      temperature: 0.1 // Focado e direto ao ponto
     });
 
     const aiResponse = response.choices[0].message.content;
