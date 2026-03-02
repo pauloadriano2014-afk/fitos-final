@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import pdfParse from 'pdf-parse'; // 🔥 De volta ao jeito limpo!
 
 export const dynamic = 'force-dynamic';
 
@@ -19,16 +20,10 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 🔥 O TRUQUE DEFINITIVO PARA O NEXT.JS LER O PDF 🔥
-    // Verificamos como o Next.js empacotou a biblioteca e pegamos a função certa.
-    const pdfParse = require('pdf-parse');
-    const extractPdf = pdfParse.default ? pdfParse.default : pdfParse;
-
-    // Extrair o texto do PDF
-    const pdfData = await extractPdf(buffer);
+    // Extrair o texto do PDF agora vai funcionar liso!
+    const pdfData = await pdfParse(buffer);
     const extractedText = pdfData.text;
 
-    // Prompt Cirúrgico para a IA
     const systemPrompt = `
     Você é um assistente de Personal Trainer especialista em estruturação de dados. 
     Vou enviar o texto extraído de um treino em PDF gerado pelo aplicativo MFIT.

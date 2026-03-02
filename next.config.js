@@ -3,12 +3,12 @@ const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
   
-  // Otimizações do Render (MANTIDAS)
   output: 'standalone',
   experimental: {
     workerThreads: false,
     cpus: 1,
-    // 🔥 A CHAVE MESTRA PARA O NEXT.JS ACEITAR O ARQUIVO DO SEU DOMÍNIO 🔥
+    // 🔥 A BALA DE PRATA: PROÍBE O NEXT DE DESTRUIR O PDF-PARSE 🔥
+    serverComponentsExternalPackages: ['pdf-parse'],
     serverActions: {
       allowedOrigins: [
         'pauloadrianoteam.com.br', 
@@ -20,11 +20,9 @@ const nextConfig = {
     },
   },
 
-  // --- CONFIGURAÇÃO DE CORS (MANTIDA) ---
   async headers() {
     return [
       {
-        // Aplica para todas as rotas da API
         source: "/api/:path*",
         headers: [
           { key: "Access-Control-Allow-Credentials", value: "true" },
