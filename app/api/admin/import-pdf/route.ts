@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import pdfParse from 'pdf-parse'; // 🔥 De volta ao jeito limpo!
+import 'pdf-parse'; // 🔥 Isso avisa pro Next.js levar a biblioteca pro servidor, mas sem esmagar ela aqui.
 
 export const dynamic = 'force-dynamic';
 
@@ -20,10 +20,19 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Extrair o texto do PDF agora vai funcionar liso!
-    const pdfData = await pdfParse(buffer);
+    // 🔥 O HACK SUPREMO PARA LUDIBRIAR O NEXT.JS 🔥
+    // O eval() cega o compilador agressivo do Next.js e força o Node puro a puxar a função intacta!
+    const pdfModule = eval('require("pdf-parse")');
+    const extractPdf = typeof pdfModule === 'function' ? pdfModule : pdfModule.default;
+
+    // Extrair o texto do PDF agora VAI FUNCIONAR
+    const pdfData = await extractPdf(buffer);
     const extractedText = pdfData.text;
 
+    // Log de sucesso no Render para comemorarmos
+    console.log("🔥 PDF LIDO COM SUCESSO! Tamanho do texto:", extractedText.length);
+
+    // Prompt Cirúrgico para a IA
     const systemPrompt = `
     Você é um assistente de Personal Trainer especialista em estruturação de dados. 
     Vou enviar o texto extraído de um treino em PDF gerado pelo aplicativo MFIT.
