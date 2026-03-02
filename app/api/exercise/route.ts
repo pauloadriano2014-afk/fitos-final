@@ -95,6 +95,14 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ success: true, message: "Exercício excluído com sucesso." });
   } catch (error: any) {
     console.error("ERRO NA EXCLUSÃO DE EXERCÍCIO:", error);
+    
+    // 🔥 P2003 é o código do Prisma para "Exercício sendo usado em outra tabela"
+    if (error.code === 'P2003') {
+        return NextResponse.json({ 
+            error: "Trava de Segurança: Este exercício não pode ser excluído porque já está salvo dentro do treino de um aluno ou em um Template." 
+        }, { status: 400 });
+    }
+
     return NextResponse.json({ 
       error: "Erro ao excluir exercício", 
       details: error.message 
