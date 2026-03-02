@@ -9,7 +9,6 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const body = await req.json();
     const { name, startDate, endDate, exercises } = body;
 
-    // 1. Atualiza as Datas (Garante o Arquivamento)
     const workout = await prisma.workout.update({
       where: { id },
       data: {
@@ -19,12 +18,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       },
     });
 
-    // 2. Apaga os exercícios antigos daquela rotina específica
     await prisma.workoutExercise.deleteMany({
       where: { workoutId: id },
     });
 
-    // 3. 🔥 ESCUDO DUPLO ANTI-CORRUPÇÃO NA EDIÇÃO 🔥
     if (exercises && exercises.length > 0) {
       const allIds: string[] = [];
       exercises.forEach((ex: any) => {
@@ -49,7 +46,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
           technique: ex.technique || "",
           restTime: Number(ex.restTime) || 0,
           order: index,
-          observation: ex.observation || "",
+          // 🔥 TIREI A COLUNA OBSERVATION DAQUI TAMBÉM!
           substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null,
         }));
 
@@ -67,5 +64,27 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       { error: "Falha ao editar o treino", details: error.message }, 
       { status: 500 }
     );
+  }
+}
+
+// 🔥 O BOTÃO DA LIXEIRA VOLTOU A FUNCIONAR 🔥
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  try {
+    const { id } = params;
+    
+    // 1. Primeiro apagamos os exercícios vinculados a ele para não dar conflito
+    await prisma.workoutExercise.deleteMany({
+      where: { workoutId: id },
+    });
+
+    // 2. Depois apagamos a rotina em si
+    await prisma.workout.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error: any) {
+    console.error("Erro ao excluir o treino:", error);
+    return NextResponse.json({ error: "Falha ao excluir treino" }, { status: 500 });
   }
 }
