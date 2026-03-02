@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import 'pdf-parse'; // 🔥 Isso avisa pro Next.js levar a biblioteca pro servidor, mas sem esmagar ela aqui.
 
 export const dynamic = 'force-dynamic';
 
@@ -20,17 +19,21 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 🔥 O HACK SUPREMO PARA LUDIBRIAR O NEXT.JS 🔥
-    // O eval() cega o compilador agressivo do Next.js e força o Node puro a puxar a função intacta!
-    const pdfModule = eval('require("pdf-parse")');
-    const extractPdf = typeof pdfModule === 'function' ? pdfModule : pdfModule.default;
+    // 🔥 ADEUS PDF-PARSE. BEM-VINDO PDF2JSON (À PROVA DE BALAS) 🔥
+    const PDFParser = require("pdf2json");
+    
+    const extractedText = await new Promise<string>((resolve, reject) => {
+      const pdfParser = new PDFParser(null, 1); // 1 = Extrair apenas o texto puro
+      
+      pdfParser.on("pdfParser_dataError", (errData: any) => reject(errData.parserError));
+      pdfParser.on("pdfParser_dataReady", () => {
+        resolve(pdfParser.getRawTextContent());
+      });
 
-    // Extrair o texto do PDF agora VAI FUNCIONAR
-    const pdfData = await extractPdf(buffer);
-    const extractedText = pdfData.text;
+      pdfParser.parseBuffer(buffer);
+    });
 
-    // Log de sucesso no Render para comemorarmos
-    console.log("🔥 PDF LIDO COM SUCESSO! Tamanho do texto:", extractedText.length);
+    console.log("🔥 VITÓRIA! PDF LIDO COM SUCESSO! Tamanho do texto:", extractedText.length);
 
     // Prompt Cirúrgico para a IA
     const systemPrompt = `
