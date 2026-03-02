@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma'; // O caminho padrão do seu banco de dados
+import { prisma } from '@/lib/prisma'; 
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -7,7 +7,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const body = await req.json();
     const { name, startDate, endDate, exercises } = body;
 
-    // 1. Atualiza os dados básicos do Treino (Nome e as Datas para o Arquivamento funcionar)
+    // 1. Atualiza os dados básicos do Treino (Onde o Arquivamento acontece!)
     const workout = await prisma.workout.update({
       where: { id },
       data: {
@@ -17,29 +17,44 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       },
     });
 
-    // 2. Apaga os exercícios antigos desse treino específico para não duplicar
+    // 2. Apaga os exercícios velhos dessa rotina
     await prisma.workoutExercise.deleteMany({
       where: { workoutId: id },
     });
 
-    // 3. Insere os exercícios novos/editados que vieram do aplicativo
+    // 3. 🔥 O ESCUDO ANTI-CORRUPÇÃO: Impede o erro Fatal "Foreign Key" 🔥
     if (exercises && exercises.length > 0) {
-      const exercisesToCreate = exercises.map((ex: any) => ({
-        workoutId: id,
-        exerciseId: ex.exerciseId,
-        day: ex.day,
-        sets: ex.sets,
-        reps: ex.reps,
-        technique: ex.technique,
-        restTime: ex.restTime,
-        order: ex.order,
-        observation: ex.observation,
-        substituteId: ex.substituteId || null,
-      }));
-
-      await prisma.workoutExercise.createMany({
-        data: exercisesToCreate,
+      // Pega todos os IDs que estão chegando do aplicativo
+      const incomingIds = exercises.map((ex: any) => ex.exerciseId);
+      
+      // Verifica no banco QUAIS desses IDs ainda existem de verdade na sua Galeria
+      const validExercises = await prisma.exercise.findMany({
+        where: { id: { in: incomingIds } },
+        select: { id: true }
       });
+      const validIds = validExercises.map(e => e.id);
+
+      // Só deixa passar para o salvamento os exercícios que passaram no teste
+      const exercisesToCreate = exercises
+        .filter((ex: any) => validIds.includes(ex.exerciseId)) 
+        .map((ex: any) => ({
+          workoutId: id,
+          exerciseId: ex.exerciseId,
+          day: ex.day,
+          sets: ex.sets,
+          reps: ex.reps,
+          technique: ex.technique,
+          restTime: ex.restTime,
+          order: ex.order,
+          observation: ex.observation,
+          substituteId: ex.substituteId || null,
+        }));
+
+      if (exercisesToCreate.length > 0) {
+          await prisma.workoutExercise.createMany({
+            data: exercisesToCreate,
+          });
+      }
     }
 
     return NextResponse.json(workout, { status: 200 });
