@@ -97,7 +97,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Mantive igual ao original
+// 🔥 NOVO POST: SEMPRE CRIA UM TREINO NOVO E IGNORA FANTASMAS 🔥
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -110,60 +110,50 @@ export async function POST(req: Request) {
         });
     }
 
-    let workout = await prisma.workout.findFirst({ 
-        where: { userId, archived: false },
-        orderBy: { createdAt: 'desc' }
-    });
-
-    if (!workout || archiveCurrent) {
-      workout = await prisma.workout.create({
-        data: { 
-            userId, 
-            name: name || "Planejamento Atual", 
-            level: "Personalizado",
-            startDate: startDate ? new Date(startDate) : new Date(),
-            endDate: endDate ? new Date(endDate) : null
-        }
-      });
-    } else {
-        await prisma.workout.update({
-            where: { id: workout.id },
-            data: {
-                name: name || workout.name,
-                startDate: startDate ? new Date(startDate) : workout.startDate,
-                endDate: endDate ? new Date(endDate) : workout.endDate
-            }
-        });
-    }
-
-    const daysToUpdate = [...new Set(exercises.map((e: any) => e.day))];
-
-    await prisma.$transaction(async (tx) => {
-      await tx.workoutExercise.deleteMany({
-        where: { workoutId: workout.id, day: { in: daysToUpdate as string[] } }
-      });
-
-      if (exercises && exercises.length > 0) {
-        for (let i = 0; i < exercises.length; i++) {
-          const ex = exercises[i];
-          await tx.workoutExercise.create({
-            data: {
-              workoutId: workout.id,
-              exerciseId: ex.exerciseId,
-              day: ex.day,
-              sets: Number(ex.sets),
-              reps: String(ex.reps),
-              restTime: Number(ex.restTime),
-              technique: ex.technique,
-              order: i,
-              substituteId: ex.substituteId || null 
-            }
-          });
-        }
+    // 1. CRIAMOS UM TREINO NOVO ZERADO (Sem mesclar com o antigo)
+    const workout = await prisma.workout.create({
+      data: { 
+          userId, 
+          name: name || "Planejamento Atual", 
+          level: "Personalizado",
+          startDate: startDate ? new Date(startDate) : new Date(),
+          endDate: endDate ? new Date(endDate) : null
       }
     });
 
-    // Notificação
+    // 2. ESCUDO ANTI-CORRUPÇÃO (Filtramos IDs fantasmas/excluídos antes de salvar)
+    if (exercises && exercises.length > 0) {
+      const incomingIds = exercises.map((ex: any) => ex.exerciseId);
+      
+      const validExercises = await prisma.exercise.findMany({
+        where: { id: { in: incomingIds } },
+        select: { id: true }
+      });
+      const validIds = validExercises.map(e => e.id);
+
+      const exercisesToCreate = exercises
+        .filter((ex: any) => validIds.includes(ex.exerciseId)) // Só deixa passar os reais
+        .map((ex: any) => ({
+          workoutId: workout.id, // Amarra ao treino novo que acabamos de criar
+          exerciseId: ex.exerciseId,
+          day: ex.day,
+          sets: Number(ex.sets) || 0,
+          reps: String(ex.reps),
+          restTime: Number(ex.restTime) || 0,
+          technique: ex.technique || "",
+          order: ex.order || 0,
+          observation: ex.observation || "",
+          substituteId: ex.substituteId || null 
+        }));
+
+      if (exercisesToCreate.length > 0) {
+          await prisma.workoutExercise.createMany({
+              data: exercisesToCreate
+          });
+      }
+    }
+
+    // Notificação (Intacta)
     const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { pushToken: true, name: true }
