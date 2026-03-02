@@ -81,7 +81,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 🔥 NOVO POST: FIM DA MALDIÇÃO DO FRANKENSTEIN E ESCUDO DUPLO 🔥
+// 🔥 NOVO POST: FIM DA MALDIÇÃO DO FRANKENSTEIN, ESCUDO DUPLO E SEM CAMPO INEXISTENTE 🔥
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
           restTime: Number(ex.restTime) || 0,
           technique: ex.technique || "",
           order: index, 
-          observation: ex.observation || "",
+          // 🔥 LINHA DO OBSERVATION FOI ARRANCADA DAQUI 🔥
           // Anula o substituto caso ele tenha sido apagado da galeria
           substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null 
         }));
