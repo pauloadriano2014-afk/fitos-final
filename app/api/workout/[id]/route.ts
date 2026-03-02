@@ -46,7 +46,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
           technique: ex.technique || "",
           restTime: Number(ex.restTime) || 0,
           order: index,
-          // 🔥 TIREI A COLUNA OBSERVATION DAQUI TAMBÉM!
+          
+          // 🔥 DE VOLTA AO LUGAR DELA! A EDIÇÃO AGORA SALVA OBSERVAÇÕES 🔥
+          observation: ex.observation || "",
+          
           substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null,
         }));
 

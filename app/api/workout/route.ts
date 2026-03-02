@@ -81,7 +81,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 🔥 NOVO POST: FIM DA MALDIÇÃO DO FRANKENSTEIN, ESCUDO DUPLO E SEM CAMPO INEXISTENTE 🔥
+// 🔥 POST: TREINO NOVO COM ESCUDO E OBSERVAÇÕES SALVAS CORRETAMENTE 🔥
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
         });
     }
 
-    // 1. CRIAMOS UM TREINO NOVO (Nunca mais ele vai apagar dia de treino antigo)
+    // 1. Cria um treino novo zerado
     const workout = await prisma.workout.create({
       data: { 
           userId, 
@@ -105,7 +105,7 @@ export async function POST(req: Request) {
       }
     });
 
-    // 2. ESCUDO DUPLO ANTI-CORRUPÇÃO (Filtra o Exercício e a Opção de Troca)
+    // 2. Escudo Duplo Anti-Corrupção
     if (exercises && exercises.length > 0) {
       const allIds: string[] = [];
       exercises.forEach((ex: any) => {
@@ -130,8 +130,10 @@ export async function POST(req: Request) {
           restTime: Number(ex.restTime) || 0,
           technique: ex.technique || "",
           order: index, 
-          // 🔥 LINHA DO OBSERVATION FOI ARRANCADA DAQUI 🔥
-          // Anula o substituto caso ele tenha sido apagado da galeria
+          
+          // 🔥 AS OBSERVAÇÕES VOLTARAM! AGORA O BANCO ACEITA ELAS 🔥
+          observation: ex.observation || "",
+          
           substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null 
         }));
 

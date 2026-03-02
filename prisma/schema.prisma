@@ -15,7 +15,7 @@ model User {
   birthDate String?
   phone     String?
   gender    String?
-  aiLogs        AiLog[]
+  aiLogs    AiLog[]
    
   // Controle de Acesso e Planos
   plan_tier String   @default("standard")
@@ -50,7 +50,7 @@ model Exercise {
   name          String   @unique
   category      String
   videoUrl      String?
-  instructions String?
+  instructions  String?
   createdAt     DateTime @default(now())
    
   // Relacionamentos
@@ -89,14 +89,17 @@ model WorkoutExercise {
   substituteId String?
   substitute   Exercise? @relation("SubstituteRelation", fields: [substituteId], references: [id])
 
-  restTime  Int      @default(60)
-  title     String?  
-  sets      Int      @default(3)
-  reps      String   @default("12") 
-  notes     String?  
-  technique String?  
-  day       String   @default("A") 
-  order     Int      @default(0) 
+  restTime    Int      @default(60)
+  title       String?  
+  sets        Int      @default(3)
+  reps        String   @default("12") 
+  notes       String?  
+  technique   String?  
+  day         String   @default("A") 
+  order       Int      @default(0) 
+
+  // 🔥 A NOSSA COLUNA DE OBSERVAÇÃO OFICIAL AQUI 🔥
+  observation String?  
 }
 
 model Anamnese {
@@ -142,11 +145,11 @@ model WorkoutHistory {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
    
   name           String    
-  workoutName  String? 
+  workoutName    String? 
   date           DateTime @default(now())
   xpEarned       Int      @default(0)
   duration       Int?      
-  progressions Int      @default(0) 
+  progressions   Int      @default(0) 
 
   rpe            Int?      
   feedback       String?  
