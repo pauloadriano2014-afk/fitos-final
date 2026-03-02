@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma'; 
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -7,7 +9,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const body = await req.json();
     const { name, startDate, endDate, exercises } = body;
 
-    // 1. Atualiza os dados básicos do Treino (Onde o Arquivamento acontece!)
+    // 1. Atualiza as Datas (Garante o Arquivamento)
     const workout = await prisma.workout.update({
       where: { id },
       data: {
@@ -17,37 +19,38 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       },
     });
 
-    // 2. Apaga os exercícios velhos dessa rotina
+    // 2. Apaga os exercícios antigos daquela rotina específica
     await prisma.workoutExercise.deleteMany({
       where: { workoutId: id },
     });
 
-    // 3. 🔥 O ESCUDO ANTI-CORRUPÇÃO: Impede o erro Fatal "Foreign Key" 🔥
+    // 3. 🔥 ESCUDO DUPLO ANTI-CORRUPÇÃO NA EDIÇÃO 🔥
     if (exercises && exercises.length > 0) {
-      // Pega todos os IDs que estão chegando do aplicativo
-      const incomingIds = exercises.map((ex: any) => ex.exerciseId);
-      
-      // Verifica no banco QUAIS desses IDs ainda existem de verdade na sua Galeria
+      const allIds: string[] = [];
+      exercises.forEach((ex: any) => {
+          if (ex.exerciseId) allIds.push(ex.exerciseId);
+          if (ex.substituteId) allIds.push(ex.substituteId);
+      });
+
       const validExercises = await prisma.exercise.findMany({
-        where: { id: { in: incomingIds } },
+        where: { id: { in: allIds } },
         select: { id: true }
       });
       const validIds = validExercises.map(e => e.id);
 
-      // Só deixa passar para o salvamento os exercícios que passaram no teste
       const exercisesToCreate = exercises
-        .filter((ex: any) => validIds.includes(ex.exerciseId)) 
-        .map((ex: any) => ({
+        .filter((ex: any) => validIds.includes(ex.exerciseId))
+        .map((ex: any, index: number) => ({
           workoutId: id,
           exerciseId: ex.exerciseId,
           day: ex.day,
-          sets: ex.sets,
-          reps: ex.reps,
-          technique: ex.technique,
-          restTime: ex.restTime,
-          order: ex.order,
-          observation: ex.observation,
-          substituteId: ex.substituteId || null,
+          sets: Number(ex.sets) || 0,
+          reps: String(ex.reps),
+          technique: ex.technique || "",
+          restTime: Number(ex.restTime) || 0,
+          order: index,
+          observation: ex.observation || "",
+          substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null,
         }));
 
       if (exercisesToCreate.length > 0) {
