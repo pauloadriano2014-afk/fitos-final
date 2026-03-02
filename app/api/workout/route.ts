@@ -15,7 +15,6 @@ export async function GET(req: Request) {
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
 
-    // --- CENÁRIO 1: DETALHES DO TREINO ---
     if (workoutId) {
         const workout = await prisma.workout.findUnique({
             where: { id: workoutId },
@@ -29,8 +28,6 @@ export async function GET(req: Request) {
 
         if (!workout) return NextResponse.json({ error: "Workout not found" }, { status: 404 });
 
-        // 1. Busca histórico recente (Últimos 10 treinos)
-        // NÃO filtramos por workoutId aqui porque a coluna não existe no schema
         const history = await prisma.workoutHistory.findMany({
             where: { userId },
             orderBy: { date: 'desc' },
@@ -38,36 +35,24 @@ export async function GET(req: Request) {
             include: { details: true }
         });
 
-        // 🔥 2. LÓGICA DE DETETIVE NO BACKEND 🔥
-        // Vamos descobrir qual foi o último dia feito lendo os nomes
         let calculatedLastLog = null;
 
         for (const log of history) {
             const name = (log.workoutName || log.name || "").toUpperCase();
-            
-            // Procura padrões como "TREINO A", "TREINO B" ou apenas "A", "B" se estiver isolado
-            // Regex procura a letra A-F
             const match = name.match(/TREINO\s+([A-F])/i) || name.match(/\b([A-F])\b/i);
             
             if (match) {
-                // Achamos! Ex: O cara fez o "TREINO B" ontem.
-                calculatedLastLog = {
-                    day: match[1].toUpperCase(), // "B"
-                    date: log.date
-                };
-                break; // Para no primeiro que achar (o mais recente)
+                calculatedLastLog = { day: match[1].toUpperCase(), date: log.date };
+                break; 
             }
-            
-            // Fallback para nomes mapeados (Ex: "PERNAS" -> C)
             if (name.includes('SUPERIORES')) { calculatedLastLog = { day: 'A', date: log.date }; break; }
             if (name.includes('COSTAS')) { calculatedLastLog = { day: 'B', date: log.date }; break; }
             if (name.includes('PERNAS')) { calculatedLastLog = { day: 'C', date: log.date }; break; }
         }
 
-        // Mapeia pesos (Lógica antiga mantida)
         const lastWeightsMap: any = {};
         if (history.length > 0) {
-            history.slice().reverse().forEach(h => { // slice para não mutar o array original
+            history.slice().reverse().forEach(h => { 
                 h.details.forEach(d => {
                     if (!lastWeightsMap[d.exerciseId]) lastWeightsMap[d.exerciseId] = {};
                     lastWeightsMap[d.exerciseId][d.setNumber] = d.weight;
@@ -78,11 +63,10 @@ export async function GET(req: Request) {
         return NextResponse.json({ 
             ...workout, 
             lastWeights: lastWeightsMap,
-            lastLog: calculatedLastLog // <--- Agora enviamos o dia calculado (ex: { day: 'A' })
+            lastLog: calculatedLastLog 
         });
     }
 
-    // --- CENÁRIO 2: LISTA DE TREINOS ---
     const workouts = await prisma.workout.findMany({
         where: { userId, archived: archived },
         orderBy: { createdAt: 'desc' },
@@ -97,7 +81,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 🔥 NOVO POST: SEMPRE CRIA UM TREINO NOVO E IGNORA FANTASMAS 🔥
+// 🔥 NOVO POST: FIM DA MALDIÇÃO DO FRANKENSTEIN E ESCUDO DUPLO 🔥
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -110,7 +94,7 @@ export async function POST(req: Request) {
         });
     }
 
-    // 1. CRIAMOS UM TREINO NOVO ZERADO (Sem mesclar com o antigo)
+    // 1. CRIAMOS UM TREINO NOVO (Nunca mais ele vai apagar dia de treino antigo)
     const workout = await prisma.workout.create({
       data: { 
           userId, 
@@ -121,29 +105,34 @@ export async function POST(req: Request) {
       }
     });
 
-    // 2. ESCUDO ANTI-CORRUPÇÃO (Filtramos IDs fantasmas/excluídos antes de salvar)
+    // 2. ESCUDO DUPLO ANTI-CORRUPÇÃO (Filtra o Exercício e a Opção de Troca)
     if (exercises && exercises.length > 0) {
-      const incomingIds = exercises.map((ex: any) => ex.exerciseId);
+      const allIds: string[] = [];
+      exercises.forEach((ex: any) => {
+          if (ex.exerciseId) allIds.push(ex.exerciseId);
+          if (ex.substituteId) allIds.push(ex.substituteId);
+      });
       
       const validExercises = await prisma.exercise.findMany({
-        where: { id: { in: incomingIds } },
+        where: { id: { in: allIds } },
         select: { id: true }
       });
       const validIds = validExercises.map(e => e.id);
 
       const exercisesToCreate = exercises
-        .filter((ex: any) => validIds.includes(ex.exerciseId)) // Só deixa passar os reais
-        .map((ex: any) => ({
-          workoutId: workout.id, // Amarra ao treino novo que acabamos de criar
+        .filter((ex: any) => validIds.includes(ex.exerciseId)) 
+        .map((ex: any, index: number) => ({
+          workoutId: workout.id, 
           exerciseId: ex.exerciseId,
           day: ex.day,
           sets: Number(ex.sets) || 0,
           reps: String(ex.reps),
           restTime: Number(ex.restTime) || 0,
           technique: ex.technique || "",
-          order: ex.order || 0,
+          order: index, 
           observation: ex.observation || "",
-          substituteId: ex.substituteId || null 
+          // Anula o substituto caso ele tenha sido apagado da galeria
+          substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null 
         }));
 
       if (exercisesToCreate.length > 0) {
@@ -153,7 +142,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Notificação (Intacta)
+    // Notificação
     const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { pushToken: true, name: true }
