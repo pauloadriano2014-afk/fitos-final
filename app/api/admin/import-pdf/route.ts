@@ -47,7 +47,7 @@ export async function POST(req: Request) {
         "A": [
           {
             "title": "Nome exato do exercício no PDF",
-            "category": "Tente adivinhar a categoria (Peito, Costas, Pernas, Ombros, Bíceps, Tríceps, Abdômen, Cardio)",
+            "category": "Tente adivinhar a categoria",
             "blocks": [
               {
                 "sets": "3", 
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
                 "technique": "NORMAL"
               }
             ],
-            "observation": "Qualquer instrução extra (ex: Carga: 20kg. Contração 2 seg.)"
+            "observation": ""
           }
         ]
       }
@@ -68,6 +68,7 @@ export async function POST(req: Request) {
     3. restTime: Extraia apenas o número (ex: '45s' -> "45"). Se não houver, use "60".
     4. technique: Leia as "Instruções" e o contexto. Use APENAS os valores: "DROPSET", "RESTPAUSE", "BISET", "21", "CLUSTERSET", "GVT" ou "NORMAL".
     5. BISET: Se houver "Exercícios combinados" ou "Alterne esses exercícios", os próximos dois exercícios pertencem a um BISET. Atribua "BISET" no campo technique do array 'blocks' deles.
+    6. OBSERVAÇÕES E CARGAS: IGNORE COMPLETAMENTE TODAS as cargas (ex: "Carga: 20kg" ou "PROGRESSÃO"). O campo "observation" DEVE RETORNAR ABSOLUTAMENTE VAZIO ("").
     `;
 
     const response = await openai.chat.completions.create({
