@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// 🔥 O SEGREDO AQUI: Trocamos o 'import' moderno pelo 'require' tradicional
-const pdfParse = require('pdf-parse');
-
 export const dynamic = 'force-dynamic';
 
 const openai = new OpenAI({
@@ -22,8 +19,13 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // 🔥 O TRUQUE DEFINITIVO PARA O NEXT.JS LER O PDF 🔥
+    // Verificamos como o Next.js empacotou a biblioteca e pegamos a função certa.
+    const pdfParse = require('pdf-parse');
+    const extractPdf = pdfParse.default ? pdfParse.default : pdfParse;
+
     // Extrair o texto do PDF
-    const pdfData = await pdfParse(buffer);
+    const pdfData = await extractPdf(buffer);
     const extractedText = pdfData.text;
 
     // Prompt Cirúrgico para a IA
@@ -68,7 +70,7 @@ export async function POST(req: Request) {
         { role: "system", content: systemPrompt },
         { role: "user", content: `Texto do PDF:\n\n${extractedText}` }
       ],
-      temperature: 0.1 // Focado e direto ao ponto
+      temperature: 0.1 
     });
 
     const aiResponse = response.choices[0].message.content;
