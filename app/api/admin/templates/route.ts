@@ -4,14 +4,12 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-// GET: Buscar templates (com filtros opcionais)
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const goal = searchParams.get('goal');
   const level = searchParams.get('level');
 
   const where: any = {};
-  // Se vier "TODOS", ignoramos o filtro. Se vier valor, filtramos.
   if (goal && goal !== 'TODOS') where.goal = goal;
   if (level && level !== 'TODOS') where.level = level;
 
@@ -26,29 +24,45 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Criar novo template
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, goal, level, exercisesByDay } = body;
+    // 🔥 CIRURGIA: Agora o servidor aceita 'data' (que já é a string JSON) e o 'id' para edição
+    const { id, name, goal, level, data } = body;
 
-    if (!name || !exercisesByDay) {
+    if (!name || !data) {
         return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
     }
 
-    // Salva o objeto de exercícios como string JSON
-    await prisma.workoutTemplate.create({
-      data: {
-        name,
-        goal,
-        level,
-        data: JSON.stringify(exercisesByDay)
-      }
-    });
+    if (id) {
+        // Se mandou ID, atualiza o template que já existe (Edição)
+        await prisma.workoutTemplate.update({
+            where: { id },
+            data: { name, goal, level, data }
+        });
+    } else {
+        // Se não tem ID, cria um novo (Novo Template)
+        await prisma.workoutTemplate.create({
+            data: { name, goal, level, data }
+        });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: "Erro ao criar template" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao salvar template" }, { status: 500 });
   }
+}
+
+export async function DELETE(req: Request) {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: "ID não fornecido" }, { status: 400 });
+
+    try {
+        await prisma.workoutTemplate.delete({ where: { id } });
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        return NextResponse.json({ error: "Erro ao deletar" }, { status: 500 });
+    }
 }
