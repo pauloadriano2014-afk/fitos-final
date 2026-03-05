@@ -11,6 +11,7 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
+    const mode = formData.get('mode') as string || 'FULL'; // 🔥 Lendo o modo de importação
 
     if (!file) {
       return NextResponse.json({ error: "Nenhum arquivo PDF foi enviado." }, { status: 400 });
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 🔥 ADEUS PDF-PARSE. BEM-VINDO PDF2JSON (À PROVA DE BALAS) 🔥
+    // 🔥 PDF2JSON PARA EXTRAÇÃO BRUTA E CONFIÁVEL 🔥
     const PDFParser = require("pdf2json");
     
     const extractedText = await new Promise<string>((resolve, reject) => {
@@ -33,9 +34,15 @@ export async function POST(req: Request) {
       pdfParser.parseBuffer(buffer);
     });
 
-    console.log("🔥 VITÓRIA! PDF LIDO COM SUCESSO! Tamanho do texto:", extractedText.length);
+    console.log(`🔥 LIDO COM SUCESSO! Modo: ${mode} | Tamanho do texto:`, extractedText.length);
 
-    // Prompt Cirúrgico para a IA
+    // 🔥 O COMANDO MESTRE PARA QUEBRAR A PREGUIÇA DO GPT
+    const modeInstruction = mode === 'FULL' 
+        ? `🚨 ALERTA CRÍTICO: Este é um PDF de ROTINA COMPLETA. Ele contém múltiplos dias de treino (ex: Treino A, Treino B, Treino C, etc.).
+           Você DEVE mapear TODOS os dias encontrados no documento. NÃO interrompa a extração após o primeiro dia.
+           Analise o documento do início ao fim e crie as chaves "A", "B", "C", "D", "E", etc., no objeto "exercisesByDay" conforme os dias mudam no PDF.`
+        : `🚨 Este PDF contém apenas UM dia de treino (avulso). Coloque absolutamente TODOS os exercícios extraídos dentro da chave "A" no objeto "exercisesByDay". Ignora quebras de dia se houver.`;
+
     const systemPrompt = `
     Você é um assistente de Personal Trainer especialista em estruturação de dados. 
     Vou enviar o texto extraído de um treino em PDF gerado pelo aplicativo MFIT.
@@ -62,13 +69,14 @@ export async function POST(req: Request) {
       }
     }
 
-    REGRAS DE EXTRAÇÃO:
-    1. exercisesByDay: Use as chaves "A", "B", "C", etc., para cada dia de treino.
-    2. sets e reps: Separe o formato '3/15-12-10' (sets: "3", reps: "15-12-10").
-    3. restTime: Extraia apenas o número (ex: '45s' -> "45"). Se não houver, use "60".
-    4. technique: Leia as "Instruções" e o contexto. Use APENAS os valores: "DROPSET", "RESTPAUSE", "BISET", "21", "CLUSTERSET", "GVT" ou "NORMAL".
-    5. BISET: Se houver "Exercícios combinados" ou "Alterne esses exercícios", os próximos dois exercícios pertencem a um BISET. Atribua "BISET" no campo technique do array 'blocks' deles.
-    6. OBSERVAÇÕES E CARGAS: IGNORE COMPLETAMENTE TODAS as cargas (ex: "Carga: 20kg" ou "PROGRESSÃO"). O campo "observation" DEVE RETORNAR ABSOLUTAMENTE VAZIO ("").
+    ${modeInstruction}
+
+    REGRAS DE EXTRAÇÃO ADICIONAIS:
+    1. sets e reps: Separe o formato '3/15-12-10' (sets: "3", reps: "15-12-10").
+    2. restTime: Extraia apenas o número (ex: '45s' -> "45"). Se não houver, use "60".
+    3. technique: Leia as "Instruções" e o contexto. Use APENAS os valores: "DROPSET", "RESTPAUSE", "BISET", "21", "CLUSTERSET", "GVT" ou "NORMAL".
+    4. BISET: Se houver "Exercícios combinados" ou "Alterne esses exercícios", os próximos dois exercícios pertencem a um BISET. Atribua "BISET" no campo technique do array 'blocks' deles.
+    5. OBSERVAÇÕES E CARGAS: IGNORE COMPLETAMENTE TODAS as cargas (ex: "Carga: 20kg" ou "PROGRESSÃO"). O campo "observation" DEVE RETORNAR ABSOLUTAMENTE VAZIO ("").
     `;
 
     const response = await openai.chat.completions.create({
