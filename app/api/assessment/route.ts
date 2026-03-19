@@ -102,7 +102,6 @@ export async function POST(req: Request) {
   }
 }
 
-// 👇 NOVA FUNÇÃO DELETE 👇
 export async function DELETE(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
@@ -118,4 +117,43 @@ export async function DELETE(req: Request) {
     } catch (error) {
         return NextResponse.json({ error: "Erro ao excluir" }, { status: 500 });
     }
+}
+
+// 👇 NOVA FUNÇÃO PUT (PARA EDITAR AVALIAÇÕES) 👇
+export async function PUT(req: Request) {
+  try {
+    const body = await req.json();
+    const { 
+        id, date, weight, method, 
+        bodyFat, waist, abdomen, 
+        foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh 
+    } = body;
+
+    if (!id) return NextResponse.json({ error: "ID obrigatório para edição" }, { status: 400 });
+
+    const updatedAssessment = await prisma.assessment.update({
+        where: { id },
+        data: {
+            date: date ? new Date(date) : undefined,
+            weight: Number(String(weight).replace(',', '.')),
+            waist: safeFloat(waist),
+            abdomen: safeFloat(abdomen),
+            method: method || "MANUAL",
+            foldTriceps: safeFloat(foldTriceps),
+            foldSubscapular: safeFloat(foldSubscapular),
+            foldChest: safeFloat(foldChest),
+            foldAxillary: safeFloat(foldAxillary),
+            foldSuprailiac: safeFloat(foldSuprailiac),
+            foldAbdominal: safeFloat(foldAbdominal),
+            foldThigh: safeFloat(foldThigh),
+            bodyFat: safeFloat(bodyFat),
+        }
+    });
+
+    return NextResponse.json({ success: true, id: updatedAssessment.id });
+
+  } catch (error: any) {
+    console.error("Erro Backend:", error);
+    return NextResponse.json({ error: error.message || "Erro interno ao atualizar" }, { status: 500 });
+  }
 }
