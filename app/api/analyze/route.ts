@@ -12,18 +12,21 @@ const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY || '');
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-// 🔥 CORREÇÃO 1: Adicionado ": Request" para o TypeScript entender a requisição
 export async function POST(req: Request) {
   let tempFilePath = '';
 
   try {
     const formData = await req.formData();
     const file = formData.get('video') as File;
-    const exercise = formData.get('exerciseName') as string || 'Exercício';
+    const rawExercise = formData.get('exerciseName') as string || 'Exercício';
     
+    // Separa o nome limpo das regras de elite enviadas pelo app
+    const parts = rawExercise.split(' | REGRAS DO COACH:');
+    const exerciseName = parts[0].trim();
+    const eliteRules = parts[1] ? `\n    🚨 REGRAS EXCLUSIVAS PARA ESTE EXERCÍCIO (OBRIGATÓRIO SEGUIR):\n    - ${parts[1].trim()}` : '';
+
     if (!file) return NextResponse.json({ error: "Vídeo não recebido" }, { status: 400 });
 
-    // Trava de segurança aumentada para 50MB
     if (file.size > 50 * 1024 * 1024) { 
         return NextResponse.json({ 
             error: "Vídeo muito pesado.", 
@@ -31,29 +34,25 @@ export async function POST(req: Request) {
         }, { status: 413 });
     }
 
-    console.log(`🎥 1. Recebendo vídeo: ${file.name} (${file.size} bytes, tipo: ${file.type})`);
+    console.log(`🎥 1. Recebendo vídeo: ${file.name} (${file.size} bytes, tipo: ${file.type}) - Ex: ${exerciseName}`);
 
-    // --- DESCOBRIR O FORMATO REAL DO ARQUIVO ---
     const actualMimeType = file.type || "video/mp4";
     const extension = actualMimeType.includes("quicktime") ? ".mov" : ".mp4";
 
-    // --- SALVAR EM DISCO ---
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     const fileName = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}${extension}`;
     tempFilePath = path.join(os.tmpdir(), fileName);
     fs.writeFileSync(tempFilePath, buffer);
 
-    // --- UPLOAD PARA GOOGLE ---
     console.log(`🚀 2. Enviando para Google AI como ${actualMimeType}...`);
     const uploadResponse = await fileManager.uploadFile(tempFilePath, {
       mimeType: actualMimeType, 
-      displayName: `Analysis ${exercise}`,
+      displayName: `Analysis ${exerciseName}`,
     });
 
     console.log(`✅ 3. Upload concluído. URI: ${uploadResponse.file.uri}`);
 
-    // --- AGUARDAR PROCESSAMENTO BLINDADO (ATÉ 60s) ---
     let fileState = await fileManager.getFile(uploadResponse.file.name);
     let tentativas = 0;
     
@@ -61,7 +60,6 @@ export async function POST(req: Request) {
       tentativas++;
       console.log(`⏳ Processando vídeo no Google... (Tentativa ${tentativas}/20)`);
       
-      // Espera 3 segundos antes de perguntar de novo
       await new Promise((resolve) => setTimeout(resolve, 3000));
       
       fileState = await fileManager.getFile(uploadResponse.file.name);
@@ -77,25 +75,32 @@ export async function POST(req: Request) {
 
     console.log("🟢 Vídeo pronto! Extraindo análise técnica...");
 
-    // --- ANÁLISE ---
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    const prompt = `ATENÇÃO: Você é o 'Coach Paulo Team'.
-    O aluno enviou este vídeo do exercício: "${exercise}".
+    // 🔥 O PROMPT AGORA É UM TANQUE DE GUERRA
+    const prompt = `ATENÇÃO: Você é o treinador de Elite 'Coach Paulo'.
+    O aluno enviou este vídeo executando o exercício: "${exerciseName}".
+    
     SIGA ESTE PROTOCOLO DE 3 ETAPAS RIGOROSAS:
+    
     🚨 1. VISIBILIDADE:
-    - O vídeo está escuro? É apenas um vulto ou borrão preto? Se não vê, não analise.
-    - Feedback: "Vídeo escuro. Não consigo avaliar. Acenda a luz."
+    - O vídeo está escuro ou a câmera está virada para a parede? 
+    - Se não for possível ver o movimento claramente, PARE a análise e retorne: "Vídeo escuro ou ângulo ruim. Não consigo avaliar. Refaça a gravação."
+    
     🚨 2. IDENTIFICAÇÃO DO MOVIMENTO:
-    - O movimento corresponde ao "${exercise}"? Se for diferente, reprove.
-    🚨 3. ANÁLISE TÉCNICA:
-    - Avalie postura, cadência e segurança.
-    - Dê uma dica de ouro para melhorar.
-    Retorne APENAS um JSON puro:
+    - O movimento que o aluno está fazendo no vídeo corresponde à biomecânica do exercício "${exerciseName}"?
+    - Se o aluno selecionou um exercício de braço, mas está fazendo perna (ou vice-versa), REPROVE IMEDIATAMENTE e diga: "Você selecionou ${exerciseName}, mas está gravando outro movimento. Corrija o card."
+    
+    🚨 3. ANÁLISE TÉCNICA E BIOMECÂNICA (O SEU DEVER PRINCIPAL):
+    - Avalie a postura da coluna (lordose/cifose), a cadência (velocidade de subida e descida) e a segurança articular.
+    ${eliteRules}
+    - Dê um veredito direto e reto. Nada de elogios falsos se o treino estiver ruim.
+    
+    Retorne APENAS um JSON puro no formato abaixo, sem nenhum texto antes ou depois:
     {
-      "feedback": "Seu veredito (Máx 30 palavras).",
+      "feedback": "Seu veredito técnico direto (Máximo de 30 palavras).",
       "score": 0 a 10,
-      "correction": "Ação corretiva."
+      "correction": "Sua Dica de Ouro ou Hack mental para corrigir a postura."
     }`;
 
     const result = await model.generateContent([
@@ -108,7 +113,6 @@ export async function POST(req: Request) {
       { text: prompt }
     ]);
 
-    // 🔥 EXTRATOR DE JSON BRUTO (Ignora o papo furado da IA)
     const rawText = result.response.text();
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     const cleanedText = jsonMatch ? jsonMatch[0] : rawText.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -128,13 +132,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json(jsonResponse);
 
-  // 🔥 CORREÇÃO 2: Adicionado ": any" para liberar a extração do erro
   } catch (error: any) {
     console.error("❌ ERRO NO SERVER:", error);
     return NextResponse.json({ error: "Erro interno", details: error.message }, { status: 500 });
   } finally {
     if (tempFilePath && fs.existsSync(tempFilePath)) {
-        try { fs.unlinkSync(tempFilePath); } catch (e) { console.error("Erro ao limpar temp:", e); }
+        try { fs.unlinkSync(tempFilePath); } catch (e) {}
     }
   }
 }
