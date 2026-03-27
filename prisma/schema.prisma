@@ -30,19 +30,23 @@ model User {
   currentXP Int      @default(0)
   pushToken String?  // Para notificações OneSignal/Expo
    
+  // 🔥 NOVO: Foto de perfil (Avatar VIP)
+  photoUrl  String?
+
   createdAt DateTime @default(now())
 
   // Relacionamentos
-  workouts    Workout[]
-  anamneses   Anamnese[]
-  history     WorkoutHistory[] 
-  assessments Assessment[]       
-  checkIns    CheckIn[]
+  workouts   Workout[]
+  anamneses  Anamnese[]
+  history    WorkoutHistory[] 
+  assessments Assessment[]        
+  checkIns   CheckIn[]
   
   // PA FLIX & Comunidade
   contentLikes    ContentLike[]
   contentComments ContentComment[]
-  contentCompletions ContentCompletion[] // 🔥 NOVO: Histórico de aulas assistidas
+  contentCompletions ContentCompletion[] // Histórico de aulas assistidas
+  unlockedContents ContentAccess[]     // 🔥 NOVO: Relação de conteúdos VIP liberados manualmente
 }
 
 model Exercise {
@@ -98,7 +102,7 @@ model WorkoutExercise {
   day         String   @default("A") 
   order       Int      @default(0) 
 
-  // 🔥 A NOSSA COLUNA DE OBSERVAÇÃO OFICIAL AQUI 🔥
+  // A NOSSA COLUNA DE OBSERVAÇÃO OFICIAL AQUI
   observation String?  
 }
 
@@ -131,9 +135,9 @@ model Anamnese {
 
 model WorkoutTemplate {
   id        String   @id @default(uuid())
-  name      String    
-  goal      String    
-  level     String    
+  name      String   
+  goal      String   
+  level     String   
   data      String    @db.Text 
   createdAt DateTime @default(now())
 }
@@ -144,7 +148,7 @@ model WorkoutHistory {
   userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
    
-  name           String    
+  name           String   
   workoutName    String? 
   date           DateTime @default(now())
   xpEarned       Int      @default(0)
@@ -216,20 +220,20 @@ model Assessment {
 
 // Check-in Diário/Semanal
 model CheckIn {
-  id            String   @id @default(uuid())
-  date          DateTime @default(now())
+  id          String   @id @default(uuid())
+  date        DateTime @default(now())
    
-  weight        Float?
-  feedback      String?  
+  weight      Float?
+  feedback    String?  
    
-  photoFront    String? 
-  photoBack     String?
-  photoSide     String?
+  photoFront  String? 
+  photoBack   String?
+  photoSide   String?
    
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt     DateTime @default(now())
+  createdAt   DateTime @default(now())
 }
 
 // Mural de Avisos do Admin
@@ -250,7 +254,7 @@ model AiLog {
   createdAt DateTime @default(now())
 }
 
-// 🔥 PA FLIX (Área de Conteúdo e Comunidade)
+// 🔥 PA FLIX (Área de Conteúdo e Comunidade Unificada)
 model Content {
   id          String   @id @default(uuid())
   title       String
@@ -259,16 +263,23 @@ model Content {
    
   category    String   // Ex: 'TECNICA', 'MINDSET', 'NUTRICAO'
    
-  videoUrl    String   // Link do vídeo (Cloudflare/YouTube)
-  thumbUrl    String?  // Capa do vídeo
+  // 🔥 MUDANÇAS PARA A BIBLIOTECA UNIFICADA:
+  type        String   @default("video") // "video", "ebook", "audio"
+  isVIP       Boolean  @default(false)   // Controle de bloqueio
+  
+  videoUrl    String?  // Agora é opcional
+  pdfUrl      String?  // 🔥 NOVO
+  audioUrl    String?  // 🔥 NOVO
+  thumbUrl    String?  // Capa
   duration    String?  // Ex: "12 min"
    
   createdAt   DateTime @default(now())
    
-  // Relações Sociais
+  // Relações Sociais e Acesso
   likes       ContentLike[]
   comments    ContentComment[]
-  completions ContentCompletion[] // 🔥 NOVO: Relação com quem assistiu
+  completions ContentCompletion[] 
+  unlockedFor ContentAccess[] // 🔥 NOVO: Quem tem acesso a esse conteúdo VIP
 }
 
 model ContentLike {
@@ -298,7 +309,7 @@ model ContentComment {
   createdAt DateTime @default(now())
 }
 
-// 🔥 NOVO MODELO: Controle de XP por vídeo assistido
+// Controle de XP por vídeo assistido
 model ContentCompletion {
   id        String   @id @default(uuid())
   
@@ -311,4 +322,19 @@ model ContentCompletion {
   createdAt DateTime @default(now())
 
   @@unique([userId, contentId]) // Garante que o usuário só ganhe XP 1x por vídeo
+}
+
+// 🔥 NOVA TABELA: Para ligar o aluno ao conteúdo VIP liberado
+model ContentAccess {
+  id        String   @id @default(uuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, contentId]) // Garante que não duplique a liberação
 }

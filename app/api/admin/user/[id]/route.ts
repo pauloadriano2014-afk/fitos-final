@@ -3,8 +3,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// 👇 ESTA É A FUNÇÃO QUE FALTAVA (GET)
-// Ela busca os dados do aluno e a anamnese para mostrar no Admin
+// 👇 BUSCA DADOS COMPLETOS DO ALUNO
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const userId = params.id;
@@ -12,12 +11,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        // Traz a anamnese mais recente para verificar limitações
         anamneses: {
           orderBy: { createdAt: 'desc' },
           take: 1
         },
-        // Traz o histórico de treinos se precisar
         workouts: {
           orderBy: { createdAt: 'desc' },
           take: 1
@@ -38,22 +35,34 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 // ---------------------------------------------------------
-// SUAS FUNÇÕES ORIGINAIS (MANTIDAS)
+// 🔥 PATCH ATUALIZADO: AGORA SALVA A FOTO E O STATUS
 // ---------------------------------------------------------
-
-// PATCH: Atualizar (Inativar/Ativar)
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
-    const { active } = await req.json();
+    const body = await req.json();
     const userId = params.id;
+
+    // Criamos um objeto de atualização dinâmico
+    const updateData: any = {};
+
+    // Se no corpo vier 'active' (boolean), adiciona na atualização
+    if (typeof body.active === 'boolean') {
+      updateData.active = body.active;
+    }
+
+    // Se no corpo vier 'photoUrl' (string), adiciona na atualização
+    if (body.photoUrl !== undefined) {
+      updateData.photoUrl = body.photoUrl;
+    }
 
     const user = await prisma.user.update({
       where: { id: userId },
-      data: { active }
+      data: updateData
     });
 
     return NextResponse.json(user);
   } catch (error) {
+    console.error("Erro PATCH User:", error);
     return NextResponse.json({ error: "Erro ao atualizar usuário" }, { status: 500 });
   }
 }
