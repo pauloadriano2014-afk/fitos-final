@@ -1,26 +1,25 @@
+// app/api/auth/login/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-export const dynamic = 'force-dynamic'; // Garante verificação em tempo real
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
     const { email, password } = await req.json();
-    console.log(`Tentativa de login para: ${email}`);
 
-    // AQUI ESTÁ A CORREÇÃO MÁGICA 👇
     const user = await prisma.user.findUnique({ 
       where: { email },
       include: { 
-        anamneses: true // Traz o histórico para o App saber que ele já é aluno!
+        anamneses: true 
       }
     });
 
     if (user && user.password === password) {
-      // Remove a senha por segurança antes de enviar
       const { password: _, ...userWithoutPassword } = user;
       
+      // 🔥 O Servidor agora devolve o usuário com a role ('ADMIN' ou 'USER')
       return NextResponse.json({ user: userWithoutPassword });
     }
 
