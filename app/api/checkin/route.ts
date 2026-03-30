@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// POST: Aluno envia Check-in (Mantido igual, está ótimo)
+// POST: Aluno envia Check-in
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -23,7 +23,6 @@ export async function POST(req: Request) {
       }
     });
 
-    // Atualiza o peso atual no perfil do usuário também, para facilitar cálculos futuros
     if (weight) {
         await prisma.user.update({
             where: { id: userId },
@@ -43,21 +42,26 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
+    const adminId = searchParams.get('adminId'); // 🔥 O CRACHÁ DE SEGURANÇA
 
     try {
-        // Se tiver userId, filtra por ele. Se não, traz tudo (para o Admin)
-        const whereClause = userId ? { userId } : {};
+        const whereClause: any = {};
+        
+        if (userId) {
+            whereClause.userId = userId; // Se for o aluno pedindo os próprios dados
+        } else if (adminId) {
+            whereClause.user = { coachId: adminId }; // 🔥 BLINDAGEM: Só check-ins dos alunos DESTE admin
+        }
 
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
-            // 🔥 O PULO DO GATO: Traz o nome do aluno junto!
             include: {
                 user: {
                     select: { name: true, email: true }
                 }
             },
-            take: 50 // Limita aos últimos 50 para não pesar o admin
+            take: 50 
         });
 
         return NextResponse.json(checkins);
