@@ -52,8 +52,11 @@ export async function POST(req: Request) {
 
     const videoGuid = data.result.uid;
     
-    // O link de manifesto (HLS) garante o play perfeito em qualquer internet
-    const videoUrl = `https://customer-${accountId}.cloudflarestream.com/${videoGuid}/downloads/default.mp4`;
+    // 🔥 A CORREÇÃO: Pega a URL real devolvida pela Cloudflare com o seu subdomínio correto (customer-eoi27zv...)
+    const hlsUrl = data.result.playback.hls; 
+
+    // Transforma o link HLS no link de download MP4 universal
+    const videoUrl = hlsUrl.replace('/manifest/video.m3u8', '/downloads/default.mp4');
     
     return NextResponse.json({ 
       success: true, 
