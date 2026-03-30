@@ -10,7 +10,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Nenhum arquivo enviado." }, { status: 400 });
     }
 
-    // 🔥 SEGURANÇA: Bloqueia formatos que não são mídia
     const fileName = file.name.toLowerCase();
     const isValidFormat = fileName.match(/\.(mp4|mov|avi|mp3|wav|m4a|aac)$/i);
 
@@ -20,7 +19,6 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // 🔥 PUXA AS CHAVES DO RENDER (Environment Variables)
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     const apiToken = process.env.CLOUDFLARE_API_TOKEN;
 
@@ -31,7 +29,7 @@ export async function POST(req: Request) {
     const cfFormData = new FormData();
     cfFormData.append('file', file);
 
-    // 🔥 UPLOAD PARA CLOUDFLARE STREAM
+    // 🔥 1. FAZ O UPLOAD DO VÍDEO
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream`,
       {
@@ -51,11 +49,21 @@ export async function POST(req: Request) {
     }
 
     const videoGuid = data.result.uid;
-    
-    // 🔥 A CORREÇÃO: Pega a URL real devolvida pela Cloudflare com o seu subdomínio correto (customer-eoi27zv...)
-    const hlsUrl = data.result.playback.hls; 
 
-    // Transforma o link HLS no link de download MP4 universal
+    // 🔥 2. A MÁGICA: "Clica" no botão de gerar MP4 automaticamente via API!
+    await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${videoGuid}/downloads`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    // 3. Monta o link direto do MP4
+    const hlsUrl = data.result.playback.hls; 
     const videoUrl = hlsUrl.replace('/manifest/video.m3u8', '/downloads/default.mp4');
     
     return NextResponse.json({ 
