@@ -5,7 +5,6 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
-    const title = formData.get('title') as string || 'Media_FIT_OS';
 
     if (!file) {
       return NextResponse.json({ error: "Nenhum ficheiro foi recebido." }, { status: 400 });
@@ -21,59 +20,46 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    const libraryId = process.env.BUNNY_LIBRARY_ID;
-    const apiKey = process.env.BUNNY_API_KEY;
-    const pullZone = process.env.BUNNY_PULL_ZONE; 
+    // 🔥 AQUI ESTÁ A MUDANÇA: Usando a Storage Zone (igual ao Cloudfront)
+    const storageName = process.env.BUNNY_STORAGE_NAME;
+    const storagePass = process.env.BUNNY_STORAGE_PASS;
+    const pullZone = process.env.BUNNY_STORAGE_PULL; 
 
-    if (!libraryId || !apiKey || !pullZone) {
-      return NextResponse.json({ error: "Chaves da Bunny.net incompletas no servidor." }, { status: 500 });
+    if (!storageName || !storagePass || !pullZone) {
+      return NextResponse.json({ error: "Chaves da Storage incompletas no servidor." }, { status: 500 });
     }
 
-    const createVideoResponse = await fetch(`https://video.bunnycdn.com/library/${libraryId}/videos`, {
-      method: 'POST',
-      headers: {
-        'AccessKey': apiKey,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({ title })
-    });
-
-    if (!createVideoResponse.ok) {
-      throw new Error("Falha ao criar mídia na Bunny.net");
-    }
-
-    const videoData = await createVideoResponse.json();
-    const videoGuid = videoData.guid;
+    const cleanFileName = fileName.replace(/[^a-z0-9.]/g, '_');
+    const uniqueFileName = `media_${Date.now()}_${cleanFileName}`;
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const uploadResponse = await fetch(`https://video.bunnycdn.com/library/${libraryId}/videos/${videoGuid}`, {
+    // Envia direto pro Brasil sem re-renderizar nada (preserva a qualidade e os metadados intactos)
+    const uploadResponse = await fetch(`https://br.storage.bunnycdn.com/${storageName}/${uniqueFileName}`, {
       method: 'PUT',
       headers: {
-        'AccessKey': apiKey,
+        'AccessKey': storagePass,
         'Content-Type': 'application/octet-stream',
       },
       body: buffer
     });
 
     if (!uploadResponse.ok) {
-      throw new Error("Falha ao enviar o ficheiro para a Bunny.net");
+        throw new Error("Falha ao enviar para a Bunny Storage.");
     }
 
-    // 🔥 A MÁGICA ACONTECE AQUI: Forçamos o ficheiro MP4 em 720p direto, sem embaçar no arranque!
-    const videoUrl = `https://${pullZone}/${videoGuid}/play_720p.mp4`;
+    // O link gerado será idêntico na estrutura ao do Cloudfront
+    const videoUrl = `https://${pullZone}/${uniqueFileName}`;
     
     return NextResponse.json({ 
       success: true, 
       videoUrl, 
-      guid: videoGuid,
-      message: "Upload concluído! A Bunny está a processar."
+      message: "Upload concluído com sucesso!"
     });
 
   } catch (error: any) {
-    console.error("ERRO NO UPLOAD PARA BUNNY:", error);
+    console.error("ERRO NO UPLOAD:", error);
     return NextResponse.json({ error: "Erro interno no upload", details: error.message }, { status: 500 });
   }
 }
