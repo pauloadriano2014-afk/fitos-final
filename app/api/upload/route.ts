@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     const videoGuid = data.result.uid;
     
     // O link de manifesto (HLS) garante o play perfeito em qualquer internet
-    const videoUrl = `https://customer-${accountId}.cloudflarestream.com/${videoGuid}/manifest/video.m3u8`;
+    const videoUrl = `https://customer-${accountId}.cloudflarestream.com/${videoGuid}/downloads/default.mp4`;
     
     return NextResponse.json({ 
       success: true, 
