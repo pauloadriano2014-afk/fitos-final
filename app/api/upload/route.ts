@@ -10,8 +10,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Nenhum ficheiro foi recebido." }, { status: 400 });
     }
 
-    // 🔥 TRAVA DE SEGURANÇA BACKEND 
+    // 🔥 TRAVA DE SEGURANÇA BACKEND E EXTRAÇÃO DE EXTENSÃO
     const fileName = file.name.toLowerCase();
+    const ext = fileName.split('.').pop() || '';
     const isValidFormat = fileName.match(/\.(mp4|mov|avi|mp3|wav|m4a|aac)$/i);
 
     if (!isValidFormat) {
@@ -19,6 +20,16 @@ export async function POST(req: Request) {
           error: "Formato inválido. O servidor aceita .mp4, .mov, .avi, .mp3, .wav, .m4a ou .aac" 
       }, { status: 400 });
     }
+
+    // 🔥 MAPEAMENTO CIRÚRGICO DE MIME TYPE (Ignora o file.type falho do celular)
+    let mimeType = 'application/octet-stream';
+    if (ext === 'mp4') mimeType = 'video/mp4';
+    else if (ext === 'mov') mimeType = 'video/quicktime';
+    else if (ext === 'avi') mimeType = 'video/x-msvideo';
+    else if (ext === 'mp3') mimeType = 'audio/mpeg';
+    else if (ext === 'wav') mimeType = 'audio/wav';
+    else if (ext === 'm4a') mimeType = 'audio/mp4';
+    else if (ext === 'aac') mimeType = 'audio/aac';
 
     // 🔥 AQUI ESTÁ A MUDANÇA: Usando a Storage Zone (igual ao Cloudfront)
     const storageName = process.env.BUNNY_STORAGE_NAME;
@@ -40,7 +51,7 @@ export async function POST(req: Request) {
       method: 'PUT',
       headers: {
         'AccessKey': storagePass,
-        'Content-Type': file.type || 'video/mp4',
+        'Content-Type': mimeType, // 🔥 Forçando a etiqueta correta e blindada aqui
       },
       body: buffer
     });
