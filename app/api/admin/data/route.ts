@@ -1,3 +1,4 @@
+// app/api/admin/data/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -6,11 +7,21 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const adminId = searchParams.get('adminId'); // 🔥 Agora ele recebe QUEM é o admin
+
+    // Se não mandar adminId, retorna erro ou lista vazia (segurança)
+    if (!adminId) {
+        return NextResponse.json({ error: "ID do admin não fornecido" }, { status: 400 });
+    }
+
     const rawUsers = await prisma.user.findMany({
-      where: { role: 'USER' },
+      where: { 
+          role: 'USER',
+          coachId: adminId // 🔥 O FILTRO MÁGICO: Só traz aluno deste coach!
+      },
       orderBy: { name: 'asc' },
       include: {
-        // Traz a lista completa para garantir compatibilidade
         anamneses: {
           orderBy: { createdAt: 'desc' },
           take: 1
@@ -22,21 +33,18 @@ export async function GET(req: Request) {
       }
     });
 
-    // Mapeamento Híbrido: Mantém a lista original E cria o atalho
     const users = rawUsers.map(u => ({
         ...u, 
-        // 1. Mantém a lista original (Array) para o Front antigo não quebrar
         anamneses: u.anamneses, 
-        
-        // 2. Cria o atalho (Objeto) para facilitar leitura nova
         anamnese: u.anamneses.length > 0 ? u.anamneses[0] : null,
-        
-        // O mesmo para assessments
         assessments: u.assessments,
         assessment: u.assessments.length > 0 ? u.assessments[0] : null
     }));
 
     const recentLogs = await prisma.workoutHistory.findMany({
+      where: {
+          user: { coachId: adminId } // 🔥 Só traz log de treino se o aluno for deste coach!
+      },
       take: 15,
       orderBy: { date: 'desc' },
       include: {
@@ -45,6 +53,7 @@ export async function GET(req: Request) {
     });
 
     const exercises = await prisma.exercise.findMany({
+        where: { coachId: adminId }, // 🔥 Só traz a lista de exercícios deste coach!
         orderBy: { name: 'asc' }
     });
 

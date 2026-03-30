@@ -1,25 +1,39 @@
+// app/api/contents/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { sendNotificationToAll } from '../../utils/sendNotification'; // <--- Sua importação original mantida
+import { sendNotificationToAll } from '../../utils/sendNotification'; 
 
 const prisma = new PrismaClient();
+export const dynamic = 'force-dynamic';
 
-// 1. GET: Busca os conteúdos para o App (Feed/Biblioteca)
+// 1. GET: Busca os conteúdos blindados
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
+    const userId = searchParams.get('userId'); // Se for Aluno pedindo
+    const adminId = searchParams.get('adminId'); // Se for o Painel Admin pedindo
     const format = searchParams.get('format'); 
 
-    // Busca todos os conteúdos no banco
+    // 🔥 INTELIGÊNCIA DE ROTEAMENTO: Descobre de qual Coach puxar o conteúdo
+    let targetCoachId = null;
+
+    if (adminId) {
+        targetCoachId = adminId;
+    } else if (userId) {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (user && user.coachId) targetCoachId = user.coachId;
+    }
+
+    // Busca apenas os conteúdos daquele Coach
     const allContent = await prisma.content.findMany({
+      where: targetCoachId ? { coachId: targetCoachId } : {},
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { likes: true, comments: true } }
       }
     });
 
-    // 🔥 MANTÉM A COMPATIBILIDADE SE VOCÊ REATIVAR O PAFLIX ANTIGO
+    // MANTÉM A COMPATIBILIDADE SE VOCÊ REATIVAR O PAFLIX ANTIGO
     if (format === 'grouped') {
       let userLikes: string[] = [];
       if (userId) {
@@ -48,7 +62,7 @@ export async function GET(request: Request) {
       return NextResponse.json(Object.values(categoriesMap));
     }
 
-    // 🔥 FORMATO NOVO PARA A BIBLIOTECA (Lista Plana)
+    // FORMATO NOVO PARA A BIBLIOTECA (Lista Plana)
     return NextResponse.json(allContent);
 
   } catch (error) {
@@ -57,16 +71,15 @@ export async function GET(request: Request) {
   }
 }
 
-// 2. POST: Cria novos vídeos/ebooks/audios e NOTIFICA
+// 2. POST: Cria novos vídeos/ebooks/audios COM O CARIMBO DO DONO
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { 
       title, subtitle, category, videoUrl, thumbUrl, duration, description, 
-      type, isVIP, pdfUrl, audioUrl 
+      type, isVIP, pdfUrl, audioUrl, adminId // 🔥 Agora ele recebe QUEM está criando
     } = body;
 
-    // Validação básica (O link principal depende do tipo do conteúdo)
     if (!title || !category) {
         return NextResponse.json({ error: "Campos obrigatórios faltando" }, { status: 400 });
     }
@@ -75,7 +88,7 @@ export async function POST(request: Request) {
       data: {
         title,
         subtitle: subtitle || null,
-        category, // Ex: 'TECNICA', 'MINDSET'
+        category, 
         type: type || 'video',
         isVIP: isVIP || false,
         videoUrl: videoUrl || null,
@@ -83,11 +96,11 @@ export async function POST(request: Request) {
         audioUrl: audioUrl || null,
         thumbUrl: thumbUrl || null,
         duration: duration || null,
-        description: description || "" 
+        description: description || "",
+        coachId: adminId || null // 🔥 CARIMBA A ETIQUETA DO DONO (Paulo ou Adri)
       }
     });
 
-    // 🔥 MÁGICA DA NOTIFICAÇÃO INTELIGENTE
     let notifTitle = "🎬 Nova Aula no PA FLIX!";
     let notifMsg = `Corre pra ver: "${title}" acabou de sair na categoria ${category}.`;
 
@@ -99,7 +112,6 @@ export async function POST(request: Request) {
         notifMsg = `Dê o play em: "${title}" na sua Biblioteca.`;
     }
 
-    // Dispara a notificação sem travar o painel admin
     sendNotificationToAll(
         notifTitle,
         notifMsg,
