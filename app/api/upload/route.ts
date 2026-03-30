@@ -8,10 +8,10 @@ export async function POST(req: Request) {
     const title = formData.get('title') as string || 'Media_FIT_OS';
 
     if (!file) {
-      return NextResponse.json({ error: "Nenhum arquivo foi recebido." }, { status: 400 });
+      return NextResponse.json({ error: "Nenhum ficheiro foi recebido." }, { status: 400 });
     }
 
-    // 🔥 TRAVA DE SEGURANÇA BACKEND (AGORA ACEITA ÁUDIO TAMBÉM)
+    // 🔥 TRAVA DE SEGURANÇA BACKEND 
     const fileName = file.name.toLowerCase();
     const isValidFormat = fileName.match(/\.(mp4|mov|avi|mp3|wav|m4a|aac)$/i);
 
@@ -59,16 +59,17 @@ export async function POST(req: Request) {
     });
 
     if (!uploadResponse.ok) {
-      throw new Error("Falha ao enviar o arquivo para a Bunny.net");
+      throw new Error("Falha ao enviar o ficheiro para a Bunny.net");
     }
 
-    const videoUrl = `https://${pullZone}/${videoGuid}/playlist.m3u8`;
+    // 🔥 A MÁGICA ACONTECE AQUI: Forçamos o ficheiro MP4 em 720p direto, sem embaçar no arranque!
+    const videoUrl = `https://${pullZone}/${videoGuid}/play_720p.mp4`;
     
     return NextResponse.json({ 
       success: true, 
       videoUrl, 
       guid: videoGuid,
-      message: "Upload concluído! A Bunny está processando."
+      message: "Upload concluído! A Bunny está a processar."
     });
 
   } catch (error: any) {
