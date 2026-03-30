@@ -1,3 +1,4 @@
+// app/api/auth/register/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -6,17 +7,15 @@ const prisma = new PrismaClient();
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { email, password, name, birthDate, phone, gender } = body;
+    const { email, password, name, birthDate, phone, gender, inviteCode } = body;
 
-    // 1. Validação básica (evita criar conta sem os dados principais)
-    if (!email || !password || !name) {
+    if (!email || !password || !name || !inviteCode) {
       return NextResponse.json(
-        { error: "E-mail, senha e nome são obrigatórios." },
+        { error: "E-mail, senha, nome e código de convite são obrigatórios." },
         { status: 400 }
       );
     }
 
-    // 2. Verifica se o e-mail já existe para não dar erro de servidor
     const existingUser = await prisma.user.findUnique({
       where: { email: email }
     });
@@ -28,20 +27,39 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Cria o usuário com todos os novos campos profissionais
+    // 🔥 O ROTEADOR MULTI-COACH: Descobre de quem é o aluno pelo código
+    let coachId = null;
+    const code = inviteCode.trim().toUpperCase();
+
+    if (code === 'PATEAM') {
+        const paulo = await prisma.user.findUnique({ where: { email: 'paulo_adriano2014@live.com' } });
+        if (paulo) coachId = paulo.id;
+    } else if (code === 'CURVAS') {
+        const adri = await prisma.user.findUnique({ where: { email: 'adri.personal@hotmail.com' } });
+        if (adri) coachId = adri.id;
+    }
+
+    if (!coachId) {
+         return NextResponse.json(
+            { error: "Código de convite inválido ou treinador não encontrado." },
+            { status: 400 }
+         );
+    }
+
+    // Cria o usuário já carimbado com o dono certo
     const user = await prisma.user.create({
       data: {
         email,
-        password, // Nota: No futuro, usaremos bcrypt para criptografar
+        password, 
         name,
         birthDate,
         phone,
         gender,
-        role: "USER" // Padrão para novos cadastros
+        role: "USER",
+        coachId: coachId // 🔥 ATRIBUI O ALUNO AO TREINADOR CERTO!
       }
     });
 
-    // Retorna o usuário criado (sem a senha por segurança)
     const { password: _, ...userWithoutPassword } = user;
     
     return NextResponse.json({ 
