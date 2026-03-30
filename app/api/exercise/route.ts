@@ -5,14 +5,19 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-// 🔥 BUSCAR TODOS OS EXERCÍCIOS (FILTRADOS)
+// 🔥 BUSCAR TODOS OS EXERCÍCIOS (FILTRADOS E BLINDADOS)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const adminId = searchParams.get('adminId');
 
+    // Trava para evitar que o app mande "null" ou "undefined" como texto
+    const validAdminId = (adminId && adminId !== 'null' && adminId !== 'undefined') ? adminId : null;
+
     const exercises = await prisma.exercise.findMany({
-      where: adminId ? { coachId: adminId } : {}, // 🔥 Filtra pelo dono, se enviado
+      where: validAdminId 
+        ? { OR: [{ coachId: validAdminId }, { coachId: null }] } // 🔥 Traz os do Coach + os Globais (sem dono)
+        : {}, 
       orderBy: { name: 'asc' }
     });
     return NextResponse.json(exercises);

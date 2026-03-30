@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     }
 
     // O link gerado será idêntico na estrutura ao do Cloudfront
-    const videoUrl = `https://${pullZone}/${uniqueFileName}`;
+    const videoUrl = `https://${pullZone}/${uniqueFileName}?v=${Date.now()}`;
     
     return NextResponse.json({ 
       success: true, 
