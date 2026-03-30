@@ -5,21 +5,30 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
-    const title = formData.get('title') as string || 'Video_FIT_OS';
+    const title = formData.get('title') as string || 'Media_FIT_OS';
 
     if (!file) {
-      return NextResponse.json({ error: "Nenhum arquivo de vídeo foi recebido." }, { status: 400 });
+      return NextResponse.json({ error: "Nenhum arquivo foi recebido." }, { status: 400 });
+    }
+
+    // 🔥 TRAVA DE SEGURANÇA BACKEND (AGORA ACEITA ÁUDIO TAMBÉM)
+    const fileName = file.name.toLowerCase();
+    const isValidFormat = fileName.match(/\.(mp4|mov|avi|mp3|wav|m4a|aac)$/i);
+
+    if (!isValidFormat) {
+      return NextResponse.json({ 
+          error: "Formato inválido. O servidor aceita .mp4, .mov, .avi, .mp3, .wav, .m4a ou .aac" 
+      }, { status: 400 });
     }
 
     const libraryId = process.env.BUNNY_LIBRARY_ID;
     const apiKey = process.env.BUNNY_API_KEY;
-    const pullZone = process.env.BUNNY_PULL_ZONE; // 🔥 Puxando a Rota de Streaming Direta
+    const pullZone = process.env.BUNNY_PULL_ZONE; 
 
     if (!libraryId || !apiKey || !pullZone) {
       return NextResponse.json({ error: "Chaves da Bunny.net incompletas no servidor." }, { status: 500 });
     }
 
-    // 1. Cria o 'esqueleto' do vídeo na Bunny
     const createVideoResponse = await fetch(`https://video.bunnycdn.com/library/${libraryId}/videos`, {
       method: 'POST',
       headers: {
@@ -31,13 +40,12 @@ export async function POST(req: Request) {
     });
 
     if (!createVideoResponse.ok) {
-      throw new Error("Falha ao criar o vídeo na Bunny.net");
+      throw new Error("Falha ao criar mídia na Bunny.net");
     }
 
     const videoData = await createVideoResponse.json();
     const videoGuid = videoData.guid;
 
-    // 2. Upload Binário
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
@@ -54,14 +62,13 @@ export async function POST(req: Request) {
       throw new Error("Falha ao enviar o arquivo para a Bunny.net");
     }
 
-    // 🔥 3. A MÁGICA: Monta o link do arquivo bruto de Streaming (.m3u8) para o app!
     const videoUrl = `https://${pullZone}/${videoGuid}/playlist.m3u8`;
     
     return NextResponse.json({ 
       success: true, 
-      videoUrl, // O app vai receber a URL direta e limpa!
+      videoUrl, 
       guid: videoGuid,
-      message: "Upload concluído! A Bunny está processando as resoluções."
+      message: "Upload concluído! A Bunny está processando."
     });
 
   } catch (error: any) {
