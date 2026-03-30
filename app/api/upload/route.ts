@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       method: 'PUT',
       headers: {
         'AccessKey': storagePass,
-        'Content-Type': 'application/octet-stream',
+        'Content-Type': file.type || 'video/mp4',
       },
       body: buffer
     });
