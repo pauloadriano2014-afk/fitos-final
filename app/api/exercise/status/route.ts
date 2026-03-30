@@ -1,4 +1,4 @@
-// app/api/exercise/status/route.ts (NOVO ARQUIVO)
+// app/api/exercise/status/route.ts
 import { NextResponse } from 'next/server';
 
 export async function GET(req: Request) {
@@ -13,7 +13,6 @@ export async function GET(req: Request) {
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     const apiToken = process.env.CLOUDFLARE_API_TOKEN;
 
-    // 🔥 Consulta o status bruto na Cloudflare
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${guid}`,
       {
@@ -28,8 +27,21 @@ export async function GET(req: Request) {
       throw new Error("Falha ao verificar status");
     }
 
-    // Retorna se está "ready" ou "processing"
     const isReady = data.result.status.state === 'ready';
+
+    // 🔥 O GOLPE DE MESTRE: O robô só "clica" no botão azul quando o vídeo já está pronto!
+    if (isReady) {
+        await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/${guid}/downloads`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiToken}`,
+            }
+          }
+        );
+    }
+
     return NextResponse.json({ success: true, isReady });
 
   } catch (error: any) {
