@@ -30,8 +30,9 @@ model User {
   currentXP Int      @default(0)
   pushToken String?  // Para notificações OneSignal/Expo
     
-  // Foto de perfil (Avatar VIP)
-  photoUrl  String?
+  // Foto de perfil e Avaliação
+  photoUrl      String?
+  evaluationUrl String?  // 🔥 NOVO: Link da Avaliação em PDF (Google Drive/Canva)
 
   createdAt DateTime @default(now())
 
