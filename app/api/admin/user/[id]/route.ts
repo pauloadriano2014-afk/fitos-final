@@ -35,7 +35,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 // ---------------------------------------------------------
-// 🔥 PATCH ATUALIZADO: AGORA SALVA A FOTO E O STATUS
+// 🔥 PATCH ATUALIZADO: AGORA SALVA FOTO, STATUS E AVALIAÇÃO PDF
 // ---------------------------------------------------------
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -53,6 +53,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     // Se no corpo vier 'photoUrl' (string), adiciona na atualização
     if (body.photoUrl !== undefined) {
       updateData.photoUrl = body.photoUrl;
+    }
+
+    // 🔥 NOVO: Se no corpo vier 'evaluationUrl' (string), adiciona na atualização
+    if (body.evaluationUrl !== undefined) {
+      updateData.evaluationUrl = body.evaluationUrl;
     }
 
     const user = await prisma.user.update({
