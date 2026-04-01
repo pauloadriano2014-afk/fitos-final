@@ -35,7 +35,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 // ---------------------------------------------------------
-// 🔥 PATCH ATUALIZADO: SALVA FOTO, STATUS, PDF E DATA DO CHECK-IN
+// 🔥 PATCH ATUALIZADO: SALVA FOTO, STATUS, PDF E DATA DO CHECK-IN E ISENÇÃO
 // ---------------------------------------------------------
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -56,9 +56,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       updateData.evaluationUrl = body.evaluationUrl;
     }
 
-    // 🔥 NOVO: Suporta salvar a data híbrida do check-in ou limpar (null)
     if (body.nextCheckInDate !== undefined) {
       updateData.nextCheckInDate = body.nextCheckInDate; 
+    }
+
+    // 🔥 NOVO: Suporta desativar a cobrança do check-in
+    if (typeof body.disableCheckIn === 'boolean') {
+      updateData.disableCheckIn = body.disableCheckIn;
     }
 
     const user = await prisma.user.update({

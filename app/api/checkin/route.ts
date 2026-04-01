@@ -104,3 +104,22 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "Erro ao buscar check-ins" }, { status: 500 });
     }
 }
+
+// 🔥 NOVO: DELETE EXCLUI O CHECK-IN ESPECÍFICO E AS FOTOS VINCULADAS
+export async function DELETE(req: Request) {
+    try {
+        const { searchParams } = new URL(req.url);
+        const id = searchParams.get('id');
+        
+        if (!id) return NextResponse.json({ error: "ID não fornecido" }, { status: 400 });
+
+        await prisma.checkIn.delete({
+            where: { id }
+        });
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error("Erro Checkin DELETE:", error);
+        return NextResponse.json({ error: "Erro ao excluir check-in" }, { status: 500 });
+    }
+}
