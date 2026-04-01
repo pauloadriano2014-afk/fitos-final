@@ -30,9 +30,10 @@ model User {
   currentXP Int      @default(0)
   pushToken String?  // Para notificações OneSignal/Expo
     
-  // Foto de perfil e Avaliação
-  photoUrl      String?
-  evaluationUrl String?  // 🔥 NOVO: Link da Avaliação em PDF (Google Drive/Canva)
+  // Foto de perfil e Avaliação/Check-in
+  photoUrl        String?
+  evaluationUrl   String?  // Link da Avaliação em PDF (Google Drive/Canva)
+  nextCheckInDate DateTime? // 🔥 NOVO: Data do próximo check-in definida manualmente pelo Admin
 
   createdAt DateTime @default(now())
 

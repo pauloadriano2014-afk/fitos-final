@@ -35,29 +35,30 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 // ---------------------------------------------------------
-// 🔥 PATCH ATUALIZADO: AGORA SALVA FOTO, STATUS E AVALIAÇÃO PDF
+// 🔥 PATCH ATUALIZADO: SALVA FOTO, STATUS, PDF E DATA DO CHECK-IN
 // ---------------------------------------------------------
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
     const userId = params.id;
 
-    // Criamos um objeto de atualização dinâmico
     const updateData: any = {};
 
-    // Se no corpo vier 'active' (boolean), adiciona na atualização
     if (typeof body.active === 'boolean') {
       updateData.active = body.active;
     }
 
-    // Se no corpo vier 'photoUrl' (string), adiciona na atualização
     if (body.photoUrl !== undefined) {
       updateData.photoUrl = body.photoUrl;
     }
 
-    // 🔥 NOVO: Se no corpo vier 'evaluationUrl' (string), adiciona na atualização
     if (body.evaluationUrl !== undefined) {
       updateData.evaluationUrl = body.evaluationUrl;
+    }
+
+    // 🔥 NOVO: Suporta salvar a data híbrida do check-in ou limpar (null)
+    if (body.nextCheckInDate !== undefined) {
+      updateData.nextCheckInDate = body.nextCheckInDate; 
     }
 
     const user = await prisma.user.update({

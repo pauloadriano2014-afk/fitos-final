@@ -11,6 +11,7 @@ export async function POST(req: Request) {
 
     if (!userId) return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
+    // 1. Salva o Check-in no banco
     const checkIn = await prisma.checkIn.create({
       data: {
         userId,
@@ -23,11 +24,44 @@ export async function POST(req: Request) {
       }
     });
 
-    if (weight) {
-        await prisma.user.update({
-            where: { id: userId },
-            data: { currentWeight: parseFloat(weight) }
-        }).catch(e => console.log("Erro ao atualizar peso user:", e));
+    // 2. Pega os dados do aluno para notificar o Coach
+    const userToUpdate = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { coachId: true, name: true }
+    });
+
+    // 3. Zera a data de cobrança manual (para desligar o pulso) e atualiza o peso
+    const updateData: any = { nextCheckInDate: null };
+    if (weight) updateData.currentWeight = parseFloat(weight);
+
+    await prisma.user.update({
+        where: { id: userId },
+        data: updateData
+    }).catch(e => console.log("Erro ao atualizar peso e data do user:", e));
+
+    // 4. 🔥 NOTIFICAÇÃO PUSH PARA O COACH
+    if (userToUpdate?.coachId) {
+         const coach = await prisma.user.findUnique({
+             where: { id: userToUpdate.coachId },
+             select: { pushToken: true }
+         });
+         
+         if (coach?.pushToken) {
+             await fetch('https://exp.host/--/api/v2/push/send', {
+                 method: 'POST',
+                 headers: {
+                     Accept: 'application/json',
+                     'Accept-encoding': 'application/json',
+                     'Content-Type': 'application/json',
+                 },
+                 body: JSON.stringify({
+                     to: coach.pushToken,
+                     sound: 'default',
+                     title: '📸 Novo Check-in Recebido!',
+                     body: `O aluno ${userToUpdate.name || 'Atleta'} acabou de enviar as fotos de evolução. Vá conferir!`,
+                 }),
+             }).catch(err => console.log("Erro ao enviar push pro coach:", err));
+         }
     }
 
     return NextResponse.json({ success: true, id: checkIn.id });
@@ -42,15 +76,15 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
-    const adminId = searchParams.get('adminId'); // 🔥 O CRACHÁ DE SEGURANÇA
+    const adminId = searchParams.get('adminId'); 
 
     try {
         const whereClause: any = {};
         
         if (userId) {
-            whereClause.userId = userId; // Se for o aluno pedindo os próprios dados
+            whereClause.userId = userId; 
         } else if (adminId) {
-            whereClause.user = { coachId: adminId }; // 🔥 BLINDAGEM: Só check-ins dos alunos DESTE admin
+            whereClause.user = { coachId: adminId }; 
         }
 
         const checkins = await prisma.checkIn.findMany({
