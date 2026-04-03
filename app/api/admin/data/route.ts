@@ -1,4 +1,3 @@
-// app/api/admin/data/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -44,7 +43,6 @@ export async function GET(req: Request) {
       }
     });
 
-    // 🔥 O SEGREDO TAVA AQUI: Se for 'null' (aluno antigo), agora ele cai nos Ativos!
     const activeUsers = rawUsers.filter((u: any) => u.active !== false);
     const inactiveUsers = rawUsers.filter((u: any) => u.active === false);
 
@@ -61,6 +59,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ 
+        users: activeUsers, // 🔥 SALVA-VIDAS: Faz o aplicativo online antigo voltar a funcionar NA HORA
         activeUsers, 
         inactiveUsers,
         recentLogs, 

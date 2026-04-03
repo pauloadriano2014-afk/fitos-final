@@ -1,4 +1,3 @@
-// app/api/checkin/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -139,8 +138,8 @@ export async function GET(req: Request) {
                 photoSide: true,
                 user: { select: { name: true, email: true } }
             },
-            // 🔥 CADEADO ABERTO: Subindo para 12 check-ins para não travar a sua tela nem a memória
-            take: 12 
+            // 🔥 TRAVADO EM 5 COMO PEDIDO
+            take: 5 
         });
 
         return NextResponse.json(checkins);
