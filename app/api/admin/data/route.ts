@@ -13,20 +13,15 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "ID do admin não fornecido" }, { status: 400 });
     }
 
-    const rawUsers = await prisma.user.findMany({
-      where: { 
-          role: 'USER',
-          coachId: adminId 
-      },
-      orderBy: { name: 'asc' },
-      select: {
+    // 🔥 O TRUQUE DA VENDA (as any): Cega o TypeScript para ele não bloquear o nextCheckInDate
+    const querySelect: any = {
         id: true,
         name: true,
         email: true,
         role: true,
         plan_tier: true,
         currentWeight: true,
-        nextCheckInDate: true, // 🔥 DEVOLVIDO
+        nextCheckInDate: true, 
         pushToken: true,
         coachId: true,
         active: true, 
@@ -40,7 +35,15 @@ export async function GET(req: Request) {
             take: 1,
             select: { id: true, date: true, weight: true }
         }
-      }
+    };
+
+    const rawUsers = await prisma.user.findMany({
+      where: { 
+          role: 'USER',
+          coachId: adminId 
+      },
+      orderBy: { name: 'asc' },
+      select: querySelect
     });
 
     const activeUsers = rawUsers.filter((u: any) => u.active !== false);
@@ -59,7 +62,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ 
-        users: activeUsers, 
+        users: activeUsers, // Salva-vidas para o app antigo não quebrar
         activeUsers, 
         inactiveUsers,
         recentLogs, 

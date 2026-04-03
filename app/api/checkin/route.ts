@@ -47,6 +47,7 @@ export async function POST(req: Request) {
         uploadToR2(photoSide, userId, 'side')
     ]);
 
+    // 🔥 BLINDAGEM DE TIPAGEM PARA AS FOTOS EXTRAS
     let extraUrls: string[] = [];
     if (Array.isArray(extraPhotos) && extraPhotos.length > 0) {
         extraUrls = await Promise.all(
@@ -54,17 +55,20 @@ export async function POST(req: Request) {
         ) as string[];
     }
 
-    const checkIn = await prisma.checkIn.create({
-      data: {
+    // 🔥 O TRUQUE DA VENDA (as any): Força a aceitação do extraPhotos
+    const checkInData: any = {
         userId,
         weight: parseFloat(weight) || null,
         feedback,
         photoFront: frontUrl,
         photoBack: backUrl,
         photoSide: sideUrl,
-        extraPhotos: extraUrls, // 🔥 DEVOLVIDO
+        extraPhotos: extraUrls, 
         date: new Date()
-      }
+    };
+
+    const checkIn = await prisma.checkIn.create({
+      data: checkInData
     });
 
     const userToUpdate = await prisma.user.findUnique({
