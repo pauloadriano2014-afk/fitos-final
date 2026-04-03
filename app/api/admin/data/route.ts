@@ -31,6 +31,7 @@ export async function GET(req: Request) {
         nextCheckInDate: true,
         pushToken: true,
         coachId: true,
+        active: true, // 🔥 ESSA É A PALAVRA MÁGICA QUE EU TINHA ESQUECIDO
         anamneses: {
           orderBy: { createdAt: 'desc' },
           take: 1,
