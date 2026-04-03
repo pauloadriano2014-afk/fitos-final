@@ -1,4 +1,3 @@
-// app/api/admin/data/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -14,29 +13,38 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "ID do admin não fornecido" }, { status: 400 });
     }
 
+    // 🔥 BLINDAGEM MÁXIMA: Selecionando DEDO A DEDO apenas os textos.
+    // Qualquer coluna pesada (como profilePic, avatar, base64) será ignorada.
     const rawUsers = await prisma.user.findMany({
       where: { 
           role: 'USER',
           coachId: adminId 
       },
       orderBy: { name: 'asc' },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        plan_tier: true,
+        currentWeight: true,
+        nextCheckInDate: true,
+        pushToken: true,
+        coachId: true,
         anamneses: {
           orderBy: { createdAt: 'desc' },
           take: 1,
-          // 🔥 CIRURGIA ANTI-CRASH: Pega só o ID e a data, ignora campos pesados do passado
           select: { id: true, createdAt: true }
         },
         assessments: {
             orderBy: { date: 'desc' },
             take: 1,
-            // 🔥 CIRURGIA ANTI-CRASH: Traz só o básico, ignora as fotos em base64 do passado na listagem principal
             select: { id: true, date: true, weight: true }
         }
       }
     });
 
-    const users = rawUsers.map(u => ({
+    const users = rawUsers.map((u: any) => ({
         ...u, 
         anamneses: u.anamneses, 
         anamnese: u.anamneses.length > 0 ? u.anamneses[0] : null,
@@ -44,11 +52,12 @@ export async function GET(req: Request) {
         assessment: u.assessments.length > 0 ? u.assessments[0] : null
     }));
 
+    // Limitado a apenas 5 históricos para não engasgar a tela inicial
     const recentLogs = await prisma.workoutHistory.findMany({
       where: {
           user: { coachId: adminId } 
       },
-      take: 15,
+      take: 5,
       orderBy: { date: 'desc' },
       include: {
         user: { select: { name: true, email: true } } 

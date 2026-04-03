@@ -1,29 +1,24 @@
-// app/api/checkin/route.js
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const prisma = new PrismaClient();
 
-// 🔥 CONECTA O SERVIDOR AO CLOUDFLARE R2
 const s3 = new S3Client({
     region: 'auto',
-    endpoint: process.env.R2_ENDPOINT,
+    endpoint: process.env.R2_ENDPOINT as string,
     credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        accessKeyId: process.env.R2_ACCESS_KEY_ID as string,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY as string,
     },
 });
 
-// Função para fazer o upload da imagem e devolver o link público
-async function uploadToR2(base64String, userId, prefix) {
+async function uploadToR2(base64String: string, userId: string, prefix: string) {
     if (!base64String) return null;
     
-    // Limpa o cabeçalho do base64
     const base64Data = base64String.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, 'base64');
     
-    // Cria um nome de arquivo único
     const fileName = `checkins/${userId}/${Date.now()}-${prefix}.jpg`;
 
     const command = new PutObjectCommand({
@@ -35,34 +30,30 @@ async function uploadToR2(base64String, userId, prefix) {
 
     await s3.send(command);
     
-    // Retorna o link final da foto montado com a URL pública
-    const publicUrlBase = process.env.R2_PUBLIC_URL.replace(/\/$/, ""); 
+    const publicUrlBase = (process.env.R2_PUBLIC_URL as string).replace(/\/$/, ""); 
     return `${publicUrlBase}/${fileName}`;
 }
 
-export async function POST(req) {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { userId, weight, feedback, photoFront, photoBack, photoSide, extraPhotos } = body;
 
     if (!userId) return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
-    // 🔥 FAZ O UPLOAD DE TODAS AS FOTOS PARA O CLOUDFLARE AO MESMO TEMPO
     const [frontUrl, backUrl, sideUrl] = await Promise.all([
         uploadToR2(photoFront, userId, 'front'),
         uploadToR2(photoBack, userId, 'back'),
         uploadToR2(photoSide, userId, 'side')
     ]);
 
-    // Faz o upload das fotos extras dos atletas, se houver
     let extraUrls = [];
     if (Array.isArray(extraPhotos) && extraPhotos.length > 0) {
         extraUrls = await Promise.all(
-            extraPhotos.map((photo, index) => uploadToR2(photo, userId, `extra-${index}`))
+            extraPhotos.map((photo: string, index: number) => uploadToR2(photo, userId, `extra-${index}`))
         );
     }
 
-    // 1. Salva o Check-in no banco SOMENTE COM OS LINKS
     const checkIn = await prisma.checkIn.create({
       data: {
         userId,
@@ -76,14 +67,12 @@ export async function POST(req) {
       }
     });
 
-    // 2. Pega os dados do aluno para notificar o Coach
     const userToUpdate = await prisma.user.findUnique({
         where: { id: userId },
         select: { coachId: true, name: true }
     });
 
-    // 3. Zera a data de cobrança manual e atualiza o peso
-    const updateData = { nextCheckInDate: null };
+    const updateData: any = { nextCheckInDate: null };
     if (weight) updateData.currentWeight = parseFloat(weight);
 
     await prisma.user.update({
@@ -91,7 +80,6 @@ export async function POST(req) {
         data: updateData
     }).catch(e => console.log("Erro ao atualizar peso e data do user:", e));
 
-    // 4. NOTIFICAÇÃO PUSH PARA O COACH
     if (userToUpdate?.coachId) {
          const coach = await prisma.user.findUnique({
              where: { id: userToUpdate.coachId },
@@ -124,13 +112,13 @@ export async function POST(req) {
   }
 }
 
-export async function GET(req) {
+export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     const adminId = searchParams.get('adminId'); 
 
     try {
-        const whereClause = {};
+        const whereClause: any = {};
         if (userId) {
             whereClause.userId = userId; 
         } else if (adminId) {
@@ -140,10 +128,18 @@ export async function GET(req) {
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
-            include: {
+            select: {
+                id: true,
+                weight: true,
+                feedback: true,
+                date: true,
+                photoFront: true,
+                photoBack: true,
+                photoSide: true,
                 user: { select: { name: true, email: true } }
             },
-            take: 15 // 🔥 CIRURGIA ANTI-CRASH: Baixou de 50 para 15 para não estourar a memória com fotos Base64 antigas
+            // 🔥 LIMITE DE EMERGÊNCIA: Apenas 2 check-ins por vez para garantir estabilidade absoluta
+            take: 2 
         });
 
         return NextResponse.json(checkins);
@@ -153,7 +149,7 @@ export async function GET(req) {
     }
 }
 
-export async function DELETE(req) {
+export async function DELETE(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
         const id = searchParams.get('id');
