@@ -1,3 +1,4 @@
+// app/api/admin/data/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -13,8 +14,6 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "ID do admin não fornecido" }, { status: 400 });
     }
 
-    // 🔥 BLINDAGEM MÁXIMA: Selecionando DEDO A DEDO apenas os textos.
-    // Qualquer coluna pesada (como profilePic, avatar, base64) será ignorada.
     const rawUsers = await prisma.user.findMany({
       where: { 
           role: 'USER',
@@ -31,7 +30,7 @@ export async function GET(req: Request) {
         nextCheckInDate: true,
         pushToken: true,
         coachId: true,
-        active: true, // 🔥 ESSA É A PALAVRA MÁGICA QUE EU TINHA ESQUECIDO
+        active: true, // Garante que traz o status
         anamneses: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -45,24 +44,15 @@ export async function GET(req: Request) {
       }
     });
 
-    const users = rawUsers.map((u: any) => ({
-        ...u, 
-        anamneses: u.anamneses, 
-        anamnese: u.anamneses.length > 0 ? u.anamneses[0] : null,
-        assessments: u.assessments,
-        assessment: u.assessments.length > 0 ? u.assessments[0] : null
-    }));
+    // 🔥 GAVETAS SEPARADAS: Ativos vs Inativos
+    const activeUsers = rawUsers.filter((u: any) => u.active === true);
+    const inactiveUsers = rawUsers.filter((u: any) => u.active === false);
 
-    // Limitado a apenas 5 históricos para não engasgar a tela inicial
     const recentLogs = await prisma.workoutHistory.findMany({
-      where: {
-          user: { coachId: adminId } 
-      },
+      where: { user: { coachId: adminId } },
       take: 5,
       orderBy: { date: 'desc' },
-      include: {
-        user: { select: { name: true, email: true } } 
-      }
+      include: { user: { select: { name: true } } }
     });
 
     const exercises = await prisma.exercise.findMany({
@@ -71,7 +61,8 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ 
-        users, 
+        activeUsers, // Agora mandamos listas separadas
+        inactiveUsers,
         recentLogs, 
         exercises 
     });
