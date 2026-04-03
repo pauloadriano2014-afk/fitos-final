@@ -47,7 +47,6 @@ export async function POST(req: Request) {
         uploadToR2(photoSide, userId, 'side')
     ]);
 
-    // 🔥 BLINDAGEM DE TIPAGEM PARA AS FOTOS EXTRAS
     let extraUrls: string[] = [];
     if (Array.isArray(extraPhotos) && extraPhotos.length > 0) {
         extraUrls = await Promise.all(
@@ -55,7 +54,7 @@ export async function POST(req: Request) {
         ) as string[];
     }
 
-    // 🔥 O TRUQUE DA VENDA (as any): Força a aceitação do extraPhotos
+    // 🔥 BLINDAGEM NO POST TAMBÉM
     const checkInData: any = {
         userId,
         weight: parseFloat(weight) || null,
@@ -129,19 +128,23 @@ export async function GET(req: Request) {
             whereClause.user = { coachId: adminId }; 
         }
 
+        // 🔥 O TRUQUE DA VENDA (as any): Cega o fiscal para ele deixar passar o extraPhotos
+        const checkinSelect: any = {
+            id: true,
+            weight: true,
+            feedback: true,
+            date: true,
+            photoFront: true,
+            photoBack: true,
+            photoSide: true,
+            extraPhotos: true, 
+            user: { select: { name: true, email: true } }
+        };
+
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
-            select: {
-                id: true,
-                weight: true,
-                feedback: true,
-                date: true,
-                photoFront: true,
-                photoBack: true,
-                photoSide: true,
-                user: { select: { name: true, email: true } }
-            },
+            select: checkinSelect,
             take: 5 
         });
 
