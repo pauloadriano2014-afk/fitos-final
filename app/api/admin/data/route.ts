@@ -30,7 +30,7 @@ export async function GET(req: Request) {
         nextCheckInDate: true,
         pushToken: true,
         coachId: true,
-        active: true, // Garante que traz o status
+        active: true, 
         anamneses: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -44,8 +44,8 @@ export async function GET(req: Request) {
       }
     });
 
-    // 🔥 GAVETAS SEPARADAS: Ativos vs Inativos
-    const activeUsers = rawUsers.filter((u: any) => u.active === true);
+    // 🔥 O SEGREDO TAVA AQUI: Se for 'null' (aluno antigo), agora ele cai nos Ativos!
+    const activeUsers = rawUsers.filter((u: any) => u.active !== false);
     const inactiveUsers = rawUsers.filter((u: any) => u.active === false);
 
     const recentLogs = await prisma.workoutHistory.findMany({
@@ -61,7 +61,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ 
-        activeUsers, // Agora mandamos listas separadas
+        activeUsers, 
         inactiveUsers,
         recentLogs, 
         exercises 
