@@ -13,8 +13,6 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "ID do admin não fornecido" }, { status: 400 });
     }
 
-    // 🔥 BLINDAGEM SUPREMA: O 'any' força o TS a aceitar a coluna 'nextCheckInDate'
-    // mesmo que ele ache que ela não existe no schema gerado.
     const querySelect: any = {
         id: true,
         name: true,
@@ -28,8 +26,9 @@ export async function GET(req: Request) {
         active: true, 
         anamneses: {
           orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: { id: true, createdAt: true }
+          take: 1
+          // 🔥 URGÊNCIA RESOLVIDA: Removemos o select restrito. 
+          // Agora o servidor devolve a Anamnese COMPLETA (Objetivo, Nível, etc) para o Raio-X!
         },
         assessments: {
             orderBy: { date: 'desc' },
@@ -47,7 +46,6 @@ export async function GET(req: Request) {
       select: querySelect
     });
 
-    // Filtro inteligente: Se o campo 'active' for null (alunos antigos), assume como Ativo.
     const activeUsers = rawUsers.filter((u: any) => u.active !== false);
     const inactiveUsers = rawUsers.filter((u: any) => u.active === false);
 
@@ -64,7 +62,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ 
-        users: activeUsers, // Salva-vidas: para o app antigo não abrir vazio
+        users: activeUsers, 
         activeUsers, 
         inactiveUsers,
         recentLogs, 
