@@ -54,13 +54,38 @@ export async function POST(req: Request) {
         }
     });
 
-    // Atualiza XP do Usuário
+    // Atualiza XP do Usuário e resgata dados do Treinador para Notificação
     const user = await prisma.user.update({
         where: { id: userId },
         data: { 
             currentXP: { increment: totalXp } 
+        },
+        include: {
+            coach: { select: { pushToken: true } } // Busca o token do Coach
         }
     });
+
+    // 🔥 DISPARO DE NOTIFICAÇÃO PARA O COACH
+    try {
+        if (user.coach?.pushToken) {
+            await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Accept-encoding': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    to: user.coach.pushToken,
+                    sound: 'default',
+                    title: '🔥 Treino Concluído!',
+                    body: `${user.name || 'Um aluno'} acabou de esmagar o treino ${workoutName || ''}!`,
+                }),
+            });
+        }
+    } catch (pushError) {
+        console.error("Erro ao enviar push de treino finalizado:", pushError);
+    }
 
     return NextResponse.json({ 
         success: true, 
