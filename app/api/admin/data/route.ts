@@ -26,7 +26,7 @@ export async function GET(req: Request) {
         role: true,
         plan_tier: true,
         currentWeight: true,
-        nextCheckInDate: true,
+        nextCheckInDate: true, // 🔥 DEVOLVIDO
         pushToken: true,
         coachId: true,
         active: true, 
@@ -59,7 +59,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ 
-        users: activeUsers, // 🔥 SALVA-VIDAS: Faz o aplicativo online antigo voltar a funcionar NA HORA
+        users: activeUsers, 
         activeUsers, 
         inactiveUsers,
         recentLogs, 

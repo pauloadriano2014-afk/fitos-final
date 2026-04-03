@@ -47,11 +47,11 @@ export async function POST(req: Request) {
         uploadToR2(photoSide, userId, 'side')
     ]);
 
-    let extraUrls = [];
+    let extraUrls: string[] = [];
     if (Array.isArray(extraPhotos) && extraPhotos.length > 0) {
         extraUrls = await Promise.all(
             extraPhotos.map((photo: string, index: number) => uploadToR2(photo, userId, `extra-${index}`))
-        );
+        ) as string[];
     }
 
     const checkIn = await prisma.checkIn.create({
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         photoFront: frontUrl,
         photoBack: backUrl,
         photoSide: sideUrl,
-        extraPhotos: extraUrls,
+        extraPhotos: extraUrls, // 🔥 DEVOLVIDO
         date: new Date()
       }
     });
@@ -138,7 +138,6 @@ export async function GET(req: Request) {
                 photoSide: true,
                 user: { select: { name: true, email: true } }
             },
-            // 🔥 TRAVADO EM 5 COMO PEDIDO
             take: 5 
         });
 
