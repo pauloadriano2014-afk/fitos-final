@@ -8,9 +8,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const adminId = searchParams.get('adminId'); // 🔥 Agora ele recebe QUEM é o admin
+    const adminId = searchParams.get('adminId'); 
 
-    // Se não mandar adminId, retorna erro ou lista vazia (segurança)
     if (!adminId) {
         return NextResponse.json({ error: "ID do admin não fornecido" }, { status: 400 });
     }
@@ -18,17 +17,21 @@ export async function GET(req: Request) {
     const rawUsers = await prisma.user.findMany({
       where: { 
           role: 'USER',
-          coachId: adminId // 🔥 O FILTRO MÁGICO: Só traz aluno deste coach!
+          coachId: adminId 
       },
       orderBy: { name: 'asc' },
       include: {
         anamneses: {
           orderBy: { createdAt: 'desc' },
-          take: 1
+          take: 1,
+          // 🔥 CIRURGIA ANTI-CRASH: Pega só o ID e a data, ignora campos pesados do passado
+          select: { id: true, createdAt: true }
         },
         assessments: {
             orderBy: { date: 'desc' },
-            take: 1
+            take: 1,
+            // 🔥 CIRURGIA ANTI-CRASH: Traz só o básico, ignora as fotos em base64 do passado na listagem principal
+            select: { id: true, date: true, weight: true }
         }
       }
     });
@@ -43,7 +46,7 @@ export async function GET(req: Request) {
 
     const recentLogs = await prisma.workoutHistory.findMany({
       where: {
-          user: { coachId: adminId } // 🔥 Só traz log de treino se o aluno for deste coach!
+          user: { coachId: adminId } 
       },
       take: 15,
       orderBy: { date: 'desc' },
@@ -53,7 +56,7 @@ export async function GET(req: Request) {
     });
 
     const exercises = await prisma.exercise.findMany({
-        where: { coachId: adminId }, // 🔥 Só traz a lista de exercícios deste coach!
+        where: { coachId: adminId }, 
         orderBy: { name: 'asc' }
     });
 

@@ -254,6 +254,7 @@ model CheckIn {
   photoFront  String?  
   photoBack   String?
   photoSide   String?
+  extraPhotos String[] // 🔥 NOVO: Array para salvar os links das fotos extras
     
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)

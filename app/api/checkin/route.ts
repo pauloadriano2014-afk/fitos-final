@@ -1,25 +1,77 @@
+// app/api/checkin/route.js
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const prisma = new PrismaClient();
 
-// POST: Aluno envia Check-in
-export async function POST(req: Request) {
+// 🔥 CONECTA O SERVIDOR AO CLOUDFLARE R2
+const s3 = new S3Client({
+    region: 'auto',
+    endpoint: process.env.R2_ENDPOINT,
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+});
+
+// Função para fazer o upload da imagem e devolver o link público
+async function uploadToR2(base64String, userId, prefix) {
+    if (!base64String) return null;
+    
+    // Limpa o cabeçalho do base64
+    const base64Data = base64String.replace(/^data:image\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Cria um nome de arquivo único
+    const fileName = `checkins/${userId}/${Date.now()}-${prefix}.jpg`;
+
+    const command = new PutObjectCommand({
+        Bucket: 'fitos-fotos',
+        Key: fileName,
+        Body: buffer,
+        ContentType: 'image/jpeg',
+    });
+
+    await s3.send(command);
+    
+    // Retorna o link final da foto montado com a URL pública
+    const publicUrlBase = process.env.R2_PUBLIC_URL.replace(/\/$/, ""); 
+    return `${publicUrlBase}/${fileName}`;
+}
+
+export async function POST(req) {
   try {
     const body = await req.json();
-    const { userId, weight, feedback, photoFront, photoBack, photoSide } = body;
+    const { userId, weight, feedback, photoFront, photoBack, photoSide, extraPhotos } = body;
 
     if (!userId) return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
-    // 1. Salva o Check-in no banco
+    // 🔥 FAZ O UPLOAD DE TODAS AS FOTOS PARA O CLOUDFLARE AO MESMO TEMPO
+    const [frontUrl, backUrl, sideUrl] = await Promise.all([
+        uploadToR2(photoFront, userId, 'front'),
+        uploadToR2(photoBack, userId, 'back'),
+        uploadToR2(photoSide, userId, 'side')
+    ]);
+
+    // Faz o upload das fotos extras dos atletas, se houver
+    let extraUrls = [];
+    if (Array.isArray(extraPhotos) && extraPhotos.length > 0) {
+        extraUrls = await Promise.all(
+            extraPhotos.map((photo, index) => uploadToR2(photo, userId, `extra-${index}`))
+        );
+    }
+
+    // 1. Salva o Check-in no banco SOMENTE COM OS LINKS
     const checkIn = await prisma.checkIn.create({
       data: {
         userId,
         weight: parseFloat(weight) || null,
         feedback,
-        photoFront,
-        photoBack,
-        photoSide,
+        photoFront: frontUrl,
+        photoBack: backUrl,
+        photoSide: sideUrl,
+        extraPhotos: extraUrls,
         date: new Date()
       }
     });
@@ -30,8 +82,8 @@ export async function POST(req: Request) {
         select: { coachId: true, name: true }
     });
 
-    // 3. Zera a data de cobrança manual (para desligar o pulso) e atualiza o peso
-    const updateData: any = { nextCheckInDate: null };
+    // 3. Zera a data de cobrança manual e atualiza o peso
+    const updateData = { nextCheckInDate: null };
     if (weight) updateData.currentWeight = parseFloat(weight);
 
     await prisma.user.update({
@@ -39,7 +91,7 @@ export async function POST(req: Request) {
         data: updateData
     }).catch(e => console.log("Erro ao atualizar peso e data do user:", e));
 
-    // 4. 🔥 NOTIFICAÇÃO PUSH PARA O COACH
+    // 4. NOTIFICAÇÃO PUSH PARA O COACH
     if (userToUpdate?.coachId) {
          const coach = await prisma.user.findUnique({
              where: { id: userToUpdate.coachId },
@@ -58,7 +110,7 @@ export async function POST(req: Request) {
                      to: coach.pushToken,
                      sound: 'default',
                      title: '📸 Novo Check-in Recebido!',
-                     body: `O aluno ${userToUpdate.name || 'Atleta'} acabou de enviar as fotos de evolução. Vá conferir!`,
+                     body: `O aluno ${userToUpdate.name || 'Atleta'} enviou as fotos de evolução.`,
                  }),
              }).catch(err => console.log("Erro ao enviar push pro coach:", err));
          }
@@ -72,15 +124,13 @@ export async function POST(req: Request) {
   }
 }
 
-// GET: Flexível (Histórico do Aluno OU Lista Geral pro Admin)
-export async function GET(req: Request) {
+export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     const adminId = searchParams.get('adminId'); 
 
     try {
-        const whereClause: any = {};
-        
+        const whereClause = {};
         if (userId) {
             whereClause.userId = userId; 
         } else if (adminId) {
@@ -91,11 +141,9 @@ export async function GET(req: Request) {
             where: whereClause,
             orderBy: { date: 'desc' },
             include: {
-                user: {
-                    select: { name: true, email: true }
-                }
+                user: { select: { name: true, email: true } }
             },
-            take: 50 
+            take: 15 // 🔥 CIRURGIA ANTI-CRASH: Baixou de 50 para 15 para não estourar a memória com fotos Base64 antigas
         });
 
         return NextResponse.json(checkins);
@@ -105,8 +153,7 @@ export async function GET(req: Request) {
     }
 }
 
-// 🔥 NOVO: DELETE EXCLUI O CHECK-IN ESPECÍFICO E AS FOTOS VINCULADAS
-export async function DELETE(req: Request) {
+export async function DELETE(req) {
     try {
         const { searchParams } = new URL(req.url);
         const id = searchParams.get('id');
