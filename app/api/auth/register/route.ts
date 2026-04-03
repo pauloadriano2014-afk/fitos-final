@@ -60,6 +60,33 @@ export async function POST(req: Request) {
       }
     });
 
+    // 🔥 DISPARO DE NOTIFICAÇÃO PARA O COACH
+    try {
+        const coach = await prisma.user.findUnique({
+            where: { id: coachId },
+            select: { pushToken: true }
+        });
+
+        if (coach?.pushToken) {
+            await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Accept-encoding': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    to: coach.pushToken,
+                    sound: 'default',
+                    title: '🚀 Novo Aluno na Área!',
+                    body: `${name} acabou de se cadastrar no seu time. Vai pra cima!`,
+                }),
+            });
+        }
+    } catch (pushError) {
+        console.error("Erro ao enviar push de novo registro:", pushError);
+    }
+
     const { password: _, ...userWithoutPassword } = user;
     
     return NextResponse.json({ 
