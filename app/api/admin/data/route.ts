@@ -24,6 +24,10 @@ export async function GET(req: Request) {
         pushToken: true,
         coachId: true,
         active: true, 
+        
+        // 🔥 AQUI ESTAVA O SEGREDO! Isso obriga o servidor a mandar a foto pro Dashboard 🔥
+        photoUrl: true, 
+
         anamneses: {
           orderBy: { createdAt: 'desc' },
           take: 1
@@ -33,7 +37,6 @@ export async function GET(req: Request) {
             take: 1,
             select: { id: true, date: true, weight: true }
         },
-        // 🔥 MOTOR DO FAROL BLINDADO: Puxa o treino ativo mais recente criado
         workouts: {
             where: { archived: false },
             orderBy: { createdAt: 'desc' }, 
@@ -58,7 +61,7 @@ export async function GET(req: Request) {
       where: { user: { coachId: adminId } },
       take: 5,
       orderBy: { date: 'desc' },
-      include: { user: { select: { name: true } } }
+      include: { user: { select: { name: true, photoUrl: true } } }
     });
 
     const exercises = await prisma.exercise.findMany({
