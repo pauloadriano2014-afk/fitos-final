@@ -11,7 +11,6 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     const workoutId = searchParams.get('workoutId'); 
-    const archived = searchParams.get('archived') === 'true';
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
 
@@ -67,8 +66,10 @@ export async function GET(req: Request) {
         });
     }
 
+    // 🔥 O CADEADO FOI REMOVIDO DAQUI! 
+    // Agora o servidor devolve TODOS os treinos, e o aplicativo distribui nas abas Ativos e Arquivados.
     const workouts = await prisma.workout.findMany({
-        where: { userId, archived: archived },
+        where: { userId: userId },
         orderBy: { createdAt: 'desc' },
         include: { exercises: { include: { exercise: true, substitute: true } } }
     });
@@ -81,7 +82,6 @@ export async function GET(req: Request) {
   }
 }
 
-// 🔥 POST: TREINO NOVO COM ESCUDO E OBSERVAÇÕES SALVAS CORRETAMENTE 🔥
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -94,7 +94,6 @@ export async function POST(req: Request) {
         });
     }
 
-    // 1. Cria um treino novo zerado
     const workout = await prisma.workout.create({
       data: { 
           userId, 
@@ -105,7 +104,6 @@ export async function POST(req: Request) {
       }
     });
 
-    // 2. Escudo Duplo Anti-Corrupção
     if (exercises && exercises.length > 0) {
       const allIds: string[] = [];
       exercises.forEach((ex: any) => {
@@ -130,10 +128,7 @@ export async function POST(req: Request) {
           restTime: Number(ex.restTime) || 0,
           technique: ex.technique || "",
           order: index, 
-          
-          // 🔥 AS OBSERVAÇÕES VOLTARAM! AGORA O BANCO ACEITA ELAS 🔥
           observation: ex.observation || "",
-          
           substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null 
         }));
 
@@ -144,7 +139,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Notificação
     const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { pushToken: true, name: true }
@@ -168,7 +162,6 @@ export async function POST(req: Request) {
   }
 }
 
-// 🔥 NOVO: PERMITE O APLICATIVO ARQUIVAR/DESARQUIVAR COM O BOTÃO NOVO 🔥
 export async function PATCH(req: Request) {
   try {
     const body = await req.json();
@@ -191,7 +184,6 @@ export async function PATCH(req: Request) {
   }
 }
 
-// 🔥 FALLBACK: O mesmo comando em formato PUT, para garantir que o seu app consiga arquivar de qualquer jeito 🔥
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
