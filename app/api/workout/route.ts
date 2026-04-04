@@ -167,3 +167,49 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+// 🔥 NOVO: PERMITE O APLICATIVO ARQUIVAR/DESARQUIVAR COM O BOTÃO NOVO 🔥
+export async function PATCH(req: Request) {
+  try {
+    const body = await req.json();
+    const { id, archived } = body;
+
+    if (!id) return NextResponse.json({ error: "ID do treino não fornecido" }, { status: 400 });
+
+    if (typeof archived !== 'undefined') {
+        const updated = await prisma.workout.update({
+            where: { id },
+            data: { archived }
+        });
+        return NextResponse.json({ success: true, updated });
+    }
+
+    return NextResponse.json({ error: "Nenhum dado para atualizar" }, { status: 400 });
+  } catch (error: any) {
+    console.error("Erro PATCH Workout:", error);
+    return NextResponse.json({ error: "Erro ao atualizar status do treino" }, { status: 500 });
+  }
+}
+
+// 🔥 FALLBACK: O mesmo comando em formato PUT, para garantir que o seu app consiga arquivar de qualquer jeito 🔥
+export async function PUT(req: Request) {
+  try {
+    const body = await req.json();
+    const { id, archived } = body;
+
+    if (!id) return NextResponse.json({ error: "ID do treino não fornecido" }, { status: 400 });
+
+    if (typeof archived !== 'undefined') {
+        const updated = await prisma.workout.update({
+            where: { id },
+            data: { archived }
+        });
+        return NextResponse.json({ success: true, updated });
+    }
+
+    return NextResponse.json({ error: "Nenhum dado para atualizar" }, { status: 400 });
+  } catch (error: any) {
+    console.error("Erro PUT Workout:", error);
+    return NextResponse.json({ error: "Erro ao atualizar status do treino" }, { status: 500 });
+  }
+}
