@@ -27,13 +27,18 @@ export async function GET(req: Request) {
         anamneses: {
           orderBy: { createdAt: 'desc' },
           take: 1
-          // 🔥 URGÊNCIA RESOLVIDA: Removemos o select restrito. 
-          // Agora o servidor devolve a Anamnese COMPLETA (Objetivo, Nível, etc) para o Raio-X!
         },
         assessments: {
             orderBy: { date: 'desc' },
             take: 1,
             select: { id: true, date: true, weight: true }
+        },
+        // 🔥 MOTOR DO FAROL BLINDADO: Puxa o treino ativo mais recente criado
+        workouts: {
+            where: { archived: false },
+            orderBy: { createdAt: 'desc' }, 
+            take: 1,
+            select: { id: true, endDate: true, name: true }
         }
     };
 
