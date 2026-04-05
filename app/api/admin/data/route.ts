@@ -43,9 +43,14 @@ export async function GET(req: Request) {
         }
     };
 
+    // 🔥 A MÁGICA: Pega os novos alunos (com seu ID) E os antigos (null)
     const rawUsers = await prisma.user.findMany({
       where: { 
-          coachId: adminId 
+          role: 'USER',
+          OR: [
+              { coachId: adminId },
+              { coachId: null }
+          ]
       },
       orderBy: { name: 'asc' },
       select: querySelect
@@ -54,15 +59,29 @@ export async function GET(req: Request) {
     const activeUsers = rawUsers.filter((u: any) => u.active !== false);
     const inactiveUsers = rawUsers.filter((u: any) => u.active === false);
 
+    // Corrige o Feed recente também
     const recentLogs = await prisma.workoutHistory.findMany({
-      where: { user: { coachId: adminId } },
+      where: { 
+          user: { 
+              OR: [
+                  { coachId: adminId },
+                  { coachId: null }
+              ] 
+          } 
+      },
       take: 5,
       orderBy: { date: 'desc' },
       include: { user: { select: { name: true, photoUrl: true } } } 
     });
 
+    // Corrige a Biblioteca de Exercícios também
     const exercises = await prisma.exercise.findMany({
-        where: { coachId: adminId }, 
+        where: { 
+            OR: [
+                { coachId: adminId },
+                { coachId: null }
+            ]
+        }, 
         orderBy: { name: 'asc' }
     });
 
