@@ -13,28 +13,18 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "ID do admin não fornecido" }, { status: 400 });
     }
 
+    // 🔥 OTIMIZAÇÃO EXTREMA: Arrancamos anamneses e avaliações daqui. 
+    // O banco de dados vai devolver um pacote 90% menor e mais rápido.
     const querySelect: any = {
         id: true,
         name: true,
         email: true,
         role: true,
+        plan: true,
         plan_tier: true,
-        currentWeight: true,
-        nextCheckInDate: true, 
-        pushToken: true,
-        coachId: true,
+        currentXP: true,
         active: true, 
         photoUrl: true, 
-
-        anamneses: {
-          orderBy: { createdAt: 'desc' },
-          take: 1
-        },
-        assessments: {
-            orderBy: { date: 'desc' },
-            take: 1,
-            select: { id: true, date: true, weight: true }
-        },
         workouts: {
             where: { archived: false },
             orderBy: { createdAt: 'desc' }, 
@@ -43,7 +33,6 @@ export async function GET(req: Request) {
         }
     };
 
-    // 🔥 CORTA-FOGO: Arranquei o filtro "role". Agora puxa absolutamente todos vinculados a você ou sem dono!
     const rawUsers = await prisma.user.findMany({
       where: { 
           OR: [
@@ -55,8 +44,12 @@ export async function GET(req: Request) {
       select: querySelect
     });
 
-    // Filtra apenas para remover VOCÊ MESMO da lista de alunos
-    const finalUsers = rawUsers.filter((u: any) => u.id !== adminId);
+    // 🔥 BLINDAGEM: Remove admins e a Adrielle da lista de alunos
+    const finalUsers = rawUsers.filter((u: any) => 
+        u.id !== adminId && 
+        u.role !== 'ADMIN' && 
+        u.email !== 'adri.personal@hotmail.com'
+    );
 
     const activeUsers = finalUsers.filter((u: any) => u.active !== false);
     const inactiveUsers = finalUsers.filter((u: any) => u.active === false);
@@ -75,22 +68,13 @@ export async function GET(req: Request) {
       include: { user: { select: { name: true, photoUrl: true } } } 
     });
 
-    const exercises = await prisma.exercise.findMany({
-        where: { 
-            OR: [
-                { coachId: adminId },
-                { coachId: null }
-            ]
-        }, 
-        orderBy: { name: 'asc' }
-    });
-
+    // 🔥 O GRANDE CULPADO DELETADO: Paramos de puxar a biblioteca de exercícios na tela inicial!
     return NextResponse.json({ 
         users: activeUsers, 
         activeUsers, 
         inactiveUsers,
         recentLogs, 
-        exercises 
+        exercises: [] 
     });
 
   } catch (error) {
