@@ -24,8 +24,6 @@ export async function GET(req: Request) {
         pushToken: true,
         coachId: true,
         active: true, 
-        
-        // 🔥 AQUI ESTAVA O SEGREDO! Isso obriga o servidor a mandar a foto pro Dashboard 🔥
         photoUrl: true, 
 
         anamneses: {
@@ -47,7 +45,6 @@ export async function GET(req: Request) {
 
     const rawUsers = await prisma.user.findMany({
       where: { 
-          role: 'USER',
           coachId: adminId 
       },
       orderBy: { name: 'asc' },
@@ -61,7 +58,7 @@ export async function GET(req: Request) {
       where: { user: { coachId: adminId } },
       take: 5,
       orderBy: { date: 'desc' },
-      include: { user: { select: { name: true, photoUrl: true } } }
+      include: { user: { select: { name: true, photoUrl: true } } } 
     });
 
     const exercises = await prisma.exercise.findMany({
