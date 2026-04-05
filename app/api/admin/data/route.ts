@@ -43,10 +43,9 @@ export async function GET(req: Request) {
         }
     };
 
-    // 🔥 A MÁGICA: Pega os novos alunos (com seu ID) E os antigos (null)
+    // 🔥 CORTA-FOGO: Arranquei o filtro "role". Agora puxa absolutamente todos vinculados a você ou sem dono!
     const rawUsers = await prisma.user.findMany({
       where: { 
-          role: 'USER',
           OR: [
               { coachId: adminId },
               { coachId: null }
@@ -56,10 +55,12 @@ export async function GET(req: Request) {
       select: querySelect
     });
 
-    const activeUsers = rawUsers.filter((u: any) => u.active !== false);
-    const inactiveUsers = rawUsers.filter((u: any) => u.active === false);
+    // Filtra apenas para remover VOCÊ MESMO da lista de alunos
+    const finalUsers = rawUsers.filter((u: any) => u.id !== adminId);
 
-    // Corrige o Feed recente também
+    const activeUsers = finalUsers.filter((u: any) => u.active !== false);
+    const inactiveUsers = finalUsers.filter((u: any) => u.active === false);
+
     const recentLogs = await prisma.workoutHistory.findMany({
       where: { 
           user: { 
@@ -74,7 +75,6 @@ export async function GET(req: Request) {
       include: { user: { select: { name: true, photoUrl: true } } } 
     });
 
-    // Corrige a Biblioteca de Exercícios também
     const exercises = await prisma.exercise.findMany({
         where: { 
             OR: [
