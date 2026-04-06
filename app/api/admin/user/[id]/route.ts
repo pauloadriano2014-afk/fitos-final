@@ -3,19 +3,35 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// 👇 BUSCA DADOS COMPLETOS DO ALUNO
+// 👇 BUSCA DADOS CIRÚRGICOS DO ALUNO (PERFORMANCE MÁXIMA)
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const userId = params.id;
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        photoUrl: true,
+        role: true,
+        plan: true,
+        active: true,
+        currentWeight: true,
+        currentXP: true,
+        nextCheckInDate: true,
+        evaluationUrl: true,
+        disableCheckIn: true,
+        // 🔥 Carrega apenas a anamnese mais recente
         anamneses: {
           orderBy: { createdAt: 'desc' },
           take: 1
         },
+        // 🔥 Carrega apenas o treino vigente (não arquivado)
         workouts: {
+          where: { archived: false },
           orderBy: { createdAt: 'desc' },
           take: 1
         }
@@ -34,40 +50,17 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-// ---------------------------------------------------------
-// 🔥 PATCH ATUALIZADO: SALVA FOTO, STATUS, PDF E DATA DO CHECK-IN E ISENÇÃO
-// ---------------------------------------------------------
+// 👇 ATUALIZA DADOS DO ALUNO (FOTO, STATUS, PDF, ETC)
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
     const userId = params.id;
 
-    const updateData: any = {};
-
-    if (typeof body.active === 'boolean') {
-      updateData.active = body.active;
-    }
-
-    if (body.photoUrl !== undefined) {
-      updateData.photoUrl = body.photoUrl;
-    }
-
-    if (body.evaluationUrl !== undefined) {
-      updateData.evaluationUrl = body.evaluationUrl;
-    }
-
-    if (body.nextCheckInDate !== undefined) {
-      updateData.nextCheckInDate = body.nextCheckInDate; 
-    }
-
-    // 🔥 NOVO: Suporta desativar a cobrança do check-in
-    if (typeof body.disableCheckIn === 'boolean') {
-      updateData.disableCheckIn = body.disableCheckIn;
-    }
-
+    // O Prisma ignora campos que não existem no schema, 
+    // mas o body já vem filtrado do frontend.
     const user = await prisma.user.update({
       where: { id: userId },
-      data: updateData
+      data: body
     });
 
     return NextResponse.json(user);
@@ -77,7 +70,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-// DELETE: Excluir Aluno
+// 👇 EXCLUIR ALUNO E TODOS OS SEUS VÍNCULOS
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
     const userId = params.id;
