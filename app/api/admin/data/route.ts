@@ -13,8 +13,7 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "ID do admin não fornecido" }, { status: 400 });
     }
 
-    // 🔥 OTIMIZAÇÃO EXTREMA: Arrancamos anamneses e avaliações daqui. 
-    // O banco de dados vai devolver um pacote 90% menor e mais rápido.
+    // Mantemos a otimização de não trazer as anamneses aqui para não pesar, mas trazemos as infos base.
     const querySelect: any = {
         id: true,
         name: true,
@@ -44,7 +43,6 @@ export async function GET(req: Request) {
       select: querySelect
     });
 
-    // 🔥 BLINDAGEM: Remove admins e a Adrielle da lista de alunos
     const finalUsers = rawUsers.filter((u: any) => 
         u.id !== adminId && 
         u.role !== 'ADMIN' && 
@@ -68,13 +66,23 @@ export async function GET(req: Request) {
       include: { user: { select: { name: true, photoUrl: true } } } 
     });
 
-    // 🔥 O GRANDE CULPADO DELETADO: Paramos de puxar a biblioteca de exercícios na tela inicial!
+    // 🔥 O RESGATE: Trazemos de volta a sua biblioteca de exercícios para o app não travar!
+    const exercises = await prisma.exercise.findMany({
+        where: { 
+            OR: [
+                { coachId: adminId },
+                { coachId: null }
+            ]
+        }, 
+        orderBy: { name: 'asc' }
+    });
+
     return NextResponse.json({ 
         users: activeUsers, 
         activeUsers, 
         inactiveUsers,
         recentLogs, 
-        exercises: [] 
+        exercises // <- De volta ao seu devido lugar
     });
 
   } catch (error) {
