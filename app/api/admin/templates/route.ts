@@ -29,20 +29,36 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { id, name, goal, level, data, adminId } = body; // 🔥 Recebe o adminId
+    // 🔥 AGORA O BACKEND ENXERGA O ID DA PASTA (collectionId)
+    const { id, name, goal, level, data, adminId, collectionId } = body; 
 
     if (!name || !data) {
         return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
     }
 
     if (id) {
+        // 🔥 ATUALIZA O TEMPLATE E PERMITE MOVER DE PASTA
         await prisma.workoutTemplate.update({
             where: { id },
-            data: { name, goal, level, data }
+            data: { 
+                name, 
+                goal, 
+                level, 
+                data,
+                collectionId: collectionId !== undefined ? collectionId : undefined 
+            }
         });
     } else {
+        // 🔥 CRIA O TEMPLATE JÁ DENTRO DA PASTA
         await prisma.workoutTemplate.create({
-            data: { name, goal, level, data, coachId: adminId || null } // 🔥 CARIMBA A ETIQUETA
+            data: { 
+                name, 
+                goal, 
+                level, 
+                data, 
+                coachId: adminId || null,
+                collectionId: collectionId || null
+            }
         });
     }
 
