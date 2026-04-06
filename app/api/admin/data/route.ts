@@ -13,7 +13,6 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "ID do admin não fornecido" }, { status: 400 });
     }
 
-    // Mantemos a otimização de não trazer as anamneses aqui para não pesar, mas trazemos as infos base.
     const querySelect: any = {
         id: true,
         name: true,
@@ -66,14 +65,10 @@ export async function GET(req: Request) {
       include: { user: { select: { name: true, photoUrl: true } } } 
     });
 
-    // 🔥 O RESGATE: Trazemos de volta a sua biblioteca de exercícios para o app não travar!
+    // 🔥 A CIRURGIA SALVADORA: Removi o maldito { coachId: null } daqui. 
+    // Agora ele não puxa mais o banco inteiro e não trava a memória do app!
     const exercises = await prisma.exercise.findMany({
-        where: { 
-            OR: [
-                { coachId: adminId },
-                { coachId: null }
-            ]
-        }, 
+        where: { coachId: adminId }, 
         orderBy: { name: 'asc' }
     });
 
@@ -82,7 +77,7 @@ export async function GET(req: Request) {
         activeUsers, 
         inactiveUsers,
         recentLogs, 
-        exercises // <- De volta ao seu devido lugar
+        exercises 
     });
 
   } catch (error) {
