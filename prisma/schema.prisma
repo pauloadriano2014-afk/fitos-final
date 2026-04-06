@@ -49,6 +49,7 @@ model User {
   createdTemplates  WorkoutTemplate[] @relation("CoachTemplates")
   createdNotices    Notice[]          @relation("CoachNotices")
   createdContents   Content[]         @relation("CoachContents")
+  createdCollections TemplateCollection[] @relation("CoachCollections") // 🔥 NOVO: Pastas/Coleções do Coach
 
   // Relacionamentos do Aluno
   workouts   Workout[]
@@ -58,7 +59,7 @@ model User {
   checkIns   CheckIn[]
   
   // PA FLIX & Comunidade
-  contentLikes    ContentLike[]
+  contentLikes   ContentLike[]
   contentComments ContentComment[]
   contentCompletions ContentCompletion[] // Histórico de aulas assistidas
   unlockedContents ContentAccess[]       // Relação de conteúdos VIP liberados manualmente
@@ -154,6 +155,21 @@ model Anamnese {
   createdAt       DateTime @default(now())
 }
 
+// 🔥 COLEÇÕES DE TEMPLATES (A "Netflix do Fitness")
+model TemplateCollection {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#22c55e") // Verde oficial como padrão
+  createdAt DateTime @default(now())
+
+  // ISOLAMENTO: A qual Coach pertence esta coleção?
+  coachId   String?
+  coach     User?    @relation("CoachCollections", fields: [coachId], references: [id], onDelete: Cascade)
+
+  // Relação: Quais templates estão dentro desta pasta?
+  templates WorkoutTemplate[]
+}
+
 model WorkoutTemplate {
   id        String   @id @default(uuid())
   name      String   
@@ -162,9 +178,13 @@ model WorkoutTemplate {
   data      String    @db.Text 
   createdAt DateTime @default(now())
 
-  // 🔥 ISOLAMENTO: A qual Coach este template pertence?
+  // ISOLAMENTO: A qual Coach este template pertence?
   coachId   String?
   coach     User?    @relation("CoachTemplates", fields: [coachId], references: [id], onDelete: Cascade)
+
+  // 🔥 NOVO: Coleção/Pasta a qual este template pertence
+  collectionId String?
+  collection   TemplateCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
 }
 
 // Histórico de Treinos (Gamification)

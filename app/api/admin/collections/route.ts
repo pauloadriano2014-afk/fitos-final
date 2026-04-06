@@ -2,24 +2,21 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-export const dynamic = 'force-dynamic'; // 🔥 A LINHA MÁGICA: Impede o servidor de travar em um cache antigo!
+export const dynamic = 'force-dynamic';
 
-// 👇 BUSCA AS PASTAS DO COACH (ISOLADO)
+// 👇 BUSCA AS PASTAS DO COACH
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const adminId = searchParams.get('adminId');
 
-    if (!adminId) {
-      return NextResponse.json({ error: "Admin ID obrigatório" }, { status: 400 });
-    }
+    if (!adminId) return NextResponse.json({ error: "Admin ID obrigatório" }, { status: 400 });
 
+    // 🔥 CORREÇÃO: O nome correto gerado pelo Prisma para esse modelo é templateCollection
     const collections = await prisma.templateCollection.findMany({
       where: { coachId: adminId },
       include: {
-        _count: {
-          select: { templates: true } // 🔥 Traz a quantidade de treinos que tem dentro da pasta para mostrar no visual
-        }
+        _count: { select: { templates: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -37,14 +34,12 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { name, color, adminId } = body;
 
-    if (!name || !adminId) {
-      return NextResponse.json({ error: "Nome e Admin ID são obrigatórios" }, { status: 400 });
-    }
+    if (!name || !adminId) return NextResponse.json({ error: "Nome e Admin ID são obrigatórios" }, { status: 400 });
 
     const collection = await prisma.templateCollection.create({
       data: {
         name,
-        color: color || '#22c55e', // Verde padrão garantido
+        color: color || '#22c55e',
         coachId: adminId
       }
     });
