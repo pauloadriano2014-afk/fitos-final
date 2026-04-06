@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+export const dynamic = 'force-dynamic'; // 🔥 A LINHA MÁGICA: Impede o servidor de travar em um cache antigo!
 
 // 👇 BUSCA AS PASTAS DO COACH (ISOLADO)
 export async function GET(req: Request) {
