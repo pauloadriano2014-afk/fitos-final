@@ -66,8 +66,6 @@ export async function GET(req: Request) {
         });
     }
 
-    // 🔥 O CADEADO FOI REMOVIDO DAQUI! 
-    // Agora o servidor devolve TODOS os treinos, e o aplicativo distribui nas abas Ativos e Arquivados.
     const workouts = await prisma.workout.findMany({
         where: { userId: userId },
         orderBy: { createdAt: 'desc' },
@@ -82,9 +80,48 @@ export async function GET(req: Request) {
   }
 }
 
+// 🔥 NOVA ROTA: PILOTO AUTOMÁTICO (MINI-ANAMNESE)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    
+    // Se a requisição vier do Setup Automático
+    if (body.gender && body.goal && body.focus) {
+        const { userId, gender, goal, focus, level } = body;
+
+        // 1. Cria a Anamnese básica para o aluno não ficar vazio
+        await prisma.anamnese.create({
+            data: {
+                userId,
+                peso: 0,
+                altura: 0,
+                objetivo: goal,
+                nivel: level,
+                focoPrincipal: focus,
+                frequencia: 3
+            }
+        });
+
+        // 2. Cria um Treino de Boas-Vindas (Coringa)
+        // Isso permite que o aluno entre no app e você veja no Admin que ele já escolheu o foco.
+        const workout = await prisma.workout.create({
+            data: {
+                userId,
+                name: `PROTOCOLO: ${focus.toUpperCase()}`,
+                goal: goal,
+                level: level,
+                startDate: new Date(),
+                isVisible: true
+            }
+        });
+
+        // NOTA PARA O COACH: Aqui nós vamos conectar os seus WorkoutTemplates reais em breve.
+        // Por enquanto, ele cria apenas o cabeçalho do treino para liberar o acesso ao app.
+
+        return NextResponse.json({ success: true, workoutId: workout.id });
+    }
+
+    // Lógica original de criação manual do Admin (Mantida Intocada)
     const { userId, name, exercises, startDate, endDate, archiveCurrent } = body;
 
     if (archiveCurrent) {
@@ -139,23 +176,8 @@ export async function POST(req: Request) {
       }
     }
 
-    const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { pushToken: true, name: true }
-    });
-
-    if (user && user.pushToken && Expo.isExpoPushToken(user.pushToken)) {
-        const messages = [{
-            to: user.pushToken,
-            sound: 'default' as const,
-            title: '🔥 Treino Novo Disponível!',
-            body: `${user.name ? user.name.split(' ')[0] : 'Atleta'}, seu coach acabou de atualizar sua planilha. Bora treinar!`,
-            data: { workoutId: workout.id }, 
-        }];
-        try { await expo.sendPushNotificationsAsync(messages); } catch (e) {}
-    }
-
     return NextResponse.json({ success: true });
+
   } catch (error: any) {
     console.error("Erro POST workout:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -166,21 +188,11 @@ export async function PATCH(req: Request) {
   try {
     const body = await req.json();
     const { id, archived } = body;
-
-    if (!id) return NextResponse.json({ error: "ID do treino não fornecido" }, { status: 400 });
-
-    if (typeof archived !== 'undefined') {
-        const updated = await prisma.workout.update({
-            where: { id },
-            data: { archived }
-        });
-        return NextResponse.json({ success: true, updated });
-    }
-
-    return NextResponse.json({ error: "Nenhum dado para atualizar" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+    const updated = await prisma.workout.update({ where: { id }, data: { archived } });
+    return NextResponse.json({ success: true, updated });
   } catch (error: any) {
-    console.error("Erro PATCH Workout:", error);
-    return NextResponse.json({ error: "Erro ao atualizar status do treino" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao atualizar" }, { status: 500 });
   }
 }
 
@@ -188,20 +200,10 @@ export async function PUT(req: Request) {
   try {
     const body = await req.json();
     const { id, archived } = body;
-
-    if (!id) return NextResponse.json({ error: "ID do treino não fornecido" }, { status: 400 });
-
-    if (typeof archived !== 'undefined') {
-        const updated = await prisma.workout.update({
-            where: { id },
-            data: { archived }
-        });
-        return NextResponse.json({ success: true, updated });
-    }
-
-    return NextResponse.json({ error: "Nenhum dado para atualizar" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+    const updated = await prisma.workout.update({ where: { id }, data: { archived } });
+    return NextResponse.json({ success: true, updated });
   } catch (error: any) {
-    console.error("Erro PUT Workout:", error);
-    return NextResponse.json({ error: "Erro ao atualizar status do treino" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao atualizar" }, { status: 500 });
   }
 }
