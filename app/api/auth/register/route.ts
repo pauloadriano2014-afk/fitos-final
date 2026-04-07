@@ -7,7 +7,8 @@ const prisma = new PrismaClient();
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { email, password, name, birthDate, phone, gender, inviteCode } = body;
+    // 🔥 O SEGREDO ESTÁ AQUI: Agora ele puxa o "plan" do body!
+    const { email, password, name, birthDate, phone, gender, inviteCode, plan } = body;
 
     if (!email || !password || !name || !inviteCode) {
       return NextResponse.json(
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
          );
     }
 
-    // Cria o usuário já carimbado com o dono certo
+    // 🔥 CRIAÇÃO DO ALUNO COM A ESTEIRA CORRETA!
     const user = await prisma.user.create({
       data: {
         email,
@@ -56,7 +57,8 @@ export async function POST(req: Request) {
         phone,
         gender,
         role: "USER",
-        coachId: coachId // 🔥 ATRIBUI O ALUNO AO TREINADOR CERTO!
+        coachId: coachId, // 🔥 ATRIBUI O ALUNO AO TREINADOR CERTO!
+        plan: plan || "PREMIUM" // 🔥 SALVA O PLANO EXATO QUE VEIO DO LINK! (Se não vier nada, joga Premium)
       }
     });
 
