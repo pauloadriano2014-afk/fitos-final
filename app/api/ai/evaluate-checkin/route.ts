@@ -35,17 +35,20 @@ export async function POST(req: Request) {
     const user = checkIn.user;
     const anamnese = user.anamneses[0]; 
     
-    // Identificação dos Planos
+    // Identificação dos Planos e Momentos
     const isChallenge = user.plan === 'CHALLENGE_21';
-    const isFichas = user.plan === 'FICHAS'; 
-    const isBasico = user.plan === 'PERFORMANCE' || user.plan === 'standard';
+    const isFichas = user.plan === 'FICHA_8S' || user.plan === 'FICHAS'; 
+    const isBasico = user.plan === 'PERFORMANCE' || user.plan === 'standard' || user.plan === 'LOW_COST';
     const isPremium = !isChallenge && !isFichas && !isBasico && anamnese; 
+
+    // Identifica se é o PONTO DE PARTIDA (Avaliação Inicial)
+    const isFirstCheckIn = !oldCheckIn;
 
     // Lógica do Funil: Identifica se é o Check-in FINAL (Momento do Upsell)
     const checkInCount = await prisma.checkIn.count({ where: { userId: user.id } });
     const isFinalCheckIn = (isChallenge && checkInCount >= 2) || (isFichas && checkInCount >= 2);
 
-    // 4. Coleta TODAS as fotos (Atuais + Extras + Antigas para comparação visual do Gemini)
+    // 4. Coleta TODAS as fotos
     const allPhotoUrls = [
         checkIn.photoFront, 
         checkIn.photoSide, 
@@ -65,7 +68,7 @@ export async function POST(req: Request) {
         return { inlineData: { data: Buffer.from(buffer).toString("base64"), mimeType: "image/jpeg" } };
     }));
 
-    // Montagem do Contexto Adicional (Premium)
+    // 5. Montagem do Contexto Adicional (Premium)
     let contextoAdicional = "";
     if (isPremium && anamnese) {
         contextoAdicional = `
@@ -78,51 +81,44 @@ export async function POST(req: Request) {
         `;
     }
 
-    // 5. Configuração do Gemini (Lida em tempo de execução para evitar bugs de cache)
+    // 6. Configuração do Gemini (Tempo de execução)
     const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-        throw new Error("Chave da API do Google não encontrada no ambiente.");
-    }
+    if (!apiKey) throw new Error("Chave da API não encontrada.");
     
     const genAI = new GoogleGenerativeAI(apiKey);
-    
-    // 🔥 Atualizado para Gemini 2.0 Flash
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
+    // 🔥 LOGICA DE PROMPT REFORMULADA 🔥
     const prompt = `
       Você é o Coach Paulo Adriano, campeão de fisiculturismo natural e treinador de elite. 
-      Analise as fotos de check-in e gere um feedback de mestre.
+      Analise as fotos do aluno ${user.name} e gere um feedback matador.
+
+      ${isFirstCheckIn ? `
+      🚨 CONTEXTO CRUCIAL: ESTE É O PONTO DE PARTIDA (DIA 01). 🚨
+      DIRETRIZES PARA ESTE FEEDBACK:
+      1. NÃO FALE EM EVOLUÇÃO, MELHORA OU "RESPOSTA AO PLANO". O aluno ainda não começou!
+      2. Faça um RAIO-X do shape HOJE: Comente sobre BF (gordura), pontos de maior acúmulo e tônus muscular atual.
+      3. Seja o Coach que traça o mapa: Diga o que vamos atacar primeiro (ex: "vamos focar em limpar essa base e melhorar a linha de cintura").
+      4. O tom é de início de jornada, motivador mas puramente analítico do estado inicial.` 
+      : `
+      🚨 CONTEXTO: ISTO É UM COMPARATIVO DE EVOLUÇÃO (ANTES X DEPOIS). 🚨
+      DIRETRIZES PARA ESTE FEEDBACK:
+      1. COMPARE as fotos atuais com as de ${new Date(oldCheckIn?.date || "").toLocaleDateString('pt-BR')}.
+      2. APONTE GANHOS REAIS: Melhoria na linha de cintura, cortes aparecendo, maturidade muscular ou queda no peso (${oldCheckIn?.weight}kg -> ${checkIn.weight}kg).
+      3. Parabenize pelos avanços específicos que você está vendo visualmente.`}
 
       PERFIL DO ALUNO:
-      - Nome: ${user.name}
-      - Plano Atual: ${user.plan}
-      - Objetivo: ${isChallenge ? "Emagrecimento Acelerado 21 Dias" : (user.goal || anamnese?.objetivo || "Não definido")}
-      - Nível: ${isChallenge ? "Desafio" : (user.level || anamnese?.nivel || "Não definido")}
+      - Plano: ${user.plan}
+      - Objetivo: ${user.goal || anamnese?.objetivo || "Melhorar estética"}
       - Peso Atual: ${checkIn.weight ? checkIn.weight + 'kg' : 'Não informado'}
-      ${oldCheckIn ? `- PESO ANTERIOR (Ponto de Partida): ${oldCheckIn.weight ? oldCheckIn.weight + 'kg' : 'Não informado'}. ATENÇÃO: ISTO É UM COMPARATIVO! Avalie a evolução do antes e depois.` : ''}
-      - Momento: ${isFinalCheckIn ? "CHECK-IN FINAL DO PROTOCOLO (HORA DE VENDER)" : "Acompanhamento de rotina"}
       ${contextoAdicional}
       - Feedback do Aluno: "${checkIn.feedback || "Sem comentários"}"
 
-      REGRAS DE OURO PARA O FEEDBACK:
-      1. ANALISE VISUAL PROFUNDA: ${oldCheckIn ? "COMPARE AS FOTOS! Aponte visualmente o que melhorou desde a última avaliação (linha de cintura, volume, densidade)." : "Olhe as fotos focando no estado atual e pontos a melhorar."}
-      2. VOZ DO COACH: Seja direto, técnico e motivador. Use termos como "maturação muscular", "corte", "fibra", "retenção hídrica", "encaixe", "pele colando".
-      3. COMPORTAMENTO POR PLANO:
-         - PREMIUM: Seja extremamente detalhista. Se mencionou dores/cirurgias, leve isso em conta.
-         - BÁSICO/FICHAS: Foco em resultados, constância e alinhamento do peso.
-         - DESAFIO 21 DIAS: Foco absoluto em queima de gordura e disciplina.
+      REGRAS GERAIS:
+      - Voz: Técnico, direto e motivador. Use termos de fisiculturismo (densidade, corte, pele colando).
+      - UPSELL: ${isFinalCheckIn ? "O aluno finalizou o ciclo. No final, parabenize pela vitória e faça a oferta de migração para a Consultoria Premium (Acompanhamento 1:1) com desconto especial." : "Apenas reconheça o momento e dê o comando para o treino."}
 
-      4. LÓGICA DE UPSELL E RECOMPENSA (MUITO IMPORTANTE):
-      ${isFinalCheckIn ? `
-         - O aluno ACABOU de finalizar o protocolo do plano (${user.plan}).
-         - Parabenize efusivamente pela vitória e conclusão do ciclo.
-         - Faça a oferta de UPSELL: Diga que para não estagnar e buscar o próximo nível, o corpo precisa de um novo estímulo.
-         ${isChallenge ? "- Sugira a migração para o Plano Básico, Fichas de 8 Semanas ou Consultoria Premium." : "- Sugira fortemente a migração para a Consultoria Premium (Acompanhamento 1:1) para lapidação individual."}
-         - Termine orientando o aluno a resgatar a recompensa clicando no botão de desconto abaixo ou chamando no WhatsApp.` 
-      : `
-         - O aluno ainda está no meio do processo. Reconheça a evolução, aponte um ponto de melhoria técnica e dê o comando para a próxima fase. Não faça vendas neste momento.`}
-
-      Escreva um texto pronto para copiar e colar no WhatsApp. Sem emojis infantis (use 🔥, 👊, 🏆, 🚀), papo de campeão. Parágrafos curtos.
+      Escreva um texto pronto para o WhatsApp. Parágrafos curtos. Use 🔥, 👊, 🏆, 🚀.
     `;
 
     const result = await model.generateContent([prompt, ...imageParts]);
