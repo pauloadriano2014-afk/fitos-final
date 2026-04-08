@@ -13,10 +13,32 @@ const s3 = new S3Client({
     },
 });
 
+// Intervalo automático por plano (em dias)
+const PLAN_AUTO_DAYS: Record<string, number> = {
+    PREMIUM: 14,
+    PERFORMANCE: 30,
+    standard: 30,
+    LOW_COST: 30,
+    FICHA_8S: 56,
+    FICHAS: 56,
+    CHALLENGE_21: 21,
+};
+
+// Máximo de check-ins permitidos por plano de ciclo
+const PLAN_MAX_CHECKINS: Record<string, number> = {
+    FICHA_8S: 2,
+    FICHAS: 2,
+    CHALLENGE_21: 2,
+};
+
+function addDays(date: Date, days: number): Date {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+}
+
 async function uploadToR2(base64String: string, userId: string, prefix: string) {
     if (!base64String) return null;
-    
-    // 🔥 Proteção: Se a string já for uma URL (começar com http), não tenta fazer upload de novo
     if (base64String.startsWith('http')) return base64String;
 
     try {
@@ -45,11 +67,11 @@ async function uploadToR2(base64String: string, userId: string, prefix: string) 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, weight, feedback, photoFront, photoBack, photoSide, extraPhotos } = body;
+    const { userId, weight, feedback, photoFront, photoBack, photoSide, extraPhotos, allowMarketing } = body;
 
     if (!userId) return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
-    // Faz o upload paralelo para ganhar tempo
+    // Upload paralelo das fotos
     const [frontUrl, backUrl, sideUrl] = await Promise.all([
         uploadToR2(photoFront, userId, 'front'),
         uploadToR2(photoBack, userId, 'back'),
@@ -79,24 +101,50 @@ export async function POST(req: Request) {
       data: checkInData
     });
 
-    // Atualiza dados do usuário
-    const userToUpdate = await prisma.user.findUnique({
+    // ── Busca dados do usuário para calcular próxima data ──
+    const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { coachId: true, name: true }
+        select: { plan: true, coachId: true, name: true }
     });
 
-    const updateData: any = { nextCheckInDate: null };
+    if (!user) return NextResponse.json({ success: true, id: checkIn.id });
+
+    const plan = user.plan || 'PERFORMANCE';
+    const isCyclePlan = ['FICHA_8S', 'FICHAS', 'CHALLENGE_21'].includes(plan);
+
+    // Conta quantos check-ins o aluno já tem (incluindo o que acabou de criar)
+    const totalCheckins = await prisma.checkIn.count({ where: { userId } });
+
+    // ── Calcula nextCheckInDate ──
+    let nextDate: Date | null = null;
+
+    if (isCyclePlan) {
+        const maxCheckins = PLAN_MAX_CHECKINS[plan] || 2;
+        if (totalCheckins < maxCheckins) {
+            // Primeiro check-in do ciclo: agenda o próximo
+            const autoDays = PLAN_AUTO_DAYS[plan] || 30;
+            nextDate = addDays(new Date(), autoDays);
+        }
+        // Se já atingiu o máximo, nextDate fica null (ciclo encerrado, travado)
+    } else {
+        // Planos contínuos (Premium, Básico): sempre agenda o próximo
+        const autoDays = PLAN_AUTO_DAYS[plan] || 14;
+        nextDate = addDays(new Date(), autoDays);
+    }
+
+    // ── Atualiza usuário ──
+    const updateData: any = { nextCheckInDate: nextDate };
     if (weight) updateData.currentWeight = parseFloat(weight);
 
     await prisma.user.update({
         where: { id: userId },
         data: updateData
-    }).catch(e => console.log("Erro ao atualizar peso e data do user:", e));
+    }).catch(e => console.log("Erro ao atualizar user após check-in:", e));
 
-    // Notificação Push para o Coach
-    if (userToUpdate?.coachId) {
+    // ── Notificação Push para o Coach ──
+    if (user.coachId) {
          const coach = await prisma.user.findUnique({
-             where: { id: userToUpdate.coachId },
+             where: { id: user.coachId },
              select: { pushToken: true }
          });
          
@@ -112,7 +160,7 @@ export async function POST(req: Request) {
                      to: coach.pushToken,
                      sound: 'default',
                      title: '📸 Novo Check-in Recebido!',
-                     body: `O aluno ${userToUpdate.name || 'Atleta'} enviou as fotos de evolução.`,
+                     body: `O aluno ${user.name || 'Atleta'} enviou as fotos de evolução.`,
                  }),
              }).catch(err => console.log("Erro ao enviar push:", err));
          }
@@ -139,8 +187,6 @@ export async function GET(req: Request) {
             whereClause.user = { coachId: adminId }; 
         }
 
-        // 🔥 O SEGREDO DA VELOCIDADE: Trazemos 20 check-ins. 
-        // Se eles forem URLs do R2, o peso é zero. Se forem Base64, você PRECISA rodar o SQL de limpeza.
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
