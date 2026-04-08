@@ -275,6 +275,8 @@ model CheckIn {
     
   photoFront  String?  
   photoBack   String?
+  coachFeedback  String?   // feedback do coach
+  allowMarketing Boolean @default(false)  // autorização de marketing
   photoSide   String?
   extraPhotos String[] // 🔥 NOVO: Array para salvar os links das fotos extras
     
