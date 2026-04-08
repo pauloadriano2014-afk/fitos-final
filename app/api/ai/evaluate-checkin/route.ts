@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     // Identifica se é o PONTO DE PARTIDA (Avaliação Inicial)
     const isFirstCheckIn = !oldCheckIn;
 
-    // Lógica do Funil: Identifica se é o Check-in FINAL (Momento do Upsell)
+    // Lógica do Funil: Identifica se é o Check-in FINAL (Momento do Upsell / Dia 56)
     const checkInCount = await prisma.checkIn.count({ where: { userId: user.id } });
     const isFinalCheckIn = (isChallenge && checkInCount >= 2) || (isFichas && checkInCount >= 2);
 
@@ -88,37 +88,44 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    // 🔥 LOGICA DE PROMPT REFORMULADA 🔥
+    // 🔥 LOGICA DE PROMPT REFORMULADA (DIDÁTICA 360º + TRAVA DE UPSELL) 🔥
     const prompt = `
       Você é o Coach Paulo Adriano, campeão de fisiculturismo natural e treinador de elite. 
-      Analise as fotos do aluno ${user.name} e gere um feedback matador.
+      Analise as fotos do aluno ${user.name} com um olhar técnico, detalhista e didático.
 
+      ESTRUTURA OBRIGATÓRIA DA ANÁLISE TÉCNICA:
+      1. FRENTE: Explique como está a linha de cintura, a simetria entre os lados e o tônus do abdômen/quadríceps.
+      2. LADO: Detalhe a profundidade do shape, a separação entre ombro e braço, e o encaixe da postura.
+      3. COSTAS: Avalie a largura e densidade do dorsal e a maturidade muscular da região lombar/posterior.
+
+      DIRETRIZES DE CONTEXTO:
       ${isFirstCheckIn ? `
-      🚨 CONTEXTO CRUCIAL: ESTE É O PONTO DE PARTIDA (DIA 01). 🚨
-      DIRETRIZES PARA ESTE FEEDBACK:
-      1. NÃO FALE EM EVOLUÇÃO, MELHORA OU "RESPOSTA AO PLANO". O aluno ainda não começou!
-      2. Faça um RAIO-X do shape HOJE: Comente sobre BF (gordura), pontos de maior acúmulo e tônus muscular atual.
-      3. Seja o Coach que traça o mapa: Diga o que vamos atacar primeiro (ex: "vamos focar em limpar essa base e melhorar a linha de cintura").
-      4. O tom é de início de jornada, motivador mas puramente analítico do estado inicial.` 
+      🚨 ESTE É O PONTO DE PARTIDA (DIA 01). 🚨
+      - NÃO fale em evolução ou "melhora". O aluno está começando hoje.
+      - Faça um Raio-X realista do shape cru.
+      - Use uma didática de mestre para explicar quais pontos vamos atacar primeiro para construir a base.` 
       : `
-      🚨 CONTEXTO: ISTO É UM COMPARATIVO DE EVOLUÇÃO (ANTES X DEPOIS). 🚨
-      DIRETRIZES PARA ESTE FEEDBACK:
-      1. COMPARE as fotos atuais com as de ${new Date(oldCheckIn?.date || "").toLocaleDateString('pt-BR')}.
-      2. APONTE GANHOS REAIS: Melhoria na linha de cintura, cortes aparecendo, maturidade muscular ou queda no peso (${oldCheckIn?.weight}kg -> ${checkIn.weight}kg).
-      3. Parabenize pelos avanços específicos que você está vendo visualmente.`}
+      🚨 ISTO É UM COMPARATIVO DE EVOLUÇÃO. 🚨
+      - Compare as fotos atuais com as fotos anteriores de forma minuciosa.
+      - Aponte onde a pele "colou", onde o músculo ganhou maturidade e a evolução da densidade.`}
 
-      PERFIL DO ALUNO:
-      - Plano: ${user.plan}
-      - Objetivo: ${user.goal || anamnese?.objetivo || "Melhorar estética"}
-      - Peso Atual: ${checkIn.weight ? checkIn.weight + 'kg' : 'Não informado'}
+      REGRAS DE UPSELL E RECOMPENSA:
+      ${isFinalCheckIn ? `
+      ⚠️ MOMENTO CRUCIAL: O aluno finalizou o ciclo do plano ${user.plan}.
+      - Parabenize efusivamente pela disciplina de chegar ao fim.
+      - Explique que para não estagnar agora, ele precisa de ajustes finos e individuais que só a Consultoria Premium oferece.
+      - Ofereça a migração para a CONSULTORIA PREMIUM (Acompanhamento 1:1) com um DESCONTO ESPECIAL de encerramento.
+      - Peça para ele responder "PREMIUM" aqui no WhatsApp para resgatar.` 
+      : `
+      ⚠️ NÃO faça ofertas de venda ou descontos agora. Foque 100% na evolução técnica e didática do shape.`}
+
+      DADOS DO PERFIL:
+      - Objetivo: ${user.goal || anamnese?.objetivo || "Estética Geral"}
+      - Peso: ${checkIn.weight ? checkIn.weight + 'kg' : 'Não informado'} ${oldCheckIn ? `(Anterior: ${oldCheckIn.weight}kg)` : ''}
       ${contextoAdicional}
       - Feedback do Aluno: "${checkIn.feedback || "Sem comentários"}"
 
-      REGRAS GERAIS:
-      - Voz: Técnico, direto e motivador. Use termos de fisiculturismo (densidade, corte, pele colando).
-      - UPSELL: ${isFinalCheckIn ? "O aluno finalizou o ciclo. No final, parabenize pela vitória e faça a oferta de migração para a Consultoria Premium (Acompanhamento 1:1) com desconto especial." : "Apenas reconheça o momento e dê o comando para o treino."}
-
-      Escreva um texto pronto para o WhatsApp. Parágrafos curtos. Use 🔥, 👊, 🏆, 🚀.
+      Voz: Técnico, direto, didático e motivador. Texto pronto para WhatsApp. Parágrafos curtos. Use 🔥, 👊, 🏆, 🚀.
     `;
 
     const result = await model.generateContent([prompt, ...imageParts]);
