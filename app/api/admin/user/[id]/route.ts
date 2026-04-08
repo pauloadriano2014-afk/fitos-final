@@ -24,6 +24,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         nextCheckInDate: true,
         evaluationUrl: true,
         disableCheckIn: true,
+        // 🔥 CAMPOS LIBERADOS: Agora a API entrega os dados do Raio-X para o Admin
+        goal: true,
+        level: true,
         // 🔥 Carrega apenas a anamnese mais recente
         anamneses: {
           orderBy: { createdAt: 'desc' },
@@ -50,14 +53,13 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-// 👇 ATUALIZA DADOS DO ALUNO (FOTO, STATUS, PDF, ETC)
+// 👇 ATUALIZA DADOS DO ALUNO (FOTO, STATUS, PDF, SETUP, ETC)
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
     const userId = params.id;
 
-    // O Prisma ignora campos que não existem no schema, 
-    // mas o body já vem filtrado do frontend.
+    // O Prisma agora aceita 'goal' e 'level' pois atualizamos o schema.prisma
     const user = await prisma.user.update({
       where: { id: userId },
       data: body
