@@ -8,9 +8,12 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY as string);
 
 export async function POST(req: Request) {
   try {
-    const { checkInId } = await req.json();
+    // 1. Recebe o ID atual e o ID antigo (se for comparação do painel)
+    const { checkInId, oldCheckInId } = await req.json();
 
-    // 1. Busca Check-in + Usuário + A ÚLTIMA ANAMNESE COMPLETA
+    if (!checkInId) return NextResponse.json({ error: "ID indefinido" }, { status: 400 });
+
+    // 2. Busca Check-in Atual + Usuário + A ÚLTIMA ANAMNESE COMPLETA
     const checkIn = await prisma.checkIn.findUnique({
       where: { id: checkInId },
       include: { 
@@ -24,34 +27,46 @@ export async function POST(req: Request) {
 
     if (!checkIn) return NextResponse.json({ error: "Check-in não encontrado" }, { status: 404 });
 
+    // 3. Busca o Check-in Antigo (se você clicou no botão "Comparar")
+    let oldCheckIn = null;
+    if (oldCheckInId) {
+        oldCheckIn = await prisma.checkIn.findUnique({ where: { id: oldCheckInId } });
+    }
+
     const user = checkIn.user;
-    const anamnese = user.anamneses[0]; // Pega a anamnese detalhada se existir
+    const anamnese = user.anamneses[0]; 
     
     // Identificação dos Planos
     const isChallenge = user.plan === 'CHALLENGE_21';
-    const isFichas = user.plan === 'FICHAS'; // Ajuste caso a tag no banco seja diferente
+    const isFichas = user.plan === 'FICHAS'; 
     const isBasico = user.plan === 'PERFORMANCE' || user.plan === 'standard';
-    const isPremium = !isChallenge && !isFichas && !isBasico && anamnese; // Premium tem a anamnese completa
+    const isPremium = !isChallenge && !isFichas && !isBasico && anamnese; 
 
-    // 2. Lógica do Funil: Identifica se é o Check-in FINAL (Momento do Upsell)
+    // Lógica do Funil: Identifica se é o Check-in FINAL (Momento do Upsell)
     const checkInCount = await prisma.checkIn.count({ where: { userId: user.id } });
     const isFinalCheckIn = (isChallenge && checkInCount >= 2) || (isFichas && checkInCount >= 2);
 
-    // 3. Coleta TODAS as fotos (Base + Extras)
+    // 4. Coleta TODAS as fotos (Atuais + Extras + Antigas para comparação visual do Gemini)
     const allPhotoUrls = [
         checkIn.photoFront, 
         checkIn.photoSide, 
         checkIn.photoBack, 
         ...(checkIn.extraPhotos || [])
-    ].filter(Boolean) as string[];
+    ];
+
+    if (oldCheckIn) {
+        allPhotoUrls.push(oldCheckIn.photoFront, oldCheckIn.photoSide, oldCheckIn.photoBack);
+    }
+
+    const validUrls = allPhotoUrls.filter(Boolean) as string[];
     
-    const imageParts = await Promise.all(allPhotoUrls.map(async (url) => {
+    const imageParts = await Promise.all(validUrls.map(async (url) => {
         const response = await fetch(url);
         const buffer = await response.arrayBuffer();
         return { inlineData: { data: Buffer.from(buffer).toString("base64"), mimeType: "image/jpeg" } };
     }));
 
-    // 4. Montagem do Contexto Adicional (Premium)
+    // Montagem do Contexto Adicional (Premium)
     let contextoAdicional = "";
     if (isPremium && anamnese) {
         contextoAdicional = `
@@ -69,7 +84,7 @@ export async function POST(req: Request) {
 
     const prompt = `
       Você é o Coach Paulo Adriano, campeão de fisiculturismo natural e treinador de elite. 
-      Analise as fotos de check-in (frente, lado, costas e detalhes extras) e gere um feedback de mestre.
+      Analise as fotos de check-in e gere um feedback de mestre.
 
       PERFIL DO ALUNO:
       - Nome: ${user.name}
@@ -77,12 +92,13 @@ export async function POST(req: Request) {
       - Objetivo: ${isChallenge ? "Emagrecimento Acelerado 21 Dias" : (user.goal || anamnese?.objetivo || "Não definido")}
       - Nível: ${isChallenge ? "Desafio" : (user.level || anamnese?.nivel || "Não definido")}
       - Peso Atual: ${checkIn.weight ? checkIn.weight + 'kg' : 'Não informado'}
+      ${oldCheckIn ? `- PESO ANTERIOR (Ponto de Partida): ${oldCheckIn.weight ? oldCheckIn.weight + 'kg' : 'Não informado'}. ATENÇÃO: ISTO É UM COMPARATIVO! Avalie a evolução do antes e depois.` : ''}
       - Momento: ${isFinalCheckIn ? "CHECK-IN FINAL DO PROTOCOLO (HORA DE VENDER)" : "Acompanhamento de rotina"}
       ${contextoAdicional}
       - Feedback do Aluno: "${checkIn.feedback || "Sem comentários"}"
 
       REGRAS DE OURO PARA O FEEDBACK:
-      1. ANALISE VISUAL PROFUNDA: Olhe todas as fotos. Foque em evolução de densidade, linha de cintura e cortes musculares.
+      1. ANALISE VISUAL PROFUNDA: ${oldCheckIn ? "COMPARE AS FOTOS! Aponte visualmente o que melhorou desde a última avaliação (linha de cintura, volume, densidade)." : "Olhe as fotos focando no estado atual e pontos a melhorar."}
       2. VOZ DO COACH: Seja direto, técnico e motivador. Use termos como "maturação muscular", "corte", "fibra", "retenção hídrica", "encaixe", "pele colando".
       3. COMPORTAMENTO POR PLANO:
          - PREMIUM: Seja extremamente detalhista. Se mencionou dores/cirurgias, leve isso em conta.
@@ -107,7 +123,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
         analysis: text,
-        isFinal: isFinalCheckIn // 🔥 Gatilho de front-end para exibir o botão de desconto
+        isFinal: isFinalCheckIn 
     });
 
   } catch (error) {
