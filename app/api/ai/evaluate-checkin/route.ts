@@ -4,7 +4,6 @@ import { PrismaClient } from '@prisma/client';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const prisma = new PrismaClient();
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY as string);
 
 export async function POST(req: Request) {
   try {
@@ -79,8 +78,16 @@ export async function POST(req: Request) {
         `;
     }
 
-    // 5. Configuração do Gemini
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // 5. Configuração do Gemini (Lida em tempo de execução para evitar bugs de cache)
+    const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        throw new Error("Chave da API do Google não encontrada no ambiente.");
+    }
+    
+    const genAI = new GoogleGenerativeAI(apiKey);
+    
+    // 🔥 Atualizado para Gemini 2.0 Flash
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `
       Você é o Coach Paulo Adriano, campeão de fisiculturismo natural e treinador de elite. 
