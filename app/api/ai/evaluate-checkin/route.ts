@@ -10,20 +10,13 @@ export async function POST(req: Request) {
   try {
     const { checkInId } = await req.json();
 
-    if (!checkInId) {
-        return NextResponse.json({ error: "Check-in ID não fornecido" }, { status: 400 });
-    }
-
-    // 1. Busca os dados do Check-in e o perfil do Aluno (incluindo o PLANO)
+    // 1. Busca Check-in + Usuário + A ÚLTIMA ANAMNESE COMPLETA
     const checkIn = await prisma.checkIn.findUnique({
       where: { id: checkInId },
       include: { 
         user: { 
-          select: { 
-            name: true, 
-            goal: true, 
-            level: true, 
-            plan: true // 🔥 Essencial para a lógica de diferenciação
+          include: { 
+            anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } 
           } 
         } 
       }
@@ -31,60 +24,94 @@ export async function POST(req: Request) {
 
     if (!checkIn) return NextResponse.json({ error: "Check-in não encontrado" }, { status: 404 });
 
-    // 2. Lógica de Diferenciação de Planos (Desafio 21D vs Outros)
-    const isChallenge = checkIn.user.plan === 'CHALLENGE_21';
+    const user = checkIn.user;
+    const anamnese = user.anamneses[0]; // Pega a anamnese detalhada se existir
     
-    // Para o desafio, ignoramos o que está no banco e forçamos o contexto de emagrecimento
-    const displayGoal = isChallenge ? "Emagrecimento Acelerado (Protocolo Geral de 21 Dias)" : (checkIn.user.goal || "Não definido");
-    const displayLevel = isChallenge ? "Geral (Participante do Desafio)" : (checkIn.user.level || "Não definido");
+    // Identificação dos Planos
+    const isChallenge = user.plan === 'CHALLENGE_21';
+    const isFichas = user.plan === 'FICHAS'; // Ajuste caso a tag no banco seja diferente
+    const isBasico = user.plan === 'PERFORMANCE' || user.plan === 'standard';
+    const isPremium = !isChallenge && !isFichas && !isBasico && anamnese; // Premium tem a anamnese completa
 
-    // 3. Prepara as imagens para o Gemini (URLs do R2 -> Base64)
-    const imageUrls = [checkIn.photoFront, checkIn.photoSide, checkIn.photoBack].filter(Boolean) as string[];
+    // 2. Lógica do Funil: Identifica se é o Check-in FINAL (Momento do Upsell)
+    const checkInCount = await prisma.checkIn.count({ where: { userId: user.id } });
+    const isFinalCheckIn = (isChallenge && checkInCount >= 2) || (isFichas && checkInCount >= 2);
+
+    // 3. Coleta TODAS as fotos (Base + Extras)
+    const allPhotoUrls = [
+        checkIn.photoFront, 
+        checkIn.photoSide, 
+        checkIn.photoBack, 
+        ...(checkIn.extraPhotos || [])
+    ].filter(Boolean) as string[];
     
-    const imageParts = await Promise.all(imageUrls.map(async (url) => {
+    const imageParts = await Promise.all(allPhotoUrls.map(async (url) => {
         const response = await fetch(url);
         const buffer = await response.arrayBuffer();
-        return {
-            inlineData: {
-                data: Buffer.from(buffer).toString("base64"),
-                mimeType: "image/jpeg"
-            }
-        };
+        return { inlineData: { data: Buffer.from(buffer).toString("base64"), mimeType: "image/jpeg" } };
     }));
 
-    // 4. Configuração do Modelo e Prompt com a Voz do Paulo Adriano
+    // 4. Montagem do Contexto Adicional (Premium)
+    let contextoAdicional = "";
+    if (isPremium && anamnese) {
+        contextoAdicional = `
+        DADOS DA ANAMNESE COMPLETA (ALUNO PREMIUM):
+        - Frequência: ${anamnese.frequencia}x por semana.
+        - Tempo por treino: ${anamnese.tempoDisponivel}min.
+        - Limitações/Dores: ${anamnese.limitacoes?.join(', ') || 'Nenhuma'}.
+        - Cirurgias: ${anamnese.cirurgias?.join(', ') || 'Nenhuma'}.
+        - Equipamentos: ${anamnese.equipamentos?.join(', ') || 'Academia completa'}.
+        `;
+    }
+
+    // 5. Configuração do Gemini
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
-      Você é o Coach Paulo Adriano, treinador de elite e campeão de fisiculturismo natural. 
-      Sua missão é analisar as fotos de check-in do seu aluno e escrever um feedback técnico, motivador e direto ao ponto.
+      Você é o Coach Paulo Adriano, campeão de fisiculturismo natural e treinador de elite. 
+      Analise as fotos de check-in (frente, lado, costas e detalhes extras) e gere um feedback de mestre.
 
-      DADOS DO CONTEXTO:
-      - Aluno: ${checkIn.user.name}
-      - Plano: ${checkIn.user.plan} ${isChallenge ? "🔥 (FOCO TOTAL EM DERRETER GORDURA)" : ""}
-      - Objetivo: ${displayGoal}
-      - Nível: ${displayLevel}
-      - Peso Atual: ${checkIn.weight}kg
+      PERFIL DO ALUNO:
+      - Nome: ${user.name}
+      - Plano Atual: ${user.plan}
+      - Objetivo: ${isChallenge ? "Emagrecimento Acelerado 21 Dias" : (user.goal || anamnese?.objetivo || "Não definido")}
+      - Nível: ${isChallenge ? "Desafio" : (user.level || anamnese?.nivel || "Não definido")}
+      - Peso Atual: ${checkIn.weight ? checkIn.weight + 'kg' : 'Não informado'}
+      - Momento: ${isFinalCheckIn ? "CHECK-IN FINAL DO PROTOCOLO (HORA DE VENDER)" : "Acompanhamento de rotina"}
+      ${contextoAdicional}
       - Feedback do Aluno: "${checkIn.feedback || "Sem comentários"}"
 
-      DIRETRIZES PARA O SEU FEEDBACK:
-      1. TONE DE VOZ: Use a linguagem "Maromba Técnico". Termos como: densidade, linha de cintura, volume, retenção hídrica, pele colando, encaixe. Seja um mentor que cobra mas encoraja.
-      2. ANÁLISE VISUAL: Procure nas fotos sinais de melhora. ${isChallenge ? "No Desafio 21D, foque na diminuição da linha de cintura e na urgência de manter o protocolo 100%." : "No plano de treinos, foque na evolução da musculatura e constância."}
-      3. RESPOSTA AO ALUNO: Se o aluno disse que falhou, dê um puxão de orelha técnico (ex: explicando o impacto do sódio/lixo na foto). Se ele foi bem, reforce o comando.
-      4. AÇÃO: Finalize com uma frase de comando (Ex: "Pra cima!", "Foco na missão!", "O jogo é nosso!").
+      REGRAS DE OURO PARA O FEEDBACK:
+      1. ANALISE VISUAL PROFUNDA: Olhe todas as fotos. Foque em evolução de densidade, linha de cintura e cortes musculares.
+      2. VOZ DO COACH: Seja direto, técnico e motivador. Use termos como "maturação muscular", "corte", "fibra", "retenção hídrica", "encaixe", "pele colando".
+      3. COMPORTAMENTO POR PLANO:
+         - PREMIUM: Seja extremamente detalhista. Se mencionou dores/cirurgias, leve isso em conta.
+         - BÁSICO/FICHAS: Foco em resultados, constância e alinhamento do peso.
+         - DESAFIO 21 DIAS: Foco absoluto em queima de gordura e disciplina.
 
-      IMPORTANTE: Escreva o texto pronto para ser enviado por WhatsApp. Parágrafos curtos, sem negritos exagerados e sem emojis infantis. Use a voz de um campeão.
+      4. LÓGICA DE UPSELL E RECOMPENSA (MUITO IMPORTANTE):
+      ${isFinalCheckIn ? `
+         - O aluno ACABOU de finalizar o protocolo do plano (${user.plan}).
+         - Parabenize efusivamente pela vitória e conclusão do ciclo.
+         - Faça a oferta de UPSELL: Diga que para não estagnar e buscar o próximo nível, o corpo precisa de um novo estímulo.
+         ${isChallenge ? "- Sugira a migração para o Plano Básico, Fichas de 8 Semanas ou Consultoria Premium." : "- Sugira fortemente a migração para a Consultoria Premium (Acompanhamento 1:1) para lapidação individual."}
+         - Termine orientando o aluno a resgatar a recompensa clicando no botão de desconto abaixo ou chamando no WhatsApp.` 
+      : `
+         - O aluno ainda está no meio do processo. Reconheça a evolução, aponte um ponto de melhoria técnica e dê o comando para a próxima fase. Não faça vendas neste momento.`}
+
+      Escreva um texto pronto para copiar e colar no WhatsApp. Sem emojis infantis (use 🔥, 👊, 🏆, 🚀), papo de campeão. Parágrafos curtos.
     `;
 
-    // 5. Gera a análise
     const result = await model.generateContent([prompt, ...imageParts]);
-    const response = await result.response;
-    const text = response.text();
+    const text = result.response.text();
 
-    return NextResponse.json({ analysis: text });
+    return NextResponse.json({ 
+        analysis: text,
+        isFinal: isFinalCheckIn // 🔥 Gatilho de front-end para exibir o botão de desconto
+    });
 
   } catch (error) {
     console.error("Erro na análise IA:", error);
-    return NextResponse.json({ error: "Falha ao gerar análise automática" }, { status: 500 });
+    return NextResponse.json({ error: "Erro no motor" }, { status: 500 });
   }
 }
