@@ -194,6 +194,8 @@ export async function GET(req: Request) {
                 id: true,
                 weight: true,
                 feedback: true,
+                coachFeedback: true,   // 🔥 ADICIONADO: Avaliação do Coach
+                hasReadFeedback: true, // 🔥 ADICIONADO: Status de leitura
                 date: true,
                 photoFront: true,
                 photoBack: true,
