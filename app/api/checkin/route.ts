@@ -190,17 +190,8 @@ export async function GET(req: Request) {
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
-            select: {
-                id: true,
-                weight: true,
-                feedback: true,
-                coachFeedback: true,   // 🔥 ADICIONADO: Avaliação do Coach
-                hasReadFeedback: true, // 🔥 ADICIONADO: Status de leitura
-                date: true,
-                photoFront: true,
-                photoBack: true,
-                photoSide: true,
-                extraPhotos: true, 
+            // 🔥 Removido o select. Usar o include traz todas as colunas reais do banco sem dar erro 500.
+            include: {
                 user: { select: { name: true, email: true } }
             },
             take: 20 
