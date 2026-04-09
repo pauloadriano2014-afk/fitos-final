@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
+// 🔥 DETONADOR DE CACHE: Garante que as fotos e o feedback cheguem IMEDIATAMENTE no app do aluno
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const prisma = new PrismaClient();
 
 const s3 = new S3Client({
@@ -190,7 +194,7 @@ export async function GET(req: Request) {
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
-            // 🔥 Removido o select. Usar o include traz todas as colunas reais do banco sem dar erro 500.
+            // 🔥 Usar o include traz todas as colunas reais do banco sem dar erro 500.
             include: {
                 user: { select: { name: true, email: true } }
             },
