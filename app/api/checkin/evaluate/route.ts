@@ -1,6 +1,9 @@
-// app/api/checkin/evaluate/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+
+// 🔥 DETONADOR DE CACHE: Obriga o servidor a processar na hora
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const prisma = new PrismaClient();
 
