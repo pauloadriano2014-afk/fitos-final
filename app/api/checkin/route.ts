@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import sharp from 'sharp'; // 🔥 A MÁGICA DA SOLUÇÃO ELITE
 
 // 🔥 DETONADOR DE CACHE: Garante que as fotos e o feedback cheguem IMEDIATAMENTE no app do aluno
 export const dynamic = 'force-dynamic';
@@ -49,19 +50,39 @@ async function uploadToR2(base64String: string, userId: string, prefix: string) 
         const base64Data = base64String.replace(/^data:image\/\w+;base64,/, "");
         const buffer = Buffer.from(base64Data, 'base64');
         
-        const fileName = `checkins/${userId}/${Date.now()}-${prefix}.jpg`;
+        const timestamp = Date.now();
+        const fileName = `checkins/${userId}/${timestamp}-${prefix}.jpg`;
+        const thumbFileName = `checkins/${userId}/${timestamp}-${prefix}-thumb.jpg`;
 
+        // 1. SOBE A FOTO ORIGINAL (Para abrir grande no clique)
         const command = new PutObjectCommand({
             Bucket: 'fitos-fotos',
             Key: fileName,
             Body: buffer,
             ContentType: 'image/jpeg',
         });
-
         await s3.send(command);
+
+        // 2. CRIA E SOBE A MINIATURA ELITE (Para não explodir a memória do Safari)
+        try {
+            const thumbBuffer = await sharp(buffer)
+                .resize({ width: 300, withoutEnlargement: true }) // Reduz o tamanho
+                .jpeg({ quality: 60 }) // Comprime a qualidade
+                .toBuffer();
+
+            const thumbCommand = new PutObjectCommand({
+                Bucket: 'fitos-fotos',
+                Key: thumbFileName,
+                Body: thumbBuffer,
+                ContentType: 'image/jpeg',
+            });
+            await s3.send(thumbCommand);
+        } catch (thumbError) {
+            console.log("Aviso: Falha ao gerar thumbnail, mas foto original foi salva.", thumbError);
+        }
         
         const publicUrlBase = (process.env.R2_PUBLIC_URL as string).replace(/\/$/, ""); 
-        return `${publicUrlBase}/${fileName}`;
+        return `${publicUrlBase}/${fileName}`; // O banco continua salvando só a original!
     } catch (error) {
         console.error(`Erro ao subir ${prefix} para o R2:`, error);
         return null;
@@ -116,27 +137,21 @@ export async function POST(req: Request) {
     const plan = user.plan || 'PERFORMANCE';
     const isCyclePlan = ['FICHA_8S', 'FICHAS', 'CHALLENGE_21'].includes(plan);
 
-    // Conta quantos check-ins o aluno já tem (incluindo o que acabou de criar)
     const totalCheckins = await prisma.checkIn.count({ where: { userId } });
 
-    // ── Calcula nextCheckInDate ──
     let nextDate: Date | null = null;
 
     if (isCyclePlan) {
         const maxCheckins = PLAN_MAX_CHECKINS[plan] || 2;
         if (totalCheckins < maxCheckins) {
-            // Primeiro check-in do ciclo: agenda o próximo
             const autoDays = PLAN_AUTO_DAYS[plan] || 30;
             nextDate = addDays(new Date(), autoDays);
         }
-        // Se já atingiu o máximo, nextDate fica null (ciclo encerrado, travado)
     } else {
-        // Planos contínuos (Premium, Básico): sempre agenda o próximo
         const autoDays = PLAN_AUTO_DAYS[plan] || 14;
         nextDate = addDays(new Date(), autoDays);
     }
 
-    // ── Atualiza usuário ──
     const updateData: any = { nextCheckInDate: nextDate };
     if (weight) updateData.currentWeight = parseFloat(weight);
 
@@ -145,7 +160,6 @@ export async function POST(req: Request) {
         data: updateData
     }).catch(e => console.log("Erro ao atualizar user após check-in:", e));
 
-    // ── Notificação Push para o Coach ──
     if (user.coachId) {
          const coach = await prisma.user.findUnique({
              where: { id: user.coachId },
@@ -194,7 +208,6 @@ export async function GET(req: Request) {
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
-            // 🔥 LIPOASPIRAÇÃO DE DADOS: Reduz para os 5 últimos e extrai SÓ o essencial.
             take: 5, 
             select: {
                 id: true,
