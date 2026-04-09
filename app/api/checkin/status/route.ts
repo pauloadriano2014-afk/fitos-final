@@ -1,6 +1,9 @@
-// app/api/checkin/status/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+
+// 🔥 DETONADOR DE CACHE: Sem isso, o celular do aluno não atualiza a data!
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const prisma = new PrismaClient();
 
