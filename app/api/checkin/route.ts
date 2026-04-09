@@ -194,11 +194,22 @@ export async function GET(req: Request) {
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
-            // 🔥 Usar o include traz todas as colunas reais do banco sem dar erro 500.
-            include: {
+            // 🔥 LIPOASPIRAÇÃO DE DADOS: Reduz para os 5 últimos e extrai SÓ o essencial.
+            take: 5, 
+            select: {
+                id: true,
+                weight: true,
+                feedback: true,
+                coachFeedback: true,
+                date: true,
+                createdAt: true,
+                photoFront: true,
+                photoBack: true,
+                photoSide: true,
+                extraPhotos: true,
+                allowMarketing: true,
                 user: { select: { name: true, email: true } }
-            },
-            take: 20 
+            }
         });
 
         return NextResponse.json(checkins);
