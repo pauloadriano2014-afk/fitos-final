@@ -35,6 +35,7 @@ model User {
   evaluationUrl   String?  // Link da Avaliação em PDF (Google Drive/Canva)
   nextCheckInDate DateTime? // 🔥 NOVO: Data do próximo check-in definida manualmente pelo Admin
   disableCheckIn  Boolean  @default(false) // 🔥 NOVO: Desativa a cobrança de check-in
+  dietGoal        String   @default("NONE") // 🔥 NOVO: Sugestão Alimentar do Aluno
   goal            String?
   level           String?
 
