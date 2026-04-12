@@ -8,13 +8,11 @@ export const revalidate = 0;
 
 const prisma = new PrismaClient();
 
-// 🔥 PUXANDO EXATAMENTE OS NOMES DO SEU .ENV 🔥
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || '';
 const accessKey = process.env.R2_ACCESS_KEY_ID || '';
 const secretKey = process.env.R2_SECRET_ACCESS_KEY || '';
 const publicUrl = process.env.R2_PUBLIC_URL || '';
 
-// 🔥 BUCKET FIXADO PELO SEU PRINT (fitos-fotos) 🔥
 const bucketName = process.env.R2_BUCKET_NAME || 'fitos-fotos';
 
 const s3Client = (accountId && accessKey && secretKey) ? new S3Client({
@@ -36,9 +34,6 @@ export async function POST(req: Request) {
 
         let checkIn;
 
-        // ==========================================================
-        // FLUXO 1: ATUALIZAR CHECK-IN EXISTENTE
-        // ==========================================================
         if (checkinId) {
             checkIn = await prisma.checkIn.update({
                 where: { id: checkinId },
@@ -46,15 +41,11 @@ export async function POST(req: Request) {
                 include: { user: { select: { name: true, pushToken: true } } }
             });
         } 
-        // ==========================================================
-        // FLUXO 2: GERAR LAUDO NOVO PELO LAB IA COM UPLOAD DE FOTOS
-        // ==========================================================
         else if (userId) {
             let uploadedUrls: string[] = [];
 
             if (images && images.length > 0) {
                 
-                // Trava de segurança para garantir que conectou no R2
                 if (!s3Client) {
                     return NextResponse.json({ error: "Erro no Servidor: Falha ao conectar com Cloudflare R2. Verifique as credenciais." }, { status: 500 });
                 }
@@ -64,7 +55,6 @@ export async function POST(req: Request) {
                     const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, "");
                     const buffer = Buffer.from(cleanBase64, 'base64');
                     
-                    // Vai salvar na pasta lab_evaluations/ID_ALUNO/foto.jpg
                     const fileName = `lab_evaluations/${userId}/lab_${Date.now()}_${crypto.randomBytes(3).toString('hex')}.jpg`;
 
                     const command = new PutObjectCommand({
@@ -98,9 +88,6 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Faltam parâmetros (checkinId ou userId)." }, { status: 400 });
         }
 
-        // ==========================================================
-        // DISPARO DE PUSH NOTIFICATION
-        // ==========================================================
         if (checkIn.user?.pushToken) {
             fetch('https://exp.host/--/api/v2/push/send', {
                 method: 'POST',
