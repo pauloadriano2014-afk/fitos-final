@@ -110,7 +110,8 @@ export async function POST(req: Request) {
         }
     }));
 
-    const validImageParts = imageParts.filter(Boolean);
+    // 🔥 O CALA-A-BOCA DO TYPESCRIPT: Forçamos a tipagem para ele não chorar com o "null"
+    const validImageParts = imageParts.filter(Boolean) as any[];
 
     // ── CONSTRUÇÃO DO SEU PROMPT PERFEITO ──
     let blocoAnamnese = "";
@@ -303,7 +304,6 @@ FORMATO DE SAÍDA
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    // O pulo do gato: Junta o texto com as fotos baixadas ou enviadas e manda pro Gemini
     const result = await model.generateContent([prompt, ...validImageParts]);
     const text = result.response.text();
 

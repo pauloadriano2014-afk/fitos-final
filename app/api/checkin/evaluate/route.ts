@@ -1,3 +1,4 @@
+// app/api/checkin/evaluate/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -26,32 +27,73 @@ const s3Client = (accountId && accessKey && secretKey) ? new S3Client({
 
 export async function POST(req: Request) {
     try {
-        const { checkinId, coachFeedback, userId, images } = await req.json();
+        const { checkinId, coachFeedback, userId, images, customOldPhotos, silent } = await req.json();
 
-        if (!coachFeedback) {
-            return NextResponse.json({ error: "O texto do laudo (coachFeedback) é obrigatório." }, { status: 400 });
+        if (!coachFeedback && !silent) {
+            return NextResponse.json({ error: "O texto do laudo é obrigatório." }, { status: 400 });
         }
 
+        let finalFeedback = coachFeedback || "";
         let checkIn;
 
+        // 🔥 O MOTOR QUE FALTAVA: Upar fotos da Galeria pro R2 e injetar o código [COMPARE] 🔥
+        if (customOldPhotos && Array.isArray(customOldPhotos) && customOldPhotos.length > 0) {
+            if (!s3Client) {
+                return NextResponse.json({ error: "Erro: R2 não configurado." }, { status: 500 });
+            }
+
+            let uploadedOldUrls: string[] = [];
+
+            for (let i = 0; i < customOldPhotos.length; i++) {
+                const base64Data = customOldPhotos[i];
+                
+                // Se o slot estiver vazio (Ex: subiu Frente e Costas, mas não subiu a foto de Lado)
+                if (!base64Data || base64Data.trim() === '') {
+                    uploadedOldUrls.push('null'); // Guarda a posição vazia para não quebrar a ordem da tela dividida
+                    continue;
+                }
+
+                const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, "");
+                const buffer = Buffer.from(cleanBase64, 'base64');
+                const fileName = `compare_base/${checkinId || userId}/base_${Date.now()}_${crypto.randomBytes(3).toString('hex')}.jpg`;
+
+                const command = new PutObjectCommand({
+                    Bucket: bucketName,
+                    Key: fileName,
+                    Body: buffer,
+                    ContentType: "image/jpeg",
+                });
+
+                await s3Client.send(command);
+                uploadedOldUrls.push(`${publicUrl}/${fileName}`);
+            }
+
+            // Junta os links do R2 e cria o carimbo secreto no texto
+            const joinedUrls = uploadedOldUrls.join('|');
+            finalFeedback = `[COMPARE:${joinedUrls}]\n` + finalFeedback;
+        }
+
+        // 🔥 ATUALIZA CHECK-IN (Fluxo Padrão da tela de Checkins) 🔥
         if (checkinId) {
             checkIn = await prisma.checkIn.update({
                 where: { id: checkinId },
-                data: { coachFeedback },
+                data: { coachFeedback: finalFeedback },
                 include: { user: { select: { name: true, pushToken: true } } }
             });
         } 
+        // 🔥 CRIA NOVO CHECK-IN (Vindo da tela de Laboratório IA) 🔥
         else if (userId) {
             let uploadedUrls: string[] = [];
 
             if (images && images.length > 0) {
-                
                 if (!s3Client) {
-                    return NextResponse.json({ error: "Erro no Servidor: Falha ao conectar com Cloudflare R2. Verifique as credenciais." }, { status: 500 });
+                    return NextResponse.json({ error: "Erro: R2 não configurado." }, { status: 500 });
                 }
 
                 for (let i = 0; i < images.length; i++) {
                     const base64Data = typeof images[i] === 'string' ? images[i] : (images[i].data || '');
+                    if (!base64Data || base64Data.trim() === '') continue;
+
                     const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, "");
                     const buffer = Buffer.from(cleanBase64, 'base64');
                     
@@ -73,7 +115,7 @@ export async function POST(req: Request) {
                 data: {
                     userId: userId,
                     date: new Date(),
-                    coachFeedback: coachFeedback,
+                    coachFeedback: finalFeedback,
                     photoFront: uploadedUrls[0] || null,
                     photoSide: uploadedUrls[1] || null,
                     photoBack: uploadedUrls[2] || null,
@@ -88,7 +130,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Faltam parâmetros (checkinId ou userId)." }, { status: 400 });
         }
 
-        if (checkIn.user?.pushToken) {
+        // 🔥 PUSH NOTIFICATION (Não envia se for Baixa Silenciosa) 🔥
+        if (checkIn.user?.pushToken && !silent) {
             fetch('https://exp.host/--/api/v2/push/send', {
                 method: 'POST',
                 headers: { Accept: 'application/json', 'Accept-encoding': 'application/json', 'Content-Type': 'application/json' },
@@ -98,13 +141,17 @@ export async function POST(req: Request) {
                     title: '📋 Relatório Técnico Disponível!',
                     body: 'O Coach analisou seu shape e enviou um novo laudo. Toque para ver!',
                 }),
-            }).catch(err => console.log("Erro ao enviar push pro aluno:", err));
+            }).catch(err => console.log("Erro ao enviar push:", err));
         }
 
-        return NextResponse.json({ success: true, checkIn });
+        return NextResponse.json({ 
+            success: true, 
+            checkIn,
+            updatedFeedback: finalFeedback
+        });
 
     } catch (error) {
         console.error("Erro checkin/evaluate:", error);
-        return NextResponse.json({ error: "Erro interno ao salvar avaliação e fazer o upload." }, { status: 500 });
+        return NextResponse.json({ error: "Erro interno ao salvar avaliação." }, { status: 500 });
     }
 }
