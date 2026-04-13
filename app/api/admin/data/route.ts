@@ -28,6 +28,14 @@ export async function GET(req: Request) {
             orderBy: { createdAt: 'desc' }, 
             take: 1,
             select: { id: true, endDate: true, name: true }
+        },
+        // 🔥 A MÁGICA AQUI: O banco de dados já conta automaticamente os checkins sem laudo
+        _count: {
+            select: {
+                checkIns: {
+                    where: { coachFeedback: null }
+                }
+            }
         }
     };
 
@@ -65,8 +73,7 @@ export async function GET(req: Request) {
       include: { user: { select: { name: true, photoUrl: true } } } 
     });
 
-    // 🔥 A CIRURGIA SALVADORA: Removi o maldito { coachId: null } daqui. 
-    // Agora ele não puxa mais o banco inteiro e não trava a memória do app!
+    // 🔥 A CIRURGIA SALVADORA MANTIDA INTACTA:
     const exercises = await prisma.exercise.findMany({
         where: { coachId: adminId }, 
         orderBy: { name: 'asc' }
