@@ -3,12 +3,15 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// 🔥 AUMENTA O TEMPO LIMITE SE AS FOTOS FOREM PESADAS 🔥
+export const maxDuration = 60; 
+
 const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
   try {
-    // 🔥 AGORA ELE ACEITA FOTOS CUSTOMIZADAS E PESO CUSTOMIZADO (VINDOS DO UPLOAD MANUAL)
-    const { checkInId, oldCheckInId, customOldPhotos, customOldWeight, isFromLab, customCurrentPhotos, contextText } = await req.json();
+    // 🔥 AGORA PUXAMOS O labUserId DIRETO DAQUI (FUGIU DO BLOQUEIO CORS)
+    const { checkInId, oldCheckInId, customOldPhotos, customOldWeight, isFromLab, customCurrentPhotos, contextText, labUserId } = await req.json();
 
     let user: any = null;
     let anamnese: any = null;
@@ -42,23 +45,20 @@ export async function POST(req: Request) {
             if (oldCheckIn && !customOldWeight) oldWeight = oldCheckIn.weight;
         }
     } 
-    // ── 2. COLETA DE DADOS (SE VIER DO LAB IA - AVALIAÇÃO AVULSA COM ALUNO SELECIONADO) ──
-    else if (isFromLab && req.headers.get('userId')) { 
-        const labUserId = req.headers.get('userId');
-        if (labUserId) {
-            user = await prisma.user.findUnique({
-                where: { id: labUserId },
-                include: { anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } }
-            });
-            if (user) anamnese = user.anamneses[0];
-        }
+    // ── 2. COLETA DE DADOS (SE VIER DO LAB IA E TIVER ALUNO SELECIONADO) ──
+    else if (isFromLab && labUserId) { 
+        user = await prisma.user.findUnique({
+            where: { id: labUserId },
+            include: { anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } }
+        });
+        if (user) anamnese = user.anamneses[0];
     }
 
-    // ── IDENTIFICAÇÃO DO PLANO E REGRAS DE NEGÓCIO (Se houver aluno) ──
+    // ── IDENTIFICAÇÃO DO PLANO E REGRAS DE NEGÓCIO ──
     let isChallenge = false;
     let isFichas = false;
     let isBasico = false;
-    let isPremium = true; // Default para Lab IA sem aluno
+    let isPremium = true; 
     let isFirstCheckIn = !oldCheckInId && (!customOldPhotos || customOldPhotos.length === 0);
     let isFinalCheckIn = false;
 
@@ -77,14 +77,14 @@ export async function POST(req: Request) {
 
     // Fotos Atuais
     if (customCurrentPhotos && customCurrentPhotos.length > 0) {
-        allPhotoUrls = [...customCurrentPhotos]; // Do Lab IA
+        allPhotoUrls = [...customCurrentPhotos]; 
     } else if (checkIn) {
         allPhotoUrls = [checkIn.photoFront, checkIn.photoSide, checkIn.photoBack, ...(checkIn.extraPhotos || [])];
     }
 
     // Fotos Antigas (Para Comparação)
     if (customOldPhotos && customOldPhotos.length > 0) {
-        allPhotoUrls = [...allPhotoUrls, ...customOldPhotos]; // Upload Manual do Checkin Screen
+        allPhotoUrls = [...allPhotoUrls, ...customOldPhotos]; 
         isFirstCheckIn = false;
     } else if (oldCheckIn) {
         allPhotoUrls.push(oldCheckIn.photoFront, oldCheckIn.photoSide, oldCheckIn.photoBack);
@@ -92,15 +92,12 @@ export async function POST(req: Request) {
 
     const validUrls = allPhotoUrls.filter(Boolean) as string[];
     
-    // Transforma em Base64 para a IA
     const imageParts = await Promise.all(validUrls.map(async (url) => {
         try {
-            // Se já for base64 (vindo direto do app mobile no Lab), só formata
             if (url.startsWith('data:image')) {
                 const base64Data = url.replace(/^data:image\/\w+;base64,/, "");
                 return { inlineData: { data: base64Data, mimeType: "image/jpeg" } };
             }
-            // Se for URL do R2, faz o download
             const response = await fetch(url);
             const buffer = await response.arrayBuffer();
             return { inlineData: { data: Buffer.from(buffer).toString("base64"), mimeType: "image/jpeg" } };
@@ -110,10 +107,9 @@ export async function POST(req: Request) {
         }
     }));
 
-    // 🔥 O CALA-A-BOCA DO TYPESCRIPT: Forçamos a tipagem para ele não chorar com o "null"
     const validImageParts = imageParts.filter(Boolean) as any[];
 
-    // ── CONSTRUÇÃO DO SEU PROMPT PERFEITO ──
+    // ── CONSTRUÇÃO DO PROMPT ──
     let blocoAnamnese = "";
     if (isPremium && anamnese) {
       blocoAnamnese = `
@@ -216,7 +212,6 @@ NÃO faça nenhuma oferta, promoção ou menção a outros planos. Foco 100% na 
       `;
     }
 
-    // ── MONTAGEM FINAL DO PROMPT ──
     const prompt = `
 ═══════════════════════════════════════════════════
 IDENTIDADE
