@@ -7,63 +7,112 @@ const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
   try {
-    const { checkInId, oldCheckInId } = await req.json();
+    // 🔥 AGORA ELE ACEITA FOTOS CUSTOMIZADAS E PESO CUSTOMIZADO (VINDOS DO UPLOAD MANUAL)
+    const { checkInId, oldCheckInId, customOldPhotos, customOldWeight, isFromLab, customCurrentPhotos, contextText } = await req.json();
 
-    if (!checkInId) return NextResponse.json({ error: "ID indefinido" }, { status: 400 });
+    let user: any = null;
+    let anamnese: any = null;
+    let checkIn: any = null;
+    let oldCheckIn: any = null;
 
-    const checkIn = await prisma.checkIn.findUnique({
-      where: { id: checkInId },
-      include: { 
-        user: { 
-          include: { 
-            anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } 
-          } 
-        } 
-      }
-    });
+    let currentWeight = null;
+    let oldWeight = customOldWeight ? parseFloat(customOldWeight) : null;
+    let userFeedback = "";
 
-    if (!checkIn) return NextResponse.json({ error: "Check-in não encontrado" }, { status: 404 });
+    // ── 1. COLETA DE DADOS (SE VIER DO BANCO DE DADOS - PADRÃO CHECKIN) ──
+    if (checkInId) {
+        checkIn = await prisma.checkIn.findUnique({
+            where: { id: checkInId },
+            include: { 
+                user: { 
+                    include: { anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } } 
+                } 
+            }
+        });
 
-    let oldCheckIn = null;
-    if (oldCheckInId) {
-      oldCheckIn = await prisma.checkIn.findUnique({ where: { id: oldCheckInId } });
+        if (!checkIn) return NextResponse.json({ error: "Check-in não encontrado" }, { status: 404 });
+        
+        user = checkIn.user;
+        anamnese = user.anamneses[0];
+        currentWeight = checkIn.weight;
+        userFeedback = checkIn.feedback || "";
+
+        if (oldCheckInId) {
+            oldCheckIn = await prisma.checkIn.findUnique({ where: { id: oldCheckInId } });
+            if (oldCheckIn && !customOldWeight) oldWeight = oldCheckIn.weight;
+        }
+    } 
+    // ── 2. COLETA DE DADOS (SE VIER DO LAB IA - AVALIAÇÃO AVULSA COM ALUNO SELECIONADO) ──
+    else if (isFromLab && req.headers.get('userId')) { 
+        const labUserId = req.headers.get('userId');
+        if (labUserId) {
+            user = await prisma.user.findUnique({
+                where: { id: labUserId },
+                include: { anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } }
+            });
+            if (user) anamnese = user.anamneses[0];
+        }
     }
 
-    const user = checkIn.user;
-    const anamnese = user.anamneses[0]; 
-    
-    // ── Identificação do Plano ──
-    const isChallenge = user.plan === 'CHALLENGE_21';
-    const isFichas = user.plan === 'FICHA_8S' || user.plan === 'FICHAS'; 
-    const isBasico = user.plan === 'PERFORMANCE' || user.plan === 'standard' || user.plan === 'LOW_COST';
-    const isPremium = !isChallenge && !isFichas && !isBasico;
+    // ── IDENTIFICAÇÃO DO PLANO E REGRAS DE NEGÓCIO (Se houver aluno) ──
+    let isChallenge = false;
+    let isFichas = false;
+    let isBasico = false;
+    let isPremium = true; // Default para Lab IA sem aluno
+    let isFirstCheckIn = !oldCheckInId && (!customOldPhotos || customOldPhotos.length === 0);
+    let isFinalCheckIn = false;
 
-    const isFirstCheckIn = !oldCheckIn;
+    if (user) {
+        isChallenge = user.plan === 'CHALLENGE_21';
+        isFichas = user.plan === 'FICHA_8S' || user.plan === 'FICHAS'; 
+        isBasico = user.plan === 'PERFORMANCE' || user.plan === 'standard' || user.plan === 'LOW_COST';
+        isPremium = !isChallenge && !isFichas && !isBasico;
 
-    const checkInCount = await prisma.checkIn.count({ where: { userId: user.id } });
-    const isFinalCheckIn = (isChallenge && checkInCount >= 2) || (isFichas && checkInCount >= 2);
+        const checkInCount = await prisma.checkIn.count({ where: { userId: user.id } });
+        isFinalCheckIn = (isChallenge && checkInCount >= 2) || (isFichas && checkInCount >= 2);
+    }
 
-    // ── Coleta de Fotos ──
-    const allPhotoUrls = [
-      checkIn.photoFront, 
-      checkIn.photoSide, 
-      checkIn.photoBack, 
-      ...(checkIn.extraPhotos || [])
-    ];
+    // ── COLETA DE FOTOS PARA O GEMINI ──
+    let allPhotoUrls: string[] = [];
 
-    if (oldCheckIn) {
-      allPhotoUrls.push(oldCheckIn.photoFront, oldCheckIn.photoSide, oldCheckIn.photoBack);
+    // Fotos Atuais
+    if (customCurrentPhotos && customCurrentPhotos.length > 0) {
+        allPhotoUrls = [...customCurrentPhotos]; // Do Lab IA
+    } else if (checkIn) {
+        allPhotoUrls = [checkIn.photoFront, checkIn.photoSide, checkIn.photoBack, ...(checkIn.extraPhotos || [])];
+    }
+
+    // Fotos Antigas (Para Comparação)
+    if (customOldPhotos && customOldPhotos.length > 0) {
+        allPhotoUrls = [...allPhotoUrls, ...customOldPhotos]; // Upload Manual do Checkin Screen
+        isFirstCheckIn = false;
+    } else if (oldCheckIn) {
+        allPhotoUrls.push(oldCheckIn.photoFront, oldCheckIn.photoSide, oldCheckIn.photoBack);
     }
 
     const validUrls = allPhotoUrls.filter(Boolean) as string[];
     
+    // Transforma em Base64 para a IA
     const imageParts = await Promise.all(validUrls.map(async (url) => {
-      const response = await fetch(url);
-      const buffer = await response.arrayBuffer();
-      return { inlineData: { data: Buffer.from(buffer).toString("base64"), mimeType: "image/jpeg" } };
+        try {
+            // Se já for base64 (vindo direto do app mobile no Lab), só formata
+            if (url.startsWith('data:image')) {
+                const base64Data = url.replace(/^data:image\/\w+;base64,/, "");
+                return { inlineData: { data: base64Data, mimeType: "image/jpeg" } };
+            }
+            // Se for URL do R2, faz o download
+            const response = await fetch(url);
+            const buffer = await response.arrayBuffer();
+            return { inlineData: { data: Buffer.from(buffer).toString("base64"), mimeType: "image/jpeg" } };
+        } catch (e) {
+            console.error("Erro ao processar imagem para IA:", e);
+            return null;
+        }
     }));
 
-    // ── Contexto da Anamnese (somente Premium) ──
+    const validImageParts = imageParts.filter(Boolean);
+
+    // ── CONSTRUÇÃO DO SEU PROMPT PERFEITO ──
     let blocoAnamnese = "";
     if (isPremium && anamnese) {
       blocoAnamnese = `
@@ -73,35 +122,43 @@ export async function POST(req: Request) {
 - Limitações/Dores: ${anamnese.limitacoes?.join(', ') || 'Nenhuma reportada'}
 - Cirurgias: ${anamnese.cirurgias?.join(', ') || 'Nenhuma'}
 - Equipamentos disponíveis: ${anamnese.equipamentos?.join(', ') || 'Academia completa'}
-- Objetivo declarado: ${anamnese.objetivo || user.goal || 'Estética Geral'}
+- Objetivo declarado: ${anamnese.objetivo || user?.goal || 'Estética Geral'}
 
 INSTRUÇÃO: Cruze esses dados com o que você VÊ nas fotos de forma natural na conversa.
 Exemplo: "Como você treina 3x por semana, as costas ainda estão precisando de mais estímulo — mas seu plano já está ajustado pra isso."
       `;
     }
 
-    // ── Label e contexto do plano ──
-    let planoLabel = "";
-    let planoContexto = "";
+    let planoLabel = "CONSULTORIA PREMIUM";
+    let planoContexto = "Acompanhamento individualizado 1 a 1. Check-ins a cada 15 dias. Esta é a análise mais completa e personalizada. Use TODOS os dados da anamnese. Aponte detalhes sutis entre check-ins próximos. O aluno paga por essa profundidade — entregue.";
 
-    if (isChallenge) {
-      planoLabel = "DESAFIO 21 DIAS";
-      planoContexto = "Ciclo curto de emagrecimento. O aluno envia fotos no Dia 1 e no Dia 21. Foque em mudanças visíveis de composição: barriga, cintura, inchaço, definição. Use linguagem motivacional — 21 dias é curto e o aluno precisa sentir que valeu a pena.";
-    } else if (isFichas) {
-      planoLabel = "FICHAS DE TREINO 8 SEMANAS";
-      planoContexto = "Ciclo de 56 dias. O aluno envia fotos no Dia 1 e no Dia 56. 8 semanas é tempo suficiente para cobrar mudanças reais de corpo. Seja mais detalhado na análise.";
-    } else if (isBasico) {
-      planoLabel = "PLANO BÁSICO";
-      planoContexto = "Acompanhamento mensal. Check-ins a cada 30 dias. A análise deve ser objetiva e direta, sem enrolação. Pode haver vários check-ins ao longo do tempo.";
-    } else {
-      planoLabel = "CONSULTORIA PREMIUM";
-      planoContexto = "Acompanhamento individualizado 1 a 1. Check-ins a cada 15 dias. Esta é a análise mais completa e personalizada. Use TODOS os dados da anamnese. Aponte detalhes sutis entre check-ins próximos. O aluno paga por essa profundidade — entregue.";
+    if (user) {
+        if (isChallenge) {
+            planoLabel = "DESAFIO 21 DIAS";
+            planoContexto = "Ciclo curto de emagrecimento. O aluno envia fotos no Dia 1 e no Dia 21. Foque em mudanças visíveis de composição: barriga, cintura, inchaço, definição. Use linguagem motivacional — 21 dias é curto e o aluno precisa sentir que valeu a pena.";
+        } else if (isFichas) {
+            planoLabel = "FICHAS DE TREINO 8 SEMANAS";
+            planoContexto = "Ciclo de 56 dias. O aluno envia fotos no Dia 1 e no Dia 56. 8 semanas é tempo suficiente para cobrar mudanças reais de corpo. Seja mais detalhado na análise.";
+        } else if (isBasico) {
+            planoLabel = "PLANO BÁSICO";
+            planoContexto = "Acompanhamento mensal. Check-ins a cada 30 dias. A análise deve ser objetiva e direta, sem enrolação. Pode haver vários check-ins ao longo do tempo.";
+        }
     }
 
-    // ── Bloco de Momento (Ponto de Partida vs Evolução) ──
     let blocoMomento = "";
 
-    if (isFirstCheckIn) {
+    if (isFromLab && !oldCheckInId && (!customOldPhotos || customOldPhotos.length === 0)) {
+        blocoMomento = `
+── MOMENTO: ANÁLISE AVULSA (LABORATÓRIO IA) ──
+Esta é uma análise de rotina ou avaliação isolada do shape atual.
+${contextText ? `\nDIRECIONAMENTO DO COACH: "${contextText}" (Dê extrema prioridade a este direcionamento na sua análise).` : ''}
+
+O QUE FAZER:
+- Faça um raio-X visual honesto do corpo atual.
+- Aponte os pontos fortes e o que precisa de trabalho.
+- NÃO fale em "ponto de partida" ou "evolução", pois é uma foto avulsa. Apenas analise o momento atual.
+        `;
+    } else if (isFirstCheckIn) {
       blocoMomento = `
 ── MOMENTO: PONTO DE PARTIDA (DIA 01) ──
 Este é o primeiro registro visual do aluno. Não existe "antes" para comparar.
@@ -121,11 +178,12 @@ O QUE NÃO FAZER:
       blocoMomento = `
 ── MOMENTO: COMPARATIVO DE EVOLUÇÃO ──
 Você está recebendo fotos ATUAIS e fotos ANTERIORES do mesmo aluno.
-As primeiras ${oldCheckIn ? '3' : ''} fotos são as ATUAIS. As últimas são as ANTERIORES.
+As primeiras fotos (geralmente 3) são as ATUAIS. As últimas são as ANTERIORES (Base de comparação).
+${contextText ? `\nDIRECIONAMENTO DO COACH: "${contextText}" (Leve isso em consideração ao comparar).` : ''}
 
 O QUE FAZER:
 - Compare foto por foto (frente com frente, lado com lado, costas com costas).
-- Aponte mudanças concretas que você VÊ, usando linguagem acessível. Ex: "a região da cintura afinouvisualemente", "os ombros estão mais largos em relação à cintura", "as costas estão com mais volume".
+- Aponte mudanças concretas que você VÊ, usando linguagem acessível. Ex: "a região da cintura afinou visualemente", "os ombros estão mais largos em relação à cintura", "as costas estão com mais volume".
 - Se houve perda de peso, comente se visualmente parece que perdeu gordura ou se o corpo ficou "murcho" (indicando perda de massa).
 - Se houve EVOLUÇÃO: celebre, seja específico sobre onde melhorou e diga que o plano está funcionando.
 - Se NÃO houve mudança visível: seja honesto mas construtivo. Explique que vamos ajustar a rota, e que isso faz parte. Nunca desanime o aluno.
@@ -137,9 +195,7 @@ O QUE NÃO FAZER:
       `;
     }
 
-    // ── Bloco de Upsell (somente Desafio e Fichas no check-in final) ──
     let blocoUpsell = "";
-
     if (isFinalCheckIn && (isChallenge || isFichas)) {
       blocoUpsell = `
 ── MOMENTO DE TRANSIÇÃO (UPSELL NATURAL) ──
@@ -159,7 +215,7 @@ NÃO faça nenhuma oferta, promoção ou menção a outros planos. Foco 100% na 
       `;
     }
 
-    // ── Prompt Final ──
+    // ── MONTAGEM FINAL DO PROMPT ──
     const prompt = `
 ═══════════════════════════════════════════════════
 IDENTIDADE
@@ -188,11 +244,11 @@ ${planoContexto}
 ═══════════════════════════════════════════════════
 DADOS DO ALUNO
 ═══════════════════════════════════════════════════
-- Nome: ${user.name}
-- Objetivo: ${user.goal || anamnese?.objetivo || "Estética Geral"}
-- Peso atual: ${checkIn.weight ? checkIn.weight + ' kg' : 'Não informado'}
-${oldCheckIn?.weight ? `- Peso anterior: ${oldCheckIn.weight} kg (diferença: ${((checkIn.weight || 0) - (oldCheckIn.weight || 0)).toFixed(1)} kg)` : ''}
-- Comentário do aluno: "${checkIn.feedback || "Nenhum comentário enviado"}"
+- Nome: ${user?.name || 'Aluno'}
+- Objetivo: ${user?.goal || anamnese?.objetivo || "Estética Geral"}
+- Peso atual: ${currentWeight ? currentWeight + ' kg' : 'Não informado'}
+${oldWeight ? `- Peso anterior da base de comparação: ${oldWeight} kg (diferença: ${(parseFloat(currentWeight || 0) - oldWeight).toFixed(1)} kg)` : ''}
+- Comentário do aluno: "${userFeedback || "Nenhum comentário enviado"}"
 ${blocoAnamnese}
 
 ═══════════════════════════════════════════════════
@@ -241,14 +297,14 @@ FORMATO DE SAÍDA
 - NÃO use termos técnicos sem explicar. Se precisar mencionar um músculo, diga o nome popular ou explique onde fica.
     `;
 
-    // ── Chamada ao Gemini ──
     const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("Chave da API não encontrada.");
     
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    const result = await model.generateContent([prompt, ...imageParts]);
+    // O pulo do gato: Junta o texto com as fotos baixadas ou enviadas e manda pro Gemini
+    const result = await model.generateContent([prompt, ...validImageParts]);
     const text = result.response.text();
 
     return NextResponse.json({ 
@@ -257,7 +313,7 @@ FORMATO DE SAÍDA
     });
 
   } catch (error) {
-    console.error("Erro na análise IA:", error);
+    console.error("Erro na análise IA Universal:", error);
     return NextResponse.json({ error: "Erro no motor" }, { status: 500 });
   }
 }
