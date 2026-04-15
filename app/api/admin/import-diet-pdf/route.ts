@@ -1,4 +1,3 @@
-// app/api/admin/import-diet-pdf/route.ts
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
@@ -20,18 +19,34 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 🔥 CORREÇÃO: Usando require nativo para driblar o erro de minificação do Next.js no Render
-    const pdfParse = require('pdf-parse');
+    // 🔥 USANDO A BIBLIOTECA QUE JÁ FUNCIONA NOS SEUS TREINOS (Sem erro de minificação)
+    const PDFParser = require("pdf2json");
     
-    // O trator agora vai rodar sem engasgar
-    const data = await pdfParse(buffer);
-    const extractedText = data.text;
+    const extractedText = await new Promise<string>((resolve, reject) => {
+      const pdfParser = new PDFParser();
+      
+      pdfParser.on("pdfParser_dataError", (errData: any) => reject(errData.parserError));
+      pdfParser.on("pdfParser_dataReady", (pdfData: any) => {
+         let text = "";
+         // 🚜 EXTRAÇÃO FORÇADA: Passando por cima das tabelas do Nutrium
+         if (pdfData && pdfData.Pages) {
+             pdfData.Pages.forEach((page: any) => {
+                 page.Texts.forEach((t: any) => {
+                     text += decodeURIComponent(t.R[0].T) + " ";
+                 });
+                 text += "\n";
+             });
+         }
+         resolve(text);
+      });
 
-    console.log(`🔥 PDF DE DIETA LIDO! Páginas: ${data.numpages} | Tamanho do texto:`, extractedText.length);
+      pdfParser.parseBuffer(buffer);
+    });
+
+    console.log(`🔥 PDF DE DIETA LIDO COM SUCESSO! Tamanho do texto:`, extractedText.length);
 
     if (extractedText.length < 150) {
-        console.error("Texto extraído é muito curto:", extractedText);
-        return NextResponse.json({ error: "O PDF parece estar vazio ou é uma imagem escaneada." }, { status: 400 });
+        return NextResponse.json({ error: "O PDF não pôde ser lido ou está vazio." }, { status: 400 });
     }
 
     const systemPrompt = `
@@ -76,13 +91,10 @@ export async function POST(req: Request) {
 
     const aiResponse = response.choices[0].message.content;
     
-    if (!aiResponse) {
-        throw new Error("Resposta da IA vazia");
-    }
+    if (!aiResponse) throw new Error("Resposta da IA vazia");
 
     const parsedData = JSON.parse(aiResponse);
 
-    // Prepara os UniqueIDs para o Front-end não engasgar
     const mealsReadyForApp = (parsedData.meals || []).map((meal: any) => ({
         id: Date.now().toString() + Math.random().toString(36).substring(7),
         name: meal.name || 'Refeição',
