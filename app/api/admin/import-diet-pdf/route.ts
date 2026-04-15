@@ -3,8 +3,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const dynamic = 'force-dynamic';
 
-// 🔥 Cole sua chave do Gemini aqui dentro das aspas
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'SUA_CHAVE_DO_GEMINI_AQUI');
+// 🔥 A sua chave já está segura no .env do Render
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
   try {
@@ -15,11 +15,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Nenhum arquivo PDF foi enviado." }, { status: 400 });
     }
 
-    // Prepara o PDF para o Gemini "olhar" para ele
+    // Prepara o PDF em base64 para a visão nativa da IA
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    // 🔥 ATUALIZADO: GEMINI 2.0 FLASH (O MAIS RÁPIDO E INTELIGENTE)
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const systemPrompt = `
     Você é um nutricionista esportivo e especialista em estruturação de dados.
@@ -51,7 +52,6 @@ export async function POST(req: Request) {
     4. HORÁRIOS: Procure horários como "08:00", "12:00" que antecedem as refeições.
     `;
 
-    // O Gemini engole o PDF direto, sem precisar de bibliotecas de extração no Node
     const result = await model.generateContent([
       systemPrompt,
       { inlineData: { data: base64Data, mimeType: 'application/pdf' } }
