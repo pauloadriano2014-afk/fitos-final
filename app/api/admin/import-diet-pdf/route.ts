@@ -1,12 +1,10 @@
-// app/api/admin/import-diet-pdf/route.ts
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const dynamic = 'force-dynamic';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// 🔥 Cole sua chave do Gemini aqui dentro das aspas
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'SUA_CHAVE_DO_GEMINI_AQUI');
 
 export async function POST(req: Request) {
   try {
@@ -17,49 +15,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Nenhum arquivo PDF foi enviado." }, { status: 400 });
     }
 
+    // Prepara o PDF para o Gemini "olhar" para ele
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    // 🔥 USANDO A BIBLIOTECA QUE JÁ FUNCIONA NOS SEUS TREINOS (Sem erro de minificação)
-    const PDFParser = require("pdf2json");
-    
-    const extractedText = await new Promise<string>((resolve, reject) => {
-      // NÃO usamos o modo "1" (texto puro) aqui, porque ele ignora as tabelas do Nutrium.
-      // Vamos pegar o objeto cru e extrair nós mesmos.
-      const pdfParser = new PDFParser();
-      
-      pdfParser.on("pdfParser_dataError", (errData: any) => reject(errData.parserError));
-      pdfParser.on("pdfParser_dataReady", (pdfData: any) => {
-         let text = "";
-         // 🚜 EXTRAÇÃO FORÇADA: Varrendo cada linha e decodificando o texto do Nutrium
-         if (pdfData && pdfData.Pages) {
-             pdfData.Pages.forEach((page: any) => {
-                 if (page.Texts) {
-                     page.Texts.forEach((t: any) => {
-                         if (t.R && t.R[0] && t.R[0].T) {
-                             text += decodeURIComponent(t.R[0].T) + " ";
-                         }
-                     });
-                     text += "\n";
-                 }
-             });
-         }
-         resolve(text);
-      });
-
-      pdfParser.parseBuffer(buffer);
-    });
-
-    console.log(`🔥 PDF DE DIETA LIDO COM SUCESSO! Tamanho do texto:`, extractedText.length);
-
-    if (extractedText.length < 150) {
-        return NextResponse.json({ error: "O PDF não pôde ser lido corretamente ou está vazio." }, { status: 400 });
-    }
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const systemPrompt = `
     Você é um nutricionista esportivo e especialista em estruturação de dados.
-    Vou enviar o texto extraído de uma dieta em PDF (formato Nutrium ou texto livre do Coach).
-    Sua tarefa é extrair os dados e convertê-los EXATAMENTE para este formato JSON:
+    Estou te enviando um PDF de dieta (gerado pelo Nutrium ou similar).
+    Leia o documento e extraia os dados EXATAMENTE para este formato JSON:
 
     {
       "meals": [
@@ -71,7 +36,7 @@ export async function POST(req: Request) {
             {
               "name": "Nome do alimento limpo",
               "amount": "Apenas o número numérico (Ex: 100, 2, 1.5)",
-              "unit": "APENAS UMA DESSAS: g, ml, unid, colher, fatia, xícara",
+              "unit": "APENAS UMA DESSAS E NO SINGULAR: g, ml, unid, colher, fatia, xícara",
               "groupId": "Identificador único do grupo de substituição (Ex: grp1)"
             }
           ]
@@ -79,28 +44,23 @@ export async function POST(req: Request) {
       ]
     }
 
-    REGRAS DE EXTRAÇÃO ADICIONAIS:
-    1. AGRUPAMENTO ("ou" / "SUBSTITUIÇÃO"): Se o PDF diz "100g de Frango OU 3 Ovos" (na mesma linha ou em linhas seguintes), eles são substitutos e pertencem ao MESMO "groupId". Se o texto diz "SUBSTITUIÇÃO 1:", todos os itens dessa substituição recebem o mesmo "groupId" da opção principal. Alimentos que NÃO SÃO substitutos devem ter "groupId" diferentes.
-    2. UNIDADES: Traduza para as unidades padrão e NO SINGULAR. Exemplo: "gramas" vira "g", "unidades" vira "unid", "fatias" vira "fatia".
-    3. QUANTIDADES (NUTRIUM): O Nutrium costuma escrever "1 unidade pequena de filé de frango grelhado (100 g)". Extraia PREFERENCIALMENTE a gramatura exata. Nesse caso, amount: "100", unit: "g". Ignore o "1 unidade pequena".
+    REGRAS DE EXTRAÇÃO:
+    1. AGRUPAMENTO ("ou" / "SUBSTITUIÇÃO"): Se o PDF diz "100g de Frango OU 3 Ovos", eles são substitutos e pertencem ao MESMO "groupId".
+    2. UNIDADES: Traduza para as unidades padrão. "gramas" vira "g", "unidades" vira "unid", "fatias" vira "fatia".
+    3. QUANTIDADES (NUTRIUM): Se disser "1 unidade pequena de filé de frango grelhado (100 g)", extraia a gramatura: amount: "100", unit: "g". Ignore o "1 unidade pequena".
     4. HORÁRIOS: Procure horários como "08:00", "12:00" que antecedem as refeições.
     `;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Texto do PDF de Dieta:\n\n${extractedText}` }
-      ],
-      temperature: 0.1 
-    });
+    // O Gemini engole o PDF direto, sem precisar de bibliotecas de extração no Node
+    const result = await model.generateContent([
+      systemPrompt,
+      { inlineData: { data: base64Data, mimeType: 'application/pdf' } }
+    ]);
 
-    const aiResponse = response.choices[0].message.content;
-    
-    if (!aiResponse) throw new Error("Resposta da IA vazia");
+    const responseText = result.response.text();
+    let cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
 
-    const parsedData = JSON.parse(aiResponse);
+    const parsedData = JSON.parse(cleanJson);
 
     const mealsReadyForApp = (parsedData.meals || []).map((meal: any) => ({
         id: Date.now().toString() + Math.random().toString(36).substring(7),
@@ -119,9 +79,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ meals: mealsReadyForApp }, { status: 200 });
 
   } catch (error: any) {
-    console.error("Erro na importação da Dieta via IA:", error);
+    console.error("Erro na importação da Dieta via Gemini:", error);
     return NextResponse.json(
-      { error: "Falha ao processar o PDF da Dieta.", details: error.message },
+      { error: "Falha ao processar o PDF com o Gemini.", details: error.message },
       { status: 500 }
     );
   }
