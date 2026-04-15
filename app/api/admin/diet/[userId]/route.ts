@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0; // 🔥 FORÇA O SERVIDOR A LER O BANCO EM TEMPO REAL (MATA O CACHE)
+export const revalidate = 0;
 
 const prisma = new PrismaClient();
 
@@ -11,12 +11,8 @@ export async function GET(req: Request, { params }: { params: { userId: string }
   try {
     const { userId } = params;
 
-    // 🔥 BUSCA A DIETA MAIS RECENTE DO USUÁRIO (ORDENADO POR DATA)
-    // 🔥 CIRURGIA: Busca a última dieta salva, ignorando filtros que travam o GET
     const diet = await prisma.diet.findFirst({
-      where: { 
-        userId: userId.trim() // Remove espaços se houver
-      },
+      where: { userId: userId.trim() },
       orderBy: { createdAt: 'desc' },
       include: {
         meals: {
@@ -27,13 +23,44 @@ export async function GET(req: Request, { params }: { params: { userId: string }
     });
 
     if (!diet) {
-      return NextResponse.json({ error: "Nenhuma dieta encontrada" }, { status: 404 });
+      return NextResponse.json({ error: 'Nenhuma dieta encontrada' }, { status: 404 });
     }
 
-    return NextResponse.json(diet);
+    // 🔥 Mapeia campos do Prisma → formato que o DietScreen.js espera
+    const formatted = {
+      id:           diet.id,
+      goal:         diet.goal,
+      totalKcal:    diet.totalKcal,
+      totalProtein: diet.totalProtein,
+      totalCarbs:   diet.totalCarbs,
+      totalFats:    diet.totalFats,
+      waterIntake:  diet.waterIntake,
+      generalNotes: diet.generalNotes,
+      meals: diet.meals.map((meal: any) => ({
+        id:    meal.id,
+        name:  meal.name,
+        time:  meal.time,
+        notes: meal.notes || '',
+        items: meal.items.map((item: any) => ({
+          id:                  item.id,
+          substitutionGroupId: item.substitutionGroupId,
+          name:                item.name,
+          amount:              item.amount,
+          unit:                item.unit,
+          // DietScreen usa estes nomes para calcular macros por refeição
+          gram_amount:         item.gramAmount ?? item.amount,
+          calories_per_100:    item.calories,
+          p:                   item.protein,
+          c:                   item.carbs,
+          f:                   item.fats,
+        }))
+      }))
+    };
+
+    return NextResponse.json(formatted);
 
   } catch (error) {
-    console.error("Erro ao buscar dieta do aluno:", error);
-    return NextResponse.json({ error: "Erro interno no servidor" }, { status: 500 });
+    console.error('Erro ao buscar dieta do aluno:', error);
+    return NextResponse.json({ error: 'Erro interno no servidor' }, { status: 500 });
   }
 }
