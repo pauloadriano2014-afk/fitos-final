@@ -9,40 +9,41 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { userId, name, goal, totalKcal, totalProtein, totalCarbs, totalFats, waterIntake, generalNotes, meals } = body;
 
-    if (!userId) {
-      return NextResponse.json({ error: "ID do usuário é obrigatório" }, { status: 400 });
+    // 🔥 CIRURGIA: BLINDAGEM CONTRA ID BUGADO
+    if (!userId || userId === "[object Object]" || userId === "undefined") {
+      console.error("❌ TENTATIVA DE SALVAR DIETA COM ID INVÁLIDO:", userId);
+      return NextResponse.json({ error: "ID do usuário inválido ou corrompido." }, { status: 400 });
     }
 
-    // 🔥 PADRÃO ELITE: Transação blindada para garantir a integridade do banco
     const newDiet = await prisma.$transaction(async (tx) => {
       
-      // 1. Inativa qualquer dieta atual do aluno (Mantém o histórico, mas tira do app principal)
+      // 1. Inativa qualquer dieta atual
       await tx.diet.updateMany({
         where: { userId: userId, isActive: true },
         data: { isActive: false }
       });
 
-      // 2. Cria a nova dieta em cascata (Dieta -> Refeições -> Alimentos)
+      // 2. Cria a nova dieta (Dieta -> Refeições -> Alimentos)
       const diet = await tx.diet.create({
         data: {
           userId,
           name: name || "Plano Alimentar",
-          goal,
-          totalKcal,
-          totalProtein,
-          totalCarbs,
-          totalFats,
-          waterIntake,
-          generalNotes,
+          goal: goal || "Não definido",
+          totalKcal: parseFloat(totalKcal) || 0,
+          totalProtein: parseFloat(totalProtein) || 0,
+          totalCarbs: parseFloat(totalCarbs) || 0,
+          totalFats: parseFloat(totalFats) || 0,
+          waterIntake: waterIntake || "Não definido",
+          generalNotes: generalNotes || "",
           isActive: true,
           meals: {
-            create: meals.map((meal: any, mIndex: number) => ({
+            create: (meals || []).map((meal: any, mIndex: number) => ({
               name: meal.name,
               time: meal.time,
               order: mIndex,
-              notes: meal.notes,
+              notes: meal.notes || "",
               items: {
-                create: meal.items.map((item: any) => ({
+                create: (meal.items || []).map((item: any) => ({
                   name: item.name,
                   amount: parseFloat(item.amount) || 0,
                   unit: item.unit || "g",
@@ -66,11 +67,11 @@ export async function POST(req: Request) {
       return diet;
     });
 
-    console.log(`✅ DIETA SALVA COM SUCESSO PARA O USER: ${userId}`);
+    console.log(`✅ DIETA GRAVADA COM SUCESSO NO BANCO PARA O USER: ${userId}`);
     return NextResponse.json(newDiet);
 
   } catch (error) {
-    console.error("❌ ERRO AO SALVAR DIETA:", error);
-    return NextResponse.json({ error: "Erro interno ao salvar dieta" }, { status: 500 });
+    console.error("❌ ERRO CRÍTICO NO PRISMA AO SALVAR:", error);
+    return NextResponse.json({ error: "Falha técnica ao gravar no banco." }, { status: 500 });
   }
 }

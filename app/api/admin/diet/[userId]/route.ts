@@ -3,17 +3,21 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0; // 🔥 FORÇA O SERVIDOR A LER O BANCO EM TEMPO REAL (MATA O CACHE)
+
 const prisma = new PrismaClient();
 
 export async function GET(req: Request, { params }: { params: { userId: string } }) {
   try {
     const { userId } = params;
 
-    // Busca a dieta ativa do aluno, trazendo as refeições e os alimentos ordenados
+    // 🔥 BUSCA A DIETA MAIS RECENTE DO USUÁRIO (ORDENADO POR DATA)
     const diet = await prisma.diet.findFirst({
       where: { 
-        userId: userId, 
-        isActive: true 
+        userId: userId
+      },
+      orderBy: {
+        createdAt: 'desc' // Pega sempre a última salva
       },
       include: {
         meals: {
