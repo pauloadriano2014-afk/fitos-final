@@ -25,7 +25,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         nextCheckInDate: true,
         evaluationUrl: true,
         disableCheckIn: true,
-        // 🔥 CAMPOS CRÍTICOS PARA O RAIO-X
+        dietGoal: true,
+        dietModule: true, // 🔥 CHAVE DO MÓDULO DE DIETA
         goal: true,
         level: true,
         // 🔥 Carrega a anamnese mais recente
@@ -38,6 +39,20 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
           where: { archived: false },
           orderBy: { createdAt: 'desc' },
           take: 1
+        },
+        // 🔥 Carrega a dieta ativa com as refeições e alimentos
+        diets: {
+          where: { isActive: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            meals: {
+              orderBy: { order: 'asc' },
+              include: {
+                items: true
+              }
+            }
+          }
         }
       }
     });
