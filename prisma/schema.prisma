@@ -39,6 +39,9 @@ model User {
   goal            String?
   level           String?
 
+  // 🔥 CHAVE DO MÓDULO DE DIETA (Toggle do Admin)
+  dietModule      Boolean  @default(false)
+
   createdAt DateTime @default(now())
 
   // 🔥 MULTI-TENANT (SISTEMA DE MÚLTIPLOS COACHES)
@@ -60,6 +63,7 @@ model User {
   history    WorkoutHistory[] 
   assessments Assessment[]        
   checkIns   CheckIn[]
+  diets      Diet[] // 🔥 NOVO: Relacionamento com as Dietas
   
   // PA FLIX & Comunidade
   contentLikes   ContentLike[]
@@ -146,16 +150,89 @@ model Anamnese {
   objetivo        String    
   nivel           String    
     
-  // Rotina
+  // Rotina de Treino
   frequencia      Int       
   tempoDisponivel Int      @default(60) 
     
   // Saúde (Arrays)
-  limitacoes      String[] 
-  cirurgias       String[] 
-  equipamentos    String[] 
+  limitacoes      String[]  
+  cirurgias       String[]  
+  equipamentos    String[]  
+
+  // 🔥 NUTRIÇÃO E DIETA (Campos opcionais para o plano Elite) 🔥
+  mealsPerDay     Int?      // Quantas vezes prefere comer ao dia (2 a 8)
+  allergies       String?   @db.Text // Alergias e Intolerâncias
+  foodPreferences String?   @db.Text // Gostos e Preferências
+  foodAversions   String?   @db.Text // O que não gosta de comer
+  supplements     String?   @db.Text // Suplementos que já utiliza
+  wakeUpTime      String?   // Horário que acorda
+  sleepTime       String?   // Horário que dorme
+  workTime        String?   // Horário de trabalho
+  trainTime       String?   // Horário do treino
     
   createdAt       DateTime @default(now())
+}
+
+// 🔥 NOVO: MOTOR DE DIETAS (PADRÃO ELITE) 🔥
+model Diet {
+  id            String    @id @default(uuid())
+  userId        String    
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Nível 1: Rota Expressa (Upload)
+  pdfUrl        String?   
+  
+  // Nível 2: Dieta Dinâmica no App
+  name          String    @default("Plano Alimentar")
+  goal          String?   // Ex: Emagrecimento, Hipertrofia
+  
+  // Macros Totais Diários
+  totalKcal     Float?
+  totalProtein  Float?
+  totalCarbs    Float?
+  totalFats     Float?
+  
+  // Recomendações Gerais
+  waterIntake   String?   // Ex: 3 Litros
+  freeMeal      String?   // Ex: 1x por semana
+  generalNotes  String?   @db.Text // Suplementação base, finais de semana, etc.
+  
+  isActive      Boolean   @default(true)
+  meals         Meal[]    
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Meal {
+  id        String     @id @default(uuid())
+  dietId    String
+  diet      Diet       @relation(fields: [dietId], references: [id], onDelete: Cascade)
+  name      String     // Ex: Café da Manhã, Almoço, Pré-Treino
+  time      String?    // Ex: 08:00
+  order     Int        @default(0) 
+  notes     String?    @db.Text // Instruções de preparo, ex: "Faça uma crepioca com o ovo e a tapioca"
+  
+  items     FoodItem[]
+}
+
+model FoodItem {
+  id                  String   @id @default(uuid())
+  mealId              String
+  meal                Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  
+  name                String   // Ex: Arroz Branco, Frango, Pão Integral
+  amount              Float    // Ex: 100, 2, 1
+  unit                String   // Ex: gramas, ml, fatia, colher de sopa, unidade, xícara
+  
+  // Macros do item (opcional, para compor o total)
+  protein             Float?
+  carbs               Float?
+  fats                Float?
+  calories            Float?
+
+  // 🔥 O SEGREDO DO "OU": Itens com o mesmo ID neste campo são substitutos entre si
+  substitutionGroupId String?  
 }
 
 // 🔥 COLEÇÕES DE TEMPLATES (A "Netflix do Fitness")
