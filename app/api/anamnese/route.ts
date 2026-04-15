@@ -7,16 +7,21 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     
+    // 🔥 1. DESTRUTURANDO TODOS OS CAMPOS QUE VÊM DO APP
     const { 
       userId, peso, altura, imc, aguaIdeal,
       objetivo, nivel, frequencia, tempoDisponivel,
-      limitacoes, cirurgias, equipamentos
+      limitacoes, cirurgias, equipamentos,
+      // 🔥 CAMPOS NUTRICIONAIS (VIP/ELITE)
+      mealsPerDay, wakeUpTime, sleepTime, workTime, trainTime,
+      allergies, foodPreferences, foodAversions, supplements
     } = body;
 
     if (!userId || !peso || !altura) {
       return NextResponse.json({ error: "Dados obrigatórios faltando" }, { status: 400 });
     }
 
+    // 🔥 2. GRAVANDO TUDO NO BANCO DE DADOS
     const novaAnamnese = await prisma.anamnese.create({
       data: {
         userId,
@@ -31,6 +36,17 @@ export async function POST(req: Request) {
         limitacoes: Array.isArray(limitacoes) ? limitacoes : [],
         cirurgias: Array.isArray(cirurgias) ? cirurgias : [],
         equipamentos: Array.isArray(equipamentos) ? equipamentos : [],
+        
+        // 🔥 INJETANDO OS DADOS DE NUTRIÇÃO PARA O RAIO-X
+        mealsPerDay: mealsPerDay ? Number(mealsPerDay) : null,
+        wakeUpTime: wakeUpTime || null,
+        sleepTime: sleepTime || null,
+        workTime: workTime || null,
+        trainTime: trainTime || null,
+        allergies: allergies || null,
+        foodPreferences: foodPreferences || null,
+        foodAversions: foodAversions || null,
+        supplements: supplements || null,
       },
     });
 
