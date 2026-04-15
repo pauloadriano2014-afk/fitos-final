@@ -1,6 +1,7 @@
 // app/api/admin/import-diet-pdf/route.ts
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import pdfParse from 'pdf-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,25 +21,20 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 🔥 PDF2JSON PARA EXTRAÇÃO BRUTA (Mesmo padrão que você já usa nos treinos)
-    const PDFParser = require("pdf2json");
-    
-    const extractedText = await new Promise<string>((resolve, reject) => {
-      const pdfParser = new PDFParser(null, 1);
-      
-      pdfParser.on("pdfParser_dataError", (errData: any) => reject(errData.parserError));
-      pdfParser.on("pdfParser_dataReady", () => {
-        resolve(pdfParser.getRawTextContent());
-      });
+    // 🔥 PDF-PARSE: O TRATOR QUE LÊ AS TABELAS DO NUTRIUM
+    const data = await pdfParse(buffer);
+    const extractedText = data.text;
 
-      pdfParser.parseBuffer(buffer);
-    });
+    console.log(`🔥 PDF DE DIETA LIDO! Páginas: ${data.numpages} | Tamanho do texto:`, extractedText.length);
 
-    console.log(`🔥 PDF DE DIETA LIDO COM SUCESSO! Tamanho do texto:`, extractedText.length);
+    if (extractedText.length < 150) {
+        console.error("Texto extraído é muito curto:", extractedText);
+        return NextResponse.json({ error: "O PDF parece estar vazio ou é uma imagem escaneada." }, { status: 400 });
+    }
 
     const systemPrompt = `
     Você é um nutricionista esportivo e especialista em estruturação de dados.
-    Vou enviar o texto extraído de uma dieta em PDF (pode ser formato Nutrium ou texto livre do Coach).
+    Vou enviar o texto extraído de uma dieta em PDF (formato Nutrium ou texto livre do Coach).
     Sua tarefa é extrair os dados e convertê-los EXATAMENTE para este formato JSON:
 
     {
@@ -50,7 +46,7 @@ export async function POST(req: Request) {
           "items": [
             {
               "name": "Nome do alimento limpo",
-              "amount": "Apenas o número da quantidade (Ex: 100, 2, 1.5)",
+              "amount": "Apenas o número numérico (Ex: 100, 2, 1.5)",
               "unit": "APENAS UMA DESSAS: g, ml, unid, colher, fatia, xícara",
               "groupId": "Identificador único do grupo de substituição (Ex: grp1)"
             }
@@ -60,10 +56,10 @@ export async function POST(req: Request) {
     }
 
     REGRAS DE EXTRAÇÃO ADICIONAIS:
-    1. AGRUPAMENTO ("OU" / "SUBSTITUIÇÃO"): Se o PDF diz "100g de Frango OU 3 Ovos", eles são substitutos e pertencem ao MESMO "groupId". Se o texto diz "SUBSTITUIÇÃO 1:", todos os itens dessa substituição recebem o mesmo "groupId" da opção principal. Alimentos que NÃO SÃO substitutos devem ter "groupId" diferentes.
+    1. AGRUPAMENTO ("ou" / "SUBSTITUIÇÃO"): Se o PDF diz "100g de Frango OU 3 Ovos" (na mesma linha ou em linhas seguintes), eles são substitutos e pertencem ao MESMO "groupId". Se o texto diz "SUBSTITUIÇÃO 1:", todos os itens dessa substituição recebem o mesmo "groupId" da opção principal. Alimentos que NÃO SÃO substitutos devem ter "groupId" diferentes.
     2. UNIDADES: Traduza para as unidades padrão. Exemplo: "gramas" vira "g", "unidades" vira "unid", "fatias" vira "fatia".
-    3. QUANTIDADES: O campo "amount" deve ser numérico (ex: "100", não "100g").
-    4. HORÁRIOS: Procure horários como "08:00", "12:00" que sempre antecedem as refeições.
+    3. QUANTIDADES (NUTRIUM): O Nutrium costuma escrever "1 unidade pequena de filé de frango grelhado (100 g)". Extraia PREFERENCIALMENTE a gramatura exata. Nesse caso, amount: "100", unit: "g". Ignore o "1 unidade pequena".
+    4. HORÁRIOS: Procure horários como "08:00", "12:00" que antecedem as refeições.
     `;
 
     const response = await openai.chat.completions.create({
