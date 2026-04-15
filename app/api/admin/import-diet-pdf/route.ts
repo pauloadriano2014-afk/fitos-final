@@ -1,7 +1,6 @@
 // app/api/admin/import-diet-pdf/route.ts
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import pdfParse from 'pdf-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +20,10 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 🔥 PDF-PARSE: O TRATOR QUE LÊ AS TABELAS DO NUTRIUM
+    // 🔥 CORREÇÃO: Usando require nativo para driblar o erro de minificação do Next.js no Render
+    const pdfParse = require('pdf-parse');
+    
+    // O trator agora vai rodar sem engasgar
     const data = await pdfParse(buffer);
     const extractedText = data.text;
 
