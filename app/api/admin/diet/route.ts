@@ -1,8 +1,19 @@
-// app/api/admin/diet/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+
+// 🔥 FILTROS BLINDADOS: Impedem o Prisma de engasgar e dar Erro 500
+const safeNum = (val: any) => {
+  if (val === null || val === undefined) return 0;
+  const n = parseFloat(val);
+  return isNaN(n) ? 0 : n;
+};
+
+const safeStr = (val: any) => {
+  if (val === null || val === undefined || val === '') return null;
+  return String(val);
+};
 
 export async function POST(req: Request) {
   try {
@@ -14,7 +25,6 @@ export async function POST(req: Request) {
     } = body;
 
     if (!userId || userId === '[object Object]' || userId === 'undefined') {
-      console.error('❌ TENTATIVA DE SALVAR DIETA COM ID INVÁLIDO:', userId);
       return NextResponse.json({ error: 'ID do usuário inválido ou corrompido.' }, { status: 400 });
     }
 
@@ -26,41 +36,41 @@ export async function POST(req: Request) {
         data: { isActive: false }
       });
 
-      // 2. Cria nova dieta completa
+      // 2. Cria nova dieta completa (Agora passando pelos filtros de segurança)
       const diet = await tx.diet.create({
         data: {
-          userId,
+          userId: String(userId),
           name: name || 'Plano Alimentar',
           goal: goal || 'Não definido',
-          totalKcal:    parseFloat(totalKcal)    || 0,
-          totalProtein: parseFloat(totalProtein) || 0,
-          totalCarbs:   parseFloat(totalCarbs)   || 0,
-          totalFats:    parseFloat(totalFats)    || 0,
-          waterIntake:  waterIntake  || 'Não definido',
+          totalKcal: safeNum(totalKcal),
+          totalProtein: safeNum(totalProtein),
+          totalCarbs: safeNum(totalCarbs),
+          totalFats: safeNum(totalFats),
+          waterIntake: waterIntake || 'Não definido',
           generalNotes: generalNotes || '',
           isActive: true,
           meals: {
             create: (meals || []).map((meal: any, mIndex: number) => ({
-              name:  meal.name,
-              time:  meal.time,
-              order: mIndex,
+              name: meal.name || 'Refeição',
+              time: meal.time || '00:00',
+              order: safeNum(mIndex),
               notes: meal.notes || '',
               items: {
                 create: (meal.items || []).map((item: any) => ({
-                  name:   item.name,
-                  amount: parseFloat(item.amount) || 0,
-                  unit:   item.unit || 'g',
+                  name: item.name || 'Alimento',
+                  amount: safeNum(item.amount),
+                  unit: item.unit || 'g',
 
-                  gramAmount: parseFloat(item.gram_amount) || parseFloat(item.amount) || 0,
+                  gramAmount: safeNum(item.gram_amount) || safeNum(item.amount),
 
-                  // Macros e Calorias blindados (Se vier de um jeito ou de outro, ele pega)
-                  calories: parseFloat(item.calories_per_100) || parseFloat(item.calories) || 0,
-                  protein:  parseFloat(item.p) || parseFloat(item.protein) || 0,
-                  carbs:    parseFloat(item.c) || parseFloat(item.carbs) || 0,
-                  fats:     parseFloat(item.f) || parseFloat(item.fats) || 0,
+                  // Macros convertidos à força para Float
+                  calories: safeNum(item.calories_per_100) || safeNum(item.calories),
+                  protein: safeNum(item.p) || safeNum(item.protein),
+                  carbs: safeNum(item.c) || safeNum(item.carbs),
+                  fats: safeNum(item.f) || safeNum(item.fats),
 
-                  // 🔥 CORREÇÃO DO AGRUPAMENTO: Agora ele acha o grupo de substituição certo!
-                  substitutionGroupId: item.groupId || item.substitutionGroupId || null,
+                  // Grupo convertido à força para String
+                  substitutionGroupId: safeStr(item.groupId) || safeStr(item.substitutionGroupId),
                 }))
               }
             }))
@@ -79,8 +89,9 @@ export async function POST(req: Request) {
     console.log(`✅ DIETA GRAVADA COM SUCESSO NO BANCO PARA O USER: ${userId}`);
     return NextResponse.json(newDiet);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ ERRO CRÍTICO NO PRISMA AO SALVAR:', error);
-    return NextResponse.json({ error: 'Falha técnica ao gravar no banco.' }, { status: 500 });
+    // Agora, se o banco recusar, ele vai cuspir o motivo EXATO no console em vez de um "500" genérico
+    return NextResponse.json({ error: 'Falha técnica ao gravar no banco.', details: error.message }, { status: 500 });
   }
 }
