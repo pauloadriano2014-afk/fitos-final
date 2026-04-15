@@ -12,19 +12,16 @@ export async function GET(req: Request, { params }: { params: { userId: string }
     const { userId } = params;
 
     // 🔥 BUSCA A DIETA MAIS RECENTE DO USUÁRIO (ORDENADO POR DATA)
+    // 🔥 CIRURGIA: Busca a última dieta salva, ignorando filtros que travam o GET
     const diet = await prisma.diet.findFirst({
       where: { 
-        userId: userId
+        userId: userId.trim() // Remove espaços se houver
       },
-      orderBy: {
-        createdAt: 'desc' // Pega sempre a última salva
-      },
+      orderBy: { createdAt: 'desc' },
       include: {
         meals: {
           orderBy: { order: 'asc' },
-          include: {
-            items: true
-          }
+          include: { items: true }
         }
       }
     });
