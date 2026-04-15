@@ -13,11 +13,13 @@ export async function POST(req: Request) {
     }
 
     const newDiet = await prisma.$transaction(async (tx) => {
+      // 1. Inativa dietas anteriores
       await tx.diet.updateMany({
         where: { userId, isActive: true },
         data: { isActive: false }
       });
 
+      // 2. Cria a nova dieta sem o campo inexistente (gramAmount)
       return await tx.diet.create({
         data: {
           userId: String(userId),
@@ -38,14 +40,13 @@ export async function POST(req: Request) {
               notes: meal.notes || '',
               items: {
                 create: (meal.items || []).map((item: any) => {
-                  // 🔥 Tratamento extremo para o Grupo de Substituição não quebrar o banco
                   let groupId = item.groupId || item.substitutionGroupId;
                   
                   return {
                     name: item.name || 'Alimento',
-                    amount: Number(item.amount) || 0,
+                    amount: Number(item.amount) || 0, // O banco usa este campo!
                     unit: item.unit || 'g',
-                    gramAmount: Number(item.gram_amount) || Number(item.amount) || 0,
+                    // 🔥 REMOVIDO gramAmount daqui para não dar erro
                     calories: Number(item.calories_per_100) || Number(item.calories) || 0,
                     protein: Number(item.p) || Number(item.protein) || 0,
                     carbs: Number(item.c) || Number(item.carbs) || 0,
@@ -61,12 +62,11 @@ export async function POST(req: Request) {
       });
     });
 
-    console.log(`✅ DIETA SALVA: ${userId}`);
+    console.log(`✅ DIETA SALVA COM SUCESSO: ${userId}`);
     return NextResponse.json(newDiet);
 
   } catch (error: any) {
     console.error('❌ ERRO CRÍTICO NO PRISMA:', error.message);
-    // 🔥 AGORA ELE MANDA O ERRO REAL PARA O APLICATIVO LER!
     return NextResponse.json({ 
       error: 'Erro no Banco de Dados', 
       details: error.message 
