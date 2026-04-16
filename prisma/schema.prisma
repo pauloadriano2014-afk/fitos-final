@@ -217,6 +217,7 @@ model Meal {
   time      String?    // Ex: 08:00
   order     Int        @default(0) 
   notes     String?    @db.Text // Instruções de preparo, ex: "Faça uma crepioca com o ovo e a tapioca"
+  dayType   String     @default("PADRÃO")
   
   items     FoodItem[]
 }
