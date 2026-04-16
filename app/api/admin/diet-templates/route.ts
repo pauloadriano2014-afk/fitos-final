@@ -46,3 +46,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Falha ao gravar o template no banco de dados." }, { status: 500 });
   }
 }
+
+// Adicione no final do arquivo app/api/admin/diet-templates/route.ts
+
+// 🔥 ROTA PARA DELETAR UM TEMPLATE
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: "ID do template não fornecido." }, { status: 400 });
+    }
+
+    await prisma.dietTemplate.delete({
+      where: { id }
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Erro ao deletar template:", error);
+    return NextResponse.json({ error: "Falha ao deletar o template." }, { status: 500 });
+  }
+}
