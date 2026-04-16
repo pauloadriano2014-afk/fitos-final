@@ -7,12 +7,14 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   try {
     const { id } = params;
     const body = await req.json();
-    const { name, startDate, endDate, exercises } = body;
+    // 🔥 RECEBENDO A CHAVE DA CARGA AQUI
+    const { name, startDate, endDate, exercises, workoutModel } = body;
 
     const workout = await prisma.workout.update({
       where: { id },
       data: {
         name,
+        workoutModel: workoutModel || "CARGA", // 🔥 INJETANDO NO BANCO DE DADOS
         startDate: new Date(startDate),
         endDate: new Date(endDate),
       },

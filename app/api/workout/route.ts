@@ -110,6 +110,7 @@ export async function POST(req: Request) {
                 name: `PROTOCOLO: ${focus.toUpperCase()}`,
                 goal: goal,
                 level: level,
+                workoutModel: "CARGA", // Garantia do modelo
                 startDate: new Date(),
                 isVisible: true
             }
@@ -122,7 +123,8 @@ export async function POST(req: Request) {
     }
 
     // Lógica original de criação manual do Admin (Mantida Intocada)
-    const { userId, name, exercises, startDate, endDate, archiveCurrent } = body;
+    // 🔥 ADICIONADO A CHAVE DE CARGA
+    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel } = body;
 
     if (archiveCurrent) {
         await prisma.workout.updateMany({
@@ -134,7 +136,8 @@ export async function POST(req: Request) {
     const workout = await prisma.workout.create({
       data: { 
           userId, 
-          name: name || "Planejamento Atual", 
+          name: name || "Planejamento Atual",
+          workoutModel: workoutModel || "CARGA", // 🔥 INJETANDO NO BANCO DE DADOS
           level: "Personalizado",
           startDate: startDate ? new Date(startDate) : new Date(),
           endDate: endDate ? new Date(endDate) : null

@@ -103,6 +103,9 @@ model Workout {
   startDate DateTime? @default(now()) 
   endDate   DateTime? 
   archived  Boolean   @default(false) 
+
+  // 🔥 NOVO: MODELO DO TREINO (CARGA vs BASE) 🔥
+  workoutModel String @default("CARGA")
     
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
