@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -258,7 +260,7 @@ model WorkoutTemplate {
   name      String   
   goal      String   
   level     String   
-  data      String    @db.Text 
+  data      String   @db.Text 
   createdAt DateTime @default(now())
 
   // ISOLAMENTO: A qual Coach este template pertence?
@@ -311,20 +313,20 @@ model Assessment {
     
   // Nível 1: Básico
   weight          Float    
-  height          Float?    
+  height          Float?   
   photos          String[] 
     
   // Nível 2: Medidas (cm)
-  neck            Float?    
-  shoulders       Float?    
-  chest           Float?    
-  arms            Float?    
-  forearms        Float?    
-  waist           Float?    
-  abdomen         Float?    
-  hips            Float?    
-  thighs          Float?    
-  calves          Float?    
+  neck            Float?   
+  shoulders       Float?   
+  chest           Float?   
+  arms            Float?   
+  forearms        Float?   
+  waist           Float?   
+  abdomen         Float?   
+  hips            Float?   
+  thighs          Float?   
+  calves          Float?   
     
   // Nível 3: Composição (mm)
   method          String?  // "POLLOCK_7", "BIO", "MANUAL"
@@ -338,9 +340,9 @@ model Assessment {
   foldThigh       Float?
     
   // Resultados
-  bodyFat         Float?    
-  visceralFat     Float?    
-  muscleMass      Float?    
+  bodyFat         Float?   
+  visceralFat     Float?   
+  muscleMass      Float?   
     
   notes           String?   
   createdAt       DateTime @default(now())
@@ -473,4 +475,23 @@ model ContentAccess {
   createdAt DateTime @default(now())
 
   @@unique([userId, contentId]) 
+}
+
+// 🔥 TEMPLATES DE DIETA COMPLETA
+model DietTemplate {
+  id          String   @id @default(uuid())
+  name        String   // Ex: "Emagrecimento Mulher 1500kcal"
+  goal        String?
+  totalKcal   Float?
+  meals       Json     // Salva a estrutura inteira de refeições
+  createdAt   DateTime @default(now())
+}
+
+// 🔥 TEMPLATES DE REFEIÇÃO INDIVIDUAL
+model MealTemplate {
+  id          String   @id @default(uuid())
+  name        String   // Ex: "Pré-Treino Padrão Músculo"
+  category    String?  // Ex: "Pré-Treino", "Almoço"
+  items       Json     // Salva os alimentos e substitutos
+  createdAt   DateTime @default(now())
 }
