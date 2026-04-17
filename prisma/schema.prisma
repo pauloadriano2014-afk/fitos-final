@@ -18,6 +18,8 @@ model User {
   phone     String?
   gender    String?
   aiLogs    AiLog[]
+  dailyCheckins   DailyCheckin[]
+  dietFeedbacks   DietFeedback[]
     
   // Controle de Acesso e Planos
   plan_tier String   @default("standard")
@@ -495,4 +497,32 @@ model MealTemplate {
   category    String?  // Ex: "Pré-Treino", "Almoço"
   items       Json     // Salva os alimentos e substitutos
   createdAt   DateTime @default(now())
+}
+
+// 🔥 No final do seu schema.prisma
+
+model DailyCheckin {
+  id        String   @id @default(uuid())
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      String   // Formato YYYY-MM-DD
+  water_ml  Int      @default(0)
+  fome      String?
+  digestao  String?
+  energia   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, date])
+}
+
+model DietFeedback {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  satiety          String?
+  difficulty       String?
+  requestedChanges String?  @db.Text
+  read             Boolean  @default(false)
+  createdAt        DateTime @default(now())
 }

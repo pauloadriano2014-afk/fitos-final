@@ -22,7 +22,9 @@ export async function GET(req: Request) {
         plan_tier: true,
         currentXP: true,
         active: true, 
-        photoUrl: true, 
+        photoUrl: true,
+        nextCheckInDate: true, // 🔥 INCLUA ESTA LINHA
+        disableCheckIn: true,  // 🔥 E ESTA LINHA AQUI 
         workouts: {
             where: { archived: false },
             orderBy: { createdAt: 'desc' }, 
