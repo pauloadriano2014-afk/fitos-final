@@ -8,29 +8,34 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
         const { 
-            userId, appExperience, appExpReason, appImprovement, 
-            coachSupport, checkinExperience, checkinReason, dietExperience 
+            userId, appExperience, appExpReason, visualExperience, toolsExperience, toolsReason, 
+            appImprovement, coachSupport, checkinExperience, checkinReason, 
+            dietExperience, dietAdherence, dietSubstitutions 
         } = body;
 
         if (!userId) {
             return NextResponse.json({ error: 'Usuário não identificado.' }, { status: 400 });
         }
 
-        // 1. Salva a pesquisa no banco
         const newSurvey = await prisma.satisfactionSurvey.create({
             data: {
                 userId,
                 appExperience,
                 appExpReason,
+                visualExperience,
+                toolsExperience,
+                toolsReason,
                 appImprovement,
                 coachSupport,
                 checkinExperience,
                 checkinReason,
-                dietExperience
+                dietExperience,
+                dietAdherence,
+                dietSubstitutions
             }
         });
 
-        // 2. 🔥 DESLIGA O GATILHO PARA O MODAL NÃO APARECER MAIS
+        // Desliga o gatilho no banco
         await prisma.user.update({
             where: { id: userId },
             data: { npsRequested: false }

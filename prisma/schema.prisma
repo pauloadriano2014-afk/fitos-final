@@ -508,22 +508,30 @@ model DietFeedback {
   createdAt        DateTime @default(now())
 }
 
-// 🔥 NOVO: MODELO DE PESQUISA DE SATISFAÇÃO (NPS) 🔥
+// 🔥 MODELO DE PESQUISA DE SATISFAÇÃO (NPS) ATUALIZADO 🔥
 model SatisfactionSurvey {
   id                String   @id @default(uuid())
   userId            String
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  appExperience     String   // 'EXCELENTE', 'BOM', 'CONFUSO'
+  appExperience     String   
   appExpReason      String?  @db.Text 
+  
+  // 🔥 NOVAS PERGUNTAS DE SISTEMA 🔥
+  visualExperience  String?  // Avaliação do design do app
+  toolsExperience   String?  // Avaliação da IA, Vídeos, RM, Biomecânica
+  toolsReason       String?  @db.Text // Justificativa se achar confuso
   
   appImprovement    String?  @db.Text 
   coachSupport      String?  @db.Text 
   
-  checkinExperience String   // 'PERFEITO', 'OK', 'DIFICULDADE'
+  checkinExperience String   
   checkinReason     String?  @db.Text 
   
+  // 🔥 NOVAS PERGUNTAS DE DIETA 🔥
   dietExperience    String?  @db.Text 
+  dietAdherence     String?  // 100%, Escorregando, Dificil
+  dietSubstitutions String?  // Avaliação do sistema de substituição
   
   createdAt         DateTime @default(now())
   readByAdmin       Boolean  @default(false)
