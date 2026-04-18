@@ -8,9 +8,10 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
         const { 
-            userId, appExperience, appExpReason, visualExperience, toolsExperience, toolsReason, 
-            appImprovement, coachSupport, checkinExperience, checkinReason, 
-            dietExperience, dietAdherence, dietSubstitutions 
+            userId, appExperience, appExpReason, visualExperience, visualReason, 
+            toolsExperience, toolsReason, libraryExperience, appImprovement, 
+            coachSupport, checkinExperience, checkinReason, 
+            dietExperience, dietAdherence, dietRoutine, dietTools, dietToolsReason, dietSubstitutions 
         } = body;
 
         if (!userId) {
@@ -23,19 +24,23 @@ export async function POST(req: Request) {
                 appExperience,
                 appExpReason,
                 visualExperience,
+                visualReason,
                 toolsExperience,
                 toolsReason,
+                libraryExperience,
                 appImprovement,
                 coachSupport,
                 checkinExperience,
                 checkinReason,
                 dietExperience,
                 dietAdherence,
+                dietRoutine,
+                dietTools,
+                dietToolsReason,
                 dietSubstitutions
             }
         });
 
-        // Desliga o gatilho no banco
         await prisma.user.update({
             where: { id: userId },
             data: { npsRequested: false }

@@ -517,21 +517,28 @@ model SatisfactionSurvey {
   appExperience     String   
   appExpReason      String?  @db.Text 
   
-  // 🔥 NOVAS PERGUNTAS DE SISTEMA 🔥
-  visualExperience  String?  // Avaliação do design do app
-  toolsExperience   String?  // Avaliação da IA, Vídeos, RM, Biomecânica
-  toolsReason       String?  @db.Text // Justificativa se achar confuso
+  visualExperience  String?  
+  visualReason      String?  @db.Text // Sugestão de nova cor
+
+  toolsExperience   String?  
+  toolsReason       String?  @db.Text 
   
+  // 🔥 NOVA PERGUNTA: Biblioteca
+  libraryExperience String?
+
   appImprovement    String?  @db.Text 
   coachSupport      String?  @db.Text 
   
   checkinExperience String   
   checkinReason     String?  @db.Text 
   
-  // 🔥 NOVAS PERGUNTAS DE DIETA 🔥
+  // 🔥 NOVAS PERGUNTAS DE DIETA
   dietExperience    String?  @db.Text 
-  dietAdherence     String?  // 100%, Escorregando, Dificil
-  dietSubstitutions String?  // Avaliação do sistema de substituição
+  dietAdherence     String?  
+  dietRoutine       String?  // Avaliação da divisão de dias (Treino, Descanso)
+  dietTools         String?  // Avaliação de Água e Lista de Mercado
+  dietToolsReason   String?  @db.Text // Sugestões para ferramentas da dieta
+  dietSubstitutions String?  
   
   createdAt         DateTime @default(now())
   readByAdmin       Boolean  @default(false)
