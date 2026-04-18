@@ -1,3 +1,4 @@
+// app/api/survey/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -15,6 +16,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Usuário não identificado.' }, { status: 400 });
         }
 
+        // 1. Salva a pesquisa no banco
         const newSurvey = await prisma.satisfactionSurvey.create({
             data: {
                 userId,
@@ -26,6 +28,12 @@ export async function POST(req: Request) {
                 checkinReason,
                 dietExperience
             }
+        });
+
+        // 2. 🔥 DESLIGA O GATILHO PARA O MODAL NÃO APARECER MAIS
+        await prisma.user.update({
+            where: { id: userId },
+            data: { npsRequested: false }
         });
 
         return NextResponse.json({ message: 'Pesquisa enviada com sucesso!', survey: newSurvey }, { status: 201 });

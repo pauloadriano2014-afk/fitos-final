@@ -20,6 +20,7 @@ model User {
   aiLogs          AiLog[]
   dailyCheckins   DailyCheckin[]
   dietFeedbacks   DietFeedback[]
+  npsRequested Boolean @default(false) // Gatilho manual para disparar o NPS
   
   // Controle de Acesso e Planos
   plan_tier       String   @default("standard")
