@@ -23,15 +23,16 @@ export async function GET(req: Request) {
         currentXP: true,
         active: true, 
         photoUrl: true,
-        nextCheckInDate: true, // 🔥 INCLUA ESTA LINHA
-        disableCheckIn: true,  // 🔥 E ESTA LINHA AQUI 
+        nextCheckInDate: true, 
+        disableCheckIn: true,  
+        coachId: true,        // 🔥 NOVO: Identifica se é seu aluno ou da Adri (Treino)
+        nutritionistId: true, // 🔥 NOVO: Identifica quem prescreve a dieta
         workouts: {
             where: { archived: false },
             orderBy: { createdAt: 'desc' }, 
             take: 1,
             select: { id: true, endDate: true, name: true }
         },
-        // 🔥 A MÁGICA AQUI: O banco de dados já conta automaticamente os checkins sem laudo
         _count: {
             select: {
                 checkIns: {
@@ -41,13 +42,9 @@ export async function GET(req: Request) {
         }
     };
 
+    // 🔥 MUDANÇA ELITE: Agora buscamos TODOS os alunos da base, sem travar no adminId.
+    // A separação de "Meus Alunos" e "Alunos Adri" será feita visualmente lá no Frontend!
     const rawUsers = await prisma.user.findMany({
-      where: { 
-          OR: [
-              { coachId: adminId },
-              { coachId: null }
-          ]
-      },
       orderBy: { name: 'asc' },
       select: querySelect
     });
@@ -61,15 +58,8 @@ export async function GET(req: Request) {
     const activeUsers = finalUsers.filter((u: any) => u.active !== false);
     const inactiveUsers = finalUsers.filter((u: any) => u.active === false);
 
+    // 🔥 Feed Global da Equipe
     const recentLogs = await prisma.workoutHistory.findMany({
-      where: { 
-          user: { 
-              OR: [
-                  { coachId: adminId },
-                  { coachId: null }
-              ] 
-          } 
-      },
       take: 5,
       orderBy: { date: 'desc' },
       include: { user: { select: { name: true, photoUrl: true } } } 

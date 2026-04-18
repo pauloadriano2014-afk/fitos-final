@@ -10,83 +10,91 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String?
-  birthDate String?
-  phone     String?
-  gender    String?
-  aiLogs    AiLog[]
+  id              String   @id @default(uuid())
+  email           String   @unique
+  password        String
+  name            String?
+  birthDate       String?
+  phone           String?
+  gender          String?
+  aiLogs          AiLog[]
   dailyCheckins   DailyCheckin[]
   dietFeedbacks   DietFeedback[]
-    
+  
   // Controle de Acesso e Planos
-  plan_tier String   @default("standard")
-  role      String   @default("USER") // ADMIN ou USER
-  plan      String   @default("PERFORMANCE") // FREE, ELITE, VIP
-  active    Boolean  @default(true)
-    
+  plan_tier       String   @default("standard")
+  role            String   @default("USER") // ADMIN, USER ou COACH
+  plan            String   @default("PERFORMANCE") // FREE, ELITE, VIP
+  active          Boolean  @default(true)
+  
   // Dados Rápidos (Cache)
-  currentWeight Float? // Peso atualizado pelo check-in ou avaliação
-    
+  currentWeight   Float? 
+  
   // Gamification & Notificações
-  currentXP Int      @default(0)
-  pushToken String?  // Para notificações OneSignal/Expo
-    
+  currentXP       Int      @default(0)
+  pushToken       String?  
+  
   // Foto de perfil e Avaliação/Check-in
   photoUrl        String?
-  evaluationUrl   String?  // Link da Avaliação em PDF (Google Drive/Canva)
-  nextCheckInDate DateTime? // 🔥 NOVO: Data do próximo check-in definida manualmente pelo Admin
-  disableCheckIn  Boolean  @default(false) // 🔥 NOVO: Desativa a cobrança de check-in
-  dietGoal        String   @default("NONE") // 🔥 NOVO: Sugestão Alimentar do Aluno
+  evaluationUrl   String?  
+  nextCheckInDate DateTime? 
+  disableCheckIn  Boolean  @default(false) 
+  dietGoal        String   @default("NONE") 
   goal            String?
   level           String?
 
   // 🔥 CHAVE DO MÓDULO DE DIETA (Toggle do Admin)
   dietModule      Boolean  @default(false)
 
-  createdAt DateTime @default(now())
+  createdAt       DateTime @default(now())
 
   // 🔥 MULTI-TENANT (SISTEMA DE MÚLTIPLOS COACHES)
-  // Define a qual treinador este aluno pertence
-  coachId   String?
-  coach     User?    @relation("CoachStudents", fields: [coachId], references: [id], onDelete: SetNull)
-  students  User[]   @relation("CoachStudents")
+  // Define a qual treinador (de treinos) este aluno pertence
+  coachId         String?
+  coach           User?    @relation("CoachStudents", fields: [coachId], references: [id], onDelete: SetNull)
+  students        User[]   @relation("CoachStudents")
+
+  // 🔥 NOVO: Define a qual NUTRICIONISTA este aluno pertence
+  nutritionistId  String?
+  nutritionist    User?    @relation("NutritionistStudents", fields: [nutritionistId], references: [id], onDelete: SetNull)
+  dietStudents    User[]   @relation("NutritionistStudents")
 
   // 🔥 CRIAÇÕES EXCLUSIVAS DO COACH (O Muro de Separação)
-  createdExercises  Exercise[]        @relation("CoachExercises")
-  createdTemplates  WorkoutTemplate[] @relation("CoachTemplates")
-  createdNotices    Notice[]          @relation("CoachNotices")
-  createdContents   Content[]         @relation("CoachContents")
-  createdCollections TemplateCollection[] @relation("CoachCollections") // 🔥 NOVO: Pastas/Coleções do Coach
+  createdExercises  Exercise[]          @relation("CoachExercises")
+  createdTemplates  WorkoutTemplate[]   @relation("CoachTemplates")
+  createdNotices    Notice[]            @relation("CoachNotices")
+  createdContents   Content[]           @relation("CoachContents")
+  createdCollections TemplateCollection[] @relation("CoachCollections") 
 
   // Relacionamentos do Aluno
-  workouts   Workout[]
-  anamneses  Anamnese[]
-  history    WorkoutHistory[] 
-  assessments Assessment[]        
-  checkIns   CheckIn[]
-  diets      Diet[] // 🔥 NOVO: Relacionamento com as Dietas
+  workouts        Workout[]
+  anamneses       Anamnese[]
+  history         WorkoutHistory[] 
+  assessments     Assessment[]        
+  checkIns        CheckIn[]
+  diets           Diet[] 
   
   // PA FLIX & Comunidade
-  contentLikes   ContentLike[]
-  contentComments ContentComment[]
-  contentCompletions ContentCompletion[] // Histórico de aulas assistidas
-  unlockedContents ContentAccess[]       // Relação de conteúdos VIP liberados manualmente
+  contentLikes      ContentLike[]
+  contentComments   ContentComment[]
+  contentCompletions ContentCompletion[] 
+  unlockedContents  ContentAccess[]      
+
+  // 🔥 NOVO: Relacionamento de Pesquisas de Satisfação
+  surveys           SatisfactionSurvey[]
 }
 
 model Exercise {
-  id            String   @id @default(uuid())
-  name          String   
-  category      String
-  videoUrl      String?
-  instructions  String?
-  createdAt     DateTime @default(now())
-    
+  id              String   @id @default(uuid())
+  name            String   
+  category        String
+  videoUrl        String?
+  instructions    String?
+  createdAt       DateTime @default(now())
+  
   // 🔥 ISOLAMENTO: A qual Coach este exercício pertence?
-  coachId       String?
-  coach         User?    @relation("CoachExercises", fields: [coachId], references: [id], onDelete: Cascade)
+  coachId         String?
+  coach           User?    @relation("CoachExercises", fields: [coachId], references: [id], onDelete: Cascade)
 
   // Relacionamentos
   workoutExercises WorkoutExercise[] 
@@ -102,7 +110,7 @@ model Workout {
   goal      String?   
   level     String?   
   isVisible Boolean   @default(true)
-    
+  
   // Planejamento
   startDate DateTime? @default(now()) 
   endDate   DateTime? 
@@ -110,7 +118,7 @@ model Workout {
 
   // 🔥 NOVO: MODELO DO TREINO (CARGA vs BASE) 🔥
   workoutModel String @default("CARGA")
-    
+  
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercises WorkoutExercise[]
@@ -118,14 +126,14 @@ model Workout {
 }
 
 model WorkoutExercise {
-  id        String   @id @default(uuid())
-  workoutId String
-  workout   Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-    
+  id          String   @id @default(uuid())
+  workoutId   String
+  workout     Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  
   // Exercício Principal
-  exerciseId String
-  exercise   Exercise @relation(fields: [exerciseId], references: [id])
-    
+  exerciseId  String
+  exercise    Exercise @relation(fields: [exerciseId], references: [id])
+  
   // Exercício Substituto (Opcional)
   substituteId String?
   substitute   Exercise? @relation("SubstituteRelation", fields: [substituteId], references: [id])
@@ -146,21 +154,21 @@ model Anamnese {
   id              String   @id @default(uuid())
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    
+  
   // Dados Físicos
   peso            Float
   altura          Float
   imc             Float?    
   aguaIdeal       Float?    
-    
+  
   // Objetivos
   objetivo        String    
   nivel           String    
-    
+  
   // Rotina de Treino
   frequencia      Int       
   tempoDisponivel Int      @default(60) 
-    
+  
   // Saúde (Arrays)
   limitacoes      String[]  
   cirurgias       String[]  
@@ -176,33 +184,28 @@ model Anamnese {
   sleepTime       String?   // Horário que dorme
   workTime        String?   // Horário de trabalho
   trainTime       String?   // Horário do treino
-    
+  
   createdAt       DateTime @default(now())
 }
 
-// 🔥 NOVO: MOTOR DE DIETAS (PADRÃO ELITE) 🔥
 model Diet {
   id            String    @id @default(uuid())
   userId        String    
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  // Nível 1: Rota Expressa (Upload)
   pdfUrl        String?   
   
-  // Nível 2: Dieta Dinâmica no App
   name          String    @default("Plano Alimentar")
-  goal          String?   // Ex: Emagrecimento, Hipertrofia
+  goal          String?   
   
-  // Macros Totais Diários
   totalKcal     Float?
   totalProtein  Float?
   totalCarbs    Float?
   totalFats     Float?
   
-  // Recomendações Gerais
-  waterIntake   String?   // Ex: 3 Litros
-  freeMeal      String?   // Ex: 1x por semana
-  generalNotes  String?   @db.Text // Suplementação base, finais de semana, etc.
+  waterIntake   String?   
+  freeMeal      String?   
+  generalNotes  String?   @db.Text 
   
   isActive      Boolean   @default(true)
   meals         Meal[]    
@@ -215,10 +218,10 @@ model Meal {
   id        String     @id @default(uuid())
   dietId    String
   diet      Diet       @relation(fields: [dietId], references: [id], onDelete: Cascade)
-  name      String     // Ex: Café da Manhã, Almoço, Pré-Treino
-  time      String?    // Ex: 08:00
+  name      String     
+  time      String?    
   order     Int        @default(0) 
-  notes     String?    @db.Text // Instruções de preparo, ex: "Faça uma crepioca com o ovo e a tapioca"
+  notes     String?    @db.Text 
   dayType   String     @default("PADRÃO")
   
   items     FoodItem[]
@@ -229,32 +232,27 @@ model FoodItem {
   mealId              String
   meal                Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
   
-  name                String   // Ex: Arroz Branco, Frango, Pão Integral
-  amount              Float    // Ex: 100, 2, 1
-  unit                String   // Ex: gramas, ml, fatia, colher de sopa, unidade, xícara
+  name                String   
+  amount              Float    
+  unit                String   
   
-  // Macros do item (opcional, para compor o total)
   protein             Float?
   carbs               Float?
   fats                Float?
   calories            Float?
 
-  // 🔥 O SEGREDO DO "OU": Itens com o mesmo ID neste campo são substitutos entre si
   substitutionGroupId String?  
 }
 
-// 🔥 COLEÇÕES DE TEMPLATES (A "Netflix do Fitness")
 model TemplateCollection {
   id        String   @id @default(uuid())
   name      String
-  color     String   @default("#22c55e") // Verde oficial como padrão
+  color     String   @default("#22c55e") 
   createdAt DateTime @default(now())
 
-  // ISOLAMENTO: A qual Coach pertence esta coleção?
   coachId   String?
   coach     User?    @relation("CoachCollections", fields: [coachId], references: [id], onDelete: Cascade)
 
-  // Relação: Quais templates estão dentro desta pasta?
   templates WorkoutTemplate[]
 }
 
@@ -266,21 +264,18 @@ model WorkoutTemplate {
   data      String   @db.Text 
   createdAt DateTime @default(now())
 
-  // ISOLAMENTO: A qual Coach este template pertence?
   coachId   String?
   coach     User?    @relation("CoachTemplates", fields: [coachId], references: [id], onDelete: Cascade)
 
-  // 🔥 NOVO: Coleção/Pasta a qual este template pertence
   collectionId String?
   collection   TemplateCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
 }
 
-// Histórico de Treinos (Gamification)
 model WorkoutHistory {
   id               String   @id @default(uuid())
   userId           String
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    
+  
   name             String   
   workoutName      String? 
   date             DateTime @default(now())
@@ -298,28 +293,25 @@ model ExerciseHistory {
   id               String         @id @default(uuid())
   workoutHistoryId String
   workoutHistory   WorkoutHistory @relation(fields: [workoutHistoryId], references: [id], onDelete: Cascade)
-    
+  
   exerciseId       String
   exerciseName     String
-    
+  
   setNumber        Int
   weight           Float  
   reps             String 
 }
 
-// Avaliação Física (Pollock/Dobras)
 model Assessment {
   id              String   @id @default(uuid())
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   date            DateTime @default(now())
-    
-  // Nível 1: Básico
+  
   weight          Float    
   height          Float?   
   photos          String[] 
-    
-  // Nível 2: Medidas (cm)
+  
   neck            Float?   
   shoulders       Float?   
   chest           Float?   
@@ -330,10 +322,9 @@ model Assessment {
   hips            Float?   
   thighs          Float?   
   calves          Float?   
-    
-  // Nível 3: Composição (mm)
-  method          String?  // "POLLOCK_7", "BIO", "MANUAL"
-    
+  
+  method          String?  
+  
   foldTriceps     Float?
   foldSubscapular Float?
   foldChest       Float?
@@ -341,38 +332,35 @@ model Assessment {
   foldSuprailiac  Float?
   foldAbdominal   Float?
   foldThigh       Float?
-    
-  // Resultados
+  
   bodyFat         Float?   
   visceralFat     Float?   
   muscleMass      Float?   
-    
+  
   notes           String?   
   createdAt       DateTime @default(now())
 }
 
-// Check-in Diário/Semanal
 model CheckIn {
-  id          String   @id @default(uuid())
-  date        DateTime @default(now())
-    
-  weight      Float?
-  feedback    String?  
-    
-  photoFront  String?  
-  photoBack   String?
-  coachFeedback  String?   // feedback do coach
-  allowMarketing Boolean @default(false)  // autorização de marketing
-  photoSide   String?
-  extraPhotos String[] // 🔥 NOVO: Array para salvar os links das fotos extras
-    
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String   @id @default(uuid())
+  date          DateTime @default(now())
+  
+  weight        Float?
+  feedback      String?  
+  
+  photoFront    String?  
+  photoBack     String?
+  coachFeedback String?  
+  allowMarketing Boolean @default(false)  
+  photoSide     String?
+  extraPhotos   String[] 
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
 }
 
-// Mural de Avisos do Admin
 model Notice {
   id        String   @id @default(uuid())
   title     String
@@ -380,7 +368,6 @@ model Notice {
   active    Boolean  @default(true)
   date      DateTime @default(now())
 
-  // 🔥 ISOLAMENTO: De qual Coach é este aviso?
   coachId   String?
   coach     User?    @relation("CoachNotices", fields: [coachId], references: [id], onDelete: Cascade)
 }
@@ -394,31 +381,28 @@ model AiLog {
   createdAt DateTime @default(now())
 }
 
-// 🔥 PA FLIX (Área de Conteúdo e Comunidade Unificada)
 model Content {
   id          String   @id @default(uuid())
   title       String
   subtitle    String?
   description String?  @db.Text
-    
-  category    String   // Ex: 'TECNICA', 'MINDSET', 'NUTRICAO'
-    
-  type        String   @default("video") // "video", "ebook", "audio"
-  isVIP       Boolean  @default(false)   // Controle de bloqueio
+  
+  category    String   
+  
+  type        String   @default("video") 
+  isVIP       Boolean  @default(false)   
   
   videoUrl    String?  
   pdfUrl      String?  
   audioUrl    String?  
   thumbUrl    String?  
   duration    String?  
-    
+  
   createdAt   DateTime @default(now())
 
-  // 🔥 ISOLAMENTO: A qual Coach pertence este E-book/Vídeo?
   coachId     String?
   coach       User?    @relation("CoachContents", fields: [coachId], references: [id], onDelete: Cascade)
-    
-  // Relações Sociais e Acesso
+  
   likes       ContentLike[]
   comments    ContentComment[]
   completions ContentCompletion[] 
@@ -427,13 +411,13 @@ model Content {
 
 model ContentLike {
   id        String   @id @default(uuid())
-    
+  
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    
+  
   contentId String
   content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
-    
+  
   createdAt DateTime @default(now())
 
   @@unique([userId, contentId])
@@ -442,13 +426,13 @@ model ContentLike {
 model ContentComment {
   id        String   @id @default(uuid())
   text      String   @db.Text
-    
+  
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    
+  
   contentId String
   content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
-    
+  
   createdAt DateTime @default(now())
 }
 
@@ -480,32 +464,28 @@ model ContentAccess {
   @@unique([userId, contentId]) 
 }
 
-// 🔥 TEMPLATES DE DIETA COMPLETA
 model DietTemplate {
   id          String   @id @default(uuid())
-  name        String   // Ex: "Emagrecimento Mulher 1500kcal"
+  name        String   
   goal        String?
   totalKcal   Float?
-  meals       Json     // Salva a estrutura inteira de refeições
+  meals       Json     
   createdAt   DateTime @default(now())
 }
 
-// 🔥 TEMPLATES DE REFEIÇÃO INDIVIDUAL
 model MealTemplate {
   id          String   @id @default(uuid())
-  name        String   // Ex: "Pré-Treino Padrão Músculo"
-  category    String?  // Ex: "Pré-Treino", "Almoço"
-  items       Json     // Salva os alimentos e substitutos
+  name        String   
+  category    String?  
+  items       Json     
   createdAt   DateTime @default(now())
 }
-
-// 🔥 No final do seu schema.prisma
 
 model DailyCheckin {
   id        String   @id @default(uuid())
   studentId String
   student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  date      String   // Formato YYYY-MM-DD
+  date      String   
   water_ml  Int      @default(0)
   fome      String?
   digestao  String?
@@ -525,4 +505,25 @@ model DietFeedback {
   requestedChanges String?  @db.Text
   read             Boolean  @default(false)
   createdAt        DateTime @default(now())
+}
+
+// 🔥 NOVO: MODELO DE PESQUISA DE SATISFAÇÃO (NPS) 🔥
+model SatisfactionSurvey {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  appExperience     String   // 'EXCELENTE', 'BOM', 'CONFUSO'
+  appExpReason      String?  @db.Text 
+  
+  appImprovement    String?  @db.Text 
+  coachSupport      String?  @db.Text 
+  
+  checkinExperience String   // 'PERFEITO', 'OK', 'DIFICULDADE'
+  checkinReason     String?  @db.Text 
+  
+  dietExperience    String?  @db.Text 
+  
+  createdAt         DateTime @default(now())
+  readByAdmin       Boolean  @default(false)
 }
