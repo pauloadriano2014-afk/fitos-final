@@ -1,3 +1,4 @@
+// app/api/admin/data/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -17,6 +18,7 @@ export async function GET(req: Request) {
         id: true,
         name: true,
         email: true,
+        phone: true,          // 🔥 O CAMPO QUE FALTAVA AQUI!
         role: true,
         plan: true,
         plan_tier: true,
@@ -25,8 +27,8 @@ export async function GET(req: Request) {
         photoUrl: true,
         nextCheckInDate: true, 
         disableCheckIn: true,  
-        coachId: true,        // 🔥 NOVO: Identifica se é seu aluno ou da Adri (Treino)
-        nutritionistId: true, // 🔥 NOVO: Identifica quem prescreve a dieta
+        coachId: true,        
+        nutritionistId: true, 
         workouts: {
             where: { archived: false },
             orderBy: { createdAt: 'desc' }, 
@@ -42,8 +44,6 @@ export async function GET(req: Request) {
         }
     };
 
-    // 🔥 MUDANÇA ELITE: Agora buscamos TODOS os alunos da base, sem travar no adminId.
-    // A separação de "Meus Alunos" e "Alunos Adri" será feita visualmente lá no Frontend!
     const rawUsers = await prisma.user.findMany({
       orderBy: { name: 'asc' },
       select: querySelect
@@ -58,14 +58,12 @@ export async function GET(req: Request) {
     const activeUsers = finalUsers.filter((u: any) => u.active !== false);
     const inactiveUsers = finalUsers.filter((u: any) => u.active === false);
 
-    // 🔥 Feed Global da Equipe
     const recentLogs = await prisma.workoutHistory.findMany({
       take: 5,
       orderBy: { date: 'desc' },
       include: { user: { select: { name: true, photoUrl: true } } } 
     });
 
-    // 🔥 A CIRURGIA SALVADORA MANTIDA INTACTA:
     const exercises = await prisma.exercise.findMany({
         where: { coachId: adminId }, 
         orderBy: { name: 'asc' }
