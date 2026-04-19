@@ -202,13 +202,19 @@ export async function GET(req: Request) {
         if (userId) {
             whereClause.userId = userId; 
         } else if (adminId) {
-            whereClause.user = { coachId: adminId }; 
+            // 🔥 Garante que alunos antigos sem coachId também apareçam pro Paulo!
+            whereClause.user = { 
+                OR: [
+                    { coachId: adminId },
+                    { coachId: null }
+                ]
+            }; 
         }
 
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
-            take: 5, 
+            take: 5, // 🔥 REVERTIDO PARA 5 (Proteção de Memória OOM do App) 🔥
             select: {
                 id: true,
                 weight: true,

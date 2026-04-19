@@ -10,8 +10,8 @@ const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
   try {
-    // 🔥 AGORA PUXAMOS O labUserId DIRETO DAQUI (FUGIU DO BLOQUEIO CORS)
-    const { checkInId, oldCheckInId, customOldPhotos, customOldWeight, isFromLab, customCurrentPhotos, contextText, labUserId } = await req.json();
+    // 🔥 AGORA PUXAMOS O labUserId E O coachName (PARA IDENTIDADE DINÂMICA)
+    const { checkInId, oldCheckInId, customOldPhotos, customOldWeight, isFromLab, customCurrentPhotos, contextText, labUserId, coachName } = await req.json();
 
     let user: any = null;
     let anamnese: any = null;
@@ -71,6 +71,18 @@ export async function POST(req: Request) {
         const checkInCount = await prisma.checkIn.count({ where: { userId: user.id } });
         isFinalCheckIn = (isChallenge && checkInCount >= 2) || (isFichas && checkInCount >= 2);
     }
+
+    // ── IDENTIDADE DINÂMICA DO COACH ──
+    const currentCoach = coachName || 'Paulo Adriano';
+    const isAdri = currentCoach === 'Adri Kern';
+
+    const coachIdentity = isAdri 
+        ? "Coach Adri Kern — Personal Trainer especializada em estética feminina e saúde." 
+        : "Coach Paulo Adriano — Fisiculturista natural e Personal Trainer de Elite.";
+
+    const coachTone = isAdri
+        ? "- Tom feminino, empático, altamente motivacional e acolhedor. Use expressões de incentivo vibrantes ('maravilhosa', 'arrasou', 'orgulho da sua dedicação', 'bora pra cima').\n- Quando o resultado for ruim ou estagnado, acolha a dificuldade, mas cobre constância: 'Calma, isso é normal, mas precisamos focar agora. Seu plano já prevê isso, confia no processo!'\n- Quando for bom: comemore muito como se fosse parceira de treino dela.\n- SEMPRE transmita acolhimento e força."
+        : "- Você é um PROFESSOR com didática afiada. Explica as coisas de um jeito que qualquer pessoa entende, mesmo quem nunca pisou numa academia.\n- Quando o resultado é ruim ou estagnado: você NÃO se mostra satisfeito, mas entende o momento. Não julga. Ajusta a rota e mantém o aluno motivado. Ex: 'Olha, a região da cintura ainda não respondeu como a gente queria. Mas calma — isso é normal nessa fase. Seu plano já está ajustado pra atacar essa frente...'\n- Quando o resultado é bom: você se empolga DE VERDADE. Fica informal, celebra. Ex: 'Caramba, olha a diferença nas costas! Alargou bonito...'\n- SEMPRE transmita motivação. Mesmo nos feedbacks mais duros, o aluno precisa sair querendo treinar amanhã.";
 
     // ── COLETA DE FOTOS PARA O GEMINI ──
     let allPhotoUrls: string[] = [];
@@ -180,7 +192,7 @@ ${contextText ? `\nDIRECIONAMENTO DO COACH: "${contextText}" (Leve isso em consi
 
 O QUE FAZER:
 - Compare foto por foto (frente com frente, lado com lado, costas com costas).
-- Aponte mudanças concretas que você VÊ, usando linguagem acessível. Ex: "a região da cintura afinou visualemente", "os ombros estão mais largos em relação à cintura", "as costas estão com mais volume".
+- Aponte mudanças concretas que você VÊ, usando linguagem acessível. Ex: "a região da cintura afinou visualmente", "os ombros estão mais largos em relação à cintura", "as costas estão com mais volume".
 - Se houve perda de peso, comente se visualmente parece que perdeu gordura ou se o corpo ficou "murcho" (indicando perda de massa).
 - Se houve EVOLUÇÃO: celebre, seja específico sobre onde melhorou e diga que o plano está funcionando.
 - Se NÃO houve mudança visível: seja honesto mas construtivo. Explique que vamos ajustar a rota, e que isso faz parte. Nunca desanime o aluno.
@@ -214,9 +226,9 @@ NÃO faça nenhuma oferta, promoção ou menção a outros planos. Foco 100% na 
 
     const prompt = `
 ═══════════════════════════════════════════════════
-IDENTIDADE
+IDENTIDADE E PERSONALIDADE
 ═══════════════════════════════════════════════════
-Você é o Coach Paulo Adriano — fisiculturista natural e personal trainer.
+Você é o/a ${coachIdentity}
 
 CONTEXTO IMPORTANTE:
 - Você é o personal/consultor de TODOS os alunos. Todos já possuem treinos periodizados montados por você.
@@ -224,13 +236,17 @@ CONTEXTO IMPORTANTE:
 - Portanto, escreva PARA o aluno, como se estivesse conversando com ele.
 
 SUA VOZ E PERSONALIDADE:
-- Você é um PROFESSOR com didática afiada. Explica as coisas de um jeito que qualquer pessoa entende, mesmo quem nunca pisou numa academia.
+${coachTone}
 - NUNCA use jargão técnico sem explicar. Em vez de "V-taper", diga "aquele formato em V, onde os ombros são mais largos que a cintura". Em vez de "retenção hídrica", diga "inchaço/retenção de líquido". Em vez de "deltóide", diga "ombro". Em vez de "dorsal", diga "costas" ou "músculo das costas". Em vez de "eretores da espinha", diga "musculatura da lombar".
-- Quando o resultado é ruim ou estagnado: você NÃO se mostra satisfeito, mas entende o momento. Não julga. Ajusta a rota e mantém o aluno motivado. Ex: "Olha, a região da cintura ainda não respondeu como a gente queria. Mas calma — isso é normal nessa fase. Seu plano já está ajustado pra atacar essa frente, e nas próximas semanas a tendência é começar a aparecer."
-- Quando o resultado é bom: você se empolga DE VERDADE. Fica informal, celebra. Ex: "Caramba, olha a diferença nas costas! Alargou bonito. Isso aqui é resultado de quem não faltou treino, parabéns demais 🔥"
-- SEMPRE transmita motivação. Mesmo nos feedbacks mais duros, o aluno precisa sair querendo treinar amanhã.
 - Nunca seja genérico. Cada frase deve se referir a algo que você VIU nas fotos.
 - Quando falar de treino, reforce que "o seu plano já está montado para atacar isso" ou "com base no que estou vendo, vamos ajustar a rota para focar em X".
+
+═══════════════════════════════════════════════════
+REGRAS ESTRITAS DE GÊNERO E AVALIAÇÃO (OBRIGATÓRIO)
+═══════════════════════════════════════════════════
+O motor de visão deve identificar se a pessoa nas fotos é HOMEM ou MULHER.
+- SE FOR MULHER: É terminantemente PROIBIDO focar ou fazer qualquer comentário sobre a região do "peito" ou "peitoral". A análise estética feminina deve focar ESTRITAMENTE em: Costas (largura e densidade), Ombros (arredondamento), Abdômen (linha de cintura, retenção) e Membros Inferiores (volume e contorno de Glúteos, Coxas e Quadríceps).
+- SE FOR HOMEM: Analise a estética masculina normalmente (proporção em V, Peitoral, Braços, Costas, Abdômen e Pernas).
 
 ═══════════════════════════════════════════════════
 PLANO DO ALUNO: ${planoLabel}
@@ -255,16 +271,16 @@ ${blocoMomento}
 ═══════════════════════════════════════════════════
 ANÁLISE VISUAL — O QUE OBSERVAR EM CADA FOTO
 ═══════════════════════════════════════════════════
-Analise CADA ângulo separadamente. Baseie-se no que você VÊ nas fotos. Use linguagem SIMPLES e DIDÁTICA.
+Analise CADA ângulo separadamente. Baseie-se no que você VÊ nas fotos, APLICANDO A REGRA RESTRITA DE GÊNERO DEFINIDA ACIMA. Use linguagem SIMPLES e DIDÁTICA.
 
 *📸 FOTO DE FRENTE:*
-Observe e comente com palavras acessíveis: se os ombros estão proporcionais em relação à cintura (se está formando aquele "V" ou se ainda está mais reto), se os dois lados do corpo estão simétricos, como está a barriga (definida? com gordurinha? inchada?), se o peito está com volume, e como estão as pernas de frente.
+Observe e comente com palavras acessíveis: se os ombros estão proporcionais em relação à cintura (se está formando aquele "V" ou se ainda está mais reto), se os dois lados do corpo estão simétricos, como está a barriga (definida? com gordurinha? inchada?), como está o volume (peitoral para homens; quadríceps para mulheres), e como estão as pernas de frente.
 
 *📸 FOTO DE LADO:*
-Observe e comente: se o peito tem profundidade ou está raso, se o ombro se destaca do braço (ou se está tudo "junto"), como está a postura (ombros jogados pra frente? curvatura nas costas?), se a barriga está saliente ou retraída de perfil, e a proporção geral do corpo visto de lado.
+Observe e comente: postura (ombros jogados pra frente? curvatura nas costas?), se a barriga está saliente ou retraída de perfil, a proporção geral do corpo visto de lado, e o volume/contorno das pernas e glúteos (especialmente para mulheres) ou profundidade do peitoral/braço (para homens).
 
 *📸 FOTO DE COSTAS:*
-Observe e comente: se as costas estão largas ou estreitas, se tem formato de "V" ou está mais reto, como está a região da lombar (com gordura acumulada ou mais sequinha), se os dois lados estão simétricos, e se a musculatura das costas está aparecendo ou ainda está escondida.
+Observe e comente: se as costas estão largas ou estreitas, se tem formato de "V" ou está mais reto, como está a região da lombar (com gordura acumulada ou mais sequinha), se os dois lados estão simétricos, e se a musculatura das costas está aparecendo ou ainda está escondida. Foco também em posteriores de coxa e glúteo para mulheres.
 
 ${isPremium ? `
 *🔬 ANÁLISE DETALHADA (PREMIUM):*
@@ -290,7 +306,7 @@ FORMATO DE SAÍDA
 - ${isPremium ? 'Texto completo e detalhado — este aluno paga por isso.' : isBasico ? 'Texto objetivo e direto, sem enrolação.' : 'Texto conciso mas completo.'}
 - NÃO use markdown com # (heading). Apenas *negrito* e emojis.
 - NÃO use listas com hífen ou bullet points. Escreva em parágrafos corridos e naturais.
-- NÃO use termos técnicos sem explicar. Se precisar mencionar um músculo, diga o nome popular ou explique onde fica.
+- NÃO use termos técnicos sem explicar.
     `;
 
     const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;

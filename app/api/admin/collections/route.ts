@@ -12,9 +12,8 @@ export async function GET(req: Request) {
 
     if (!adminId) return NextResponse.json({ error: "Admin ID obrigatório" }, { status: 400 });
 
-    // 🔥 CORREÇÃO: O nome correto gerado pelo Prisma para esse modelo é templateCollection
+    // 🔥 Removido o where: { coachId: adminId } para liberar a biblioteca da equipe
     const collections = await prisma.templateCollection.findMany({
-      where: { coachId: adminId },
       include: {
         _count: { select: { templates: true } }
       },

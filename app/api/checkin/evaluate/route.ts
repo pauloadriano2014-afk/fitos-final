@@ -1,4 +1,3 @@
-// app/api/checkin/evaluate/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";

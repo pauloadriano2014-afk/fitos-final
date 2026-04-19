@@ -13,7 +13,9 @@ export async function GET(req: Request) {
   const where: any = {};
   if (goal && goal !== 'TODOS') where.goal = goal;
   if (level && level !== 'TODOS') where.level = level;
-  if (adminId) where.coachId = adminId; // 🔥 BLINDAGEM: Traz só os templates do dono
+  
+  // 🔥 APAGUE OU COMENTE ESTA LINHA ABAIXO:
+  // if (adminId) where.coachId = adminId;
 
   try {
     const templates = await prisma.workoutTemplate.findMany({
