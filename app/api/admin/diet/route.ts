@@ -1,3 +1,4 @@
+// app/api/admin/diet/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
         data: { isActive: false }
       });
 
-      // 2. Cria a nova dieta sem o campo inexistente (gramAmount)
+      // 2. Cria a nova dieta
       return await tx.diet.create({
         data: {
           userId: String(userId),
@@ -38,15 +39,15 @@ export async function POST(req: Request) {
               time: meal.time || '00:00',
               order: mIndex,
               notes: meal.notes || '',
+              dayType: meal.dayType || 'PADRÃO', // 🔥 O GARGALO ESTAVA AQUI! Agora o banco salva a etiqueta da aba!
               items: {
                 create: (meal.items || []).map((item: any) => {
                   let groupId = item.groupId || item.substitutionGroupId;
                   
                   return {
                     name: item.name || 'Alimento',
-                    amount: Number(item.amount) || 0, // O banco usa este campo!
+                    amount: Number(item.amount) || 0, 
                     unit: item.unit || 'g',
-                    // 🔥 REMOVIDO gramAmount daqui para não dar erro
                     calories: Number(item.calories_per_100) || Number(item.calories) || 0,
                     protein: Number(item.p) || Number(item.protein) || 0,
                     carbs: Number(item.c) || Number(item.carbs) || 0,
