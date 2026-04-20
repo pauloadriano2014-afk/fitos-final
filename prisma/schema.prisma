@@ -20,7 +20,7 @@ model User {
   aiLogs          AiLog[]
   dailyCheckins   DailyCheckin[]
   dietFeedbacks   DietFeedback[]
-  npsRequested Boolean @default(false) // Gatilho manual para disparar o NPS
+  npsRequested    Boolean  @default(false) // Gatilho manual para disparar o NPS
   
   // Controle de Acesso e Planos
   plan_tier       String   @default("standard")
@@ -223,7 +223,8 @@ model Meal {
   time      String?    
   order     Int        @default(0) 
   notes     String?    @db.Text 
-  dayType   String     @default("PADRÃO")
+  // 🔥 ETIQUETA DO TIPO DE DIA (TREINO, CARDIO, DESCANSO)
+  dayType   String     @default("TREINO")
   
   items     FoodItem[]
 }
