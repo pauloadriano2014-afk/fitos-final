@@ -39,7 +39,7 @@ export async function POST(req: Request) {
               time: meal.time || '00:00',
               order: mIndex,
               notes: meal.notes || '',
-              dayType: meal.dayType || 'PADRÃO', // 🔥 O GARGALO ESTAVA AQUI! Agora o banco salva a etiqueta da aba!
+              dayType: meal.dayType || 'TREINO', // 🔥 O GARGALO ESTAVA AQUI! Agora o banco salva a etiqueta da aba!
               items: {
                 create: (meal.items || []).map((item: any) => {
                   let groupId = item.groupId || item.substitutionGroupId;
