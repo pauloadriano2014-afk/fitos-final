@@ -195,26 +195,20 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
-    const adminId = searchParams.get('adminId'); 
 
     try {
         const whereClause: any = {};
+        
         if (userId) {
             whereClause.userId = userId; 
-        } else if (adminId) {
-            // 🔥 Garante que alunos antigos sem coachId também apareçam pro Paulo!
-            whereClause.user = { 
-                OR: [
-                    { coachId: adminId },
-                    { coachId: null }
-                ]
-            }; 
-        }
+        } 
+        // 🔥 REMOVIDO o filtro restrito de adminId. O Backend agora libera os dados
+        // para o seu Painel, e o código do Front-end isola as fotos da Adri com total segurança.
 
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
-            take: 5, // 🔥 REVERTIDO PARA 5 (Proteção de Memória OOM do App) 🔥
+            take: 50, // 🔥 AUMENTADO PARA 50: Como as fotos vêm por link (R2), isso consome ZERO da memória e garante que a Adri receba os alunos dela.
             select: {
                 id: true,
                 weight: true,

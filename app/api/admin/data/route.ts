@@ -18,7 +18,7 @@ export async function GET(req: Request) {
         id: true,
         name: true,
         email: true,
-        phone: true,          // 🔥 O CAMPO QUE FALTAVA AQUI!
+        phone: true,          // 🔥 O CAMPO QUE FALTAVA
         role: true,
         plan: true,
         plan_tier: true,
@@ -58,14 +58,41 @@ export async function GET(req: Request) {
     const activeUsers = finalUsers.filter((u: any) => u.active !== false);
     const inactiveUsers = finalUsers.filter((u: any) => u.active === false);
 
+    // 🔥 GARGALO DO FEED E DA CEGUEIRA DE ID RESOLVIDOS
     const recentLogs = await prisma.workoutHistory.findMany({
-      take: 5,
+      take: 50, 
       orderBy: { date: 'desc' },
-      include: { user: { select: { name: true, photoUrl: true } } } 
+      include: { user: { select: { id: true, name: true, photoUrl: true, coachId: true } } } 
     });
 
+    // 🔥 LÓGICA DE HERANÇA DE EXERCÍCIOS (ESPELHO DE MÃO ÚNICA)
+    const currentAdmin = await prisma.user.findUnique({
+        where: { id: adminId },
+        select: { email: true }
+    });
+    
+    const isAdri = currentAdmin?.email?.toLowerCase() === 'adri.personal@hotmail.com';
+    let exerciseWhere: any = { coachId: adminId }; // Padrão de segurança: Só vê o próprio
+
+    if (isAdri) {
+        // Se for a Adri, o sistema busca o ID do Paulo (Master)
+        const masterAdmin = await prisma.user.findFirst({
+            where: { role: 'ADMIN', email: { not: 'adri.personal@hotmail.com' } },
+            select: { id: true }
+        });
+        
+        if (masterAdmin) {
+            exerciseWhere = {
+                OR: [
+                    { coachId: adminId },       // Os exercícios que a Adri criar
+                    { coachId: masterAdmin.id } // Os exercícios do Paulo (como modelo)
+                ]
+            };
+        }
+    }
+
     const exercises = await prisma.exercise.findMany({
-        where: { coachId: adminId }, 
+        where: exerciseWhere,
         orderBy: { name: 'asc' }
     });
 
