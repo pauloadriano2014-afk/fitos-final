@@ -30,13 +30,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "O nome do template e as refeições são obrigatórios." }, { status: 400 });
     }
 
+    // 🔥 A CURA: Limpa a sujeira antes de gravar. Garante que todo alimento tenha uma etiqueta de origem.
+    const safeMeals = (meals || []).map((m: any) => ({
+        ...m,
+        dayType: m.dayType || 'TREINO'
+    }));
+
     const template = await prisma.dietTemplate.create({
       data: {
         name,
-        goal,
-        totalKcal,
-        // O Prisma salva arrays/objetos diretamente se o campo for do tipo Json
-        meals: meals 
+        goal: goal || 'Indefinido',
+        totalKcal: Number(totalKcal) || 0,
+        // Salva os dados blindados
+        meals: safeMeals 
       }
     });
 
@@ -46,8 +52,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Falha ao gravar o template no banco de dados." }, { status: 500 });
   }
 }
-
-// Adicione no final do arquivo app/api/admin/diet-templates/route.ts
 
 // 🔥 ROTA PARA DELETAR UM TEMPLATE
 export async function DELETE(req: Request) {
