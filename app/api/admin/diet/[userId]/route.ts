@@ -41,6 +41,7 @@ export async function GET(req: Request, { params }: { params: { userId: string }
         name:  meal.name,
         time:  meal.time,
         notes: meal.notes || '',
+        dayType: meal.dayType, // 🔥 A PEÇA QUE FALTAVA PARA ACABAR COM A PALHAÇADA!
         items: meal.items.map((item: any) => ({
           id:                  item.id,
           substitutionGroupId: item.substitutionGroupId,
