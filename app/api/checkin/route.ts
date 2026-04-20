@@ -1,9 +1,9 @@
+// app/api/checkin/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import sharp from 'sharp'; // 🔥 A MÁGICA DA SOLUÇÃO ELITE
+import sharp from 'sharp';
 
-// 🔥 DETONADOR DE CACHE: Garante que as fotos e o feedback cheguem IMEDIATAMENTE no app do aluno
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -18,7 +18,6 @@ const s3 = new S3Client({
     },
 });
 
-// Intervalo automático por plano (em dias)
 const PLAN_AUTO_DAYS: Record<string, number> = {
     PREMIUM: 14,
     PERFORMANCE: 30,
@@ -29,7 +28,6 @@ const PLAN_AUTO_DAYS: Record<string, number> = {
     CHALLENGE_21: 21,
 };
 
-// Máximo de check-ins permitidos por plano de ciclo
 const PLAN_MAX_CHECKINS: Record<string, number> = {
     FICHA_8S: 2,
     FICHAS: 2,
@@ -54,7 +52,6 @@ async function uploadToR2(base64String: string, userId: string, prefix: string) 
         const fileName = `checkins/${userId}/${timestamp}-${prefix}.jpg`;
         const thumbFileName = `checkins/${userId}/${timestamp}-${prefix}-thumb.jpg`;
 
-        // 1. SOBE A FOTO ORIGINAL (Para abrir grande no clique)
         const command = new PutObjectCommand({
             Bucket: 'fitos-fotos',
             Key: fileName,
@@ -63,11 +60,10 @@ async function uploadToR2(base64String: string, userId: string, prefix: string) 
         });
         await s3.send(command);
 
-        // 2. CRIA E SOBE A MINIATURA ELITE (Para não explodir a memória do Safari)
         try {
             const thumbBuffer = await sharp(buffer)
-                .resize({ width: 300, withoutEnlargement: true }) // Reduz o tamanho
-                .jpeg({ quality: 60 }) // Comprime a qualidade
+                .resize({ width: 300, withoutEnlargement: true }) 
+                .jpeg({ quality: 60 }) 
                 .toBuffer();
 
             const thumbCommand = new PutObjectCommand({
@@ -82,7 +78,7 @@ async function uploadToR2(base64String: string, userId: string, prefix: string) 
         }
         
         const publicUrlBase = (process.env.R2_PUBLIC_URL as string).replace(/\/$/, ""); 
-        return `${publicUrlBase}/${fileName}`; // O banco continua salvando só a original!
+        return `${publicUrlBase}/${fileName}`; 
     } catch (error) {
         console.error(`Erro ao subir ${prefix} para o R2:`, error);
         return null;
@@ -96,7 +92,6 @@ export async function POST(req: Request) {
 
     if (!userId) return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
-    // Upload paralelo das fotos
     const [frontUrl, backUrl, sideUrl] = await Promise.all([
         uploadToR2(photoFront, userId, 'front'),
         uploadToR2(photoBack, userId, 'back'),
@@ -126,7 +121,6 @@ export async function POST(req: Request) {
       data: checkInData
     });
 
-    // ── Busca dados do usuário para calcular próxima data ──
     const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { plan: true, coachId: true, name: true }
@@ -198,19 +192,17 @@ export async function GET(req: Request) {
 
     try {
         const whereClause: any = {};
-        
         if (userId) {
             whereClause.userId = userId; 
         } 
-        // 🔥 REMOVIDO o filtro restrito de adminId. O Backend agora libera os dados
-        // para o seu Painel, e o código do Front-end isola as fotos da Adri com total segurança.
 
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,
             orderBy: { date: 'desc' },
-            take: 50, // 🔥 AUMENTADO PARA 50: Como as fotos vêm por link (R2), isso consome ZERO da memória e garante que a Adri receba os alunos dela.
+            take: 50, 
             select: {
                 id: true,
+                userId: true, // 🔥 O PULO DO GATO QUE FALTAVA AQUI PARA IDENTIFICAR O ALUNO
                 weight: true,
                 feedback: true,
                 coachFeedback: true,
@@ -221,7 +213,7 @@ export async function GET(req: Request) {
                 photoSide: true,
                 extraPhotos: true,
                 allowMarketing: true,
-                user: { select: { name: true, email: true } }
+                user: { select: { id: true, name: true, email: true, coachId: true } } // 🔥 IDs dos usuários INJETADOS
             }
         });
 
