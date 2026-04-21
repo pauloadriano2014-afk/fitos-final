@@ -1,95 +1,90 @@
+// app/api/workout/[id]/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  try {
-    const { id } = params;
-    const body = await req.json();
-    // 🔥 RECEBENDO A CHAVE DA CARGA AQUI
-    const { name, startDate, endDate, exercises, workoutModel } = body;
+    try {
+        const workoutId = params.id;
+        const body = await req.json();
+        
+        // 🔥 DESESTRUTURANDO A INTENSIDADE DO BODY 🔥
+        const { name, workoutModel, intensityMultiplier, intensityEndDate, startDate, endDate, exercises, archiveCurrent } = body;
 
-    const workout = await prisma.workout.update({
-      where: { id },
-      data: {
-        name,
-        workoutModel: workoutModel || "CARGA", // 🔥 INJETANDO NO BANCO DE DADOS
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-      },
-    });
+        // Atualiza o Cabeçalho do Treino
+        await prisma.workout.update({
+            where: { id: workoutId },
+            data: {
+                name: name,
+                workoutModel: workoutModel || "CARGA",
+                
+                // 🔥 SALVANDO A PERIODIZAÇÃO NO BANCO 🔥
+                intensityMultiplier: intensityMultiplier ? parseFloat(intensityMultiplier) : 1.0,
+                intensityEndDate: intensityEndDate ? new Date(intensityEndDate) : null,
+                
+                startDate: startDate ? new Date(startDate) : undefined,
+                endDate: endDate ? new Date(endDate) : undefined,
+                archived: archiveCurrent ? true : false
+            }
+        });
 
-    await prisma.workoutExercise.deleteMany({
-      where: { workoutId: id },
-    });
+        // Recria a lista de exercícios
+        if (exercises && Array.isArray(exercises)) {
+            // Apaga os antigos
+            await prisma.workoutExercise.deleteMany({
+                where: { workoutId: workoutId }
+            });
 
-    if (exercises && exercises.length > 0) {
-      const allIds: string[] = [];
-      exercises.forEach((ex: any) => {
-          if (ex.exerciseId) allIds.push(ex.exerciseId);
-          if (ex.substituteId) allIds.push(ex.substituteId);
-      });
+            // Prepara os novos
+            const allIds: string[] = [];
+            exercises.forEach((ex: any) => {
+                if (ex.exerciseId) allIds.push(ex.exerciseId);
+                if (ex.substituteId) allIds.push(ex.substituteId);
+            });
 
-      const validExercises = await prisma.exercise.findMany({
-        where: { id: { in: allIds } },
-        select: { id: true }
-      });
-      const validIds = validExercises.map(e => e.id);
+            const validExercises = await prisma.exercise.findMany({
+                where: { id: { in: allIds } },
+                select: { id: true }
+            });
+            const validIds = validExercises.map(e => e.id);
 
-      const exercisesToCreate = exercises
-        .filter((ex: any) => validIds.includes(ex.exerciseId))
-        .map((ex: any, index: number) => ({
-          workoutId: id,
-          exerciseId: ex.exerciseId,
-          day: ex.day,
-          sets: Number(ex.sets) || 0,
-          reps: String(ex.reps),
-          technique: ex.technique || "",
-          restTime: Number(ex.restTime) || 0,
-          order: index,
-          
-          // 🔥 DE VOLTA AO LUGAR DELA! A EDIÇÃO AGORA SALVA OBSERVAÇÕES 🔥
-          observation: ex.observation || "",
-          
-          substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null,
-        }));
+            const exercisesToCreate = exercises
+                .filter((ex: any) => validIds.includes(ex.exerciseId))
+                .map((ex: any, index: number) => ({
+                    workoutId: workoutId,
+                    exerciseId: ex.exerciseId,
+                    day: ex.day,
+                    sets: Number(ex.sets) || 0,
+                    reps: String(ex.reps),
+                    restTime: Number(ex.restTime) || 0,
+                    technique: ex.technique || "",
+                    order: index,
+                    observation: ex.observation || "",
+                    substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null
+                }));
 
-      if (exercisesToCreate.length > 0) {
-          await prisma.workoutExercise.createMany({
-            data: exercisesToCreate,
-          });
-      }
+            if (exercisesToCreate.length > 0) {
+                await prisma.workoutExercise.createMany({
+                    data: exercisesToCreate
+                });
+            }
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        console.error("Erro PUT workout:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
-    return NextResponse.json(workout, { status: 200 });
-  } catch (error: any) {
-    console.error("Erro no PUT (Edição) do Workout:", error);
-    return NextResponse.json(
-      { error: "Falha ao editar o treino", details: error.message }, 
-      { status: 500 }
-    );
-  }
 }
 
-// 🔥 O BOTÃO DA LIXEIRA VOLTOU A FUNCIONAR 🔥
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-  try {
-    const { id } = params;
-    
-    // 1. Primeiro apagamos os exercícios vinculados a ele para não dar conflito
-    await prisma.workoutExercise.deleteMany({
-      where: { workoutId: id },
-    });
-
-    // 2. Depois apagamos a rotina em si
-    await prisma.workout.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({ success: true }, { status: 200 });
-  } catch (error: any) {
-    console.error("Erro ao excluir o treino:", error);
-    return NextResponse.json({ error: "Falha ao excluir treino" }, { status: 500 });
-  }
+    try {
+        await prisma.workout.delete({
+            where: { id: params.id }
+        });
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        return NextResponse.json({ error: "Erro ao deletar" }, { status: 500 });
+    }
 }

@@ -1,9 +1,8 @@
+// app/api/workout/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { Expo } from 'expo-server-sdk';
 
 const prisma = new PrismaClient();
-const expo = new Expo();
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
@@ -80,7 +79,6 @@ export async function GET(req: Request) {
   }
 }
 
-// 🔥 NOVA ROTA: PILOTO AUTOMÁTICO (MINI-ANAMNESE)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -89,7 +87,6 @@ export async function POST(req: Request) {
     if (body.gender && body.goal && body.focus) {
         const { userId, gender, goal, focus, level } = body;
 
-        // 1. Cria a Anamnese básica para o aluno não ficar vazio
         await prisma.anamnese.create({
             data: {
                 userId,
@@ -102,29 +99,23 @@ export async function POST(req: Request) {
             }
         });
 
-        // 2. Cria um Treino de Boas-Vindas (Coringa)
-        // Isso permite que o aluno entre no app e você veja no Admin que ele já escolheu o foco.
         const workout = await prisma.workout.create({
             data: {
                 userId,
                 name: `PROTOCOLO: ${focus.toUpperCase()}`,
                 goal: goal,
                 level: level,
-                workoutModel: "CARGA", // Garantia do modelo
+                workoutModel: "CARGA", 
                 startDate: new Date(),
                 isVisible: true
             }
         });
 
-        // NOTA PARA O COACH: Aqui nós vamos conectar os seus WorkoutTemplates reais em breve.
-        // Por enquanto, ele cria apenas o cabeçalho do treino para liberar o acesso ao app.
-
         return NextResponse.json({ success: true, workoutId: workout.id });
     }
 
-    // Lógica original de criação manual do Admin (Mantida Intocada)
-    // 🔥 ADICIONADO A CHAVE DE CARGA
-    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel } = body;
+    // 🔥 CRIAÇÃO DE TREINO PELO ADMIN 🔥
+    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel, intensityMultiplier, intensityEndDate } = body;
 
     if (archiveCurrent) {
         await prisma.workout.updateMany({
@@ -137,7 +128,12 @@ export async function POST(req: Request) {
       data: { 
           userId, 
           name: name || "Planejamento Atual",
-          workoutModel: workoutModel || "CARGA", // 🔥 INJETANDO NO BANCO DE DADOS
+          workoutModel: workoutModel || "CARGA", 
+          
+          // 🔥 MOTOR DE PERIODIZAÇÃO INJETADO NO BANCO 🔥
+          intensityMultiplier: intensityMultiplier ? parseFloat(intensityMultiplier) : 1.0,
+          intensityEndDate: intensityEndDate ? new Date(intensityEndDate) : null,
+
           level: "Personalizado",
           startDate: startDate ? new Date(startDate) : new Date(),
           endDate: endDate ? new Date(endDate) : null
@@ -188,18 +184,6 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  try {
-    const body = await req.json();
-    const { id, archived } = body;
-    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
-    const updated = await prisma.workout.update({ where: { id }, data: { archived } });
-    return NextResponse.json({ success: true, updated });
-  } catch (error: any) {
-    return NextResponse.json({ error: "Erro ao atualizar" }, { status: 500 });
-  }
-}
-
-export async function PUT(req: Request) {
   try {
     const body = await req.json();
     const { id, archived } = body;
