@@ -117,8 +117,12 @@ model Workout {
   endDate   DateTime? 
   archived  Boolean   @default(false) 
 
-  // 🔥 NOVO: MODELO DO TREINO (CARGA vs BASE) 🔥
+  // MODELO DO TREINO (CARGA vs BASE)
   workoutModel String @default("CARGA")
+
+  // 🔥 MOTOR DE PERIODIZAÇÃO (Deload / Choque) 🔥
+  intensityMultiplier Float     @default(1.0)
+  intensityEndDate    DateTime? 
   
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
