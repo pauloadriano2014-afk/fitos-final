@@ -1,3 +1,4 @@
+// app/api/admin/import-pdf/route.ts
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
@@ -57,9 +58,17 @@ export async function POST(req: Request) {
             "category": "Tente adivinhar a categoria",
             "blocks": [
               {
-                "sets": "3", 
-                "reps": "12-10-10",
-                "restTime": "45",
+                "sets": "1", 
+                "reps": "15",
+                "load": "30kgs",
+                "restTime": "60",
+                "technique": "NORMAL"
+              },
+              {
+                "sets": "1", 
+                "reps": "12",
+                "load": "40kgs",
+                "restTime": "60",
                 "technique": "NORMAL"
               }
             ],
@@ -72,11 +81,12 @@ export async function POST(req: Request) {
     ${modeInstruction}
 
     REGRAS DE EXTRAÇÃO ADICIONAIS:
-    1. sets e reps: Separe o formato '3/15-12-10' (sets: "3", reps: "15-12-10").
-    2. restTime: Extraia apenas o número (ex: '45s' -> "45"). Se não houver, use "60".
-    3. technique: Leia as "Instruções" e o contexto. Use APENAS os valores: "DROPSET", "RESTPAUSE", "BISET", "21", "CLUSTERSET", "GVT" ou "NORMAL".
-    4. BISET: Se houver "Exercícios combinados" ou "Alterne esses exercícios", os próximos dois exercícios pertencem a um BISET. Atribua "BISET" no campo technique do array 'blocks' deles.
-    5. OBSERVAÇÕES E CARGAS: IGNORE COMPLETAMENTE TODAS as cargas (ex: "Carga: 20kg" ou "PROGRESSÃO"). O campo "observation" DEVE RETORNAR ABSOLUTAMENTE VAZIO ("").
+    1. load (CARGA): AGORA VOCÊ DEVE EXTRAIR AS CARGAS! Se houver progressão de carga (ex: 30-40-40-45kgs) ou de repetições (ex: 15-12-10-8), crie um bloco individual para CADA série dentro do array 'blocks' (sets: "1") com sua respectiva "reps" e "load" (carga extraída exatamente como no PDF, ex: "10kgs de cada lado" ou "40kgs").
+    2. Séries Simples: Se a carga e as repetições forem iguais para todas as séries (ex: Séries: 3/10, Carga: 20kgs), crie um único bloco (ex: sets: "3", reps: "10", load: "20kgs").
+    3. restTime: Extraia apenas o número (ex: '45s' -> "45"). Se não houver, use "60".
+    4. technique: Leia as "Instruções" e o contexto. Use APENAS os valores: "DROPSET", "RESTPAUSE", "BISET", "21", "CLUSTERSET", "GVT" ou "NORMAL".
+    5. BISET: Se houver "Exercícios combinados" ou "Alterne esses exercícios", os próximos dois exercícios pertencem a um BISET. Atribua "BISET" no campo technique.
+    6. observation: Deixe vazio (""), a não ser que o PDF tenha instruções extras relevantes sobre a execução (ex: "Segure bem a descida").
     `;
 
     const response = await openai.chat.completions.create({
