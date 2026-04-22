@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     const userId = searchParams.get('userId'); // Se for Aluno pedindo
     const adminId = searchParams.get('adminId'); // Se for o Painel Admin pedindo
     const format = searchParams.get('format'); 
+    const isGlobal = searchParams.get('global') === 'true'; // 🔥 LÊ A FLAG GLOBAL DO APP
 
     // 🔥 INTELIGÊNCIA DE ROTEAMENTO: Descobre de qual Coach puxar o conteúdo
     let targetCoachId = null;
@@ -24,9 +25,13 @@ export async function GET(request: Request) {
         if (user && user.coachId) targetCoachId = user.coachId;
     }
 
-    // Busca apenas os conteúdos daquele Coach
+    // 🔥 O SEGREDO DO SUCESSO AQUI:
+    // Se isGlobal for true (pedido da aba do aluno), ignoramos o filtro de coachId e trazemos a biblioteca inteira da consultoria.
+    // O bloqueio VIP (as chavinhas) fará o trabalho de trancar o que for pago lá no frontend.
+    const whereClause = (targetCoachId && !isGlobal) ? { coachId: targetCoachId } : {};
+
     const allContent = await prisma.content.findMany({
-      where: targetCoachId ? { coachId: targetCoachId } : {},
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { likes: true, comments: true } }
