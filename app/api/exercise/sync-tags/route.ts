@@ -35,6 +35,7 @@ function guessSubCategory(name: string, category: string): string {
   
   // OMBROS
   if (c.includes('ombro') || c.includes('deltoide')) {
+    if (n.includes('encolhimento') || n.includes('trapézio') || n.includes('trapezio')) return 'Trapézio';
     if (n.includes('desenvolvimento')) return 'Multiarticular';
     if (n.includes('frontal') || n.includes('frente')) return 'Frontal';
     if (n.includes('posterior') || n.includes('inverso') || n.includes('face pull') || n.includes('facepull') || n.includes('voador inverso')) return 'Posterior';
@@ -44,8 +45,9 @@ function guessSubCategory(name: string, category: string): string {
   
   // ABDÔMEN
   if (c.includes('abd') || c.includes('core')) {
+    if (n.includes('remador') || n.includes('rodinha') || n.includes('roda') || n.includes('canivete') || n.includes('completo')) return 'Completo';
     if (n.includes('infra') || n.includes('perna') || n.includes('pendurado')) return 'Infra';
-    if (n.includes('prancha') || n.includes('core') || n.includes('oblíquo') || n.includes('obliquo') || n.includes('roda')) return 'Core';
+    if (n.includes('prancha') || n.includes('isometria') || n.includes('oblíquo') || n.includes('obliquo')) return 'Core'; 
     return 'Supra'; 
   }
   
@@ -54,14 +56,12 @@ function guessSubCategory(name: string, category: string): string {
 
 export async function GET() {
   try {
-    // Puxa todos os exercícios do banco de dados
     const exercises = await prisma.exercise.findMany();
     let updatedCount = 0;
 
     for (const ex of exercises) {
       const novaSubCategoria = guessSubCategory(ex.name, ex.category);
       
-      // Se a IA adivinhou uma categoria diferente do que está no banco, ele atualiza
       if (novaSubCategoria !== ex.subCategory) {
         await prisma.exercise.update({
           where: { id: ex.id },
