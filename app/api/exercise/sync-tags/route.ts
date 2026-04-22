@@ -1,0 +1,83 @@
+// app/api/exercise/sync-tags/route.ts
+import { NextResponse } from 'next/server';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+export const dynamic = 'force-dynamic';
+
+function guessSubCategory(name: string, category: string): string {
+  const n = name.toLowerCase();
+  const c = category.toLowerCase();
+
+  // PEITORAL
+  if (c.includes('peit')) {
+    if (n.includes('inclinado') || n.includes('superior')) return 'Superior';
+    if (n.includes('declinado') || n.includes('inferior')) return 'Inferior';
+    return 'Medial'; 
+  }
+  
+  // COSTAS
+  if (c.includes('costas') || c.includes('dorsal')) {
+    if (n.includes('puxada') || n.includes('pulldown') || n.includes('barra fixa') || n.includes('pull down')) return 'Puxadas';
+    if (n.includes('lombar') || n.includes('hiperextensão') || n.includes('bom dia')) return 'Lombar';
+    return 'Remadas'; 
+  }
+  
+  // PERNAS
+  if (c.includes('perna') || c.includes('membros inferiores') || c.includes('coxa')) {
+    if (n.includes('panturrilha') || n.includes('gêmeos') || n.includes('gemeos') || n.includes('sóleo')) return 'Panturrilha';
+    if (n.includes('glúteo') || n.includes('gluteo') || n.includes('pélvica') || n.includes('pelvica') || n.includes('abdutora') || n.includes('coice')) return 'Glúteos';
+    if (n.includes('flexora') || n.includes('stiff') || n.includes('posterior') || n.includes('romeno')) return 'Posteriores';
+    if (n.includes('extensora') || n.includes('adutora') || n.includes('adutor') || n.includes('sissy')) return 'Quadríceps e Adutores';
+    if (n.includes('agachamento') || n.includes('leg') || n.includes('hack') || n.includes('afundo') || n.includes('passada') || n.includes('búlgaro')) return 'Multiarticular';
+    return 'Geral';
+  }
+  
+  // OMBROS
+  if (c.includes('ombro') || c.includes('deltoide')) {
+    if (n.includes('desenvolvimento')) return 'Multiarticular';
+    if (n.includes('frontal') || n.includes('frente')) return 'Frontal';
+    if (n.includes('posterior') || n.includes('inverso') || n.includes('face pull') || n.includes('facepull') || n.includes('voador inverso')) return 'Posterior';
+    if (n.includes('lateral') || n.includes('manguito') || n.includes('remada alta')) return 'Lateral';
+    return 'Geral';
+  }
+  
+  // ABDÔMEN
+  if (c.includes('abd') || c.includes('core')) {
+    if (n.includes('infra') || n.includes('perna') || n.includes('pendurado')) return 'Infra';
+    if (n.includes('prancha') || n.includes('core') || n.includes('oblíquo') || n.includes('obliquo') || n.includes('roda')) return 'Core';
+    return 'Supra'; 
+  }
+  
+  return 'Geral';
+}
+
+export async function GET() {
+  try {
+    // Puxa todos os exercícios do banco de dados
+    const exercises = await prisma.exercise.findMany();
+    let updatedCount = 0;
+
+    for (const ex of exercises) {
+      const novaSubCategoria = guessSubCategory(ex.name, ex.category);
+      
+      // Se a IA adivinhou uma categoria diferente do que está no banco, ele atualiza
+      if (novaSubCategoria !== ex.subCategory) {
+        await prisma.exercise.update({
+          where: { id: ex.id },
+          data: { subCategory: novaSubCategoria }
+        });
+        updatedCount++;
+      }
+    }
+
+    return NextResponse.json({ 
+        success: true, 
+        message: `Mágica concluída! O robô atualizou ${updatedCount} exercícios no banco de dados.` 
+    });
+
+  } catch (error) {
+    console.error("Erro na faxina:", error);
+    return NextResponse.json({ error: "Deu erro no robô faxineiro" }, { status: 500 });
+  }
+}
