@@ -89,6 +89,7 @@ model Exercise {
   id              String   @id @default(uuid())
   name            String   
   category        String
+  subCategory     String?  @default("Geral") // 🔥 NOVA COLUNA PARA O FILTRO AVANÇADO E FUTURA IA
   videoUrl        String?
   instructions    String?
   createdAt       DateTime @default(now())
@@ -106,8 +107,8 @@ model Exercise {
 }
 
 model Workout {
-  id        String    @id @default(uuid())
-  name      String    
+  id        String   @id @default(uuid())
+  name      String   
   goal      String?   
   level     String?   
   isVisible Boolean   @default(true)
@@ -194,8 +195,8 @@ model Anamnese {
 }
 
 model Diet {
-  id            String    @id @default(uuid())
-  userId        String    
+  id            String   @id @default(uuid())
+  userId        String   
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   pdfUrl        String?   
