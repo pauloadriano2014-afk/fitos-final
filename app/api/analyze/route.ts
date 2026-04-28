@@ -103,16 +103,38 @@ export async function POST(req: Request) {
       "correction": "Sua Dica de Ouro ou Hack mental para corrigir a postura."
     }`;
 
-    const result = await model.generateContent([
-      {
-        fileData: {
-          mimeType: actualMimeType,
-          fileUri: uploadResponse.file.uri
-        }
-      },
-      { text: prompt }
-    ]);
+    // 🔥 SISTEMA DE BLINDAGEM ANTI-FALHAS 429 (EXPONENTIAL BACKOFF) 🔥
+    let result;
+    const maxRetries = 3;
+    const baseDelayMs = 3000; // Começa esperando 3 segundos
 
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        result = await model.generateContent([
+          {
+            fileData: {
+              mimeType: actualMimeType,
+              fileUri: uploadResponse.file.uri
+            }
+          },
+          { text: prompt }
+        ]);
+        break; // Sucesso! Sai do loop na hora.
+      } catch (err: any) {
+        const isRateLimit = err.status === 429 || (err.message && err.message.includes('429'));
+        
+        if (isRateLimit && attempt < maxRetries) {
+          const waitTime = baseDelayMs * Math.pow(2, attempt - 1); // Ex: 3s na primeira, 6s na segunda...
+          console.log(`⚠️ [429] Limite de tokens atingido. Segurando a onda por ${waitTime/1000}s antes da tentativa ${attempt + 1}...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        } else {
+          // Se for outro tipo de erro (ex: 500) ou já esgotou as 3 tentativas, aí joga pro painel de erro
+          throw err;
+        }
+      }
+    }
+
+    // Se chegou aqui, é porque a IA respondeu com sucesso
     const rawText = result.response.text();
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     const cleanedText = jsonMatch ? jsonMatch[0] : rawText.replace(/```json/g, '').replace(/```/g, '').trim();
