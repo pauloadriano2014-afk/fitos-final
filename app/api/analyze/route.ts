@@ -14,25 +14,22 @@ const prisma = new PrismaClient();
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-// 🔥 FUNÇÃO NATIVA PARA NOTIFICAR O COACH VIA EXPO & PRISMA 🔥
+// 🔥 FUNÇÃO NATIVA PARA NOTIFICAR O COACH VIA EXPO & PRISMA
 async function notifyCoach(alunoName: string, exerciseName: string, score: number) {
   try {
-    // 1. Busca o Administrador (Você) no banco de dados para pegar o Push Token
     const admin = await prisma.user.findFirst({
       where: { role: 'ADMIN' },
       select: { pushToken: true }
     });
 
     if (admin?.pushToken) {
-      // 2. Monta a mensagem no padrão exato do Expo
       const message = {
         to: admin.pushToken,
         sound: 'default',
         title: '🤖 IA de Vídeo Utilizada!',
-        body: `${alunoName} acabou de analisar o exercício: ${exerciseName}. Nota: ${score}/10.`,
+        body: `${alunoName} analisou: ${exerciseName}. Nota: ${score}/10.`,
       };
 
-      // 3. Dispara direto pro servidor do Expo
       await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: {
@@ -42,10 +39,7 @@ async function notifyCoach(alunoName: string, exerciseName: string, score: numbe
         },
         body: JSON.stringify(message),
       });
-
       console.log(`📱 Push Notification Expo enviada com sucesso pro Coach!`);
-    } else {
-      console.log(`⚠️ Coach não notificado: O usuário ADMIN não possui um pushToken registrado.`);
     }
   } catch (error) {
     console.error("❌ Erro ao enviar push notification:", error);
@@ -60,10 +54,8 @@ export async function POST(req: Request) {
     const file = formData.get('video') as File;
     const rawExercise = formData.get('exerciseName') as string || 'Exercício';
     
-    // 🔥 Captura o nome do aluno que o app vai enviar
     const alunoName = formData.get('alunoName') as string || 'Um aluno';
     
-    // Separa o nome limpo das regras de elite enviadas pelo app
     const parts = rawExercise.split(' | REGRAS DO COACH:');
     const exerciseName = parts[0].trim();
     const eliteRules = parts[1] ? `\n    🚨 REGRAS EXCLUSIVAS PARA ESTE EXERCÍCIO (OBRIGATÓRIO SEGUIR):\n    - ${parts[1].trim()}` : '';
@@ -77,7 +69,7 @@ export async function POST(req: Request) {
         }, { status: 413 });
     }
 
-    console.log(`🎥 1. Recebendo vídeo de [${alunoName}]: ${file.name} (${file.size} bytes, tipo: ${file.type}) - Ex: ${exerciseName}`);
+    console.log(`🎥 1. Recebendo vídeo de [${alunoName}]: ${file.name} (${file.size} bytes) - Ex: ${exerciseName}`);
 
     const actualMimeType = file.type || "video/mp4";
     const extension = actualMimeType.includes("quicktime") ? ".mov" : ".mp4";
@@ -118,9 +110,6 @@ export async function POST(req: Request) {
 
     console.log("🟢 Vídeo pronto! Extraindo análise técnica...");
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    // 🔥 O SEU PROMPT INTACTO
     const prompt = `ATENÇÃO: Você é o treinador de Elite 'Coach Paulo'.
     O aluno enviou este vídeo executando o exercício: "${exerciseName}".
     
@@ -146,43 +135,37 @@ export async function POST(req: Request) {
       "correction": "Sua Dica de Ouro ou Hack mental para corrigir a postura."
     }`;
 
-    // 🔥 SISTEMA DE BLINDAGEM ANTI-FALHAS 429
-    let result;
-    const maxRetries = 2; 
-    const baseDelayMs = 3000; 
+    // 🔥 SISTEMA DE MOTOR DUPLO (O FIM DO ERRO 429) 🔥
+    const model20 = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model15Pro = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); // O peso-pesado reserva
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let result;
+
+    try {
+      console.log("🔥 Tentando motor principal (gemini-2.0-flash)...");
+      result = await model20.generateContent([
+        { fileData: { mimeType: actualMimeType, fileUri: uploadResponse.file.uri } },
+        { text: prompt }
+      ]);
+    } catch (err: any) {
+      console.log("⚠️ O Google bloqueou o 2.0 Flash (429). Acionando o tanque reserva (1.5-PRO) imediatamente...");
       try {
-        result = await model.generateContent([
-          {
-            fileData: {
-              mimeType: actualMimeType,
-              fileUri: uploadResponse.file.uri
-            }
-          },
+        result = await model15Pro.generateContent([
+          { fileData: { mimeType: actualMimeType, fileUri: uploadResponse.file.uri } },
           { text: prompt }
         ]);
-        break; // Sucesso
-      } catch (err: any) {
-        const isRateLimit = err.status === 429 || (err.message && err.message.includes('429'));
-        
-        if (isRateLimit && attempt < maxRetries) {
-          console.log(`⚠️ [429] Limite atingido. Tentando novamente em ${baseDelayMs/1000}s...`);
-          await new Promise(resolve => setTimeout(resolve, baseDelayMs));
-        } else if (isRateLimit) {
-          console.log("❌ Limite do Google estourado de vez. Devolvendo mensagem amigável.");
-          return NextResponse.json({
-            feedback: "Sistema de análise de vídeo sobrecarregado no momento devido ao alto volume de treinos. Nossa IA está processando outros atletas da equipe.",
-            score: 0,
-            correction: "Aguarde cerca de 1 minuto e tente analisar o vídeo novamente. Mantenha o foco no treino!"
-          }, { status: 200 }); 
-        } else {
-          throw err;
-        }
+        console.log("✅ Análise salva com sucesso pelo motor 1.5-PRO!");
+      } catch (errPro: any) {
+        console.log("❌ Ambos os motores foram bloqueados pelo Google.");
+        return NextResponse.json({
+          feedback: "Sistema de análise de vídeo temporariamente sobrecarregado. Nossa IA está processando outros atletas da equipe.",
+          score: 0,
+          correction: "Por favor, tente analisar o vídeo novamente no próximo exercício. Mantenha o foco!"
+        }, { status: 200 }); 
       }
     }
 
-    const rawText = result!.response.text();
+    const rawText = result.response.text();
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     const cleanedText = jsonMatch ? jsonMatch[0] : rawText.replace(/```json/g, '').replace(/```/g, '').trim();
 
@@ -199,7 +182,7 @@ export async function POST(req: Request) {
         };
     }
 
-    // 🔥 GATILHO DA NOTIFICAÇÃO PUSH PRO COACH 🔥
+    // Gatilho da Notificação Push pro Coach
     if (jsonResponse.score > 0 || jsonResponse.score === 0) {
       await notifyCoach(alunoName, exerciseName, jsonResponse.score);
     }
