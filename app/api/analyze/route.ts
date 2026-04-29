@@ -126,6 +126,7 @@ export async function POST(req: Request) {
     
     🚨 3. ANÁLISE TÉCNICA E BIOMECÂNICA (O SEU DEVER PRINCIPAL):
     - Avalie a postura da coluna (lordose/cifose), a cadência (velocidade de subida e descida) e a segurança articular.
+    - ⚠️ ALINHAMENTO DE PUNHOS E MÃOS (CRÍTICO): Observe atentamente as mãos e os punhos do aluno. O aluno NUNCA deve 'quebrar' (flexionar) o punho para fazer força. Em exercícios como REMADAS ou PUXADAS, as mãos devem funcionar apenas como 'ganchos'. A tração inteira deve vir dos cotovelos indo para trás. Se notar o aluno puxando o peso com as mãos/antebraços e flexionando os punhos, alerte isso imediatamente como um erro grave que rouba a ativação das costas.
     ${eliteRules}
     - Dê um veredito direto e reto. Nada de elogios falsos se o treino estiver ruim.
     
