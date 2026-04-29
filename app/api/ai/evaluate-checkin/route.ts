@@ -111,15 +111,20 @@ export async function POST(req: Request) {
                 return { inlineData: { data: base64Data, mimeType: "image/jpeg" } };
             }
             const response = await fetch(url);
+            if (!response.ok) throw new Error(`Falha ao baixar imagem: ${url}`);
             const buffer = await response.arrayBuffer();
             return { inlineData: { data: Buffer.from(buffer).toString("base64"), mimeType: "image/jpeg" } };
-        } catch (e) {
-            console.error("Erro ao processar imagem para IA:", e);
-            return null;
+        } catch (e: any) {
+            console.error(`❌ Erro crítico ao processar a imagem ${url}:`, e.message);
+            return null; // Retorna null para não explodir o Promise.all
         }
     }));
 
     const validImageParts = imageParts.filter(Boolean) as any[];
+
+    if (validImageParts.length === 0) {
+        throw new Error("Nenhuma imagem válida conseguiu ser processada para enviar para a IA.");
+    }
 
     // ── CONSTRUÇÃO DO PROMPT ──
     let blocoAnamnese = "";
@@ -310,7 +315,7 @@ FORMATO DE SAÍDA
     `;
 
     const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("Chave da API não encontrada.");
+    if (!apiKey) throw new Error("Chave da API não encontrada no Render. Verifique a aba Environment Variables.");
     
     // 🔥 SISTEMA DE MOTOR DUPLO PARA FOTOS 🔥
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -324,32 +329,26 @@ FORMATO DE SAÍDA
         const result = await model20.generateContent([prompt, ...validImageParts]);
         finalAnalysisText = result.response.text();
     } catch (err: any) {
-        console.log("⚠️ O Google bloqueou o 2.0 Flash (429) em FOTOS. Acionando o tanque reserva (1.5-PRO)...");
+        console.log("⚠️ O Google bloqueou o 2.0 Flash nas FOTOS. Erro:", err.message);
         try {
             const resultPro = await model15Pro.generateContent([prompt, ...validImageParts]);
             finalAnalysisText = resultPro.response.text();
             console.log("✅ Análise de FOTOS salva com sucesso pelo motor 1.5-PRO!");
         } catch (errPro: any) {
-            console.log("❌ Ambos os motores foram bloqueados pelo Google nas FOTOS.");
-            
-            // Retorna um texto amigável e status 200 pra não quebrar a tela do aluno
-            finalAnalysisText = "Sistema de análise de check-in temporariamente sobrecarregado. Nossa IA está processando imagens de outros atletas da equipe neste exato momento. Por favor, aguarde uns minutos e envie seu check-in novamente. Mantenha o foco!";
-            
-            return NextResponse.json({ 
-                analysis: finalAnalysisText,
-                isFinal: isFinalCheckIn 
-            }, { status: 200 }); 
+            console.log("❌ Ambos os motores falharam nas FOTOS. Erro:", errPro.message);
+            finalAnalysisText = "Sistema de análise temporariamente sobrecarregado. Por favor, tente novamente.";
+            return NextResponse.json({ analysis: finalAnalysisText, isFinal: isFinalCheckIn }, { status: 200 }); 
         }
     }
 
-    // Se chegou aqui, um dos motores funcionou e passou a análise
-    return NextResponse.json({ 
-      analysis: finalAnalysisText,
-      isFinal: isFinalCheckIn 
-    });
+    return NextResponse.json({ analysis: finalAnalysisText, isFinal: isFinalCheckIn });
 
-  } catch (error) {
-    console.error("Erro na análise IA Universal:", error);
-    return NextResponse.json({ error: "Erro no motor" }, { status: 500 });
+  } catch (error: any) {
+    // 🚨 ESSE É O NOSSO RAIO-X. ELE VAI MOSTRAR EXATAMENTE ONDE O SERVIDOR QUEBROU 🚨
+    console.error("❌ Erro FATAL na rota de Check-in ANTES da IA:", error);
+    return NextResponse.json({ 
+        error: "Falha interna no servidor", 
+        details: error.message || String(error) // Vai enviar o motivo real (ex: Prisma, Imagem bloqueada, etc)
+    }, { status: 500 });
   }
 }
