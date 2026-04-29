@@ -312,14 +312,39 @@ FORMATO DE SAÍDA
     const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("Chave da API não encontrada.");
     
+    // 🔥 SISTEMA DE MOTOR DUPLO PARA FOTOS 🔥
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model20 = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model15Pro = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
-    const result = await model.generateContent([prompt, ...validImageParts]);
-    const text = result.response.text();
+    let finalAnalysisText = "";
 
+    try {
+        console.log("🔥 Tentando motor principal em FOTOS (gemini-2.0-flash)...");
+        const result = await model20.generateContent([prompt, ...validImageParts]);
+        finalAnalysisText = result.response.text();
+    } catch (err: any) {
+        console.log("⚠️ O Google bloqueou o 2.0 Flash (429) em FOTOS. Acionando o tanque reserva (1.5-PRO)...");
+        try {
+            const resultPro = await model15Pro.generateContent([prompt, ...validImageParts]);
+            finalAnalysisText = resultPro.response.text();
+            console.log("✅ Análise de FOTOS salva com sucesso pelo motor 1.5-PRO!");
+        } catch (errPro: any) {
+            console.log("❌ Ambos os motores foram bloqueados pelo Google nas FOTOS.");
+            
+            // Retorna um texto amigável e status 200 pra não quebrar a tela do aluno
+            finalAnalysisText = "Sistema de análise de check-in temporariamente sobrecarregado. Nossa IA está processando imagens de outros atletas da equipe neste exato momento. Por favor, aguarde uns minutos e envie seu check-in novamente. Mantenha o foco!";
+            
+            return NextResponse.json({ 
+                analysis: finalAnalysisText,
+                isFinal: isFinalCheckIn 
+            }, { status: 200 }); 
+        }
+    }
+
+    // Se chegou aqui, um dos motores funcionou e passou a análise
     return NextResponse.json({ 
-      analysis: text,
+      analysis: finalAnalysisText,
       isFinal: isFinalCheckIn 
     });
 
