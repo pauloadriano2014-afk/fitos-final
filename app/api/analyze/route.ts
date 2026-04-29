@@ -7,8 +7,9 @@ import path from 'path';
 import os from 'os';
 
 // Configurações
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY || '');
+const apiKey = process.env.GEMINI_API_KEY || '';
+const genAI = new GoogleGenerativeAI(apiKey);
+const fileManager = new GoogleAIFileManager(apiKey);
 const prisma = new PrismaClient();
 
 export const maxDuration = 60;
@@ -135,32 +136,32 @@ export async function POST(req: Request) {
       "correction": "Sua Dica de Ouro ou Hack mental para corrigir a postura."
     }`;
 
-    // 🔥 SISTEMA DE MOTOR DUPLO (O FIM DO ERRO 429) 🔥
-    const model20 = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    const model15Pro = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); // O peso-pesado reserva
+    // 🔥 SISTEMA DE MOTOR DUPLO (SÉRIE 2.5 - VÍDEO) 🔥
+    const model25Flash = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model25Pro = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
     let result;
 
     try {
-      console.log("🔥 Tentando motor principal (gemini-2.0-flash)...");
-      result = await model20.generateContent([
+      console.log("🔥 Tentando motor principal em VÍDEO (gemini-2.5-flash)...");
+      result = await model25Flash.generateContent([
         { fileData: { mimeType: actualMimeType, fileUri: uploadResponse.file.uri } },
         { text: prompt }
       ]);
     } catch (err: any) {
-      console.log("⚠️ O Google bloqueou o 2.0 Flash (429). Acionando o tanque reserva (1.5-PRO) imediatamente...");
+      console.log("⚠️ O Google bloqueou o 2.5 Flash no VÍDEO. Acionando o tanque reserva (2.5-PRO)...");
       try {
-        result = await model15Pro.generateContent([
+        result = await model25Pro.generateContent([
           { fileData: { mimeType: actualMimeType, fileUri: uploadResponse.file.uri } },
           { text: prompt }
         ]);
-        console.log("✅ Análise salva com sucesso pelo motor 1.5-PRO!");
+        console.log("✅ Análise de VÍDEO salva com sucesso pelo motor 2.5-PRO!");
       } catch (errPro: any) {
-        console.log("❌ Ambos os motores foram bloqueados pelo Google.");
+        console.log("❌ Ambos os motores da série 2.5 falharam no VÍDEO.");
         return NextResponse.json({
-          feedback: "Sistema de análise de vídeo temporariamente sobrecarregado. Nossa IA está processando outros atletas da equipe.",
+          feedback: "Sistema de análise de vídeo temporariamente sobrecarregado. Nossa IA está processando outros atletas.",
           score: 0,
-          correction: "Por favor, tente analisar o vídeo novamente no próximo exercício. Mantenha o foco!"
+          correction: "Por favor, aguarde 1 minuto e tente analisar novamente. Mantenha o foco!"
         }, { status: 200 }); 
       }
     }
@@ -169,7 +170,7 @@ export async function POST(req: Request) {
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     const cleanedText = jsonMatch ? jsonMatch[0] : rawText.replace(/```json/g, '').replace(/```/g, '').trim();
 
-    console.log("🤖 Resposta IA (Limpa):", cleanedText);
+    console.log("🤖 Resposta IA Vídeo (Limpa):", cleanedText);
 
     let jsonResponse;
     try {
@@ -183,14 +184,14 @@ export async function POST(req: Request) {
     }
 
     // Gatilho da Notificação Push pro Coach
-    if (jsonResponse.score > 0 || jsonResponse.score === 0) {
+    if (jsonResponse.score >= 0) {
       await notifyCoach(alunoName, exerciseName, jsonResponse.score);
     }
 
     return NextResponse.json(jsonResponse);
 
   } catch (error: any) {
-    console.error("❌ ERRO NO SERVER:", error);
+    console.error("❌ ERRO NO SERVER DE VÍDEO:", error);
     return NextResponse.json({ error: "Erro interno", details: error.message }, { status: 500 });
   } finally {
     if (tempFilePath && fs.existsSync(tempFilePath)) {
