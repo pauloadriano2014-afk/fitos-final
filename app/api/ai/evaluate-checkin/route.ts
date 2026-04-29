@@ -220,7 +220,7 @@ INSTRUÇÃO:
 - Depois, conecte com a análise: aponte 2-3 pontos que você identificou que precisam de um acompanhamento mais próximo para dar o próximo passo.
 - Explique de forma natural que esses ajustes finos e individuais são exatamente o que a Consultoria Premium oferece: acompanhamento 1 a 1 com treino, dieta e check-ins personalizados.
 - Finalize com: para aproveitar o desconto especial de encerramento, é só responder *PREMIUM* aqui no WhatsApp.
-- O tom deve ser de oportunidade natural, como um próximo passo lógico. Nunca como um vendedor.
+- O tom deve ser de oportunidade natural, como um próximo passo lógico. Nunca como vendedor.
       `;
     } else {
       blocoUpsell = `
@@ -317,26 +317,27 @@ FORMATO DE SAÍDA
     const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("Chave da API não encontrada no Render. Verifique a aba Environment Variables.");
     
-    // 🔥 SISTEMA DE MOTOR DUPLO PARA FOTOS 🔥
+    // 🔥 SISTEMA DE MOTOR DUPLO (SÉRIE 2.5 - OS MAIS POTENTES) 🔥
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model20 = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    const model15Pro = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const modelMain = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Principal
+    const modelReserve = genAI.getGenerativeModel({ model: "gemini-2.5-pro" }); // Tanque de Guerra
 
     let finalAnalysisText = "";
 
     try {
-        console.log("🔥 Tentando motor principal em FOTOS (gemini-2.0-flash)...");
-        const result = await model20.generateContent([prompt, ...validImageParts]);
+        console.log("🔥 Tentando motor principal em FOTOS (gemini-2.5-flash)...");
+        const result = await modelMain.generateContent([prompt, ...validImageParts]);
         finalAnalysisText = result.response.text();
     } catch (err: any) {
-        console.log("⚠️ O Google bloqueou o 2.0 Flash nas FOTOS. Erro:", err.message);
+        console.log("⚠️ O Google bloqueou o 2.5 Flash nas FOTOS. Erro:", err.message);
         try {
-            const resultPro = await model15Pro.generateContent([prompt, ...validImageParts]);
+            console.log("🔥 Acionando o Tanque de Guerra (gemini-2.5-pro)...");
+            const resultPro = await modelReserve.generateContent([prompt, ...validImageParts]);
             finalAnalysisText = resultPro.response.text();
-            console.log("✅ Análise de FOTOS salva com sucesso pelo motor 1.5-PRO!");
+            console.log("✅ Análise de FOTOS salva com sucesso pelo motor 2.5-PRO!");
         } catch (errPro: any) {
             console.log("❌ Ambos os motores falharam nas FOTOS. Erro:", errPro.message);
-            finalAnalysisText = "Sistema de análise temporariamente sobrecarregado. Por favor, tente novamente.";
+            finalAnalysisText = "Sistema de análise temporariamente sobrecarregado. Por favor, aguarde 1 minuto e tente novamente.";
             return NextResponse.json({ analysis: finalAnalysisText, isFinal: isFinalCheckIn }, { status: 200 }); 
         }
     }
@@ -344,11 +345,10 @@ FORMATO DE SAÍDA
     return NextResponse.json({ analysis: finalAnalysisText, isFinal: isFinalCheckIn });
 
   } catch (error: any) {
-    // 🚨 ESSE É O NOSSO RAIO-X. ELE VAI MOSTRAR EXATAMENTE ONDE O SERVIDOR QUEBROU 🚨
     console.error("❌ Erro FATAL na rota de Check-in ANTES da IA:", error);
     return NextResponse.json({ 
         error: "Falha interna no servidor", 
-        details: error.message || String(error) // Vai enviar o motivo real (ex: Prisma, Imagem bloqueada, etc)
+        details: error.message || String(error) 
     }, { status: 500 });
   }
 }
