@@ -67,11 +67,14 @@ model User {
   createdContents   Content[]           @relation("CoachContents")
   createdCollections TemplateCollection[] @relation("CoachCollections") 
 
+  // 🔥 NOVO: Matrizes do Laboratório de IA
+  createdMotorTemplates MotorTemplate[] @relation("CoachMotorTemplates")
+
   // Relacionamentos do Aluno
   workouts        Workout[]
   anamneses       Anamnese[]
   history         WorkoutHistory[] 
-  assessments     Assessment[]        
+  assessments     Assessment[]       
   checkIns        CheckIn[]
   diets           Diet[] 
   
@@ -276,6 +279,27 @@ model WorkoutTemplate {
 
   collectionId String?
   collection   TemplateCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+}
+
+// 🔥 MOTOR DE PRESCRIÇÃO: AS MATRIZES INTELIGENTES 🔥
+model MotorTemplate {
+  id          String   @id @default(uuid())
+  name        String   // Ex: "ABCD Feminino Elite"
+  
+  // Filtros (Tags)
+  objectives  String[] // Ex: ["EMAGRECIMENTO", "HIPERTROFIA"]
+  levels      String[] // Ex: ["INTERMEDIÁRIO", "AVANÇADO"]
+  times       Int[]    // Ex: [45, 60, 90] (Minutos)
+  days        Int[]    // Ex: [3, 4] (Dias na semana)
+  
+  // A Estrutura Lógica (O JSON pesadão que o algoritmo vai ler)
+  structure   String   @db.Text 
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  coachId     String?
+  coach       User?    @relation("CoachMotorTemplates", fields: [coachId], references: [id], onDelete: Cascade)
 }
 
 model WorkoutHistory {
