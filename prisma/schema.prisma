@@ -92,7 +92,11 @@ model Exercise {
   id              String   @id @default(uuid())
   name            String   
   category        String
-  subCategory     String?  @default("Geral") // 🔥 NOVA COLUNA PARA O FILTRO AVANÇADO E FUTURA IA
+  subCategory     String?  @default("Geral") 
+  
+  // 🔥 A NOVA COLUNA DE TAGS DE AMBIENTE 🔥
+  environments    String[] @default(["ACADEMIA"])
+  
   videoUrl        String?
   instructions    String?
   createdAt       DateTime @default(now())
@@ -538,7 +542,6 @@ model DietFeedback {
   createdAt        DateTime @default(now())
 }
 
-// 🔥 MODELO DE PESQUISA DE SATISFAÇÃO (NPS) ATUALIZADO 🔥
 model SatisfactionSurvey {
   id                String   @id @default(uuid())
   userId            String
@@ -548,12 +551,11 @@ model SatisfactionSurvey {
   appExpReason      String?  @db.Text 
   
   visualExperience  String?  
-  visualReason      String?  @db.Text // Sugestão de nova cor
+  visualReason      String?  @db.Text 
 
   toolsExperience   String?  
   toolsReason       String?  @db.Text 
   
-  // 🔥 NOVA PERGUNTA: Biblioteca
   libraryExperience String?
 
   appImprovement    String?  @db.Text 
@@ -562,12 +564,11 @@ model SatisfactionSurvey {
   checkinExperience String   
   checkinReason     String?  @db.Text 
   
-  // 🔥 NOVAS PERGUNTAS DE DIETA
   dietExperience    String?  @db.Text 
   dietAdherence     String?  
-  dietRoutine       String?  // Avaliação da divisão de dias (Treino, Descanso)
-  dietTools         String?  // Avaliação de Água e Lista de Mercado
-  dietToolsReason   String?  @db.Text // Sugestões para ferramentas da dieta
+  dietRoutine       String?  
+  dietTools         String?  
+  dietToolsReason   String?  @db.Text 
   dietSubstitutions String?  
   
   createdAt         DateTime @default(now())

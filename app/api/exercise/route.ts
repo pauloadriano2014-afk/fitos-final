@@ -5,26 +5,22 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-// 🔥 INTELIGÊNCIA DE AUTO-TAGUEAMENTO 🔥
 function guessSubCategory(name: string, category: string): string {
   const n = name.toLowerCase();
   const c = category.toLowerCase();
 
-  // PEITORAL
   if (c.includes('peit')) {
     if (n.includes('inclinado') || n.includes('superior')) return 'Superior';
     if (n.includes('declinado') || n.includes('inferior')) return 'Inferior';
     return 'Medial'; 
   }
   
-  // COSTAS
   if (c.includes('costas') || c.includes('dorsal')) {
     if (n.includes('puxada') || n.includes('pulldown') || n.includes('barra fixa') || n.includes('pull down')) return 'Puxadas';
     if (n.includes('lombar') || n.includes('hiperextensão') || n.includes('bom dia')) return 'Lombar';
     return 'Remadas'; 
   }
   
-  // PERNAS
   if (c.includes('perna') || c.includes('membros inferiores') || c.includes('coxa')) {
     if (n.includes('panturrilha') || n.includes('gêmeos') || n.includes('gemeos') || n.includes('sóleo')) return 'Panturrilha';
     if (n.includes('glúteo') || n.includes('gluteo') || n.includes('pélvica') || n.includes('pelvica') || n.includes('abdutora') || n.includes('coice')) return 'Glúteos';
@@ -34,7 +30,6 @@ function guessSubCategory(name: string, category: string): string {
     return 'Geral';
   }
   
-  // OMBROS
   if (c.includes('ombro') || c.includes('deltoide')) {
     if (n.includes('encolhimento') || n.includes('trapézio') || n.includes('trapezio')) return 'Trapézio';
     if (n.includes('desenvolvimento')) return 'Multiarticular';
@@ -44,11 +39,10 @@ function guessSubCategory(name: string, category: string): string {
     return 'Geral';
   }
   
-  // ABDÔMEN
   if (c.includes('abd') || c.includes('core')) {
     if (n.includes('remador') || n.includes('rodinha') || n.includes('roda') || n.includes('canivete') || n.includes('completo')) return 'Completo';
     if (n.includes('infra') || n.includes('perna') || n.includes('pendurado')) return 'Infra';
-    if (n.includes('prancha') || n.includes('isometria') || n.includes('oblíquo') || n.includes('obliquo')) return 'Core'; // Apenas estabilizações e isometrias
+    if (n.includes('prancha') || n.includes('isometria') || n.includes('oblíquo') || n.includes('obliquo')) return 'Core'; 
     return 'Supra'; 
   }
   
@@ -81,12 +75,16 @@ export async function POST(req: Request) {
     const body = await req.json();
     const cat = body.muscleGroup || body.category || "Geral";
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
+    
+    // 🔥 PEGA A ARRAY ENVIADA PELO APP OU ASSUME 'ACADEMIA' SE VIER VAZIO 🔥
+    const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
 
     const exercise = await prisma.exercise.create({
       data: {
         name: body.name,
         category: cat,
         subCategory: subCat,
+        environments: envs, // JOGANDO PRO BANCO!
         videoUrl: body.videoUrl || "",
         instructions: body.instructions || "Execução padrão FIT OS.",
         coachId: body.adminId || null 
@@ -106,12 +104,16 @@ export async function PUT(req: Request) {
     const cat = body.muscleGroup || body.category || "Geral";
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
 
+    // 🔥 PEGA A ARRAY ENVIADA PELO APP OU ASSUME 'ACADEMIA' NA EDIÇÃO 🔥
+    const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
+
     const updatedExercise = await prisma.exercise.update({
       where: { id: body.id },
       data: {
         name: body.name,
         category: cat,
         subCategory: subCat,
+        environments: envs, // ATUALIZANDO NO BANCO!
         videoUrl: body.videoUrl || "",
         instructions: body.instructions || "Execução padrão FIT OS."
       }
