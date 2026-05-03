@@ -43,6 +43,8 @@ model User {
   dietGoal        String   @default("NONE") 
   goal            String?
   level           String?
+  isMenstruating  Boolean   @default(false)
+  menstruationStartDate DateTime?
 
   // 🔥 CHAVE DO MÓDULO DE DIETA (Toggle do Admin)
   dietModule      Boolean  @default(false)
