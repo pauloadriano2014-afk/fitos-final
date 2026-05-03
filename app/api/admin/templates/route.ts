@@ -38,6 +38,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
     }
 
+    // 🔥 TRAVA DE SEGURANÇA BLINDADA 🔥
+    // Se o ID for o bug "[object Object]" do JS ou não for uma string válida, derruba a requisição na hora!
+    if (id && (typeof id !== 'string' || id.includes('[object'))) {
+        return NextResponse.json({ error: "ID inválido/corrompido detectado. Atualização bloqueada." }, { status: 400 });
+    }
+
     if (id) {
         // 🔥 ATUALIZA O TEMPLATE E PERMITE MOVER DE PASTA
         await prisma.workoutTemplate.update({
@@ -74,7 +80,9 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
-    if (!id) return NextResponse.json({ error: "ID não fornecido" }, { status: 400 });
+    
+    // 🔥 TRAVA DE SEGURANÇA NA EXCLUSÃO TAMBÉM 🔥
+    if (!id || id.includes('[object')) return NextResponse.json({ error: "ID inválido ou corrompido" }, { status: 400 });
 
     try {
         await prisma.workoutTemplate.delete({ where: { id } });
