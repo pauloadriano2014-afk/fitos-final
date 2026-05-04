@@ -26,9 +26,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         evaluationUrl: true,
         disableCheckIn: true,
         dietGoal: true,
-        dietModule: true, // 🔥 CHAVE DO MÓDULO DE DIETA
+        dietModule: true, 
         goal: true,
         level: true,
+        // 🔥 LIBERANDO OS CAMPOS DO CICLO MENSTRUAL PARA O FRONTEND 🔥
+        isMenstruating: true,
+        menstruationStartDate: true,
         // 🔥 Carrega a anamnese mais recente
         anamneses: {
           orderBy: { createdAt: 'desc' },
@@ -69,7 +72,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-// 👇 ATUALIZA DADOS DO ALUNO PELO PAINEL ADMIN
+// 👇 ATUALIZA DADOS DO ALUNO PELO PAINEL ADMIN (METODO PATCH)
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
@@ -83,6 +86,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json(user);
   } catch (error) {
     console.error("Erro PATCH Admin User:", error);
+    return NextResponse.json({ error: "Erro ao atualizar usuário" }, { status: 500 });
+  }
+}
+
+// 🔥 ADICIONADO: MÉTODO PUT (Que é o que o App da Aluna usa para salvar o botão) 🔥
+export async function PUT(req: Request, { params }: { params: { id: string } }) {
+  try {
+    const body = await req.json();
+    const userId = params.id;
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: body
+    });
+
+    return NextResponse.json(user);
+  } catch (error) {
+    console.error("Erro PUT Admin User:", error);
     return NextResponse.json({ error: "Erro ao atualizar usuário" }, { status: 500 });
   }
 }
