@@ -90,32 +90,46 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-// 🔥 ADICIONADO: MÉTODO PUT (Que é o que o App da Aluna usa para salvar o botão) 🔥
+// 🔥 ADICIONADO: MÉTODO PUT COM AUTOMAÇÃO DE DELOAD 🔥
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
     const userId = params.id;
 
+    // 1. Atualiza o perfil da Aluna
     const user = await prisma.user.update({
       where: { id: userId },
       data: body
     });
 
+    // 2. 🔥 A MÁGICA DA AUTOMAÇÃO 🔥
+    // Se a aluna LIGOU o botão de menstruação, aplicamos o Deload automático nos treinos dela
+    if (body.isMenstruating === true) {
+      const deloadEnd = new Date();
+      deloadEnd.setDate(deloadEnd.getDate() + 5); // Validade de 5 dias
+
+      await prisma.workout.updateMany({
+        where: { userId: userId, archived: false },
+        data: {
+          intensityMultiplier: 0.8, // Aplica 20% de redução (Deload)
+          intensityEndDate: deloadEnd
+        }
+      });
+    } 
+    // Se a aluna DESLIGOU o botão (ou o prazo acabou), removemos o Deload
+    else if (body.isMenstruating === false) {
+      await prisma.workout.updateMany({
+        where: { userId: userId, archived: false },
+        data: {
+          intensityMultiplier: 1.0, // Volta a carga para 100%
+          intensityEndDate: null
+        }
+      });
+    }
+
     return NextResponse.json(user);
   } catch (error) {
-    console.error("Erro PUT Admin User:", error);
+    console.error("Erro PUT Admin User com Automação:", error);
     return NextResponse.json({ error: "Erro ao atualizar usuário" }, { status: 500 });
-  }
-}
-
-// 👇 EXCLUIR ALUNO
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-  try {
-    const userId = params.id;
-    await prisma.user.delete({ where: { id: userId } });
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Erro DELETE Admin User:", error);
-    return NextResponse.json({ error: "Erro ao excluir usuário" }, { status: 500 });
   }
 }
