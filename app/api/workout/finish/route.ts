@@ -1,5 +1,10 @@
+// app/api/workout/finish/route.ts
+
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+
+// 🔥 IMPORTAMOS O CÉREBRO DA NOSSA IA 🔥
+import { analyzeWorkoutEvolution } from '@/app/utils/analyzeEvolution'; 
 
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
@@ -64,6 +69,10 @@ export async function POST(req: Request) {
             coach: { select: { pushToken: true } } // Busca o token do Coach
         }
     });
+
+    // 🔥 GATILHO SILENCIOSO DA IA 🔥
+    // Roda a verificação de Estagnação em background. Se achar problema, salva no banco!
+    analyzeWorkoutEvolution(userId, user.coachId || undefined).catch(console.error);
 
     // 🔥 DISPARO DE NOTIFICAÇÃO PARA O COACH
     try {

@@ -86,8 +86,12 @@ model User {
   contentCompletions ContentCompletion[] 
   unlockedContents  ContentAccess[]      
 
-  // 🔥 NOVO: Relacionamento de Pesquisas de Satisfação
+  // Relacionamento de Pesquisas de Satisfação
   surveys           SatisfactionSurvey[]
+
+  // 🔥 SISTEMA DE ALERTAS IA 🔥
+  alertsAsStudent   StudentAlert[] @relation("UserAlerts")
+  alertsAsCoach     StudentAlert[] @relation("CoachAlerts")
 }
 
 model Exercise {
@@ -502,20 +506,20 @@ model ContentAccess {
 }
 
 model DietTemplate {
-  id          String   @id @default(uuid())
-  name        String   
-  goal        String?
-  totalKcal   Float?
-  meals       Json     
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  name      String   
+  goal      String?
+  totalKcal Float?
+  meals     Json     
+  createdAt DateTime @default(now())
 }
 
 model MealTemplate {
-  id          String   @id @default(uuid())
-  name        String   
-  category    String?  
-  items       Json     
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  name      String   
+  category  String?  
+  items     Json     
+  createdAt DateTime @default(now())
 }
 
 model DailyCheckin {
@@ -575,4 +579,25 @@ model SatisfactionSurvey {
   
   createdAt         DateTime @default(now())
   readByAdmin       Boolean  @default(false)
+}
+
+// 🔥 NOVO: SISTEMA DE ALERTAS IA (ESTAGNAÇÃO E EVOLUÇÃO) 🔥
+model StudentAlert {
+  id           String   @id @default(uuid())
+  
+  // Aluno que gerou o alerta
+  userId       String
+  user         User     @relation("UserAlerts", fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Opcional: Treinador dono do alerta (Para o Multi-Tenant)
+  coachId      String?
+  coach        User?    @relation("CoachAlerts", fields: [coachId], references: [id], onDelete: Cascade)
+
+  type         String   // "STAGNATION", "EVOLUTION", "RISK"
+  title        String   // Ex: "Estagnação de Carga"
+  message      String   @db.Text // Sugestão gerada pela IA
+  exerciseName String?  // Ex: "Agachamento Livre" (caso o alerta seja de um exercício específico)
+  
+  isRead       Boolean  @default(false) // Para o "Sininho" de notificações do Admin apagar após lido
+  createdAt    DateTime @default(now())
 }
