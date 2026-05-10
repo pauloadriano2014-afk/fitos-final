@@ -29,9 +29,17 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         dietModule: true, 
         goal: true,
         level: true,
+
+        // 🔥 GESTÃO FINANCEIRA E CONTRATOS (LIBERADOS PARA O FRONTEND) 🔥
+        contractType: true,
+        contractValue: true,
+        paymentDueDate: true,
+        nextWorkoutUpdate: true,
+
         // 🔥 LIBERANDO OS CAMPOS DO CICLO MENSTRUAL PARA O FRONTEND 🔥
         isMenstruating: true,
         menstruationStartDate: true,
+        
         // 🔥 Carrega a anamnese mais recente
         anamneses: {
           orderBy: { createdAt: 'desc' },
@@ -132,4 +140,21 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     console.error("Erro PUT Admin User com Automação:", error);
     return NextResponse.json({ error: "Erro ao atualizar usuário" }, { status: 500 });
   }
+}
+
+// 🔥 ADICIONADO: MÉTODO DELETE PARA EXCLUSÃO DE ALUNO 🔥
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+    try {
+        const id = params.id;
+        if (!id) return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+
+        await prisma.user.delete({
+            where: { id: id }
+        });
+
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        console.error("Erro ao apagar utilizador:", error);
+        return NextResponse.json({ error: "Falha ao eliminar utilizador." }, { status: 500 });
+    }
 }

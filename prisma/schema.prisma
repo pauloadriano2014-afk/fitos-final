@@ -28,6 +28,12 @@ model User {
   plan            String   @default("PERFORMANCE") // FREE, ELITE, VIP
   active          Boolean  @default(true)
   
+  // 🔥 GESTÃO FINANCEIRA E CONTRATOS 🔥
+  contractType      String?   @default("Mensal") // Mensal, Trimestral, Semestral, Anual, Projeto 90, Ficha 8S
+  contractValue     Float?    @default(0.0)
+  paymentDueDate    DateTime? // Data de Vencimento
+  nextWorkoutUpdate DateTime? // Data da próxima troca de treino
+
   // Dados Rápidos (Cache)
   currentWeight   Float? 
   
