@@ -29,6 +29,13 @@ export async function GET(req: Request) {
         disableCheckIn: true,  
         coachId: true,        
         nutritionistId: true, 
+
+        // 🔥 A MÁGICA FINANCEIRA LIBERADA PARA O FRONTEND 🔥
+        contractType: true,
+        contractValue: true,
+        paymentDueDate: true,
+        nextWorkoutUpdate: true,
+
         workouts: {
             where: { archived: false },
             orderBy: { createdAt: 'desc' }, 
