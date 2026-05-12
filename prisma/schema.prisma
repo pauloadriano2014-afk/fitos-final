@@ -34,6 +34,7 @@ model User {
   paymentDueDate    DateTime? // Data de Vencimento
   nextWorkoutUpdate DateTime? // Data da próxima troca de treino
   financeCategory   String?   @default("Consultoria Online") // 🔥 CATEGORIA INDEPENDENTE NO FINANCEIRO 🔥
+  isFinanceActive   Boolean   @default(true)
 
   // Dados Rápidos (Cache)
   currentWeight   Float? 

@@ -6,13 +6,14 @@ const prisma = new PrismaClient();
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId, contractType, contractValue, paymentDueDate, financeCategory } = body;
+    // 🔥 Agora sim estamos recebendo o isFinanceActive 🔥
+    const { userId, contractType, contractValue, paymentDueDate, financeCategory, isFinanceActive } = body;
 
     if (!userId) {
       return NextResponse.json({ error: "ID do aluno é obrigatório" }, { status: 400 });
     }
 
-    // 🔥 BLINDAGEM DOS CENTAVOS (Aceita vírgula ou ponto e transforma em Float pro BD) 🔥
+    // Blindagem dos centavos
     const parsedValue = parseFloat(String(contractValue).replace(',', '.')) || 0;
 
     // 🔥 ATUALIZA O ALUNO NO BANCO DE DADOS 🔥
@@ -22,7 +23,9 @@ export async function POST(req: NextRequest) {
         contractType: contractType || 'Mensal',
         contractValue: parsedValue,
         paymentDueDate: paymentDueDate ? new Date(paymentDueDate) : null,
-        financeCategory: financeCategory || 'Consultoria Online', 
+        financeCategory: financeCategory || 'Consultoria Online',
+        // 🔥 AQUI ESTAVA FALTANDO! Agora salva de verdade no banco de dados 🔥
+        isFinanceActive: isFinanceActive !== undefined ? isFinanceActive : true 
       },
     });
 
