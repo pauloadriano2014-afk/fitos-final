@@ -33,6 +33,7 @@ model User {
   contractValue     Float?    @default(0.0)
   paymentDueDate    DateTime? // Data de Vencimento
   nextWorkoutUpdate DateTime? // Data da próxima troca de treino
+  financeCategory   String?   @default("Consultoria Online") // 🔥 CATEGORIA INDEPENDENTE NO FINANCEIRO 🔥
 
   // Dados Rápidos (Cache)
   currentWeight   Float? 
@@ -216,7 +217,7 @@ model Anamnese {
 model Diet {
   id            String   @id @default(uuid())
   userId        String   
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   pdfUrl        String?   
   
