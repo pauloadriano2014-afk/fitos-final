@@ -36,6 +36,10 @@ export async function GET(req: Request) {
         paymentDueDate: true,
         nextWorkoutUpdate: true,
 
+        // 🔥 INJETADO AQUI PARA O F5 NÃO RESSUSCITAR NINGUÉM 🔥
+        financeCategory: true,
+        isFinanceActive: true,
+
         workouts: {
             where: { archived: false },
             orderBy: { createdAt: 'desc' }, 
