@@ -5,13 +5,14 @@ const prisma = new PrismaClient();
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const { id } = params; // O ID do vídeo
+    const { id } = params; 
     
     const comments = await prisma.contentComment.findMany({
       where: { contentId: id },
       orderBy: { createdAt: 'desc' },
       include: {
-        user: { select: { name: true } } // Traz o nome do aluno
+        // 🔥 INCLUÍMOS O ROLE AQUI PARA ACHAR VOCÊ E A ADRI 🔥
+        user: { select: { name: true, role: true } } 
       }
     });
 
