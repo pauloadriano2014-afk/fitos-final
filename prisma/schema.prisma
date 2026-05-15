@@ -483,6 +483,11 @@ model ContentComment {
   content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
   
   createdAt DateTime @default(now())
+
+  // 🔥 AUTO-RELACIONAMENTO PARA RESPOSTAS (THREADS) 🔥
+  parentId  String?
+  parent    ContentComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   ContentComment[] @relation("CommentReplies")
 }
 
 model ContentCompletion {
