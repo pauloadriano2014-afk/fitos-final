@@ -114,7 +114,8 @@ export async function POST(req: Request) {
         photoBack: backUrl,
         photoSide: sideUrl,
         extraPhotos: extraUrls, 
-        date: new Date()
+        date: new Date(),
+        allowMarketing: allowMarketing || false // 🔥 INSERIDO AQUI PARA GRAVAR NO BANCO 🔥
     };
 
     const checkIn = await prisma.checkIn.create({
@@ -202,7 +203,7 @@ export async function GET(req: Request) {
             take: 50, 
             select: {
                 id: true,
-                userId: true, // 🔥 O PULO DO GATO QUE FALTAVA AQUI PARA IDENTIFICAR O ALUNO
+                userId: true, 
                 weight: true,
                 feedback: true,
                 coachFeedback: true,
@@ -213,7 +214,7 @@ export async function GET(req: Request) {
                 photoSide: true,
                 extraPhotos: true,
                 allowMarketing: true,
-                user: { select: { id: true, name: true, email: true, coachId: true } } // 🔥 IDs dos usuários INJETADOS
+                user: { select: { id: true, name: true, email: true, coachId: true } } 
             }
         });
 
