@@ -73,8 +73,8 @@ export async function POST(req: Request) {
     }
 
     // ── IDENTIDADE DINÂMICA DO COACH ──
-    const currentCoach = coachName || 'Paulo Adriano';
-    const isAdri = currentCoach === 'Adri Kern';
+    const ADRI_COACH_ID = 'b7c0c181-41fd-4156-b8fe-963a267759a3';
+    const isAdri = (user?.coachId === ADRI_COACH_ID) || (coachName === 'Adri Kern') || (coachName === 'Adri');
 
     const coachIdentity = isAdri 
         ? "Coach Adri Kern — Personal Trainer especializada em estética feminina e saúde." 
@@ -83,6 +83,11 @@ export async function POST(req: Request) {
     const coachTone = isAdri
         ? "- Tom feminino, empático, altamente motivacional e acolhedor. Use expressões de incentivo vibrantes ('maravilhosa', 'arrasou', 'orgulho da sua dedicação', 'bora pra cima').\n- Quando o resultado for ruim ou estagnado, acolha a dificuldade, mas cobre constância: 'Calma, isso é normal, mas precisamos focar agora. Seu plano já prevê isso, confia no processo!'\n- Quando for bom: comemore muito como se fosse parceira de treino dela.\n- SEMPRE transmita acolhimento e força."
         : "- Você é um PROFESSOR com didática afiada. Explica as coisas de um jeito que qualquer pessoa entende, mesmo quem nunca pisou numa academia.\n- Quando o resultado é ruim ou estagnado: você NÃO se mostra satisfeito, mas entende o momento. Não julga. Ajusta a rota e mantém o aluno motivado. Ex: 'Olha, a região da cintura ainda não respondeu como a gente queria. Mas calma — isso é normal nessa fase. Seu plano já está ajustado pra atacar essa frente...'\n- Quando o resultado é bom: você se empolga DE VERDADE. Fica informal, celebra. Ex: 'Caramba, olha a diferença nas costas! Alargou bonito...'\n- SEMPRE transmita motivação. Mesmo nos feedbacks mais duros, o aluno precisa sair querendo treinar amanhã.";
+
+    // 🔥 TRAVA DE ASSINATURA UNIFICADA 🔥
+    const signatureBlock = isAdri 
+        ? "Sua Coach,\nAdri Kern / PA ELITE TEAM" 
+        : "Seu Coach,\nPaulo Adriano / PA ELITE TEAM";
 
     // ── COLETA DE FOTOS PARA O GEMINI ──
     let allPhotoUrls: string[] = [];
@@ -116,7 +121,7 @@ export async function POST(req: Request) {
             return { inlineData: { data: Buffer.from(buffer).toString("base64"), mimeType: "image/jpeg" } };
         } catch (e: any) {
             console.error(`❌ Erro crítico ao processar a imagem ${url}:`, e.message);
-            return null; // Retorna null para não explodir o Promise.all
+            return null; 
         }
     }));
 
@@ -131,12 +136,12 @@ export async function POST(req: Request) {
     if (isPremium && anamnese) {
       blocoAnamnese = `
 ── ANAMNESE COMPLETA (ALUNO PREMIUM — USE NA ANÁLISE) ──
-- Frequência semanal: ${anamnese.frequencia}x
-- Tempo por sessão: ${anamnese.tempoDisponivel}min
-- Limitações/Dores: ${anamnese.limitacoes?.join(', ') || 'Nenhuma reportada'}
-- Cirurgias: ${anamnese.cirurgias?.join(', ') || 'Nenhuma'}
-- Equipamentos disponíveis: ${anamnese.equipamentos?.join(', ') || 'Academia completa'}
-- Objetivo declarado: ${anamnese.objetivo || user?.goal || 'Estética Geral'}
+- Frequência semanal: \${anamnese.frequencia}x
+- Tempo por sessão: \${anamnese.tempoDisponivel}min
+- Limitações/Dores: \${anamnese.limitacoes?.join(', ') || 'Nenhuma reportada'}
+- Cirurgias: \${anamnese.cirurgias?.join(', ') || 'Nenhuma'}
+- Equipamentos disponíveis: \${anamnese.equipamentos?.join(', ') || 'Academia completa'}
+- Objetivo declarado: \${anamnese.objetivo || user?.goal || 'Estética Geral'}
 
 INSTRUÇÃO: Cruze esses dados com o que você VÊ nas fotos de forma natural na conversa.
 Exemplo: "Como você treina 3x por semana, as costas ainda estão precisando de mais estímulo — mas seu plano já está ajustado pra isso."
@@ -165,7 +170,7 @@ Exemplo: "Como você treina 3x por semana, as costas ainda estão precisando de 
         blocoMomento = `
 ── MOMENTO: ANÁLISE AVULSA (LABORATÓRIO IA) ──
 Esta é uma análise de rotina ou avaliação isolada do shape atual.
-${contextText ? `\nDIRECIONAMENTO DO COACH: "${contextText}" (Dê extrema prioridade a este direcionamento na sua análise).` : ''}
+\${contextText ? \`\\nDIRECIONAMENTO DO COACH: "\${contextText}" (Dê extrema prioridade a este direcionamento na sua análise).\` : ''}
 
 O QUE FAZER:
 - Faça um raio-X visual honesto do corpo atual.
@@ -193,7 +198,7 @@ O QUE NÃO FAZER:
 ── MOMENTO: COMPARATIVO DE EVOLUÇÃO ──
 Você está recebendo fotos ATUAIS e fotos ANTERIORES do mesmo aluno.
 As primeiras fotos (geralmente 3) são as ATUAIS. As últimas são as ANTERIORES (Base de comparação).
-${contextText ? `\nDIRECIONAMENTO DO COACH: "${contextText}" (Leve isso em consideração ao comparar).` : ''}
+\${contextText ? \`\\nDIRECIONAMENTO DO COACH: "\${contextText}" (Leve isso em consideração ao comparar).\` : ''}
 
 O QUE FAZER:
 - Compare foto por foto (frente com frente, lado com lado, costas com costas).
@@ -213,7 +218,7 @@ O QUE NÃO FAZER:
     if (isFinalCheckIn && (isChallenge || isFichas)) {
       blocoUpsell = `
 ── MOMENTO DE TRANSIÇÃO (UPSELL NATURAL) ──
-O aluno FINALIZOU o ciclo do plano "${planoLabel}".
+O aluno FINALIZOU o ciclo do plano "\ref{\${planoLabel}}".
 
 INSTRUÇÃO:
 - Primeiro, parabenize genuinamente. Chegar ao final exige disciplina real e isso merece reconhecimento.
@@ -264,7 +269,7 @@ DADOS DO ALUNO
 - Nome: ${user?.name || 'Aluno'}
 - Objetivo: ${user?.goal || anamnese?.objetivo || "Estética Geral"}
 - Peso atual: ${currentWeight ? currentWeight + ' kg' : 'Não informado'}
-${oldWeight ? `- Peso anterior da base de comparação: ${oldWeight} kg (diferença: ${(parseFloat(currentWeight || 0) - oldWeight).toFixed(1)} kg)` : ''}
+${oldWeight ? "- Peso anterior da base de comparação: " + oldWeight + " kg (diferença: " + (parseFloat(currentWeight || 0) - oldWeight).toFixed(1) + " kg)" : ""}
 - Comentário do aluno: "${userFeedback || "Nenhum comentário enviado"}"
 ${blocoAnamnese}
 
@@ -312,6 +317,11 @@ FORMATO DE SAÍDA
 - NÃO use markdown com # (heading). Apenas *negrito* e emojis.
 - NÃO use listas com hífen ou bullet points. Escreva em parágrafos corridos e naturais.
 - NÃO use termos técnicos sem explicar.
+- NUNCA use frases clichês de inteligência artificial como "Em resumo", "Por fim", "Lembre-se que", "Espero que isso ajude", "Continue o excelente trabalho". Seja direto e natural, encerre a mensagem com a força da sua análise e vá direto para a assinatura.
+- VALORIZE A CONSTÂNCIA: Se o aluno teve resultado, elogie a disciplina dele antes de elogiar o corpo. Mostre que você sabe que o resultado veio do esforço diário dele com o treino e a dieta.
+- OBRIGATÓRIO: Termine a avaliação assinando EXATAMENTE com o bloco de texto abaixo:
+
+${signatureBlock}
     `;
 
     const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;
@@ -319,8 +329,8 @@ FORMATO DE SAÍDA
     
     // 🔥 SISTEMA DE MOTOR DUPLO (SÉRIE 2.5 - OS MAIS POTENTES) 🔥
     const genAI = new GoogleGenerativeAI(apiKey);
-    const modelMain = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Principal
-    const modelReserve = genAI.getGenerativeModel({ model: "gemini-2.5-pro" }); // Tanque de Guerra
+    const modelMain = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
+    const modelReserve = genAI.getGenerativeModel({ model: "gemini-2.5-pro" }); 
 
     let finalAnalysisText = "";
 
