@@ -18,7 +18,7 @@ export async function GET(req: Request) {
         id: true,
         name: true,
         email: true,
-        phone: true,          // 🔥 O CAMPO QUE FALTAVA
+        phone: true,          
         role: true,
         plan: true,
         plan_tier: true,
@@ -29,6 +29,7 @@ export async function GET(req: Request) {
         disableCheckIn: true,  
         coachId: true,        
         nutritionistId: true, 
+        isMenstruating: true, // 🔥 ADICIONADO PARA O DASHBOARD LER O STATUS MENSTRUAL 🔥
 
         // 🔥 A MÁGICA FINANCEIRA LIBERADA PARA O FRONTEND 🔥
         contractType: true,
@@ -44,7 +45,12 @@ export async function GET(req: Request) {
             where: { archived: false },
             orderBy: { createdAt: 'desc' }, 
             take: 1,
-            select: { id: true, endDate: true, name: true }
+            select: { 
+                id: true, 
+                endDate: true, 
+                name: true, 
+                intensityMultiplier: true // 🔥 ADICIONADO PARA LER O STATUS DO DELOAD NO TREINO 🔥
+            }
         },
         _count: {
             select: {
