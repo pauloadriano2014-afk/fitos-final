@@ -6,8 +6,8 @@ const prisma = new PrismaClient();
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    // 🔥 Agora sim estamos recebendo o isFinanceActive 🔥
-    const { userId, contractType, contractValue, paymentDueDate, financeCategory, isFinanceActive } = body;
+    // 🔥 Agora sim estamos recebendo o isFinanceActive e o startDate 🔥
+    const { userId, contractType, contractValue, paymentDueDate, startDate, financeCategory, isFinanceActive } = body;
 
     if (!userId) {
       return NextResponse.json({ error: "ID do aluno é obrigatório" }, { status: 400 });
@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
         contractType: contractType || 'Mensal',
         contractValue: parsedValue,
         paymentDueDate: paymentDueDate ? new Date(paymentDueDate) : null,
+        startDate: startDate ? new Date(startDate) : undefined, // 🔥 DATA DE INÍCIO SALVA AQUI 🔥
         financeCategory: financeCategory || 'Consultoria Online',
         // 🔥 AQUI ESTAVA FALTANDO! Agora salva de verdade no banco de dados 🔥
         isFinanceActive: isFinanceActive !== undefined ? isFinanceActive : true 
