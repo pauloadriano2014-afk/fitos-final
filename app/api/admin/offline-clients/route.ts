@@ -1,4 +1,3 @@
-// app/api/admin/offline-clients/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -14,29 +13,49 @@ export async function POST(req: Request) {
             coachId, assignedCoach 
         } = body;
 
-        // Upsert: Atualiza se achar o ID, ou cria um novo se não achar
+        if (!id) {
+            return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
+        }
+
+        // Upsert: Atualiza se achar o ID, ou cria um novo
         const client = await prisma.offlineClient.upsert({
-            where: { id: id || '' }, 
+            where: { id: id }, 
             update: {
-                name, phone, plan, financeCategory, contractType,
+                name,
+                phone,
+                plan,
+                financeCategory,
+                contractType,
                 contractValue: parseFloat(contractValue) || 0,
                 startDate: startDate ? new Date(startDate) : null,
                 paymentDueDate: paymentDueDate ? new Date(paymentDueDate) : null,
-                photoUrl, isFinanceActive, assignedCoach
+                photoUrl,
+                isFinanceActive,
+                assignedCoach
             },
             create: {
-                id, // Usa o ID gerado pelo aplicativo (offline_xxxx)
-                name, phone, plan, financeCategory, contractType,
+                id,
+                name,
+                phone,
+                plan,
+                financeCategory,
+                contractType,
                 contractValue: parseFloat(contractValue) || 0,
                 startDate: startDate ? new Date(startDate) : null,
                 paymentDueDate: paymentDueDate ? new Date(paymentDueDate) : null,
-                photoUrl, isFinanceActive, coachId, assignedCoach
+                photoUrl,
+                isFinanceActive,
+                assignedCoach,
+                coachId
             }
         });
 
         return NextResponse.json({ success: true, client });
     } catch (error: any) {
         console.error("Erro ao salvar OfflineClient:", error);
-        return NextResponse.json({ error: "Erro interno ao salvar aluno offline", details: error.message }, { status: 500 });
+        return NextResponse.json({ 
+            error: "Erro interno ao salvar aluno offline", 
+            details: error.message 
+        }, { status: 500 });
     }
 }

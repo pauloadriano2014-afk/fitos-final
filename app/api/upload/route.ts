@@ -1,4 +1,3 @@
-// app/api/upload/route.ts
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
@@ -11,11 +10,11 @@ export async function POST(req: Request) {
     }
 
     const fileName = file.name.toLowerCase();
-    const isValidFormat = fileName.match(/\.(mp4|mov|avi|mp3|wav|m4a|aac)$/i);
+    const isValidFormat = fileName.match(/\.(mp4|mov|avi|mp3|wav|m4a|aac|mkv)$/i);
 
     if (!isValidFormat) {
       return NextResponse.json({ 
-          error: "Formato inválido. O servidor aceita .mp4, .mov, .avi, .mp3, .wav, .m4a ou .aac" 
+          error: "Formato inválido. Aceitos: .mp4, .mov, .avi, .mp3, .wav, .m4a, .aac, .mkv" 
       }, { status: 400 });
     }
 
@@ -26,6 +25,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Configuração da Cloudflare ausente no servidor." }, { status: 500 });
     }
 
+    // 🔥 PREPARAÇÃO DE SEGURANÇA PARA O FORM DATA 🔥
+    // O Cloudflare Stream espera o arquivo como um stream.
     const cfFormData = new FormData();
     cfFormData.append('file', file);
 
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiToken}`,
+          // NÃO defina o Content-Type manualmente aqui, deixe o fetch detectar o boundary do FormData
         },
         body: cfFormData,
       }
@@ -43,23 +45,30 @@ export async function POST(req: Request) {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      console.error("ERRO CLOUDFLARE:", data);
-      throw new Error(data.errors?.[0]?.message || "Falha no upload para Cloudflare Stream");
+      console.error("ERRO CLOUDFLARE STREAM:", JSON.stringify(data, null, 2));
+      return NextResponse.json({ 
+          error: data.errors?.[0]?.message || "Falha no upload para Cloudflare Stream" 
+      }, { status: response.status });
     }
 
-    // 🔥 Devolve o link HLS instantâneo (sem forçar MP4)
+    // 🔥 DADOS DO VÍDEO PROCESSADO 🔥
     const videoGuid = data.result.uid;
-    const videoUrl = data.result.playback.hls; 
+    const hlsUrl = data.result.playback.hls;
+    const dashUrl = data.result.playback.dash;
     
     return NextResponse.json({ 
       success: true, 
-      videoUrl, 
+      videoUrl: hlsUrl, // Link HLS principal para o player
+      dashUrl: dashUrl,
       guid: videoGuid,
-      message: "Upload instantâneo concluído!"
+      message: "Upload enviado com sucesso! O processamento começou."
     });
 
   } catch (error: any) {
-    console.error("ERRO NO UPLOAD:", error);
-    return NextResponse.json({ error: "Erro interno no servidor", details: error.message }, { status: 500 });
+    console.error("ERRO NO UPLOAD (CATCH):", error);
+    return NextResponse.json({ 
+        error: "Erro interno no servidor ao processar o upload", 
+        details: error.message 
+    }, { status: 500 });
   }
 }
