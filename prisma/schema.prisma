@@ -32,6 +32,7 @@ model User {
   contractType      String?   @default("Mensal") // Mensal, Trimestral, Semestral, Anual, Projeto 90, Ficha 8S
   contractValue     Float?    @default(0.0)
   paymentDueDate    DateTime? // Data de Vencimento
+  startDate         DateTime? // Data de Início
   nextWorkoutUpdate DateTime? // Data da próxima troca de treino
   financeCategory   String?   @default("Consultoria Online") // 🔥 CATEGORIA INDEPENDENTE NO FINANCEIRO 🔥
   isFinanceActive   Boolean   @default(true)
@@ -80,6 +81,9 @@ model User {
   // 🔥 NOVO: Matrizes do Laboratório de IA
   createdMotorTemplates MotorTemplate[] @relation("CoachMotorTemplates")
 
+  // 🔥 ALUNOS OFFLINE DO FINANCEIRO 🔥
+  offlineClients    OfflineClient[]     @relation("CoachOfflineClients")
+
   // Relacionamentos do Aluno
   workouts        Workout[]
   anamneses       Anamnese[]
@@ -100,6 +104,28 @@ model User {
   // 🔥 SISTEMA DE ALERTAS IA 🔥
   alertsAsStudent   StudentAlert[] @relation("UserAlerts")
   alertsAsCoach     StudentAlert[] @relation("CoachAlerts")
+}
+
+// 🔥 TABELA EXCLUSIVA PARA ALUNOS DO FINANCEIRO (OFFLINE) 🔥
+model OfflineClient {
+  id              String    @id
+  name            String
+  phone           String?
+  plan            String?
+  financeCategory String?   @default("Consultoria Online")
+  contractType    String?   @default("Mensal")
+  contractValue   Float?    @default(0.0)
+  startDate       DateTime?
+  paymentDueDate  DateTime?
+  photoUrl        String?
+  isFinanceActive Boolean   @default(true)
+  assignedCoach   String?   // "PAULO" ou "ADRI" para o filtro do App
+
+  coachId         String?
+  coach           User?     @relation("CoachOfflineClients", fields: [coachId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model Exercise {
