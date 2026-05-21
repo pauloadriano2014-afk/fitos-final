@@ -17,36 +17,25 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
         }
 
+        const safeStartDate = startDate ? new Date(startDate) : null;
+        const safePaymentDueDate = paymentDueDate ? new Date(paymentDueDate) : null;
+
         // Upsert: Atualiza se achar o ID, ou cria um novo
         const client = await prisma.offlineClient.upsert({
             where: { id: id }, 
             update: {
-                name,
-                phone,
-                plan,
-                financeCategory,
-                contractType,
+                name, phone, plan, financeCategory, contractType,
                 contractValue: parseFloat(contractValue) || 0,
-                startDate: startDate ? new Date(startDate) : null,
-                paymentDueDate: paymentDueDate ? new Date(paymentDueDate) : null,
-                photoUrl,
-                isFinanceActive,
-                assignedCoach
+                startDate: safeStartDate,
+                paymentDueDate: safePaymentDueDate,
+                photoUrl, isFinanceActive, assignedCoach
             },
             create: {
-                id,
-                name,
-                phone,
-                plan,
-                financeCategory,
-                contractType,
+                id, name, phone, plan, financeCategory, contractType,
                 contractValue: parseFloat(contractValue) || 0,
-                startDate: startDate ? new Date(startDate) : null,
-                paymentDueDate: paymentDueDate ? new Date(paymentDueDate) : null,
-                photoUrl,
-                isFinanceActive,
-                assignedCoach,
-                coachId
+                startDate: safeStartDate,
+                paymentDueDate: safePaymentDueDate,
+                photoUrl, isFinanceActive, assignedCoach, coachId
             }
         });
 
