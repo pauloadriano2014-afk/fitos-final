@@ -26,17 +26,18 @@ export async function POST(req: Request) {
     }
 
     // 🔥 PREPARAÇÃO DE SEGURANÇA PARA O FORM DATA 🔥
-    // O Cloudflare Stream espera o arquivo como um stream.
     const cfFormData = new FormData();
-    cfFormData.append('file', file);
+    // Garantimos o envio do arquivo com o nome correto
+    cfFormData.append('file', file, file.name);
 
+    // 🔥 EXECUÇÃO DO UPLOAD COM FETCH 🔥
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream`,
       {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiToken}`,
-          // NÃO defina o Content-Type manualmente aqui, deixe o fetch detectar o boundary do FormData
+          // NUNCA defina o 'Content-Type' aqui. O fetch fará isso para incluir o boundary corretamente.
         },
         body: cfFormData,
       }
@@ -47,7 +48,8 @@ export async function POST(req: Request) {
     if (!response.ok || !data.success) {
       console.error("ERRO CLOUDFLARE STREAM:", JSON.stringify(data, null, 2));
       return NextResponse.json({ 
-          error: data.errors?.[0]?.message || "Falha no upload para Cloudflare Stream" 
+          error: data.errors?.[0]?.message || "Falha no upload para Cloudflare Stream",
+          details: data.errors
       }, { status: response.status });
     }
 
