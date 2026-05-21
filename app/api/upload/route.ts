@@ -10,13 +10,13 @@ export async function POST(req: Request) {
     }
 
     const fileName = file.name.toLowerCase();
-    const isValidFormat = fileName.match(/\.(mp4|mov|avi|mp3|wav|m4a|aac|mkv)$/i);
+    const isValidFormat = fileName.match(/\.(jpg|jpeg|png|webp|mp4|mov|avi|mp3|wav|m4a|aac|mkv)$/i);
 
-    if (!isValidFormat) {
-      return NextResponse.json({ 
-          error: "Formato inválido. Aceitos: .mp4, .mov, .avi, .mp3, .wav, .m4a, .aac, .mkv" 
-      }, { status: 400 });
-    }
+if (!isValidFormat) {
+  return NextResponse.json({ 
+      error: "Formato inválido. Aceitos: .jpg, .jpeg, .png, .webp, .mp4, .mov, .avi, .mp3, .wav, .m4a, .aac, .mkv" 
+  }, { status: 400 });
+}
 
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     const apiToken = process.env.CLOUDFLARE_API_TOKEN;

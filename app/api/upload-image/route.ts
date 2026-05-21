@@ -21,11 +21,13 @@ export async function POST(req: Request) {
     }
 
     const fileName = (file.name || 'profile.jpg').toLowerCase();
-    const isValidFormat = fileName.match(/\.(jpg|jpeg|png|webp)$/i);
+    const isValidFormat = fileName.match(/\.(jpg|jpeg|png|webp|mp4|mov|avi|mp3|wav|m4a|aac|mkv)$/i);
 
-    if (!isValidFormat) {
-      return NextResponse.json({ error: "Formato inválido. Use JPG, PNG ou WEBP." }, { status: 400 });
-    }
+if (!isValidFormat) {
+  return NextResponse.json({ 
+      error: "Formato inválido. Aceitos: .jpg, .jpeg, .png, .webp, .mp4, .mov, .avi, .mp3, .wav, .m4a, .aac, .mkv" 
+  }, { status: 400 });
+}
 
     // 🔥 LOG PARA DEBUGAR NO RENDER 🔥
     console.log("Arquivo recebido:", file.name, file.type, file.size);
