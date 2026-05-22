@@ -1,50 +1,58 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
-
+// Rota para SALVAR ou ATUALIZAR um aluno offline
 export async function POST(req: Request) {
-    try {
-        const body = await req.json();
-        const { 
-            id, name, phone, plan, financeCategory, 
-            contractType, contractValue, startDate, 
-            paymentDueDate, photoUrl, isFinanceActive, 
-            coachId, assignedCoach 
-        } = body;
+  try {
+    const data = await req.json();
 
-        if (!id) {
-            return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
-        }
+    const newClient = await prisma.offlineClient.upsert({
+      where: { id: data.id },
+      update: {
+        name: data.name,
+        phone: data.phone,
+        plan: data.plan,
+        financeCategory: data.financeCategory,
+        contractType: data.contractType,
+        contractValue: data.contractValue,
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        paymentDueDate: data.paymentDueDate ? new Date(data.paymentDueDate) : null,
+        photoUrl: data.photoUrl,
+        isFinanceActive: data.isFinanceActive,
+        assignedCoach: data.assignedCoach,
+        coachId: data.coachId
+      },
+      create: {
+        id: data.id,
+        name: data.name,
+        phone: data.phone,
+        plan: data.plan,
+        financeCategory: data.financeCategory,
+        contractType: data.contractType,
+        contractValue: data.contractValue,
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        paymentDueDate: data.paymentDueDate ? new Date(data.paymentDueDate) : null,
+        photoUrl: data.photoUrl,
+        isFinanceActive: data.isFinanceActive,
+        assignedCoach: data.assignedCoach,
+        coachId: data.coachId
+      }
+    });
 
-        const safeStartDate = startDate ? new Date(startDate) : null;
-        const safePaymentDueDate = paymentDueDate ? new Date(paymentDueDate) : null;
+    return NextResponse.json({ success: true, client: newClient });
+  } catch (error: any) {
+    console.error("Erro ao salvar aluno offline:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
 
-        // Upsert: Atualiza se achar o ID, ou cria um novo
-        const client = await prisma.offlineClient.upsert({
-            where: { id: id }, 
-            update: {
-                name, phone, plan, financeCategory, contractType,
-                contractValue: parseFloat(contractValue) || 0,
-                startDate: safeStartDate,
-                paymentDueDate: safePaymentDueDate,
-                photoUrl, isFinanceActive, assignedCoach
-            },
-            create: {
-                id, name, phone, plan, financeCategory, contractType,
-                contractValue: parseFloat(contractValue) || 0,
-                startDate: safeStartDate,
-                paymentDueDate: safePaymentDueDate,
-                photoUrl, isFinanceActive, assignedCoach, coachId
-            }
-        });
-
-        return NextResponse.json({ success: true, client });
-    } catch (error: any) {
-        console.error("Erro ao salvar OfflineClient:", error);
-        return NextResponse.json({ 
-            error: "Erro interno ao salvar aluno offline", 
-            details: error.message 
-        }, { status: 500 });
-    }
+// Rota para BUSCAR todos os alunos offline
+export async function GET() {
+  try {
+    const clients = await prisma.offlineClient.findMany();
+    return NextResponse.json(clients);
+  } catch (error: any) {
+    console.error("Erro ao buscar alunos offline:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
