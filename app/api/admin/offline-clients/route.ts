@@ -56,3 +56,23 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+// Rota para EXCLUIR um aluno offline definitivamente
+export async function DELETE(req: Request) {
+  try {
+    const { id } = await req.json();
+
+    if (!id) {
+      return NextResponse.json({ error: "ID não fornecido" }, { status: 400 });
+    }
+
+    await prisma.offlineClient.delete({
+      where: { id }
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error("Erro ao excluir aluno offline:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
