@@ -29,15 +29,17 @@ export async function GET(req: Request) {
         disableCheckIn: true,  
         coachId: true,        
         nutritionistId: true, 
-        isMenstruating: true, // 🔥 ADICIONADO PARA O DASHBOARD LER O STATUS MENSTRUAL 🔥
+        isMenstruating: true,
 
-        // 🔥 A MÁGICA FINANCEIRA LIBERADA PARA O FRONTEND 🔥
+        // 🔥 CAMPOS DO NOVO SISTEMA DE ACOMPANHAMENTO 🔥
+        strategyNotes: true,
+        lastContactDate: true,
+
+        // 🔥 FINANÇAS 🔥
         contractType: true,
         contractValue: true,
         paymentDueDate: true,
         nextWorkoutUpdate: true,
-
-        // 🔥 INJETADO AQUI PARA O F5 NÃO RESSUSCITAR NINGUÉM 🔥
         financeCategory: true,
         isFinanceActive: true,
 
@@ -49,7 +51,7 @@ export async function GET(req: Request) {
                 id: true, 
                 endDate: true, 
                 name: true, 
-                intensityMultiplier: true // 🔥 ADICIONADO PARA LER O STATUS DO DELOAD NO TREINO 🔥
+                intensityMultiplier: true
             }
         },
         _count: {
@@ -75,24 +77,22 @@ export async function GET(req: Request) {
     const activeUsers = finalUsers.filter((u: any) => u.active !== false);
     const inactiveUsers = finalUsers.filter((u: any) => u.active === false);
 
-    // 🔥 GARGALO DO FEED E DA CEGUEIRA DE ID RESOLVIDOS
     const recentLogs = await prisma.workoutHistory.findMany({
       take: 50, 
       orderBy: { date: 'desc' },
       include: { user: { select: { id: true, name: true, photoUrl: true, coachId: true } } } 
     });
 
-    // 🔥 LÓGICA DE HERANÇA DE EXERCÍCIOS (ESPELHO DE MÃO ÚNICA)
+    // LÓGICA DE HERANÇA DE EXERCÍCIOS
     const currentAdmin = await prisma.user.findUnique({
         where: { id: adminId },
         select: { email: true }
     });
     
     const isAdri = currentAdmin?.email?.toLowerCase() === 'adri.personal@hotmail.com';
-    let exerciseWhere: any = { coachId: adminId }; // Padrão de segurança: Só vê o próprio
+    let exerciseWhere: any = { coachId: adminId };
 
     if (isAdri) {
-        // Se for a Adri, o sistema busca o ID do Paulo (Master)
         const masterAdmin = await prisma.user.findFirst({
             where: { role: 'ADMIN', email: { not: 'adri.personal@hotmail.com' } },
             select: { id: true }
@@ -101,8 +101,8 @@ export async function GET(req: Request) {
         if (masterAdmin) {
             exerciseWhere = {
                 OR: [
-                    { coachId: adminId },       // Os exercícios que a Adri criar
-                    { coachId: masterAdmin.id } // Os exercícios do Paulo (como modelo)
+                    { coachId: adminId },
+                    { coachId: masterAdmin.id }
                 ]
             };
         }
