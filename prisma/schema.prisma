@@ -55,6 +55,10 @@ model User {
   isMenstruating  Boolean   @default(false)
   menstruationStartDate DateTime?
 
+  // 🔥 ANOTAÇÕES PRIVADAS DO COACH E CRM DE ACOMPANHAMENTO 🔥
+  strategyNotes   String?   @db.Text
+  lastContactDate DateTime?
+
   // 🔥 CHAVE DO MÓDULO DE DIETA (Toggle do Admin)
   dietModule      Boolean  @default(false)
 
