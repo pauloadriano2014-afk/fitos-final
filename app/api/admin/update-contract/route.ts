@@ -17,6 +17,24 @@ export async function POST(req: NextRequest) {
     const parsedPaymentDueDate = paymentDueDate ? new Date(paymentDueDate) : null;
     const parsedStartDate = startDate ? new Date(startDate) : null;
 
+    // 🔥 BIFURCAÇÃO PARA ALUNOS OFFLINE 🔥
+    if (String(userId).startsWith('offline_')) {
+      const updatedOfflineClient = await prisma.offlineClient.update({
+        where: { id: userId },
+        data: {
+          contractType: contractType || 'Mensal',
+          contractValue: parsedValue,
+          paymentDueDate: parsedPaymentDueDate,
+          startDate: parsedStartDate,
+          financeCategory: financeCategory || 'Consultoria Online',
+          isFinanceActive: isFinanceActive !== undefined ? isFinanceActive : true
+        },
+      });
+
+      return NextResponse.json({ success: true, client: updatedOfflineClient });
+    }
+
+    // 🔥 FLUXO NORMAL PARA ALUNOS DO APP (Users) 🔥
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
