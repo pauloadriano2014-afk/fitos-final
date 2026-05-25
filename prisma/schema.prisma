@@ -58,6 +58,7 @@ model User {
   // 🔥 ANOTAÇÕES PRIVADAS DO COACH E CRM DE ACOMPANHAMENTO 🔥
   strategyNotes   String?   @db.Text
   lastContactDate DateTime?
+  weeklyChecks    Json?
 
   // 🔥 CHAVE DO MÓDULO DE DIETA (Toggle do Admin)
   dietModule      Boolean  @default(false)
