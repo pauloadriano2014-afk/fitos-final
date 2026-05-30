@@ -392,16 +392,25 @@ model Assessment {
   height          Float?   
   photos          String[] 
   
+  // 🔥 CIRCUNFERÊNCIAS / PERIMETRIA (Todas Opcionais) 🔥
   neck            Float?   
   shoulders       Float?   
-  chest           Float?   
-  arms            Float?   
-  forearms        Float?   
-  waist           Float?   
-  abdomen         Float?   
-  hips            Float?   
-  thighs          Float?   
-  calves          Float?   
+  chest           Float?   // Tórax
+  waist           Float?   // Cintura
+  abdomen         Float?   // Abdômen
+  hips            Float?   // Glúteos/Quadril
+  
+  // Membros Superiores
+  arms            Float?   // Braço Direito (Mantido para retrocompatibilidade)
+  armLeft         Float?   // Braço Esquerdo
+  forearms        Float?   // Antebraço Direito (Mantido para retrocompatibilidade)
+  forearmLeft     Float?   // Antebraço Esquerdo
+  
+  // Membros Inferiores
+  thighs          Float?   // Perna Direita (Coxa) (Mantido para retrocompatibilidade)
+  thighLeft       Float?   // Perna Esquerda (Coxa)
+  calves          Float?   // Panturrilha Direita (Mantido para retrocompatibilidade)
+  calfLeft        Float?   // Panturrilha Esquerda
   
   method          String?  
   

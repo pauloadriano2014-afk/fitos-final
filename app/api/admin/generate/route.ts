@@ -45,14 +45,18 @@ export async function POST(req: Request) {
     // 2. Mapeia e garante que o exercício exista na biblioteca
     const exerciciosCriados = [];
     for (const ex of exerciciosParaSalvar) {
-      const dbEx = await prisma.exercise.upsert({
+      let dbEx = await prisma.exercise.findFirst({
         where: { name: ex.title },
-        update: {},
-        create: {
-          name: ex.title,
-          category: ex.category || "Geral",
-        }
       });
+
+      if (!dbEx) {
+        dbEx = await prisma.exercise.create({
+          data: {
+            name: ex.title,
+            category: ex.category || "Geral",
+          }
+        });
+      }
 
       exerciciosCriados.push({
         title: ex.title,

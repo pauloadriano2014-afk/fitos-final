@@ -45,7 +45,8 @@ export async function POST(req: Request) {
         userId, date, weight, height, photos, method, 
         bodyFat, muscleMass, visceralFat, notes, 
         folds, measures,
-        neck, shoulders, chest, arms, forearms, waist, abdomen, hips, thighs, calves,
+        // Mantive os antigos e adicionei os novos separados por Lado
+        neck, shoulders, chest, arms, armLeft, forearms, forearmLeft, waist, abdomen, hips, thighs, thighLeft, calves, calfLeft,
         foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh 
     } = body;
 
@@ -64,17 +65,25 @@ export async function POST(req: Request) {
             height: safeFloat(height),
             photos: photos || [],
             
-            // Medidas
+            // 🔥 MEDIDAS DE PERIMETRIA COMPLETA 🔥
             neck: safeFloat(m.neck || neck),
             shoulders: safeFloat(m.shoulders || shoulders),
-            chest: safeFloat(m.chest || chest),
-            arms: safeFloat(m.arms || arms),
-            forearms: safeFloat(m.forearms || forearms),
-            waist: safeFloat(m.waist || waist),
-            abdomen: safeFloat(m.abdomen || abdomen),
-            hips: safeFloat(m.hips || hips),
-            thighs: safeFloat(m.thighs || thighs),
-            calves: safeFloat(m.calves || calves),
+            chest: safeFloat(m.chest || chest), // Tórax
+            waist: safeFloat(m.waist || waist), // Cintura
+            abdomen: safeFloat(m.abdomen || abdomen), // Abdômen
+            hips: safeFloat(m.hips || hips), // Glúteos
+            
+            // Membros Superiores
+            arms: safeFloat(m.arms || arms), // Braço Direito
+            armLeft: safeFloat(m.armLeft || armLeft), // Braço Esquerdo
+            forearms: safeFloat(m.forearms || forearms), // Antebraço Direito
+            forearmLeft: safeFloat(m.forearmLeft || forearmLeft), // Antebraço Esquerdo
+            
+            // Membros Inferiores
+            thighs: safeFloat(m.thighs || thighs), // Perna Direita
+            thighLeft: safeFloat(m.thighLeft || thighLeft), // Perna Esquerda
+            calves: safeFloat(m.calves || calves), // Panturrilha Direita
+            calfLeft: safeFloat(m.calfLeft || calfLeft), // Panturrilha Esquerda
 
             // Pollock
             method: method || "MANUAL",
@@ -125,7 +134,9 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { 
         id, date, weight, method, 
-        bodyFat, waist, abdomen, 
+        bodyFat, 
+        // Desestrutura a perimetria
+        chest, shoulders, hips, arms, armLeft, forearms, forearmLeft, waist, abdomen, thighs, thighLeft, calves, calfLeft,
         foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh 
     } = body;
 
@@ -136,8 +147,22 @@ export async function PUT(req: Request) {
         data: {
             date: date ? new Date(date) : undefined,
             weight: Number(String(weight).replace(',', '.')),
+            
+            // 🔥 MEDIDAS DE PERIMETRIA COMPLETA (ATUALIZADAS) 🔥
+            chest: safeFloat(chest),
+            shoulders: safeFloat(shoulders),
             waist: safeFloat(waist),
             abdomen: safeFloat(abdomen),
+            hips: safeFloat(hips),
+            arms: safeFloat(arms),
+            armLeft: safeFloat(armLeft),
+            forearms: safeFloat(forearms),
+            forearmLeft: safeFloat(forearmLeft),
+            thighs: safeFloat(thighs),
+            thighLeft: safeFloat(thighLeft),
+            calves: safeFloat(calves),
+            calfLeft: safeFloat(calfLeft),
+
             method: method || "MANUAL",
             foldTriceps: safeFloat(foldTriceps),
             foldSubscapular: safeFloat(foldSubscapular),
