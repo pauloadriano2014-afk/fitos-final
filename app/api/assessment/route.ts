@@ -24,7 +24,7 @@ const safeFloat = (val: any) => {
     return isNaN(num) ? null : num;
 };
 
-// 🔥 FUNÇÃO DE UPLOAD PARA O R2 COM SHARP (IGUAL AO CHECKIN) 🔥
+// 🔥 FUNÇÃO DE UPLOAD PARA O R2 COM SHARP 🔥
 async function uploadToR2(base64String: string | null, userId: string, prefix: string) {
     if (!base64String) return null;
     if (base64String.startsWith('http')) return base64String;
@@ -34,7 +34,6 @@ async function uploadToR2(base64String: string | null, userId: string, prefix: s
         const buffer = Buffer.from(base64Data, 'base64');
         
         const timestamp = Date.now();
-        // Mudamos a pasta para "assessments" para não misturar com as do aluno
         const fileName = `assessments/${userId}/${timestamp}-${prefix}.jpg`;
         const thumbFileName = `assessments/${userId}/${timestamp}-${prefix}-thumb.jpg`;
 
@@ -102,7 +101,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { 
-        userId, date, weight, height, photos, method, 
+        userId, date, weight, height, method, 
         bodyFat, muscleMass, visceralFat, notes, 
         folds, measures,
         neck, shoulders, chest, chestMeasure, arms, armLeft, forearms, forearmLeft, waist, abdomen, hips, thighs, thighLeft, calves, calfLeft,
@@ -124,18 +123,18 @@ export async function POST(req: Request) {
         uploadToR2(photoBack, userId, 'back')
     ]);
 
+    // 🔥 AGRUPA AS URLS NO ARRAY ESPERADO PELO PRISMA 🔥
+    const uploadedPhotos = [frontUrl || '', sideUrl || '', backUrl || ''];
+
     const newAssessment = await prisma.assessment.create({
         data: {
             userId,
             date: date ? new Date(date) : new Date(),
             weight: Number(String(weight).replace(',', '.')),
             height: safeFloat(height),
-            photos: photos || [],
             
-            // 🔥 URLs do Cloudflare R2
-            photoFront: frontUrl,
-            photoSide: sideUrl,
-            photoBack: backUrl,
+            // 🔥 Array de Fotos (Mapeado corretamente)
+            photos: uploadedPhotos,
             
             neck: safeFloat(m.neck || neck),
             shoulders: safeFloat(m.shoulders || shoulders),
@@ -208,10 +207,10 @@ export async function PUT(req: Request) {
 
     if (!id) return NextResponse.json({ error: "ID obrigatório para edição" }, { status: 400 });
 
-    // 🔥 BUSCA A AVALIAÇÃO PARA PEGAR O userId (Necessário para a pasta do Cloudflare R2) 🔥
+    // 🔥 BUSCA A AVALIAÇÃO PARA PEGAR O userId E AS FOTOS ANTIGAS 🔥
     const existingAssessment = await prisma.assessment.findUnique({
         where: { id },
-        select: { userId: true }
+        select: { userId: true, photos: true }
     });
 
     if (!existingAssessment) {
@@ -219,11 +218,19 @@ export async function PUT(req: Request) {
     }
 
     const userId = existingAssessment.userId;
+    let finalPhotos = existingAssessment.photos || [];
 
-    // 🔥 UPA APENAS SE FORAM ENVIADAS NOVAS FOTOS (undefined ignora, null deleta) 🔥
+    // 🔥 UPA APENAS SE FORAM ENVIADAS NOVAS FOTOS 🔥
     let frontUrl = photoFront !== undefined ? await uploadToR2(photoFront, userId, 'front') : undefined;
     let sideUrl = photoSide !== undefined ? await uploadToR2(photoSide, userId, 'side') : undefined;
     let backUrl = photoBack !== undefined ? await uploadToR2(photoBack, userId, 'back') : undefined;
+
+    // 🔥 MESCLA AS FOTOS NOVAS COM AS ANTIGAS NO ARRAY 🔥
+    const mergedPhotos = [
+        frontUrl !== undefined ? (frontUrl || '') : (finalPhotos[0] || ''),
+        sideUrl !== undefined ? (sideUrl || '') : (finalPhotos[1] || ''),
+        backUrl !== undefined ? (backUrl || '') : (finalPhotos[2] || '')
+    ];
 
     const updatedAssessment = await prisma.assessment.update({
         where: { id },
@@ -231,10 +238,8 @@ export async function PUT(req: Request) {
             date: date ? new Date(date) : undefined,
             weight: Number(String(weight).replace(',', '.')),
             
-            // 🔥 URLs DO CLOUDFLARE R2 🔥
-            photoFront: frontUrl,
-            photoSide: sideUrl,
-            photoBack: backUrl,
+            // 🔥 Salvando o array final de fotos perfeitamente alinhado com o Prisma
+            photos: mergedPhotos,
 
             chest: safeFloat(chestMeasure || chest),
             shoulders: safeFloat(shoulders),
