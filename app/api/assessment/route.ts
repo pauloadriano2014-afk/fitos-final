@@ -1,8 +1,21 @@
+// app/api/assessment/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import sharp from 'sharp';
 
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
+
+// 🔥 CONFIGURAÇÃO DO CLOUDFLARE R2 🔥
+const s3 = new S3Client({
+    region: 'auto',
+    endpoint: process.env.R2_ENDPOINT as string,
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID as string,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY as string,
+    },
+});
 
 const safeFloat = (val: any) => {
     if (val === '' || val === null || val === undefined) return null;
@@ -10,6 +23,53 @@ const safeFloat = (val: any) => {
     const num = parseFloat(str);
     return isNaN(num) ? null : num;
 };
+
+// 🔥 FUNÇÃO DE UPLOAD PARA O R2 COM SHARP (IGUAL AO CHECKIN) 🔥
+async function uploadToR2(base64String: string | null, userId: string, prefix: string) {
+    if (!base64String) return null;
+    if (base64String.startsWith('http')) return base64String;
+
+    try {
+        const base64Data = base64String.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        const timestamp = Date.now();
+        // Mudamos a pasta para "assessments" para não misturar com as do aluno
+        const fileName = `assessments/${userId}/${timestamp}-${prefix}.jpg`;
+        const thumbFileName = `assessments/${userId}/${timestamp}-${prefix}-thumb.jpg`;
+
+        const command = new PutObjectCommand({
+            Bucket: 'fitos-fotos',
+            Key: fileName,
+            Body: buffer,
+            ContentType: 'image/jpeg',
+        });
+        await s3.send(command);
+
+        try {
+            const thumbBuffer = await sharp(buffer)
+                .resize({ width: 300, withoutEnlargement: true }) 
+                .jpeg({ quality: 60 }) 
+                .toBuffer();
+
+            const thumbCommand = new PutObjectCommand({
+                Bucket: 'fitos-fotos',
+                Key: thumbFileName,
+                Body: thumbBuffer,
+                ContentType: 'image/jpeg',
+            });
+            await s3.send(thumbCommand);
+        } catch (thumbError) {
+            console.log("Aviso: Falha ao gerar thumbnail, mas foto original foi salva.", thumbError);
+        }
+        
+        const publicUrlBase = (process.env.R2_PUBLIC_URL as string).replace(/\/$/, ""); 
+        return `${publicUrlBase}/${fileName}`; 
+    } catch (error) {
+        console.error(`Erro ao subir ${prefix} para o R2:`, error);
+        return null;
+    }
+}
 
 export async function GET(req: Request) {
   try {
@@ -45,9 +105,9 @@ export async function POST(req: Request) {
         userId, date, weight, height, photos, method, 
         bodyFat, muscleMass, visceralFat, notes, 
         folds, measures,
-        // Mantive os antigos e adicionei os novos separados por Lado
-        neck, shoulders, chest, arms, armLeft, forearms, forearmLeft, waist, abdomen, hips, thighs, thighLeft, calves, calfLeft,
-        foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh 
+        neck, shoulders, chest, chestMeasure, arms, armLeft, forearms, forearmLeft, waist, abdomen, hips, thighs, thighLeft, calves, calfLeft,
+        foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh,
+        photoFront, photoSide, photoBack
     } = body;
 
     if (!userId || !weight) {
@@ -57,6 +117,13 @@ export async function POST(req: Request) {
     const f = folds || {};
     const m = measures || {};
 
+    // 🔥 FAZ O UPLOAD DAS FOTOS ANTES DE SALVAR NO BANCO 🔥
+    const [frontUrl, sideUrl, backUrl] = await Promise.all([
+        uploadToR2(photoFront, userId, 'front'),
+        uploadToR2(photoSide, userId, 'side'),
+        uploadToR2(photoBack, userId, 'back')
+    ]);
+
     const newAssessment = await prisma.assessment.create({
         data: {
             userId,
@@ -65,27 +132,28 @@ export async function POST(req: Request) {
             height: safeFloat(height),
             photos: photos || [],
             
-            // 🔥 MEDIDAS DE PERIMETRIA COMPLETA 🔥
+            // 🔥 URLs do Cloudflare R2
+            photoFront: frontUrl,
+            photoSide: sideUrl,
+            photoBack: backUrl,
+            
             neck: safeFloat(m.neck || neck),
             shoulders: safeFloat(m.shoulders || shoulders),
-            chest: safeFloat(m.chest || chest), // Tórax
-            waist: safeFloat(m.waist || waist), // Cintura
-            abdomen: safeFloat(m.abdomen || abdomen), // Abdômen
-            hips: safeFloat(m.hips || hips), // Glúteos
+            chest: safeFloat(m.chest || chestMeasure || chest), // Mapeado para receber da tela com segurança
+            waist: safeFloat(m.waist || waist),
+            abdomen: safeFloat(m.abdomen || abdomen),
+            hips: safeFloat(m.hips || hips),
             
-            // Membros Superiores
-            arms: safeFloat(m.arms || arms), // Braço Direito
-            armLeft: safeFloat(m.armLeft || armLeft), // Braço Esquerdo
-            forearms: safeFloat(m.forearms || forearms), // Antebraço Direito
-            forearmLeft: safeFloat(m.forearmLeft || forearmLeft), // Antebraço Esquerdo
+            arms: safeFloat(m.arms || arms),
+            armLeft: safeFloat(m.armLeft || armLeft),
+            forearms: safeFloat(m.forearms || forearms),
+            forearmLeft: safeFloat(m.forearmLeft || forearmLeft),
             
-            // Membros Inferiores
-            thighs: safeFloat(m.thighs || thighs), // Perna Direita
-            thighLeft: safeFloat(m.thighLeft || thighLeft), // Perna Esquerda
-            calves: safeFloat(m.calves || calves), // Panturrilha Direita
-            calfLeft: safeFloat(m.calfLeft || calfLeft), // Panturrilha Esquerda
+            thighs: safeFloat(m.thighs || thighs),
+            thighLeft: safeFloat(m.thighLeft || thighLeft),
+            calves: safeFloat(m.calves || calves),
+            calfLeft: safeFloat(m.calfLeft || calfLeft),
 
-            // Pollock
             method: method || "MANUAL",
             foldTriceps: safeFloat(f.triceps || foldTriceps),
             foldSubscapular: safeFloat(f.subscapular || foldSubscapular),
@@ -95,7 +163,6 @@ export async function POST(req: Request) {
             foldAbdominal: safeFloat(f.abdominal || foldAbdominal),
             foldThigh: safeFloat(f.thigh || foldThigh),
 
-            // Resultados
             bodyFat: safeFloat(bodyFat),
             muscleMass: safeFloat(muscleMass),
             visceralFat: safeFloat(visceralFat),
@@ -106,7 +173,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, id: newAssessment.id });
 
   } catch (error: any) {
-    console.error("Erro Backend:", error);
+    console.error("Erro Backend POST:", error);
     return NextResponse.json({ error: error.message || "Erro interno" }, { status: 500 });
   }
 }
@@ -128,19 +195,35 @@ export async function DELETE(req: Request) {
     }
 }
 
-// 👇 NOVA FUNÇÃO PUT (PARA EDITAR AVALIAÇÕES) 👇
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
     const { 
         id, date, weight, method, 
         bodyFat, 
-        // Desestrutura a perimetria
-        chest, shoulders, hips, arms, armLeft, forearms, forearmLeft, waist, abdomen, thighs, thighLeft, calves, calfLeft,
-        foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh 
+        chest, chestMeasure, shoulders, hips, arms, armLeft, forearms, forearmLeft, waist, abdomen, thighs, thighLeft, calves, calfLeft,
+        foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh,
+        photoFront, photoSide, photoBack 
     } = body;
 
     if (!id) return NextResponse.json({ error: "ID obrigatório para edição" }, { status: 400 });
+
+    // 🔥 BUSCA A AVALIAÇÃO PARA PEGAR O userId (Necessário para a pasta do Cloudflare R2) 🔥
+    const existingAssessment = await prisma.assessment.findUnique({
+        where: { id },
+        select: { userId: true }
+    });
+
+    if (!existingAssessment) {
+        return NextResponse.json({ error: "Avaliação não encontrada" }, { status: 404 });
+    }
+
+    const userId = existingAssessment.userId;
+
+    // 🔥 UPA APENAS SE FORAM ENVIADAS NOVAS FOTOS (undefined ignora, null deleta) 🔥
+    let frontUrl = photoFront !== undefined ? await uploadToR2(photoFront, userId, 'front') : undefined;
+    let sideUrl = photoSide !== undefined ? await uploadToR2(photoSide, userId, 'side') : undefined;
+    let backUrl = photoBack !== undefined ? await uploadToR2(photoBack, userId, 'back') : undefined;
 
     const updatedAssessment = await prisma.assessment.update({
         where: { id },
@@ -148,8 +231,12 @@ export async function PUT(req: Request) {
             date: date ? new Date(date) : undefined,
             weight: Number(String(weight).replace(',', '.')),
             
-            // 🔥 MEDIDAS DE PERIMETRIA COMPLETA (ATUALIZADAS) 🔥
-            chest: safeFloat(chest),
+            // 🔥 URLs DO CLOUDFLARE R2 🔥
+            photoFront: frontUrl,
+            photoSide: sideUrl,
+            photoBack: backUrl,
+
+            chest: safeFloat(chestMeasure || chest),
             shoulders: safeFloat(shoulders),
             waist: safeFloat(waist),
             abdomen: safeFloat(abdomen),
@@ -178,7 +265,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ success: true, id: updatedAssessment.id });
 
   } catch (error: any) {
-    console.error("Erro Backend:", error);
+    console.error("Erro Backend PUT:", error);
     return NextResponse.json({ error: error.message || "Erro interno ao atualizar" }, { status: 500 });
   }
 }
