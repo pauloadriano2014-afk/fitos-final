@@ -81,14 +81,32 @@ export async function GET(req: Request) {
     if (latest === 'true') {
         const last = await prisma.assessment.findFirst({
             where: { userId },
-            orderBy: { date: 'desc' }
+            orderBy: { date: 'desc' },
+            // 🔥 Busca o gênero direto do relacionamento com o usuário
+            include: {
+                user: {
+                    select: {
+                        gender: true,
+                        sexo: true
+                    }
+                }
+            }
         });
         return NextResponse.json(last || {});
     }
 
     const history = await prisma.assessment.findMany({
         where: { userId },
-        orderBy: { date: 'asc' }
+        orderBy: { date: 'asc' },
+        // 🔥 Garante que todo o histórico venha carimbado com o gênero do aluno
+        include: {
+            user: {
+                select: {
+                    gender: true,
+                    sexo: true
+                }
+            }
+        }
     });
 
     return NextResponse.json(history);
