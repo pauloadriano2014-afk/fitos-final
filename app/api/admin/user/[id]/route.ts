@@ -15,6 +15,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         id: true,
         name: true,
         email: true,
+        gender: true, // 🔥 O FANTASMA MORRE AQUI! Faltava pedir essa coluna pro banco!
         strategyNotes: true,
         lastContactDate: true,
         weeklyChecks: true,
