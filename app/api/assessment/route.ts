@@ -97,16 +97,7 @@ export async function GET(req: Request) {
 
     const history = await prisma.assessment.findMany({
         where: { userId },
-        orderBy: { date: 'asc' },
-        // 🔥 Garante que todo o histórico venha carimbado com o gênero do aluno
-        include: {
-            user: {
-                select: {
-                    gender: true,
-                    sexo: true
-                }
-            }
-        }
+        orderBy: { date: 'asc' }
     });
 
     return NextResponse.json(history);
