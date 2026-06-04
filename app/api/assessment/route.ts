@@ -81,20 +81,12 @@ export async function GET(req: Request) {
     if (latest === 'true') {
         const last = await prisma.assessment.findFirst({
             where: { userId },
-            orderBy: { date: 'desc' },
-            // 🔥 Busca o gênero direto do relacionamento com o usuário
-            include: {
-                user: {
-                    select: {
-                        gender: true,
-                        sexo: true
-                    }
-                }
-            }
+            orderBy: { date: 'desc' }
         });
         return NextResponse.json(last || {});
     }
 
+    // 🔥 INCLUDE REMOVIDO: Agora a busca é direta e à prova de falhas (Evita o Erro 500)
     const history = await prisma.assessment.findMany({
         where: { userId },
         orderBy: { date: 'asc' }
@@ -245,7 +237,8 @@ export async function PUT(req: Request) {
         where: { id },
         data: {
             date: date ? new Date(date) : undefined,
-            weight: Number(String(weight).replace(',', '.')),
+            // 🔥 PREVENÇÃO CONTRA ERRO 500: Só tenta formatar o peso se ele realmente foi enviado. 
+            weight: weight ? Number(String(weight).replace(',', '.')) : undefined,
             
             // 🔥 Salvando o array final de fotos perfeitamente alinhado com o Prisma
             photos: mergedPhotos,
