@@ -1,3 +1,4 @@
+// app/api/assessment/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -106,7 +107,8 @@ export async function POST(req: Request) {
         folds, measures,
         neck, shoulders, chest, chestMeasure, arms, armLeft, forearms, forearmLeft, waist, abdomen, hips, thighs, thighLeft, calves, calfLeft,
         foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh,
-        photoFront, photoSide, photoBack
+        photoFront, photoSide, photoBack,
+        age // 🔥 NOVO: Recebendo a idade do frontend
     } = body;
 
     if (!userId || !weight) {
@@ -130,6 +132,7 @@ export async function POST(req: Request) {
         data: {
             userId,
             date: date ? new Date(date) : new Date(),
+            age: age ? parseInt(String(age), 10) : null, // 🔥 NOVO: Salvando a idade congelada no momento da avaliação
             weight: safeFloat(weight) || 0, // Protegido contra undefined com valor base
             height: safeFloat(height),
             
@@ -202,7 +205,8 @@ export async function PUT(req: Request) {
         bodyFat, 
         chest, chestMeasure, shoulders, hips, arms, armLeft, forearms, forearmLeft, waist, abdomen, thighs, thighLeft, calves, calfLeft,
         foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh,
-        photoFront, photoSide, photoBack 
+        photoFront, photoSide, photoBack,
+        age // 🔥 NOVO: Recebendo a idade do frontend para edição
     } = body;
 
     if (!id) return NextResponse.json({ error: "ID obrigatório para edição" }, { status: 400 });
@@ -236,6 +240,7 @@ export async function PUT(req: Request) {
         where: { id },
         data: {
             date: date ? new Date(date) : undefined,
+            age: age !== undefined ? (age ? parseInt(String(age), 10) : null) : undefined, // 🔥 NOVO: Atualiza a idade se fornecida
             // 🔥 PREVENÇÃO CONTRA ERRO 500: Fallback seguro caso peso venha undefined
             weight: weight !== undefined ? (safeFloat(weight) ?? undefined) : undefined,
             

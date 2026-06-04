@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -385,6 +387,9 @@ model Assessment {
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   date            DateTime @default(now())
+  
+  // 🔥 NOVO: Idade do aluno no exato momento desta avaliação
+  age             Int?     
   
   weight          Float    
   height          Float?   
