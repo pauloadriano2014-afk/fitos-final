@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -431,23 +429,23 @@ model Assessment {
 }
 
 model CheckIn {
-  id            String   @id @default(uuid())
-  date          DateTime @default(now())
+  id              String   @id @default(uuid())
+  date            DateTime @default(now())
   
-  weight        Float?
-  feedback      String?  
+  weight          Float?
+  feedback        String?  
   
-  photoFront    String?  
-  photoBack     String?
-  coachFeedback String?  
-  allowMarketing Boolean @default(false)  
-  photoSide     String?
-  extraPhotos   String[] 
+  photoFront      String?  
+  photoBack       String?
+  coachFeedback   String?  
+  allowMarketing  Boolean @default(false)  
+  photoSide       String?
+  extraPhotos     String[] 
   
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
 }
 
 model Notice {

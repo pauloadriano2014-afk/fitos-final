@@ -1,4 +1,3 @@
-// app/api/assessment/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -131,7 +130,7 @@ export async function POST(req: Request) {
         data: {
             userId,
             date: date ? new Date(date) : new Date(),
-            weight: Number(String(weight).replace(',', '.')),
+            weight: safeFloat(weight) || 0, // Protegido contra undefined com valor base
             height: safeFloat(height),
             
             // 🔥 Array de Fotos (Mapeado corretamente)
@@ -139,7 +138,7 @@ export async function POST(req: Request) {
             
             neck: safeFloat(m.neck || neck),
             shoulders: safeFloat(m.shoulders || shoulders),
-            chest: safeFloat(m.chest || chestMeasure || chest), // Mapeado para receber da tela com segurança
+            chest: safeFloat(m.chest || chestMeasure || chest), 
             waist: safeFloat(m.waist || waist),
             abdomen: safeFloat(m.abdomen || abdomen),
             hips: safeFloat(m.hips || hips),
@@ -237,8 +236,8 @@ export async function PUT(req: Request) {
         where: { id },
         data: {
             date: date ? new Date(date) : undefined,
-            // 🔥 PREVENÇÃO CONTRA ERRO 500: Só tenta formatar o peso se ele realmente foi enviado. 
-            weight: weight ? Number(String(weight).replace(',', '.')) : undefined,
+            // 🔥 PREVENÇÃO CONTRA ERRO 500: Fallback seguro caso peso venha undefined
+            weight: weight !== undefined ? (safeFloat(weight) ?? undefined) : undefined,
             
             // 🔥 Salvando o array final de fotos perfeitamente alinhado com o Prisma
             photos: mergedPhotos,
