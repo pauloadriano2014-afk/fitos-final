@@ -1,13 +1,14 @@
 // src/app/api/checkin/update-photo/route.ts
-// Nova rota: recebe a foto editada em base64, faz upload pro R2
-// e atualiza o campo correto do check-in no banco.
+// Rota unificada:
+//   mode=single  → sobe a foto editada e atualiza o campo (photoFront/Side/Back)
+//   mode=compare → sobe a imagem composta e injeta [COMPARE_IMG:url] no coachFeedback
 
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from 'crypto';
 
-export const dynamic = 'force-dynamic';
+export const dynamic   = 'force-dynamic';
 export const revalidate = 0;
 
 const prisma = new PrismaClient();
@@ -26,48 +27,72 @@ const s3Client = (accountId && accessKey && secretKey)
     })
     : null;
 
+async function uploadBase64(base64: string, folder: string): Promise<string> {
+    if (!s3Client) throw new Error('R2 não configurado.');
+    const clean  = base64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(clean, 'base64');
+    const key    = `${folder}/${Date.now()}_${crypto.randomBytes(4).toString('hex')}.jpg`;
+    await s3Client.send(new PutObjectCommand({
+        Bucket: bucketName, Key: key, Body: buffer, ContentType: 'image/jpeg',
+    }));
+    return `${publicUrl}/${key}`;
+}
+
 export async function POST(req: Request) {
     try {
-        const { checkinId, photoField, imageBase64 } = await req.json();
-        // photoField: "photoFront" | "photoSide" | "photoBack"
+        const body = await req.json();
+        const { mode, checkinId, photoField, imageBase64, compareCheckinId } = body;
 
-        if (!checkinId || !photoField || !imageBase64) {
-            return NextResponse.json(
-                { error: "Parâmetros obrigatórios: checkinId, photoField, imageBase64." },
-                { status: 400 }
-            );
+        if (!checkinId || !imageBase64) {
+            return NextResponse.json({ error: 'Parâmetros obrigatórios ausentes.' }, { status: 400 });
         }
 
-        if (!s3Client) {
-            return NextResponse.json({ error: "R2 não configurado no servidor." }, { status: 500 });
+        // ── Modo individual: sobrescreve a foto com marcações ─────────────────
+        if (mode === 'single') {
+            if (!photoField) return NextResponse.json({ error: 'photoField obrigatório.' }, { status: 400 });
+
+            const newUrl = await uploadBase64(imageBase64, `checkins/${checkinId}`);
+            const updated = await prisma.checkIn.update({
+                where: { id: checkinId },
+                data:  { [photoField]: newUrl },
+            });
+            return NextResponse.json({ success: true, newUrl, checkIn: updated });
         }
 
-        // 1. Converte base64 → buffer
-        const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-        const buffer = Buffer.from(cleanBase64, 'base64');
+        // ── Modo comparação: sobe imagem composta e insere tag no feedback ─────
+        if (mode === 'compare') {
+            const newUrl = await uploadBase64(imageBase64, `compare/${checkinId}`);
 
-        // 2. Gera nome único e faz upload pro R2
-        const fileName = `checkins/${checkinId}/edited_${photoField}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.jpg`;
+            // Busca o feedback atual para não apagar o texto
+            const current = await prisma.checkIn.findUnique({ where: { id: checkinId } });
+            if (!current) return NextResponse.json({ error: 'Check-in não encontrado.' }, { status: 404 });
 
-        await s3Client.send(new PutObjectCommand({
-            Bucket: bucketName,
-            Key: fileName,
-            Body: buffer,
-            ContentType: "image/jpeg",
-        }));
+            let feedback = current.coachFeedback || '';
 
-        const newUrl = `${publicUrl}/${fileName}`;
+            // Remove tag anterior de comparação se existir (evita duplicar)
+            feedback = feedback.replace(/\[COMPARE_IMG:[^\]]+\]/g, '').trim();
+            feedback = feedback.replace(/\[COMPARE:[^\]]+\]/g, '').trim();
 
-        // 3. Atualiza o campo correto no banco
-        const updated = await prisma.checkIn.update({
-            where: { id: checkinId },
-            data: { [photoField]: newUrl },
-        });
+            // Injeta a nova tag de imagem composta no início
+            const updatedFeedback = `[COMPARE_IMG:${newUrl}]\n${feedback}`;
 
-        return NextResponse.json({ success: true, newUrl, checkIn: updated });
+            const updated = await prisma.checkIn.update({
+                where: { id: checkinId },
+                data:  { coachFeedback: updatedFeedback },
+            });
+
+            return NextResponse.json({
+                success: true,
+                newUrl,
+                updatedFeedback,
+                checkIn: updated,
+            });
+        }
+
+        return NextResponse.json({ error: 'mode inválido. Use "single" ou "compare".' }, { status: 400 });
 
     } catch (error) {
-        console.error("Erro ao atualizar foto editada:", error);
-        return NextResponse.json({ error: "Erro interno ao salvar foto." }, { status: 500 });
+        console.error('Erro update-photo:', error);
+        return NextResponse.json({ error: 'Erro interno.' }, { status: 500 });
     }
 }
