@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     // Filtramos por coachId para nunca misturar exercícios entre admins.
     const adminExercises = await prisma.exercise.findMany({
       where: { coachId: adminId },
-      select: { id: true, name: true, category: true, subCategory: true },
+      select: { id: true, name: true, category: true, subCategory: true, videoUrl: true },
       orderBy: { name: 'asc' },
     });
 
@@ -151,12 +151,12 @@ REGRAS OBRIGATÓRIAS:
 1. Use EXCLUSIVAMENTE exercícios do banco fornecido. Nunca invente nomes ou IDs.
 2. Use o "id" e o "name" EXATAMENTE como estão no banco — sem alterações.
 3. Progressão de carga: se houver lastWeight no histórico, sugira +5% a +10%. Arredonde para múltiplos de 2.5kg.
-4. Varie pelo menos 20% dos exercícios em relação ao treino mais recente (use variantes do mesmo grupo muscular).
-5. Respeite OBRIGATORIAMENTE limitações e cirurgias — jamais prescreva movimentos contraindicados.
-6. Cada série = um bloco individual com sets="1". Pirâmides ficam em blocos separados (ex: 15, 12, 10, 8).
-7. Técnicas disponíveis (use com moderação — máx. 2 por dia): GVT, DROPSET, RESTPAUSE, BISET, 21, CLUSTERSET, 1_5_REPS, TUT. Deixe em branco para execução normal.
+4. Varie OBRIGATORIAMENTE pelo menos 35% dos exercícios em relação ao treino mais recente. Troque por variantes do mesmo grupo muscular (ex: se tinha Supino Articulado, coloque Supino Reto c/Halteres ou Supino Inclinado c/Halteres). NUNCA repita mais de 65% dos exercícios do treino anterior.
+5. Aplique pelo menos UMA técnica avançada diferente por dia de treino (DROPSET, RESTPAUSE, BISET, 21, CLUSTERSET, 1_5_REPS ou TUT). Distribua as técnicas — não repita a mesma em todos os dias.
+6. Respeite OBRIGATORIAMENTE limitações e cirurgias — jamais prescreva movimentos contraindicados.
+7. Cada série = um bloco individual com sets="1". Pirâmides ficam em blocos separados (ex: 15, 12, 10, 8).
 8. Cardio: sets = minutos, reps = kcal alvo, technique = intensidade (Leve/Moderada/Zona 2/Forte/HIIT).
-9. Mantenha o mesmo número de dias e estrutura geral do treino anterior (se houver).
+9. Mantenha o mesmo número de dias e nomes dos dias do treino anterior (se houver).
 
 FORMATO DE SAÍDA — JSON puro, sem markdown, sem texto antes ou depois:
 {
@@ -236,6 +236,7 @@ Gere a nova rotina progressiva. Responda APENAS com o JSON.`.trim();
           return {
             exerciseId: ex.exerciseId,
             title: dbEx.name,           // nome canônico do banco
+            videoUrl: dbEx.videoUrl || '',
             category: dbEx.category,
             subCategory: dbEx.subCategory,
             observation: ex.observation || '',
