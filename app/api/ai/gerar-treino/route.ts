@@ -311,7 +311,7 @@ FORMATO JSON — sem markdown, sem texto extra
 {
   "workoutName": "Nome",
   "workoutModel": "CARGA",
-  "reasoning": "Quais exercícios foram trocados e por quê. Quais técnicas foram aplicadas em cada dia.",
+  "reasoning": "Máximo 3 linhas: quais exercícios foram trocados e qual técnica foi aplicada em cada dia.",
   "exercisesByDay": {
     "A": [
       {
@@ -356,7 +356,7 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
     // ─── 7. CHAMAR CLAUDE ───
     const response = await anthropic.messages.create({
       model: 'claude-opus-4-5',
-      max_tokens: 10000,
+      max_tokens: 16000,
       messages: [{ role: 'user', content: userMessage }],
       system: systemPrompt,
     });
