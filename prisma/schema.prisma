@@ -101,7 +101,7 @@ model User {
   contentLikes      ContentLike[]
   contentComments   ContentComment[]
   contentCompletions ContentCompletion[] 
-  unlockedContents  ContentAccess[]      
+  unlockedContents  ContentAccess[]     
 
   // Relacionamento de Pesquisas de Satisfação
   surveys           SatisfactionSurvey[]
@@ -141,6 +141,9 @@ model Exercise {
   
   // 🔥 A NOVA COLUNA DE TAGS DE AMBIENTE 🔥
   environments    String[] @default(["ACADEMIA"])
+
+  // 🔥 NOVA COLUNA ADICIONADA AQUI 🔥
+  tags            String[]
   
   videoUrl        String?
   instructions    String?
