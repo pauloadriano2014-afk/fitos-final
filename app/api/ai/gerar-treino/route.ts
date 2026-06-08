@@ -16,16 +16,35 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── 1. BUSCAR BANCO DO ADMIN COM TAGS ───
-    // Filtra por ambiente do aluno: inclui UNIVERSAL e o ambiente específico
+    // Replicar lógica de herança: se for a Adri, inclui exercícios do master também
     const trainingEnv = cycleConfig?.trainingEnvironment || null;
 
     const envFilter = trainingEnv
       ? { hasSome: ['UNIVERSAL', trainingEnv] }
       : undefined;
 
+    // Detectar se é a Adri e buscar o master admin
+    const currentAdmin = await prisma.user.findUnique({
+      where: { id: adminId },
+      select: { email: true }
+    });
+
+    const isAdri = currentAdmin?.email?.toLowerCase() === 'adri.personal@hotmail.com';
+    let coachFilter: any = { coachId: adminId };
+
+    if (isAdri) {
+      const masterAdmin = await prisma.user.findFirst({
+        where: { role: 'ADMIN', email: { not: 'adri.personal@hotmail.com' } },
+        select: { id: true }
+      });
+      if (masterAdmin) {
+        coachFilter = { OR: [{ coachId: adminId }, { coachId: masterAdmin.id }] };
+      }
+    }
+
     const adminExercises = await prisma.exercise.findMany({
       where: {
-        coachId: adminId,
+        ...coachFilter,
         ...(envFilter ? { environments: envFilter } : {}),
       },
       select: {
