@@ -16,8 +16,18 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── 1. BUSCAR BANCO DO ADMIN COM TAGS ───
+    // Filtra por ambiente do aluno: inclui UNIVERSAL e o ambiente específico
+    const trainingEnv = cycleConfig?.trainingEnvironment || null;
+
+    const envFilter = trainingEnv
+      ? { hasSome: ['UNIVERSAL', trainingEnv] }
+      : undefined;
+
     const adminExercises = await prisma.exercise.findMany({
-      where: { coachId: adminId },
+      where: {
+        coachId: adminId,
+        ...(envFilter ? { environments: envFilter } : {}),
+      },
       select: {
         id: true,
         name: true,
@@ -25,6 +35,7 @@ export async function POST(req: NextRequest) {
         subCategory: true,
         videoUrl: true,
         tags: true,
+        environments: true,
       },
       orderBy: { name: 'asc' },
     });
