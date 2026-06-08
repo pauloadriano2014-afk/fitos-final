@@ -91,11 +91,28 @@ export async function GET() {
       const novaSubCategoria = guessSubCategory(ex.name, ex.category);
       const novasTags = generateTags(ex.name, ex.category);
 
+      // Migra environments antigos para novos IDs
+      let environments = ex.environments || [];
+      const needsMigration = environments.some((e: string) => 
+        ['ACADEMIA', 'CONDOMÍNIO', 'CASA'].includes(e)
+      );
+      if (needsMigration || environments.length === 0) {
+        environments = environments.length === 0 
+          ? ['ACADEMIA_PADRAO']
+          : environments.map((e: string) => {
+              if (e === 'ACADEMIA') return 'ACADEMIA_PADRAO';
+              if (e === 'CONDOMÍNIO' || e === 'CONDOMINIO') return 'CONDOMINIO';
+              if (e === 'CASA') return 'EM_CASA';
+              return e;
+            });
+      }
+
       await prisma.exercise.update({
         where: { id: ex.id },
         data: {
           subCategory: novaSubCategoria,
           tags: novasTags,
+          environments: environments,
         }
       });
       updatedCount++;
