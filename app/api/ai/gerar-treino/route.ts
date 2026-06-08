@@ -9,7 +9,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId, adminId } = body;
+    const { userId, adminId, cycleConfig } = body;
 
     if (!userId || !adminId) {
       return NextResponse.json({ error: 'userId e adminId obrigatórios' }, { status: 400 });
@@ -168,6 +168,58 @@ export async function POST(req: NextRequest) {
 
     // ─── 6. MONTAR PROMPT ───
     const anamnese_ = anamnese as any;
+
+    // Processar cycleConfig se veio do frontend
+    const hasCycleConfig = cycleConfig && cycleConfig.days?.length > 0;
+
+    let cycleCtx = '';
+    if (hasCycleConfig) {
+      const phaseLabels: Record<string, string> = {
+        HIPERTROFIA: 'Hipertrofia — volume moderado, técnicas variadas, reps 8-15',
+        FORCA: 'Força — cargas pesadas, reps 3-6, pausas longas (2-3min)',
+        CHOQUE: 'Choque — volume alto, técnicas avançadas pesadas, reps 6-12',
+        DELOAD: 'Deload — volume leve, sem técnicas avançadas, reps 15-20, cargas 60-70%',
+      };
+
+      const dayStructure = cycleConfig.days.map((d: any) => {
+        const groupLines = d.groups.map((g: any) => `    - ${g.id}: ${g.qty} exercícios, descanso ${g.rest ?? 60}s`).join('\n');
+        return `  Dia ${d.name}:\n${groupLines}`;
+      }).join('\n');
+
+      const techList = cycleConfig.techniques?.length > 0
+        ? cycleConfig.techniques.join(', ')
+        : 'Livre escolha da IA';
+
+      const limitationRulesCtx = cycleConfig.limitationRules?.length > 0
+        ? cycleConfig.limitationRules.map((rule: any) =>
+            rule.rules.map((r: any) => {
+              if (r.staticOnly) return `  - ${r.group}: APENAS exercícios estáticos (prancha, isometria). ${r.note}`;
+              if (r.forceLight) return `  - ${r.group}: máx ${r.maxExercises} exercícios, carga LEVE. ${r.note}`;
+              if (r.addNote) return `  - ${r.group}: adicionar observação: "${r.note}"`;
+              return `  - ${r.group}: ${r.note}`;
+            }).join('\n')
+          ).join('\n')
+        : '';
+
+      cycleCtx = `
+══════════════════════════════════════════
+CONFIGURAÇÃO DO CICLO (SIGA EXATAMENTE)
+══════════════════════════════════════════
+FASE: ${phaseLabels[cycleConfig.phase] || cycleConfig.phase}
+DESCANSO PADRÃO: ${cycleConfig.defaultRest}s entre séries
+TÉCNICAS PERMITIDAS: ${techList}
+ESCOPO DAS TÉCNICAS: ${cycleConfig.techniqueScope === 'DAY' ? 'Use técnicas DIFERENTES em cada dia' : 'Distribua as técnicas ao longo do ciclo'}
+
+ESTRUTURA DOS DIAS (OBRIGATÓRIO):
+${dayStructure}
+
+ATENÇÃO: Os grupos musculares e quantidades acima são ORDENS, não sugestões.
+- Use EXATAMENTE os grupos listados para cada dia
+- Respeite a quantidade de exercícios por grupo
+- Os nomes dos dias devem ser exatamente: ${cycleConfig.days.map((d: any) => `"${d.name}"`).join(', ')}
+
+${limitationRulesCtx ? `REGRAS DE LIMITAÇÃO ATIVAS:\n${limitationRulesCtx}` : ''}`;
+    }
     const alunoCtx = `
 ALUNO: ${user.name || 'Não informado'}
 - Objetivo: ${user.goal || anamnese_?.objetivo || 'Não informado'}
@@ -276,6 +328,7 @@ FORMATO JSON — sem markdown, sem texto extra
 
     const userMessage = `${alunoCtx}
 ${workoutsCtx}
+${cycleCtx}
 
 BANCO DE EXERCÍCIOS:
 ${JSON.stringify(bankForPrompt)}
