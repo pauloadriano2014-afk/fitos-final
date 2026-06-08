@@ -224,10 +224,11 @@ export async function POST(req: NextRequest) {
       const dayStructure = cycleConfig.days.map((d: any) => {
         const groupLines = d.groups.map((g: any) => {
           const restNote = g.rest !== undefined ? `, descanso ${g.rest}s` : '';
+          const setsNote = g.sets !== undefined ? `, ${g.sets} séries por exercício (exceto técnicas com séries fixas como GVT=10)` : ', 4 séries por exercício';
           const cardioNote = g.id === 'CARDIO' && cycleConfig.cardioTarget
             ? ` (${cycleConfig.cardioTarget}kcal — sets=minutos, reps=kcal, technique=Moderada)`
             : '';
-          return `    - ${g.id}: ${g.qty} exercício(s)${restNote}${cardioNote}`;
+          return `    - ${g.id}: ${g.qty} exercício(s)${setsNote}${restNote}${cardioNote}`;
         }).join('\n');
         return `  Dia ${d.name}:\n${groupLines}`;
       }).join('\n');
