@@ -290,14 +290,14 @@ COMO TROCAR CORRETAMENTE:
 
 REGRA 4 — TÉCNICAS (OBRIGATÓRIO):
 Cada dia DEVE ter pelo menos 1 técnica avançada. Use técnicas DIFERENTES por dia.
-- DROPSET: reduz 20-30% da carga e continua sem pausa
-- RESTPAUSE: 10-15s de pausa e repete com mesma carga
-- BISET: dois exercícios SEM pausa — marque os DOIS com BISET
-- 21: 7 reps baixo + 7 reps cima + 7 completas
-- CLUSTERSET: blocos de 3 reps com 15s entre eles
-- 1_5_REPS: movimento completo + meio = 1 rep
-- TUT: cadência controlada 3s descida
-- GVT: 10 séries de 10 reps
+- DROPSET: reduz 20-30% da carga e continua sem pausa. Reps normais (8-15)
+- RESTPAUSE: 10-15s de pausa e repete com mesma carga. Reps normais (8-12)
+- BISET: dois exercícios SEM pausa — marque os DOIS com BISET. Reps normais
+- 21: OBRIGATÓRIO reps="21" em TODOS os blocos (7 baixo + 7 meio + 7 completas). NUNCA use outra quantidade de reps com esta técnica
+- CLUSTERSET: blocos de 3 reps com 15s entre eles. reps="3" em cada bloco
+- 1_5_REPS: movimento completo + meio = 1 rep. Reps normais (8-12)
+- TUT: cadência controlada 3s descida. Reps normais (8-12)
+- GVT: OBRIGATÓRIO 10 séries de 10 reps. sets="10" blocos com reps="10"
 
 REGRA 5 — SUBSTITUTOS INTELIGENTES:
 Para cada exercício, adicione 1 substituto com TARGET diferente ou EQUIPMENT diferente.
@@ -330,7 +330,7 @@ FORMATO JSON — sem markdown, sem texto extra
         "title": "nome-exato",
         "category": "Categoria",
         "subCategory": "SubCategoria",
-        "observation": "dica ao aluno",
+        "observation": "",
         "substitute": { "exerciseId": "id-exato", "title": "nome-exato" },
         "blocks": [
           { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" }
@@ -338,7 +338,9 @@ FORMATO JSON — sem markdown, sem texto extra
       }
     ]
   }
-}`;
+}
+
+IMPORTANTE: O campo "observation" deve ser SEMPRE string vazia "". Não escreva observações — o personal trainer fará isso manualmente.`;
 
     // Banco para o prompt com tags para a IA escolher melhor
     const bankForPrompt = adminExercises.map(ex => {
@@ -407,21 +409,37 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
             substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' };
           }
 
+          // Corrige reps obrigatórias por técnica
+          const fixReps = (reps: string, technique: string): string => {
+            if (technique === '21') return '21';
+            if (technique === 'CLUSTERSET') return '3';
+            if (technique === 'GVT') return '10';
+            return reps;
+          };
+
+          const fixSets = (sets: string, technique: string): string => {
+            if (technique === 'GVT') return '1'; // GVT usa 10 blocos separados de 1 série
+            return sets;
+          };
+
           return {
             exerciseId: ex.exerciseId,
             title: dbEx.name,
             videoUrl: dbEx.videoUrl || '',
             category: dbEx.category,
             subCategory: dbEx.subCategory,
-            observation: ex.observation || '',
+            observation: '', // sempre vazio — personal trainer preenche manualmente
             substitute,
-            blocks: (ex.blocks || []).map((b: any) => ({
-              sets:      String(b.sets      || '1'),
-              reps:      String(b.reps      || '12'),
-              load:      b.load             || '',
-              restTime:  String(b.restTime  || '60'),
-              technique: b.technique        || '',
-            })),
+            blocks: (ex.blocks || []).map((b: any) => {
+              const tech = b.technique || '';
+              return {
+                sets:      fixSets(String(b.sets || '1'), tech),
+                reps:      fixReps(String(b.reps || '12'), tech),
+                load:      b.load || '',
+                restTime:  String(b.restTime || '60'),
+                technique: tech,
+              };
+            }),
           };
         });
     }
