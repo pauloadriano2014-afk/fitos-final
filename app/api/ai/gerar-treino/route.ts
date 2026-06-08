@@ -15,10 +15,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'userId e adminId obrigatórios' }, { status: 400 });
     }
 
-    // ─── 1. BUSCAR BANCO DE EXERCÍCIOS DO ADMIN LOGADO ───
+    // ─── 1. BUSCAR BANCO DO ADMIN COM TAGS ───
     const adminExercises = await prisma.exercise.findMany({
       where: { coachId: adminId },
-      select: { id: true, name: true, category: true, subCategory: true, videoUrl: true },
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        subCategory: true,
+        videoUrl: true,
+        tags: true, // target, mechanic, equipment, jointRisk
+      },
       orderBy: { name: 'asc' },
     });
 
@@ -28,7 +35,43 @@ export async function POST(req: NextRequest) {
 
     const exerciseMap = new Map(adminExercises.map((ex) => [ex.id, ex]));
 
-    // ─── 2. BUSCAR DADOS DO ALUNO ───
+    // ─── 2. MONTAR MAPA DE VARIAÇÕES POR TARGET ───
+    // Agrupa por tags.target — o músculo alvo REAL
+    // Assim: Mesa Flexora (POSTERIOR) → Cadeira Flexora (POSTERIOR) ✅
+    const byTarget: Record<string, Array<{ id: string; name: string; equipment: string; mechanic: string }>> = {};
+    const bySubCategory: Record<string, Array<{ id: string; name: string }>> = {};
+
+    adminExercises.forEach((ex) => {
+      const tags = ex.tags as any;
+      const target = tags?.target || ex.category?.toUpperCase() || 'GERAL';
+      const equipment = tags?.equipment || 'LIVRE';
+      const mechanic = tags?.mechanic || 'ISOLADO';
+      const sub = `${ex.category}|${ex.subCategory || 'Geral'}`;
+
+      if (!byTarget[target]) byTarget[target] = [];
+      byTarget[target].push({ id: ex.id, name: ex.name, equipment, mechanic });
+
+      if (!bySubCategory[sub]) bySubCategory[sub] = [];
+      bySubCategory[sub].push({ id: ex.id, name: ex.name });
+    });
+
+    // Formatar guia de variações para o prompt
+    const variationGuide = Object.entries(byTarget)
+      .filter(([, exs]) => exs.length >= 2)
+      .map(([target, exs]) => {
+        const byEquip: Record<string, string[]> = {};
+        exs.forEach(e => {
+          if (!byEquip[e.equipment]) byEquip[e.equipment] = [];
+          byEquip[e.equipment].push(`"${e.name}" (${e.id})`);
+        });
+        const lines = Object.entries(byEquip)
+          .map(([eq, names]) => `    ${eq}: ${names.join(' | ')}`)
+          .join('\n');
+        return `  TARGET ${target} (${exs.length} opções):\n${lines}`;
+      })
+      .join('\n\n');
+
+    // ─── 3. BUSCAR DADOS DO ALUNO ───
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -50,7 +93,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Aluno não encontrado' }, { status: 404 });
     }
 
-    // ─── 3. BUSCAR HISTÓRICO DE CARGAS ───
+    // ─── 4. HISTÓRICO DE CARGAS ───
     const history = await prisma.workoutHistory.findMany({
       where: { userId },
       orderBy: { date: 'desc' },
@@ -66,7 +109,7 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    // ─── 4. PROCESSAR TREINOS ANTERIORES ───
+    // ─── 5. PROCESSAR TREINOS ANTERIORES ───
     const anamnese = user.anamneses?.[0] || null;
 
     const previousWorkouts = user.workouts.map((workout, wIdx) => {
@@ -79,33 +122,30 @@ export async function POST(req: NextRequest) {
         let blocks = ex.blocks;
         let technique = ex.technique;
         try {
-          if (ex.technique && typeof ex.technique === 'string' && ex.technique.trim().startsWith('{')) {
-            const parsed = JSON.parse(ex.technique);
-            if (parsed?.b) { blocks = parsed.b; technique = parsed.t; }
+          if (ex.technique?.startsWith('{')) {
+            const p = JSON.parse(ex.technique);
+            if (p?.b) { blocks = p.b; technique = p.t; }
           }
         } catch (_) {}
 
-        if (!blocks || !Array.isArray(blocks) || blocks.length === 0) {
-          blocks = [{
-            sets: String(ex.sets || '3'),
-            reps: String(ex.reps || '12'),
-            restTime: String(ex.restTime || '60'),
-            technique: technique || '',
-          }];
+        if (!blocks?.length) {
+          blocks = [{ sets: String(ex.sets || '3'), reps: String(ex.reps || '12'), restTime: String(ex.restTime || '60'), technique: technique || '' }];
         }
 
         const realLoads = weightMap[ex.exerciseId] || {};
-        const blocksWithHistory = blocks.map((b: any, idx: number) => ({
-          ...b,
-          lastWeight: realLoads[idx] ?? realLoads[0] ?? null,
-        }));
+        const exTags = (ex.exercise?.tags as any) || {};
 
         exercisesByDay[day].push({
           exerciseId: ex.exerciseId,
           name: ex.exercise?.name || 'Exercício',
-          category: ex.exercise?.category || '',
-          subCategory: ex.exercise?.subCategory || '',
-          blocks: blocksWithHistory,
+          target: exTags.target || ex.exercise?.category || '',
+          equipment: exTags.equipment || '',
+          mechanic: exTags.mechanic || '',
+          jointRisk: exTags.jointRisk || [],
+          blocks: blocks.map((b: any, idx: number) => ({
+            ...b,
+            lastWeight: realLoads[idx] ?? realLoads[0] ?? null,
+          })),
           observation: ex.observation || '',
         });
       });
@@ -114,124 +154,103 @@ export async function POST(req: NextRequest) {
         index: wIdx + 1,
         name: workout.name,
         model: workout.workoutModel || 'CARGA',
-        createdAt: workout.createdAt,
         days: exercisesByDay,
       };
     });
 
-    // ─── 5. MONTAR MAPA DE VARIAÇÕES POR SUBCATEGORIA ───
-    // Agrupa exercícios por categoria+subCategoria para a IA escolher variantes reais
-    const variationMap: Record<string, Array<{id: string, name: string}>> = {};
-    adminExercises.forEach((ex) => {
-      const key = `${ex.category}|${ex.subCategory}`;
-      if (!variationMap[key]) variationMap[key] = [];
-      variationMap[key].push({ id: ex.id, name: ex.name });
-    });
-
-    // Formatar para o prompt — só grupos com 2+ opções
-    const variationGuide = Object.entries(variationMap)
-      .filter(([, exs]) => exs.length >= 2)
-      .map(([key, exs]) => {
-        const [cat, sub] = key.split('|');
-        return `${cat} > ${sub}: ${exs.map(e => `"${e.name}" (${e.id})`).join(' | ')}`;
-      })
-      .join('\n');
+    // IDs do treino mais recente para forçar variação
+    const latestIds = new Set<string>();
+    if (previousWorkouts.length > 0) {
+      Object.values(previousWorkouts[0].days).forEach((dayExs: any[]) => {
+        dayExs.forEach((ex: any) => latestIds.add(ex.exerciseId));
+      });
+    }
 
     // ─── 6. MONTAR PROMPT ───
     const anamnese_ = anamnese as any;
-    const alunoContext = `
-DADOS DO ALUNO:
-- Nome: ${user.name || 'Não informado'}
+    const alunoCtx = `
+ALUNO: ${user.name || 'Não informado'}
 - Objetivo: ${user.goal || anamnese_?.objetivo || 'Não informado'}
 - Nível: ${user.level || anamnese_?.nivel || 'Não informado'}
-- Foco principal: ${anamnese_?.focoPrincipal || 'Geral'}
-- Frequência semanal: ${anamnese_?.frequencia ? `${anamnese_?.frequencia}x por semana` : 'Não informado'}
-- Tempo disponível: ${anamnese_?.tempoDisponivel ? `${anamnese_?.tempoDisponivel} minutos` : 'Não informado'}
-- Limitações/Dores: ${anamnese_?.limitacoes?.length ? anamnese_?.limitacoes.join(', ') : 'Nenhuma'}
+- Frequência: ${anamnese_?.frequencia ? `${anamnese_?.frequencia}x/sem` : 'Não informado'}
+- Tempo: ${anamnese_?.tempoDisponivel ? `${anamnese_?.tempoDisponivel}min` : 'Não informado'}
+- Limitações: ${anamnese_?.limitacoes?.length ? anamnese_?.limitacoes.join(', ') : 'Nenhuma'}
 - Cirurgias: ${anamnese_?.cirurgias?.length ? anamnese_?.cirurgias.join(', ') : 'Nenhuma'}
-- Peso: ${anamnese_?.peso ? `${anamnese_?.peso}kg` : 'Não informado'}
-- Altura: ${anamnese_?.altura ? `${anamnese_?.altura}cm` : 'Não informado'}
-`.trim();
+- Peso/Altura: ${anamnese_?.peso ? `${anamnese_?.peso}kg` : '?'} / ${anamnese_?.altura ? `${anamnese_?.altura}cm` : '?'}`.trim();
 
-    const workoutsContext = previousWorkouts.length > 0
-      ? `\nHISTÓRICO DE TREINOS (do mais recente para o mais antigo):\n${JSON.stringify(previousWorkouts, null, 2)}`
-      : '\nNenhum treino anterior encontrado. Crie uma rotina do zero adequada ao perfil do aluno.';
+    const workoutsCtx = previousWorkouts.length > 0
+      ? `\nHISTÓRICO (mais recente primeiro):\n${JSON.stringify(previousWorkouts, null, 2)}`
+      : '\nSem treinos anteriores — crie rotina do zero.';
 
-    // Extrair IDs dos exercícios do treino mais recente para forçar variação
-    const latestWorkoutExerciseIds = new Set<string>();
-    if (previousWorkouts.length > 0) {
-      const latest = previousWorkouts[0];
-      Object.values(latest.days).forEach((dayExs: any[]) => {
-        dayExs.forEach((ex: any) => latestWorkoutExerciseIds.add(ex.exerciseId));
-      });
-    }
-    const latestIds = Array.from(latestWorkoutExerciseIds);
+    const systemPrompt = `Você é um personal trainer experiente. Gere uma rotina NOVA e DIFERENTE do treino anterior.
 
-    const systemPrompt = `Você é um personal trainer experiente. Sua tarefa é gerar uma rotina de treino NOVA e DIFERENTE do treino anterior.
+══════════════════════════════════════════
+REGRAS ABSOLUTAS
+══════════════════════════════════════════
 
-═══════════════════════════════════════════
-REGRAS ABSOLUTAS — NUNCA VIOLE ESTAS REGRAS
-═══════════════════════════════════════════
+REGRA 1 — DIAS: Use "A", "B", "C"... Nunca use nomes descritivos.
 
-REGRA 1 — NOMES DOS DIAS: Use SEMPRE letras simples: "A", "B", "C", "D", "E", "F". NUNCA use nomes descritivos como "Peito e Tríceps" ou "Glúteos".
+REGRA 2 — IDs: Use APENAS ids e names do banco. Jamais invente.
 
-REGRA 2 — IDs EXCLUSIVOS: Use APENAS ids e names do banco fornecido. Nunca invente.
+REGRA 3 — VARIAÇÃO POR TARGET (MAIS IMPORTANTE):
+${latestIds.size > 0 ? `IDs do treino anterior: ${Array.from(latestIds).join(', ')}
 
-REGRA 3 — VARIAÇÃO OBRIGATÓRIA DE EXERCÍCIOS:
-${latestIds.length > 0 ? `Os IDs do treino anterior são: ${latestIds.join(', ')}
-VOCÊ DEVE TROCAR NO MÍNIMO 40% DESSES EXERCÍCIOS por variantes do mesmo grupo muscular.
-Use o GUIA DE VARIAÇÕES abaixo para escolher substitutos inteligentes.
-Exemplo correto: Búlgaro c/halteres → Afundo no Smith (mesmo grupo: Pernas > Multiarticular)
-Exemplo ERRADO: Búlgaro c/halteres → Búlgaro máquina (muito parecido, não conta como variação)` : 'Crie uma rotina do zero variada e equilibrada.'}
+OBRIGATÓRIO: Troque no mínimo 40% desses exercícios.
+COMO TROCAR CORRETAMENTE:
+- Identifique o "target" do exercício a ser trocado
+- Escolha outro exercício com o MESMO target no GUIA DE VARIAÇÕES
+- Prefira equipment diferente para maior variedade
+- Exemplos corretos:
+  * Mesa Flexora (POSTERIOR/MAQUINA) → Cadeira Flexora (POSTERIOR/MAQUINA) ou Stiff c/halter (POSTERIOR/HALTER)
+  * Búlgaro c/halteres (PERNAS/HALTER) → Afundo no Smith (PERNAS/BARRA) ou Passada c/barra (PERNAS/BARRA)
+  * Supino articulado (PEITO/LIVRE) → Supino reto c/halteres (PEITO/HALTER) ou Supino no Smith (PEITO/BARRA)
+  * Puxada frente aberta (COSTAS/LIVRE) → Puxada c/triângulo (COSTAS/LIVRE) ou Pulldown com barra (COSTAS/BARRA)
+- ERRADO: Trocar Mesa Flexora por Mesa Flexora de outro jeito (mesmo equipamento/nome similar)` : 'Sem treino anterior — crie rotina variada.'}
 
-REGRA 4 — TÉCNICAS AVANÇADAS OBRIGATÓRIAS:
-Cada dia DEVE ter pelo menos 1 técnica avançada. Use técnicas DIFERENTES em cada dia.
-T�cnicas disponíveis: DROPSET, RESTPAUSE, BISET, 21, CLUSTERSET, 1_5_REPS, TUT, GVT
-- DROPSET: reduz carga e continua sem pausa
-- RESTPAUSE: pausa 10-15s e continua com mesma carga
-- BISET: dois exercícios sem pausa (use em 2 exercícios consecutivos)
+REGRA 4 — TÉCNICAS (OBRIGATÓRIO):
+Cada dia DEVE ter pelo menos 1 técnica avançada. Use técnicas DIFERENTES por dia.
+- DROPSET: reduz 20-30% da carga e continua sem pausa
+- RESTPAUSE: 10-15s de pausa e repete com mesma carga
+- BISET: dois exercícios SEM pausa — marque os DOIS com BISET
 - 21: 7 reps baixo + 7 reps cima + 7 completas
-- CLUSTERSET: mini-séries com 15s de pausa entre elas
-- 1_5_REPS: movimento completo + meio movimento = 1 rep
-- TUT: cadência controlada (3s descida, 1s pausa, 2s subida)
-- GVT: 10 séries de 10 reps mesma carga
+- CLUSTERSET: blocos de 3 reps com 15s entre eles
+- 1_5_REPS: movimento completo + meio = 1 rep
+- TUT: cadência controlada 3s descida
+- GVT: 10 séries de 10 reps
 
-REGRA 5 — SUBSTITUTOS INTELIGENTES: Para cada exercício principal, adicione um substituto de subCategoria diferente quando possível.
-Exemplo: exercício principal = Leg Press 45° (Multiarticular) → substituto = Cadeira Extensora (Quadríceps)
+REGRA 5 — SUBSTITUTOS INTELIGENTES:
+Para cada exercício, adicione 1 substituto com TARGET diferente ou EQUIPMENT diferente.
+Consulte o GUIA DE VARIAÇÕES abaixo.
 
-REGRA 6 — PROGRESSÃO DE CARGA: Se lastWeight existir, sugira +5% a +10%. Arredonde para múltiplos de 2.5kg.
+REGRA 6 — PROGRESSÃO: lastWeight +5% a +10%, múltiplos de 2.5kg.
 
-REGRA 7 — ESTRUTURA DE BLOCOS: Cada série = 1 bloco com sets="1". Pirâmides em blocos separados.
+REGRA 7 — BLOCOS: sets="1" por bloco. Pirâmides = blocos separados.
 
-REGRA 8 — LIMITAÇÕES: Respeite SEMPRE limitações e cirurgias. Nunca prescreva movimentos contraindicados.
+REGRA 8 — LIMITAÇÕES: Respeite jointRisk. Se aluno tem limitação de joelho, EVITE exercícios com "JOELHO" em jointRisk.
 
-REGRA 9 — CARDIO: sets=minutos, reps=kcal alvo, technique=Leve/Moderada/Zona 2/Forte/HIIT.
+REGRA 9 — CARDIO: sets=minutos, reps=kcal, technique=Leve/Moderada/Zona 2/Forte/HIIT.
 
-═══════════════════════════════════════════
-GUIA DE VARIAÇÕES DO BANCO DO COACH
-(Use para escolher substitutos e variações)
-═══════════════════════════════════════════
+══════════════════════════════════════════
+GUIA DE VARIAÇÕES (por TARGET)
+══════════════════════════════════════════
 ${variationGuide}
 
-═══════════════════════════════════════════
-FORMATO DE SAÍDA — JSON PURO, SEM MARKDOWN
-═══════════════════════════════════════════
+══════════════════════════════════════════
+FORMATO JSON — sem markdown, sem texto extra
+══════════════════════════════════════════
 {
-  "workoutName": "Nome da rotina",
+  "workoutName": "Nome",
   "workoutModel": "CARGA",
-  "reasoning": "Explique quais exercícios foram trocados e quais técnicas foram aplicadas em cada dia",
+  "reasoning": "Quais exercícios foram trocados e por quê. Quais técnicas foram aplicadas em cada dia.",
   "exercisesByDay": {
     "A": [
       {
-        "exerciseId": "id-exato-do-banco",
-        "title": "Nome exato do banco",
+        "exerciseId": "id-exato",
+        "title": "nome-exato",
         "category": "Categoria",
         "subCategory": "SubCategoria",
-        "observation": "Dica ao aluno",
-        "substitute": {
-          "exerciseId": "id-do-substituto",
-          "title": "Nome do substituto"
-        },
+        "observation": "dica ao aluno",
+        "substitute": { "exerciseId": "id-exato", "title": "nome-exato" },
         "blocks": [
           { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" }
         ]
@@ -240,15 +259,30 @@ FORMATO DE SAÍDA — JSON PURO, SEM MARKDOWN
   }
 }`;
 
-    const userMessage = `${alunoContext}
-${workoutsContext}
+    // Banco para o prompt — inclui target/equipment para a IA escolher melhor
+    const bankForPrompt = adminExercises.map(ex => {
+      const tags = ex.tags as any;
+      return {
+        id: ex.id,
+        name: ex.name,
+        category: ex.category,
+        subCategory: ex.subCategory,
+        target: tags?.target || ex.category,
+        equipment: tags?.equipment || '',
+        mechanic: tags?.mechanic || '',
+        jointRisk: tags?.jointRisk || [],
+      };
+    });
 
-BANCO COMPLETO DE EXERCÍCIOS:
-${JSON.stringify(adminExercises.map(e => ({ id: e.id, name: e.name, category: e.category, subCategory: e.subCategory })))}
+    const userMessage = `${alunoCtx}
+${workoutsCtx}
 
-Gere a nova rotina. Responda APENAS com o JSON.`.trim();
+BANCO DE EXERCÍCIOS:
+${JSON.stringify(bankForPrompt)}
 
-    // ─── 7. CHAMAR CLAUDE API ───
+Gere a rotina. Responda APENAS com o JSON.`.trim();
+
+    // ─── 7. CHAMAR CLAUDE ───
     const response = await anthropic.messages.create({
       model: 'claude-opus-4-5',
       max_tokens: 10000,
@@ -261,49 +295,34 @@ Gere a nova rotina. Responda APENAS com o JSON.`.trim();
       .map((c) => (c as any).text)
       .join('');
 
-    const cleanJson = rawText
-      .replace(/^```json\s*/m, '')
-      .replace(/^```\s*/m, '')
-      .replace(/```\s*$/m, '')
-      .trim();
+    const cleanJson = rawText.replace(/^```json\s*/m, '').replace(/^```\s*/m, '').replace(/```\s*$/m, '').trim();
 
     let parsed: any;
     try {
       parsed = JSON.parse(cleanJson);
     } catch (e) {
-      console.error('[gerar-treino] JSON inválido da IA:', cleanJson.substring(0, 600));
-      return NextResponse.json(
-        { error: 'A IA retornou um formato inválido. Tente novamente.' },
-        { status: 500 }
-      );
+      console.error('[gerar-treino] JSON inválido:', cleanJson.substring(0, 600));
+      return NextResponse.json({ error: 'A IA retornou formato inválido. Tente novamente.' }, { status: 500 });
     }
 
-    // ─── 8. VALIDAR E ENRIQUECER COM DADOS DO BANCO ───
+    // ─── 8. VALIDAR E ENRIQUECER ───
     const validatedDays: Record<string, any[]> = {};
     let ghostCount = 0;
 
     for (const [day, exercises] of Object.entries(parsed.exercisesByDay || {})) {
       validatedDays[day] = (exercises as any[])
         .filter((ex) => {
-          const exists = exerciseMap.has(ex.exerciseId);
-          if (!exists) {
-            ghostCount++;
-            console.warn(`[gerar-treino] exercício inválido ignorado: ${ex.exerciseId} "${ex.title}"`);
-          }
-          return exists;
+          const ok = exerciseMap.has(ex.exerciseId);
+          if (!ok) { ghostCount++; console.warn(`[gerar-treino] inválido: ${ex.exerciseId} "${ex.title}"`); }
+          return ok;
         })
         .map((ex) => {
           const dbEx = exerciseMap.get(ex.exerciseId)!;
 
-          // Validar substituto se existir
           let substitute = null;
           if (ex.substitute?.exerciseId && exerciseMap.has(ex.substitute.exerciseId)) {
             const dbSub = exerciseMap.get(ex.substitute.exerciseId)!;
-            substitute = {
-              id: dbSub.id,
-              name: dbSub.name,
-              videoUrl: dbSub.videoUrl || '',
-            };
+            substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' };
           }
 
           return {
@@ -325,18 +344,13 @@ Gere a nova rotina. Responda APENAS com o JSON.`.trim();
         });
     }
 
-    if (ghostCount > 0) {
-      console.warn(`[gerar-treino] ${ghostCount} exercícios fora do banco removidos.`);
-    }
+    if (ghostCount > 0) console.warn(`[gerar-treino] ${ghostCount} fantasmas removidos.`);
 
     const workoutTabs = Object.keys(validatedDays);
-    const totalExercises = workoutTabs.reduce((acc, day) => acc + validatedDays[day].length, 0);
+    const totalExercises = workoutTabs.reduce((acc, d) => acc + validatedDays[d].length, 0);
 
     if (totalExercises === 0) {
-      return NextResponse.json(
-        { error: 'A IA gerou exercícios que não existem no banco. Tente novamente.' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'A IA não gerou exercícios válidos. Tente novamente.' }, { status: 500 });
     }
 
     return NextResponse.json({
