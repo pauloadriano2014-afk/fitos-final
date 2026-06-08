@@ -175,14 +175,36 @@ export async function POST(req: NextRequest) {
     let cycleCtx = '';
     if (hasCycleConfig) {
       const phaseLabels: Record<string, string> = {
-        HIPERTROFIA: 'Hipertrofia — volume moderado, técnicas variadas, reps 8-15',
-        FORCA: 'Força — cargas pesadas, reps 3-6, pausas longas (2-3min)',
-        CHOQUE: 'Choque — volume alto, técnicas avançadas pesadas, reps 6-12',
-        DELOAD: 'Deload — volume leve, sem técnicas avançadas, reps 15-20, cargas 60-70%',
+        HIPERTROFIA:   'Hipertrofia — volume moderado, técnicas variadas, reps 8-15, foco em tempo sob tensão',
+        FORCA:         'Força — cargas pesadas, reps 3-6, descanso longo 2-3min, pirâmides crescentes',
+        CHOQUE:        'Choque — volume alto, técnicas avançadas em quase todos os exercícios, reps 6-12',
+        DELOAD:        'Deload — volume leve, SEM técnicas avançadas, reps 15-20, cargas 60-70% do máximo',
+        EMAGRECIMENTO: 'Emagrecimento — circuito com pouco descanso, reps 12-20, cardio OBRIGATÓRIO 300kcal no final dos dias de superiores/abdômen',
+        DEFINICAO:     'Definição — preservar massa muscular, reps 12-15, cardio OBRIGATÓRIO 300kcal no final dos dias de superiores/abdômen',
       };
 
+      const gender = cycleConfig.gender || 'Não informado';
+
+      const genderRules = gender === 'Feminino'
+        ? `GÊNERO: Feminino
+- Priorize exercícios de glúteos, posteriores e adutor
+- Inclua variações de glúteo no cabo, elevação pélvica, coice
+- Para peito: exercícios leves e controlados, máx 2-3 séries por exercício
+- Superiores em geral com cargas mais leves e foco em definição`
+        : `GÊNERO: Masculino
+- Priorize exercícios compostos de superiores: supino, desenvolvimento, remada
+- Foco em hipertrofia de peito, costas e ombros quando presentes
+- Evite exercícios de glúteo isolado (elevação pélvica no cabo, coice)
+- Para pernas: foco em quadríceps e força multiarticular`;
+
       const dayStructure = cycleConfig.days.map((d: any) => {
-        const groupLines = d.groups.map((g: any) => `    - ${g.id}: ${g.qty} exercícios, descanso ${g.rest ?? 60}s`).join('\n');
+        const groupLines = d.groups.map((g: any) => {
+          const restNote = g.rest !== undefined ? `, descanso ${g.rest}s` : '';
+          const cardioNote = g.id === 'CARDIO' && cycleConfig.cardioTarget
+            ? ` (${cycleConfig.cardioTarget}kcal — sets=minutos, reps=kcal, technique=Moderada)`
+            : '';
+          return `    - ${g.id}: ${g.qty} exercício(s)${restNote}${cardioNote}`;
+        }).join('\n');
         return `  Dia ${d.name}:\n${groupLines}`;
       }).join('\n');
 
@@ -206,17 +228,19 @@ export async function POST(req: NextRequest) {
 CONFIGURAÇÃO DO CICLO (SIGA EXATAMENTE)
 ══════════════════════════════════════════
 FASE: ${phaseLabels[cycleConfig.phase] || cycleConfig.phase}
-DESCANSO PADRÃO: ${cycleConfig.defaultRest}s entre séries
 TÉCNICAS PERMITIDAS: ${techList}
-ESCOPO DAS TÉCNICAS: ${cycleConfig.techniqueScope === 'DAY' ? 'Use técnicas DIFERENTES em cada dia' : 'Distribua as técnicas ao longo do ciclo'}
+ESCOPO DAS TÉCNICAS: ${cycleConfig.techniqueScope === 'DAY' ? 'Use técnicas DIFERENTES em cada dia' : 'Distribua as técnicas ao longo do ciclo — não repita a mesma técnica no mesmo dia'}
 
-ESTRUTURA DOS DIAS (OBRIGATÓRIO):
+${genderRules}
+
+ESTRUTURA DOS DIAS (ORDENS ABSOLUTAS):
 ${dayStructure}
 
-ATENÇÃO: Os grupos musculares e quantidades acima são ORDENS, não sugestões.
-- Use EXATAMENTE os grupos listados para cada dia
-- Respeite a quantidade de exercícios por grupo
-- Os nomes dos dias devem ser exatamente: ${cycleConfig.days.map((d: any) => `"${d.name}"`).join(', ')}
+REGRAS DE ESTRUTURA:
+- Use EXATAMENTE os grupos e quantidades listados acima
+- Respeite o descanso definido por grupo
+- Nomes dos dias: ${cycleConfig.days.map((d: any) => `"${d.name}"`).join(', ')}
+- Para CARDIO: sets=minutos de duração, reps=kcal estimadas, technique=Moderada/Zona 2/HIIT
 
 ${limitationRulesCtx ? `REGRAS DE LIMITAÇÃO ATIVAS:\n${limitationRulesCtx}` : ''}`;
     }
