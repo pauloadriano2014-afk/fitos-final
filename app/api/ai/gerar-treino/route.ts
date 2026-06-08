@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
         category: true,
         subCategory: true,
         videoUrl: true,
-        tags: true, // target, mechanic, equipment, jointRisk
+        tags: true,
       },
       orderBy: { name: 'asc' },
     });
@@ -36,26 +36,20 @@ export async function POST(req: NextRequest) {
     const exerciseMap = new Map(adminExercises.map((ex) => [ex.id, ex]));
 
     // ─── 2. MONTAR MAPA DE VARIAÇÕES POR TARGET ───
-    // Agrupa por tags.target — o músculo alvo REAL
-    // Assim: Mesa Flexora (POSTERIOR) → Cadeira Flexora (POSTERIOR) ✅
+    // ─── 2. MONTAR MAPA DE VARIAÇÕES POR TARGET ───
     const byTarget: Record<string, Array<{ id: string; name: string; equipment: string; mechanic: string }>> = {};
-    const bySubCategory: Record<string, Array<{ id: string; name: string }>> = {};
 
     adminExercises.forEach((ex) => {
       const tags = ex.tags as any;
       const target = tags?.target || ex.category?.toUpperCase() || 'GERAL';
       const equipment = tags?.equipment || 'LIVRE';
       const mechanic = tags?.mechanic || 'ISOLADO';
-      const sub = `${ex.category}|${ex.subCategory || 'Geral'}`;
 
       if (!byTarget[target]) byTarget[target] = [];
       byTarget[target].push({ id: ex.id, name: ex.name, equipment, mechanic });
-
-      if (!bySubCategory[sub]) bySubCategory[sub] = [];
-      bySubCategory[sub].push({ id: ex.id, name: ex.name });
     });
 
-    // Formatar guia de variações para o prompt
+    // Guia de variações para o prompt — agrupa por target e equipment
     const variationGuide = Object.entries(byTarget)
       .filter(([, exs]) => exs.length >= 2)
       .map(([target, exs]) => {
@@ -335,7 +329,7 @@ FORMATO JSON — sem markdown, sem texto extra
   }
 }`;
 
-    // Banco para o prompt — inclui target/equipment para a IA escolher melhor
+    // Banco para o prompt com tags para a IA escolher melhor
     const bankForPrompt = adminExercises.map(ex => {
       const tags = ex.tags as any;
       return {

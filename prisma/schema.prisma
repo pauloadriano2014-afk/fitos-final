@@ -143,7 +143,7 @@ model Exercise {
   environments    String[] @default(["ACADEMIA"])
 
   // 🔥 NOVA COLUNA ADICIONADA AQUI 🔥
-  tags            String[]
+  tags            Json?
   
   videoUrl        String?
   instructions    String?
