@@ -1,3 +1,4 @@
+// app/api/workout/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { Expo } from 'expo-server-sdk';
@@ -154,6 +155,9 @@ export async function POST(req: Request) {
       exercises.forEach((ex: any) => {
           if (ex.exerciseId) allIds.push(ex.exerciseId);
           if (ex.substituteId) allIds.push(ex.substituteId);
+          if (ex.substitutes && Array.isArray(ex.substitutes)) {
+              ex.substitutes.forEach((subId: string) => allIds.push(subId));
+          }
       });
       
       const validExercises = await prisma.exercise.findMany({
@@ -164,18 +168,28 @@ export async function POST(req: Request) {
 
       const exercisesToCreate = exercises
         .filter((ex: any) => validIds.includes(ex.exerciseId)) 
-        .map((ex: any, index: number) => ({
-          workoutId: workout.id, 
-          exerciseId: ex.exerciseId,
-          day: ex.day,
-          sets: Number(ex.sets) || 0,
-          reps: String(ex.reps),
-          restTime: Number(ex.restTime) || 0,
-          technique: ex.technique || "",
-          order: index, 
-          observation: ex.observation || "",
-          substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null 
-        }));
+        .map((ex: any, index: number) => {
+            // Valida quais substitutos do array realmente existem no banco
+            const validSubstitutes = Array.isArray(ex.substitutes) 
+                ? ex.substitutes.filter((id: string) => validIds.includes(id)) 
+                : [];
+
+            return {
+                workoutId: workout.id, 
+                exerciseId: ex.exerciseId,
+                day: ex.day,
+                sets: Number(ex.sets) || 0,
+                reps: String(ex.reps),
+                restTime: Number(ex.restTime) || 0,
+                technique: ex.technique || "",
+                order: index, 
+                observation: ex.observation || "",
+                // Mantemos o legado para não quebrar treinos antigos
+                substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null,
+                // 🔥 O NOVO ARRAY ENTRA AQUI 🔥
+                substitutes: validSubstitutes 
+            };
+        });
 
       if (exercisesToCreate.length > 0) {
           await prisma.workoutExercise.createMany({
@@ -204,6 +218,10 @@ export async function PATCH(req: Request) {
   }
 }
 
+// 🔥 A ROTA PUT DEVE SEGUIR A MESMA LÓGICA DA POST 🔥
+// Na sua API original, a rota PUT estava apenas atualizando o status 'archived'.
+// Como o React Native envia PUT na edição do treino (em `app/api/workout/[id]/route.ts`),
+// Se for atualizar o treino por aqui também, o PUT deve deletar e recriar os exercícios (como faz na criação).
 export async function PUT(req: Request) {
   try {
     const body = await req.json();

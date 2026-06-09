@@ -188,28 +188,31 @@ model Workout {
 }
 
 model WorkoutExercise {
-  id          String   @id @default(uuid())
-  workoutId   String
-  workout     Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid())
+  workoutId    String
+  workout      Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
   
   // Exercício Principal
-  exerciseId  String
-  exercise    Exercise @relation(fields: [exerciseId], references: [id])
+  exerciseId   String
+  exercise     Exercise @relation(fields: [exerciseId], references: [id])
   
-  // Exercício Substituto (Opcional)
+  // Exercício Substituto (Opcional - Legado)
   substituteId String?
   substitute   Exercise? @relation("SubstituteRelation", fields: [substituteId], references: [id])
 
-  restTime    Int      @default(60)
-  title       String?  
-  sets        Int      @default(3)
-  reps        String   @default("12") 
-  notes       String?  
-  technique   String?  
-  day         String   @default("A") 
-  order       Int      @default(0) 
+  // 🔥 AQUI ESTÁ A COLUNA NOVA PARA OS MÚLTIPLOS SUBSTITUTOS 🔥
+  substitutes  String[] @default([])
 
-  observation String?  
+  restTime     Int      @default(60)
+  title        String?  
+  sets         Int      @default(3)
+  reps         String   @default("12") 
+  notes        String?  
+  technique    String?  
+  day          String   @default("A") 
+  order        Int      @default(0) 
+
+  observation  String?  
 }
 
 model Anamnese {
