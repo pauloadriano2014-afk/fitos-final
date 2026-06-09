@@ -15,6 +15,11 @@ export async function GET(req: Request) {
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
 
+    // 🔥 O SEGREDO ESTÁ AQUI: Buscamos o dicionário de exercícios para traduzir as IDs em Nomes 🔥
+    const allExercises = await prisma.exercise.findMany({
+        select: { id: true, name: true, videoUrl: true }
+    });
+
     if (workoutId) {
         const workout = await prisma.workout.findUnique({
             where: { id: workoutId },
@@ -60,8 +65,19 @@ export async function GET(req: Request) {
             });
         }
 
+        // 🔥 TRADUÇÃO DOS SUBSTITUTOS PARA O TREINO ESPECÍFICO 🔥
+        const populatedExercises = workout.exercises.map((ex: any) => {
+            const mappedSubs = (ex.substitutes || []).map((subId: string) => {
+                const found = allExercises.find(e => e.id === subId);
+                return found ? { id: found.id, name: found.name, videoUrl: found.videoUrl } : null;
+            }).filter(Boolean);
+
+            return { ...ex, substitutes: mappedSubs };
+        });
+
         return NextResponse.json({ 
             ...workout, 
+            exercises: populatedExercises, // 🔥 Enviamos os exercícios já traduzidos!
             lastWeights: lastWeightsMap,
             lastLog: calculatedLastLog 
         });
@@ -73,7 +89,21 @@ export async function GET(req: Request) {
         include: { exercises: { include: { exercise: true, substitute: true } } }
     });
 
-    return NextResponse.json(workouts);
+    // 🔥 TRADUÇÃO PARA A LISTA GERAL DE TREINOS 🔥
+    const populatedWorkouts = workouts.map(w => {
+        return {
+            ...w,
+            exercises: w.exercises.map((ex: any) => {
+                const mappedSubs = (ex.substitutes || []).map((subId: string) => {
+                    const found = allExercises.find(e => e.id === subId);
+                    return found ? { id: found.id, name: found.name, videoUrl: found.videoUrl } : null;
+                }).filter(Boolean);
+                return { ...ex, substitutes: mappedSubs };
+            })
+        };
+    });
+
+    return NextResponse.json(populatedWorkouts);
 
   } catch (error) {
     console.error("Erro GET workout:", error);
