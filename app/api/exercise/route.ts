@@ -44,7 +44,7 @@ function guessSubCategory(name: string, category: string): string {
   return 'Geral';
 }
 
-// 🔥 GERADOR DE TAGS AUTOMÁTICO
+// 🔥 GERADOR DE TAGS AUTOMÁTICO (VOLTANDO AO FORMATO JSON DO PRISMA)
 function generateTags(name: string, category: string): object {
   const n = name.toLowerCase();
   const c = category.toLowerCase();
@@ -129,7 +129,7 @@ export async function POST(req: Request) {
     const cat = body.muscleGroup || body.category || "Geral";
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
     const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
-    const tags = generateTags(body.name, cat); // 🔥 TAGS AUTOMÁTICAS
+    const tags = generateTags(body.name, cat);
 
     const exercise = await prisma.exercise.create({
       data: {
@@ -137,10 +137,11 @@ export async function POST(req: Request) {
         category: cat,
         subCategory: subCat,
         environments: envs,
-        tags: tags, // 🔥 SALVA AS TAGS
+        tags: tags, // O Prisma agora aceita o objeto JSON direto
         videoUrl: body.videoUrl || "",
         instructions: body.instructions || "Execução padrão FIT OS.",
-        coachId: body.adminId || null
+        coachId: body.adminId || null,
+        defaultSubstitutes: body.defaultSubstitutes || [] // 🔥 AQUI ESTÁ O QUE FALTAVA
       }
     });
     return NextResponse.json(exercise);
@@ -157,7 +158,7 @@ export async function PUT(req: Request) {
     const cat = body.muscleGroup || body.category || "Geral";
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
     const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
-    const tags = generateTags(body.name, cat); // 🔥 TAGS AUTOMÁTICAS NA EDIÇÃO
+    const tags = generateTags(body.name, cat);
 
     const updatedExercise = await prisma.exercise.update({
       where: { id: body.id },
@@ -166,13 +167,15 @@ export async function PUT(req: Request) {
         category: cat,
         subCategory: subCat,
         environments: envs,
-        tags: tags, // 🔥 ATUALIZA AS TAGS
+        tags: tags, // O Prisma agora aceita o objeto JSON direto
         videoUrl: body.videoUrl || "",
-        instructions: body.instructions || "Execução padrão FIT OS."
+        instructions: body.instructions || "Execução padrão FIT OS.",
+        defaultSubstitutes: body.defaultSubstitutes || [] // 🔥 AQUI ESTÁ O QUE FALTAVA
       }
     });
     return NextResponse.json(updatedExercise);
   } catch (error) {
+    console.error("Erro PUT Exercise:", error);
     return NextResponse.json({ error: "Erro ao editar" }, { status: 500 });
   }
 }
