@@ -1,5 +1,6 @@
 // app/api/exercise/sync-adri/route.ts
 // Copia environments, tags e defaultSubstitutes dos exercícios do master para os exercícios da Adri com mesmo nome
+// defaultSubstitutes: traduz IDs do master para IDs equivalentes da Adri (por nome)
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -23,49 +24,73 @@ export async function GET() {
       return NextResponse.json({ error: 'Usuários não encontrados' }, { status: 404 });
     }
 
-    // 2. Buscar todos os exercícios do master (com tags, environments e defaultSubstitutes)
+    // 2. Buscar todos os exercícios do master
     const masterExercises = await prisma.exercise.findMany({
       where: { coachId: master.id },
       select: { id: true, name: true, tags: true, environments: true, defaultSubstitutes: true }
     });
 
-    // Mapa: nome em lowercase → exercício do master
-    const masterMap = new Map(
+    // Mapa: nome lowercase → exercício do master
+    const masterMapByName = new Map(
       masterExercises.map(ex => [ex.name.toLowerCase().trim(), ex])
     );
 
-    // 3. Buscar exercícios da Adri
+    // Mapa: ID do master → nome do exercício (para traduzir substitutos)
+    const masterMapById = new Map(
+      masterExercises.map(ex => [ex.id, ex.name.toLowerCase().trim()])
+    );
+
+    // 3. Buscar todos os exercícios da Adri
     const adriExercises = await prisma.exercise.findMany({
       where: { coachId: adri.id },
-      select: { id: true, name: true, environments: true, defaultSubstitutes: true }
+      select: { id: true, name: true }
     });
+
+    // Mapa: nome lowercase → ID da Adri (para resolver substitutos)
+    const adriMapByName = new Map(
+      adriExercises.map(ex => [ex.name.toLowerCase().trim(), ex.id])
+    );
 
     let updatedCount = 0;
     let skippedCount = 0;
+    let substitutesTranslated = 0;
 
     // 4. Para cada exercício da Adri, busca o equivalente do master
     for (const adriEx of adriExercises) {
-      const masterEx = masterMap.get(adriEx.name.toLowerCase().trim());
+      const masterEx = masterMapByName.get(adriEx.name.toLowerCase().trim());
 
-      if (masterEx) {
-        // Encontrou correspondência — copia environments, tags e defaultSubstitutes
-        await prisma.exercise.update({
-          where: { id: adriEx.id },
-          data: {
-            environments: masterEx.environments,
-            tags: masterEx.tags as any,
-            defaultSubstitutes: masterEx.defaultSubstitutes,
-          }
-        });
-        updatedCount++;
-      } else {
+      if (!masterEx) {
         skippedCount++;
+        continue;
       }
+
+      // Traduz os IDs dos substitutos do master para IDs da Adri
+      const translatedSubstitutes: string[] = [];
+      for (const masterSubId of (masterEx.defaultSubstitutes || [])) {
+        const subName = masterMapById.get(masterSubId);
+        if (subName) {
+          const adriSubId = adriMapByName.get(subName);
+          if (adriSubId) {
+            translatedSubstitutes.push(adriSubId);
+            substitutesTranslated++;
+          }
+        }
+      }
+
+      await prisma.exercise.update({
+        where: { id: adriEx.id },
+        data: {
+          environments: masterEx.environments,
+          tags: masterEx.tags as any,
+          defaultSubstitutes: translatedSubstitutes,
+        }
+      });
+      updatedCount++;
     }
 
     return NextResponse.json({
       success: true,
-      message: `Sincronização concluída! ${updatedCount} exercícios da Adri atualizados com os dados do master. ${skippedCount} exercícios exclusivos da Adri mantidos intactos.`
+      message: `Sincronização concluída! ${updatedCount} exercícios atualizados, ${substitutesTranslated} substitutos traduzidos, ${skippedCount} exclusivos da Adri mantidos.`
     });
 
   } catch (error) {
