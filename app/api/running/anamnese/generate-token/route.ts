@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       create: { userId },
     });
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://pauloadrianoteam.com.br';
+    const baseUrl = process.env.NEXT_PUBLIC_FORMS_URL || 'https://fitos-final.onrender.com';
 const link = `${baseUrl}/corrida/anamnese?token=${anamnese.token}`;
 
     return NextResponse.json({
