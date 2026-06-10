@@ -1,14 +1,24 @@
+// app/api/running/[userId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-// GET — App do aluno busca protocolo ativo + logs + semana calculada
+// GET — App do aluno busca protocolo ativo + logs + anamnese
 export async function GET(
   req: NextRequest,
   { params }: { params: { userId: string } }
 ) {
   try {
+    const userId = params.userId;
+
+    // Busca anamnese de corrida
+    const anamnese = await prisma.runningAnamnese.findUnique({
+      where: { userId },
+      select: { token: true, filled: true, filledAt: true },
+    });
+
+    // Busca protocolo ativo
     const protocol = await prisma.runningProtocol.findFirst({
-      where: { userId: params.userId, isActive: true },
+      where: { userId, isActive: true },
       include: {
         logs: {
           orderBy: { createdAt: 'desc' },
@@ -17,7 +27,7 @@ export async function GET(
     });
 
     if (!protocol) {
-      return NextResponse.json({ protocol: null });
+      return NextResponse.json({ protocol: null, anamnese: anamnese || null });
     }
 
     // Calcula semana atual com base no startDate
@@ -30,7 +40,6 @@ export async function GET(
     const weeksElapsed = Math.floor(diffDays / 7);
     const currentWeek = Math.min(protocol.startWeek + weeksElapsed, 8);
 
-    // Bloco atual baseado na semana
     const currentBlock =
       currentWeek <= 2 ? 1 :
       currentWeek <= 4 ? 2 :
@@ -41,6 +50,7 @@ export async function GET(
       protocol,
       currentWeek,
       currentBlock,
+      anamnese: anamnese || null,
     });
 
   } catch (error) {
