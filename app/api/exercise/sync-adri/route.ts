@@ -1,5 +1,5 @@
 // app/api/exercise/sync-adri/route.ts
-// Copia environments e tags dos exercícios do master para os exercícios da Adri com mesmo nome
+// Copia environments, tags e defaultSubstitutes dos exercícios do master para os exercícios da Adri com mesmo nome
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -23,10 +23,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Usuários não encontrados' }, { status: 404 });
     }
 
-    // 2. Buscar todos os exercícios do master (com tags e environments)
+    // 2. Buscar todos os exercícios do master (com tags, environments e defaultSubstitutes)
     const masterExercises = await prisma.exercise.findMany({
       where: { coachId: master.id },
-      select: { id: true, name: true, tags: true, environments: true }
+      select: { id: true, name: true, tags: true, environments: true, defaultSubstitutes: true }
     });
 
     // Mapa: nome em lowercase → exercício do master
@@ -37,7 +37,7 @@ export async function GET() {
     // 3. Buscar exercícios da Adri
     const adriExercises = await prisma.exercise.findMany({
       where: { coachId: adri.id },
-      select: { id: true, name: true, environments: true }
+      select: { id: true, name: true, environments: true, defaultSubstitutes: true }
     });
 
     let updatedCount = 0;
@@ -48,12 +48,13 @@ export async function GET() {
       const masterEx = masterMap.get(adriEx.name.toLowerCase().trim());
 
       if (masterEx) {
-        // Encontrou correspondência — copia environments e tags
+        // Encontrou correspondência — copia environments, tags e defaultSubstitutes
         await prisma.exercise.update({
           where: { id: adriEx.id },
           data: {
             environments: masterEx.environments,
             tags: masterEx.tags as any,
+            defaultSubstitutes: masterEx.defaultSubstitutes,
           }
         });
         updatedCount++;
