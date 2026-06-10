@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
       create: { userId },
     });
 
-    const link = `${process.env.NEXT_PUBLIC_APP_URL}/corrida/anamnese?token=${anamnese.token}`;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://pauloadrianoteam.com.br';
+const link = `${baseUrl}/corrida/anamnese?token=${anamnese.token}`;
 
     return NextResponse.json({
       token: anamnese.token,
