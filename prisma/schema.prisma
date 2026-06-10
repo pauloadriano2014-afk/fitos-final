@@ -63,6 +63,9 @@ model User {
   // 🔥 CHAVE DO MÓDULO DE DIETA (Toggle do Admin)
   dietModule      Boolean  @default(false)
 
+  // 🏃 CHAVE DO MÓDULO DE CORRIDA
+  runningModule   Boolean  @default(false)
+
   createdAt       DateTime @default(now())
 
   // 🔥 MULTI-TENANT (SISTEMA DE MÚLTIPLOS COACHES)
@@ -95,7 +98,12 @@ model User {
   history         WorkoutHistory[] 
   assessments     Assessment[]       
   checkIns        CheckIn[]
-  diets           Diet[] 
+  diets           Diet[]
+
+  // 🏃 MÓDULO DE CORRIDA
+  runningAnamnese   RunningAnamnese?
+  runningProtocols  RunningProtocol[]
+  runningLogs       RunningLog[] 
   
   // PA FLIX & Comunidade
   contentLikes      ContentLike[]
@@ -663,4 +671,114 @@ model StudentAlert {
   
   isRead       Boolean  @default(false) // Para o "Sininho" de notificações do Admin apagar após lido
   createdAt    DateTime @default(now())
+}
+
+// ============================================
+// 🏃 MÓDULO DE CORRIDA — PROTOCOLO 5K
+// ============================================
+
+model RunningAnamnese {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Token público para o formulário standalone
+  token     String   @unique @default(uuid())
+  filled    Boolean  @default(false)
+  filledAt  DateTime?
+
+  // 1. Experiência com corrida
+  runningExperience   String?  // "never" | "stopped" | "active"
+  timeStopped         String?  // Ex: "6 meses"
+  maxDistanceBefore   String?  // Ex: "3km"
+  weeklyFrequencyNow  String?  // Ex: "0" | "1" | "2" | "3+"
+  completedRaces      Boolean  @default(false)
+  racesDescription    String?  // Ex: "5k em 2023"
+
+  // 2. Condicionamento atual
+  canWalk30min        Boolean  @default(false)
+  canJog5min          Boolean  @default(false)
+  breathingDifficulty String?  // "light" | "moderate" | "intense"
+  fitnessLevel        Int?     // 1 a 5
+
+  // 3. Histórico de lesões e saúde
+  injuries            String[] @default([]) // ["Joelho", "Tornozelo", ...]
+  heartCondition      Boolean  @default(false)
+  jointIssues         Boolean  @default(false)
+  medications         String?
+  medicalClearance    String?  // "yes" | "no" | "not_consulted"
+
+  // 4. Objetivo e motivação
+  runningGoal         String?  // "complete_5k" | "weight_loss" | "fitness" | "race" | "other"
+  goalDeadline        String?  // Ex: "3 meses"
+  previousFailures    String?  @db.Text
+
+  // 5. Rotina e disponibilidade
+  availableDays       String[] @default([]) // ["QUA", "SEX", "DOM"]
+  preferredTime       String?  // "morning" | "afternoon" | "evening"
+  trainingLocation    String?  // "treadmill" | "street" | "both"
+  hasProperShoes      String?  // "yes" | "no" | "not_sure"
+
+  // 6. Informações físicas complementares
+  weight              Float?
+  height              Float?
+  bodyPainDuringWalk  String?  @db.Text
+  sleepQuality        String?  // "good" | "regular" | "bad"
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RunningProtocol {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String   @default("Protocolo 5K")
+  isActive    Boolean  @default(true)
+  startDate   DateTime @default(now())
+
+  // Bloco e semana de entrada (definidos pela IA ou pelo admin)
+  startBlock  Int      @default(1)  // 1 a 5
+  startWeek   Int      @default(1)  // 1 a 8
+
+  // Personalizações geradas pela IA
+  customNotes       String?  @db.Text  // Observações específicas para o aluno
+  customSpeeds      Json?              // Velocidades ajustadas por zona { z2: 7.5, z3: 8.0, ... }
+  adaptations       String?  @db.Text  // Ex: "Substituir intervalado por contínuo na sexta"
+
+  // Controle
+  generatedByAI     Boolean  @default(false)
+  aiPromptSnapshot  String?  @db.Text  // Snapshot do prompt usado (auditoria)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  logs        RunningLog[]
+}
+
+model RunningLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  protocolId  String
+  protocol    RunningProtocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+
+  // Qual treino da semana
+  week        Int              // 1 a 8
+  block       Int              // 1 a 5
+  sessionDay  String           // "QUARTA" | "SEXTA" | "DOMINGO"
+
+  // Dados registrados pelo aluno
+  date             DateTime @default(now())
+  durationMinutes  Int?
+  distanceKm       Float?
+  avgPace          String?  // Ex: "7:30"
+  notes            String?  @db.Text
+
+  // Sensação subjetiva (RPE)
+  rpe              Int?     // 1 a 10
+
+  createdAt   DateTime @default(now())
 }
