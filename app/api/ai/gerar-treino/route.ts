@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { PrismaClient } from '@prisma/client';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -65,7 +67,6 @@ export async function POST(req: NextRequest) {
 
     const exerciseMap = new Map(adminExercises.map((ex) => [ex.id, ex]));
 
-    // ─── 2. MONTAR MAPA DE VARIAÇÕES POR TARGET ───
     // ─── 2. MONTAR MAPA DE VARIAÇÕES POR TARGET ───
     const byTarget: Record<string, Array<{ id: string; name: string; equipment: string; mechanic: string }>> = {};
 
@@ -362,7 +363,6 @@ FORMATO JSON — sem markdown, sem texto extra
 
 IMPORTANTE: O campo "observation" deve ser SEMPRE string vazia "". Não escreva observações — o personal trainer fará isso manualmente.`;
 
-    // Banco para o prompt com tags para a IA escolher melhor
     const bankForPrompt = adminExercises.map(ex => {
       const tags = ex.tags as any;
       return {
@@ -386,18 +386,45 @@ ${JSON.stringify(bankForPrompt)}
 
 Gere a rotina. Responda APENAS com o JSON.`.trim();
 
-    // ─── 7. CHAMAR CLAUDE ───
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 16000,
-      messages: [{ role: 'user', content: userMessage }],
-      system: systemPrompt,
-    });
+    // ─── 7. ROTEAMENTO DE INTELIGÊNCIA ARTIFICIAL ───
+    const selectedAI = cycleConfig?.selectedAI || 'GEMINI';
+    let rawText = '';
 
-    const rawText = response.content
-      .filter((c) => c.type === 'text')
-      .map((c) => (c as any).text)
-      .join('');
+    console.log(`[gerar-treino] Gerando treino usando o modelo: ${selectedAI}`);
+
+    if (selectedAI === 'GEMINI') {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-1.5-pro',
+        systemInstruction: systemPrompt 
+      });
+      const result = await model.generateContent(userMessage);
+      rawText = result.response.text();
+    } else if (selectedAI === 'GPT') {
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.7,
+      });
+      rawText = response.choices[0].message.content || '';
+    } else {
+      // CLAUDE
+      const response = await anthropic.messages.create({
+        model: 'claude-opus-4-5', // Mantido exatamente como no seu código
+        max_tokens: 16000,
+        messages: [{ role: 'user', content: userMessage }],
+        system: systemPrompt,
+      });
+
+      rawText = response.content
+        .filter((c) => c.type === 'text')
+        .map((c) => (c as any).text)
+        .join('');
+    }
 
     const cleanJson = rawText.replace(/^```json\s*/m, '').replace(/^```\s*/m, '').replace(/```\s*$/m, '').trim();
 
