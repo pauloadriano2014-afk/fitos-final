@@ -16,15 +16,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'userId e adminId obrigatórios' }, { status: 400 });
     }
 
-    // ─── 1. BUSCAR BANCO DO ADMIN COM TAGS ───
-    // Replicar lógica de herança: se for a Adri, inclui exercícios do master também
+    // ─── 1. BUSCAR BANCO DO ADMIN ───
     const trainingEnv = cycleConfig?.trainingEnvironment || null;
 
-    const envFilter = trainingEnv
+    const envFilter = trainingEnv && trainingEnv !== 'UNIVERSAL'
       ? { hasSome: ['UNIVERSAL', trainingEnv] }
       : undefined;
 
-    // Detectar se é a Adri e buscar o master admin
     const currentAdmin = await prisma.user.findUnique({
       where: { id: adminId },
       select: { email: true }
@@ -43,6 +41,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Exercícios filtrados pelo ambiente (para o treino principal)
     const adminExercises = await prisma.exercise.findMany({
       where: {
         ...coachFilter,
@@ -56,6 +55,7 @@ export async function POST(req: NextRequest) {
         videoUrl: true,
         tags: true,
         environments: true,
+        defaultSubstitutes: true,
       },
       orderBy: { name: 'asc' },
     });
@@ -64,9 +64,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Nenhum exercício encontrado para este admin.' }, { status: 404 });
     }
 
+    // Mapa completo por id
     const exerciseMap = new Map(adminExercises.map((ex) => [ex.id, ex]));
 
     // ─── 2. MONTAR MAPA DE VARIAÇÕES POR TARGET ───
+    // Para substitutos: só exercícios do mesmo ambiente
     const byTarget: Record<string, Array<{ id: string; name: string; equipment: string; mechanic: string }>> = {};
 
     adminExercises.forEach((ex) => {
@@ -79,7 +81,6 @@ export async function POST(req: NextRequest) {
       byTarget[target].push({ id: ex.id, name: ex.name, equipment, mechanic });
     });
 
-    // Guia de variações para o prompt — agrupa por target e equipment
     const variationGuide = Object.entries(byTarget)
       .filter(([, exs]) => exs.length >= 2)
       .map(([target, exs]) => {
@@ -182,7 +183,6 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    // IDs do treino mais recente para forçar variação
     const latestIds = new Set<string>();
     if (previousWorkouts.length > 0) {
       Object.values(previousWorkouts[0].days).forEach((dayExs: any[]) => {
@@ -190,10 +190,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ─── 6. MONTAR PROMPT ───
-    const anamnese_ = anamnese as any;
+    // ─── 6. PRÉ-CALCULAR SUBSTITUTOS VÁLIDOS POR EXERCÍCIO ───
+    // Mapeamos os defaultSubstitutes já filtrados pelo ambiente
+    // Isso garante que a IA só receba substitutos válidos para o ambiente escolhido
+    const substitutesByExercise: Record<string, Array<{ id: string; name: string }>> = {};
 
-    // Processar cycleConfig se veio do frontend
+    adminExercises.forEach((ex) => {
+      const defaultSubs = (ex.defaultSubstitutes || []) as string[];
+      if (defaultSubs.length === 0) return;
+
+      const validSubs = defaultSubs
+        .map(subId => exerciseMap.get(subId))
+        .filter(Boolean)
+        .map(sub => ({ id: sub!.id, name: sub!.name }));
+
+      if (validSubs.length > 0) {
+        substitutesByExercise[ex.id] = validSubs;
+      }
+    });
+
+    // ─── 7. MONTAR PROMPT ───
+    const anamnese_ = anamnese as any;
     const hasCycleConfig = cycleConfig && cycleConfig.days?.length > 0;
 
     let cycleCtx = '';
@@ -208,23 +225,14 @@ export async function POST(req: NextRequest) {
       };
 
       const gender = cycleConfig.gender || 'Não informado';
-
       const genderRules = gender === 'Feminino'
-        ? `GÊNERO: Feminino
-- Priorize exercícios de glúteos, posteriores e adutor
-- Inclua variações de glúteo no cabo, elevação pélvica, coice
-- Para peito: exercícios leves e controlados, máx 2-3 séries por exercício
-- Superiores em geral com cargas mais leves e foco em definição`
-        : `GÊNERO: Masculino
-- Priorize exercícios compostos de superiores: supino, desenvolvimento, remada
-- Foco em hipertrofia de peito, costas e ombros quando presentes
-- Evite exercícios de glúteo isolado (elevação pélvica no cabo, coice)
-- Para pernas: foco em quadríceps e força multiarticular`;
+        ? `GÊNERO: Feminino\n- Priorize glúteos, posteriores e adutor\n- Inclua variações de glúteo no cabo, elevação pélvica, coice\n- Peito: exercícios leves, máx 2-3 séries\n- Superiores com cargas mais leves e foco em definição`
+        : `GÊNERO: Masculino\n- Priorize compostos de superiores: supino, desenvolvimento, remada\n- Foco em hipertrofia de peito, costas e ombros\n- Evite glúteo isolado (elevação pélvica no cabo, coice)\n- Pernas: foco em quadríceps e força multiarticular`;
 
       const dayStructure = cycleConfig.days.map((d: any) => {
         const groupLines = d.groups.map((g: any) => {
           const restNote = g.rest !== undefined ? `, descanso ${g.rest}s` : '';
-          const setsNote = g.sets !== undefined ? `, ${g.sets} séries por exercício (exceto técnicas com séries fixas como GVT=10)` : ', 4 séries por exercício';
+          const setsNote = g.sets !== undefined ? `, ${g.sets} séries por exercício (exceto GVT=10)` : ', 4 séries por exercício';
           const cardioNote = g.id === 'CARDIO' && cycleConfig.cardioTarget
             ? ` (${cycleConfig.cardioTarget}kcal — sets=minutos, reps=kcal, technique=Moderada)`
             : '';
@@ -240,13 +248,15 @@ export async function POST(req: NextRequest) {
       const limitationRulesCtx = cycleConfig.limitationRules?.length > 0
         ? cycleConfig.limitationRules.map((rule: any) =>
             rule.rules.map((r: any) => {
-              if (r.staticOnly) return `  - ${r.group}: APENAS exercícios estáticos (prancha, isometria). ${r.note}`;
+              if (r.staticOnly) return `  - ${r.group}: APENAS estáticos (prancha, isometria). ${r.note}`;
               if (r.forceLight) return `  - ${r.group}: máx ${r.maxExercises} exercícios, carga LEVE. ${r.note}`;
               if (r.addNote) return `  - ${r.group}: adicionar observação: "${r.note}"`;
               return `  - ${r.group}: ${r.note}`;
             }).join('\n')
           ).join('\n')
         : '';
+
+      const envLabel = trainingEnv && trainingEnv !== 'UNIVERSAL' ? trainingEnv : 'UNIVERSAL (todos os equipamentos)';
 
       cycleCtx = `
 ══════════════════════════════════════════
@@ -255,6 +265,7 @@ CONFIGURAÇÃO DO CICLO (SIGA EXATAMENTE)
 FASE: ${phaseLabels[cycleConfig.phase] || cycleConfig.phase}
 TÉCNICAS PERMITIDAS: ${techList}
 ESCOPO DAS TÉCNICAS: ${cycleConfig.techniqueScope === 'DAY' ? 'Use técnicas DIFERENTES em cada dia' : 'Distribua as técnicas ao longo do ciclo — não repita a mesma técnica no mesmo dia'}
+AMBIENTE DO TREINO: ${envLabel}
 
 ${genderRules}
 
@@ -262,13 +273,14 @@ ESTRUTURA DOS DIAS (ORDENS ABSOLUTAS):
 ${dayStructure}
 
 REGRAS DE ESTRUTURA:
-- Use EXATAMENTE os grupos e quantidades listados acima
+- Use EXATAMENTE os grupos e quantidades listados
 - Respeite o descanso definido por grupo
 - Nomes dos dias: ${cycleConfig.days.map((d: any) => `"${d.name}"`).join(', ')}
-- Para CARDIO: sets=minutos de duração, reps=kcal estimadas, technique=Moderada/Zona 2/HIIT
+- Para CARDIO: sets=minutos, reps=kcal, technique=Moderada/Zona 2/HIIT
 
 ${limitationRulesCtx ? `REGRAS DE LIMITAÇÃO ATIVAS:\n${limitationRulesCtx}` : ''}`;
     }
+
     const alunoCtx = `
 ALUNO: ${user.name || 'Não informado'}
 - Objetivo: ${user.goal || anamnese_?.objetivo || 'Não informado'}
@@ -282,6 +294,23 @@ ALUNO: ${user.name || 'Não informado'}
     const workoutsCtx = previousWorkouts.length > 0
       ? `\nHISTÓRICO (mais recente primeiro):\n${JSON.stringify(previousWorkouts, null, 2)}`
       : '\nSem treinos anteriores — crie rotina do zero.';
+
+    // Banco enriquecido com substitutos pré-calculados
+    const bankForPrompt = adminExercises.map(ex => {
+      const tags = ex.tags as any;
+      return {
+        id: ex.id,
+        name: ex.name,
+        category: ex.category,
+        subCategory: ex.subCategory,
+        target: tags?.target || ex.category,
+        equipment: tags?.equipment || '',
+        mechanic: tags?.mechanic || '',
+        jointRisk: tags?.jointRisk || [],
+        // 🔥 Substitutos pré-filtrados pelo ambiente — a IA SÓ pode usar esses
+        suggestedSubstitutes: substitutesByExercise[ex.id] || [],
+      };
+    });
 
     const systemPrompt = `Você é um personal trainer experiente. Gere uma rotina NOVA e DIFERENTE do treino anterior.
 
@@ -297,36 +326,31 @@ REGRA 3 — VARIAÇÃO POR TARGET (MAIS IMPORTANTE):
 ${latestIds.size > 0 ? `IDs do treino anterior: ${Array.from(latestIds).join(', ')}
 
 OBRIGATÓRIO: Troque no mínimo 40% desses exercícios.
-COMO TROCAR CORRETAMENTE:
-- Identifique o "target" do exercício a ser trocado
-- Escolha outro exercício com o MESMO target no GUIA DE VARIAÇÕES
-- Prefira equipment diferente para maior variedade
-- Exemplos corretos:
-  * Mesa Flexora (POSTERIOR/MAQUINA) → Cadeira Flexora (POSTERIOR/MAQUINA) ou Stiff c/halter (POSTERIOR/HALTER)
-  * Búlgaro c/halteres (PERNAS/HALTER) → Afundo no Smith (PERNAS/BARRA) ou Passada c/barra (PERNAS/BARRA)
-  * Supino articulado (PEITO/LIVRE) → Supino reto c/halteres (PEITO/HALTER) ou Supino no Smith (PEITO/BARRA)
-  * Puxada frente aberta (COSTAS/LIVRE) → Puxada c/triângulo (COSTAS/LIVRE) ou Pulldown com barra (COSTAS/BARRA)
-- ERRADO: Trocar Mesa Flexora por Mesa Flexora de outro jeito (mesmo equipamento/nome similar)` : 'Sem treino anterior — crie rotina variada.'}
+COMO TROCAR: Identifique o "target" → escolha outro exercício com MESMO target no GUIA DE VARIAÇÕES → prefira equipment diferente.` : 'Sem treino anterior — crie rotina variada.'}
 
 REGRA 4 — TÉCNICAS (OBRIGATÓRIO):
 Cada dia DEVE ter pelo menos 1 técnica avançada. Use técnicas DIFERENTES por dia.
-- DROPSET: reduz 20-30% da carga e continua sem pausa. Reps normais (8-15)
-- RESTPAUSE: 10-15s de pausa e repete com mesma carga. Reps normais (8-12)
-- BISET: dois exercícios SEM pausa — marque os DOIS com BISET. Reps normais
-- 21: OBRIGATÓRIO reps="21" em TODOS os blocos (7 baixo + 7 meio + 7 completas). NUNCA use outra quantidade de reps com esta técnica
-- CLUSTERSET: blocos de 3 reps com 15s entre eles. reps="3" em cada bloco
+- DROPSET: reduz 20-30% da carga. Reps normais (8-15)
+- RESTPAUSE: 10-15s de pausa e repete. Reps normais (8-12)
+- BISET: dois exercícios SEM pausa — marque os DOIS com BISET
+- 21: reps="21" em TODOS os blocos. NUNCA outra quantidade
+- CLUSTERSET: reps="3" em cada bloco com 15s entre eles
 - 1_5_REPS: movimento completo + meio = 1 rep. Reps normais (8-12)
-- TUT: cadência controlada 3s descida. Reps normais (8-12)
-- GVT: OBRIGATÓRIO 10 séries de 10 reps. sets="10" blocos com reps="10"
+- TUT: cadência 3s descida. Reps normais (8-12)
+- GVT: sets="10" blocos com reps="10"
 
-REGRA 5 — SUBSTITUTOS (OBRIGATÓRIO):
-NENHUM exercício pode ficar sem substituto. Você DEVE preencher o campo "substitute" com um exerciseId e title VÁLIDOS do banco para TODOS os exercícios gerados. Use TARGET semelhante mas equipamento diferente.
+REGRA 5 — SUBSTITUTOS (CRÍTICA):
+Cada exercício tem "suggestedSubstitutes" no banco — esses são substitutos JÁ FILTRADOS pelo ambiente ${trainingEnv || 'UNIVERSAL'}.
+- SE o exercício tiver "suggestedSubstitutes", use OBRIGATORIAMENTE o primeiro da lista como substituto
+- SE não tiver, escolha outro exercício do banco com target semelhante
+- NUNCA invente substitutos fora do banco
+- O substituto deve ser DIFERENTE do exercício principal
 
 REGRA 6 — PROGRESSÃO: lastWeight +5% a +10%, múltiplos de 2.5kg.
 
 REGRA 7 — BLOCOS: sets="1" por bloco. Pirâmides = blocos separados.
 
-REGRA 8 — LIMITAÇÕES: Respeite jointRisk. Se aluno tem limitação de joelho, EVITE exercícios com "JOELHO" em jointRisk.
+REGRA 8 — LIMITAÇÕES: Respeite jointRisk.
 
 REGRA 9 — CARDIO: sets=minutos, reps=kcal, technique=Leve/Moderada/Zona 2/Forte/HIIT.
 
@@ -359,36 +383,22 @@ FORMATO JSON — sem markdown, sem texto extra
   }
 }
 
-IMPORTANTE: O campo "observation" deve ser SEMPRE string vazia "". Não escreva observações — o personal trainer fará isso manualmente.`;
-
-    const bankForPrompt = adminExercises.map(ex => {
-      const tags = ex.tags as any;
-      return {
-        id: ex.id,
-        name: ex.name,
-        category: ex.category,
-        subCategory: ex.subCategory,
-        target: tags?.target || ex.category,
-        equipment: tags?.equipment || '',
-        mechanic: tags?.mechanic || '',
-        jointRisk: tags?.jointRisk || [],
-      };
-    });
+IMPORTANTE: "observation" deve ser SEMPRE string vazia "".`;
 
     const userMessage = `${alunoCtx}
 ${workoutsCtx}
 ${cycleCtx}
 
-BANCO DE EXERCÍCIOS:
+BANCO DE EXERCÍCIOS (com substitutos pré-filtrados pelo ambiente ${trainingEnv || 'UNIVERSAL'}):
 ${JSON.stringify(bankForPrompt)}
 
 Gere a rotina. Responda APENAS com o JSON.`.trim();
 
-    // ─── 7. ROTEAMENTO DE INTELIGÊNCIA ARTIFICIAL ───
+    // ─── 8. ROTEAMENTO DE IA ───
     const selectedAI = cycleConfig?.selectedAI || 'GEMINI';
     let rawText = '';
 
-    console.log(`[gerar-treino] Gerando treino usando o modelo: ${selectedAI}`);
+    console.log(`[gerar-treino] Modelo: ${selectedAI} | Ambiente: ${trainingEnv || 'UNIVERSAL'}`);
 
     if (selectedAI === 'GEMINI') {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
@@ -397,7 +407,7 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
         contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }]
       });
       rawText = result.response.text();
-      
+
     } else if (selectedAI === 'GPT') {
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
       const response = await openai.chat.completions.create({
@@ -409,19 +419,20 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
         temperature: 0.7,
       });
       rawText = response.choices[0].message.content || '';
-      
+
     } else {
-      console.log('[gerar-treino] Usando motor: CLAUDE');
+      // Claude Sonnet — qualidade próxima ao Opus, custo ~10x menor
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 8000,
+        model: 'claude-sonnet-4-6',
+        max_tokens: 6000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
       });
       rawText = response.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('');
     }
 
+    // ─── 9. VALIDAR E ENRIQUECER ───
     const cleanJson = rawText.replace(/^```json\s*/m, '').replace(/^```\s*/m, '').replace(/```\s*$/m, '').trim();
 
     let parsed: any;
@@ -432,7 +443,6 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
       return NextResponse.json({ error: 'A IA retornou formato inválido. Tente novamente.' }, { status: 500 });
     }
 
-    // ─── 8. VALIDAR E ENRIQUECER ───
     const validatedDays: Record<string, any[]> = {};
     let ghostCount = 0;
 
@@ -446,13 +456,23 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
         .map((ex) => {
           const dbEx = exerciseMap.get(ex.exerciseId)!;
 
+          // 🔥 Substituto: priorizar defaultSubstitutes pré-filtrados pelo ambiente
           let substitute = null;
-          if (ex.substitute?.exerciseId && exerciseMap.has(ex.substitute.exerciseId)) {
+          const preCalculatedSubs = substitutesByExercise[ex.exerciseId];
+
+          if (preCalculatedSubs && preCalculatedSubs.length > 0) {
+            // Usar o primeiro substituto pré-calculado (já filtrado pelo ambiente)
+            const bestSub = preCalculatedSubs[0];
+            const dbSub = exerciseMap.get(bestSub.id);
+            if (dbSub) {
+              substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' };
+            }
+          } else if (ex.substitute?.exerciseId && exerciseMap.has(ex.substitute.exerciseId)) {
+            // Fallback: substituto sugerido pela IA (validado no banco)
             const dbSub = exerciseMap.get(ex.substitute.exerciseId)!;
             substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' };
           }
 
-          // Corrige reps obrigatórias por técnica
           const fixReps = (reps: string, technique: string): string => {
             if (technique === '21') return '21';
             if (technique === 'CLUSTERSET') return '3';
@@ -461,7 +481,7 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
           };
 
           const fixSets = (sets: string, technique: string): string => {
-            if (technique === 'GVT') return '1'; // GVT usa 10 blocos separados de 1 série
+            if (technique === 'GVT') return '1';
             return sets;
           };
 
@@ -471,7 +491,7 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
             videoUrl: dbEx.videoUrl || '',
             category: dbEx.category,
             subCategory: dbEx.subCategory,
-            observation: '', // sempre vazio — personal trainer preenche manualmente
+            observation: '',
             substitute,
             blocks: (ex.blocks || []).map((b: any) => {
               const tech = b.technique || '';
@@ -498,10 +518,10 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
 
     return NextResponse.json({
       success: true,
-      workoutName:         parsed.workoutName  || `Rotina — ${user.name}`,
+      workoutName:         parsed.workoutName || `Rotina — ${user.name}`,
       workoutModel:        parsed.workoutModel || 'CARGA',
-      reasoning:           parsed.reasoning   || '',
-      trainingEnvironment: trainingEnv || 'UNIVERSAL', // 🔥 Correção do Ambiente aqui!
+      reasoning:           parsed.reasoning || '',
+      trainingEnvironment: trainingEnv || 'UNIVERSAL',
       exercisesByDay:      validatedDays,
       workoutTabs,
     });
