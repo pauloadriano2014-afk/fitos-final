@@ -417,6 +417,8 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
           { role: 'user', content: userMessage }
         ],
         temperature: 0.7,
+        max_tokens: 16000,
+        response_format: { type: 'json_object' },
       });
       rawText = response.choices[0].message.content || '';
 
