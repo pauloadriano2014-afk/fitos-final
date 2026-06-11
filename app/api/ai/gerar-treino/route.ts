@@ -6,7 +6,6 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
 const prisma = new PrismaClient();
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: NextRequest) {
   try {
@@ -320,9 +319,8 @@ Cada dia DEVE ter pelo menos 1 técnica avançada. Use técnicas DIFERENTES por 
 - TUT: cadência controlada 3s descida. Reps normais (8-12)
 - GVT: OBRIGATÓRIO 10 séries de 10 reps. sets="10" blocos com reps="10"
 
-REGRA 5 — SUBSTITUTOS INTELIGENTES:
-Para cada exercício, adicione 1 substituto com TARGET diferente ou EQUIPMENT diferente.
-Consulte o GUIA DE VARIAÇÕES abaixo.
+REGRA 5 — SUBSTITUTOS (OBRIGATÓRIO):
+NENHUM exercício pode ficar sem substituto. Você DEVE preencher o campo "substitute" com um exerciseId e title VÁLIDOS do banco para TODOS os exercícios gerados. Use TARGET semelhante mas equipamento diferente.
 
 REGRA 6 — PROGRESSÃO: lastWeight +5% a +10%, múltiplos de 2.5kg.
 
@@ -352,7 +350,7 @@ FORMATO JSON — sem markdown, sem texto extra
         "category": "Categoria",
         "subCategory": "SubCategoria",
         "observation": "",
-        "substitute": { "exerciseId": "id-exato", "title": "nome-exato" },
+        "substitute": { "exerciseId": "id-exato-do-substituto", "title": "nome-exato-do-substituto" },
         "blocks": [
           { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" }
         ]
@@ -394,12 +392,12 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
 
     if (selectedAI === 'GEMINI') {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.5-pro',
-        systemInstruction: systemPrompt 
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }]
       });
-      const result = await model.generateContent(userMessage);
       rawText = result.response.text();
+      
     } else if (selectedAI === 'GPT') {
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
       const response = await openai.chat.completions.create({
@@ -411,6 +409,7 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
         temperature: 0.7,
       });
       rawText = response.choices[0].message.content || '';
+      
     } else {
       console.log('[gerar-treino] Usando motor: CLAUDE');
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -499,10 +498,11 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
 
     return NextResponse.json({
       success: true,
-      workoutName:    parsed.workoutName  || `Rotina — ${user.name}`,
-      workoutModel:   parsed.workoutModel || 'CARGA',
-      reasoning:      parsed.reasoning   || '',
-      exercisesByDay: validatedDays,
+      workoutName:         parsed.workoutName  || `Rotina — ${user.name}`,
+      workoutModel:        parsed.workoutModel || 'CARGA',
+      reasoning:           parsed.reasoning   || '',
+      trainingEnvironment: trainingEnv || 'UNIVERSAL', // 🔥 Correção do Ambiente aqui!
+      exercisesByDay:      validatedDays,
       workoutTabs,
     });
 
