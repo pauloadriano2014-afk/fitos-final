@@ -395,7 +395,7 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
     if (selectedAI === 'GEMINI') {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
       const model = genAI.getGenerativeModel({ 
-        model: 'gemini-1.5-pro',
+        model: 'gemini-2.5-pro',
         systemInstruction: systemPrompt 
       });
       const result = await model.generateContent(userMessage);
@@ -412,18 +412,15 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
       });
       rawText = response.choices[0].message.content || '';
     } else {
-      // CLAUDE
+      console.log('[gerar-treino] Usando motor: CLAUDE');
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const response = await anthropic.messages.create({
-        model: 'claude-opus-4-5', // Mantido exatamente como no seu código
-        max_tokens: 16000,
-        messages: [{ role: 'user', content: userMessage }],
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 8000,
         system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
       });
-
-      rawText = response.content
-        .filter((c) => c.type === 'text')
-        .map((c) => (c as any).text)
-        .join('');
+      rawText = response.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('');
     }
 
     const cleanJson = rawText.replace(/^```json\s*/m, '').replace(/^```\s*/m, '').replace(/```\s*$/m, '').trim();
