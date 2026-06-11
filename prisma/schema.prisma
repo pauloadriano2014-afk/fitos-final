@@ -460,7 +460,10 @@ model CheckIn {
   coachFeedback   String?  
   allowMarketing  Boolean @default(false)  
   photoSide       String?
-  extraPhotos     String[] 
+  extraPhotos     String[]
+  photoFrontOriginal  String?
+photoSideOriginal   String?
+photoBackOriginal   String? 
   
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
