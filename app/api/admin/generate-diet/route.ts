@@ -16,7 +16,7 @@ export const maxDuration = 90;
 
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const googleAI  = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '');
+const googleAI  = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY ?? '');
 
 type Provider = 'openai' | 'openai-mini' | 'anthropic' | 'google';
 
@@ -608,7 +608,7 @@ async function callAnthropic(prompt: string): Promise<string> {
 
 async function callGoogle(prompt: string): Promise<string> {
     const model = googleAI.getGenerativeModel({
-        model: 'gemini-2.5-pro-preview-06-05',
+        model: 'gemini-2.5-pro',
         generationConfig: { responseMimeType:'application/json', temperature:0.3 } as any,
     });
     return (await model.generateContent(`${prompt}\n\nGere o plano agora.`)).response.text();
