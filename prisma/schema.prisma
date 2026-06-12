@@ -224,41 +224,88 @@ model WorkoutExercise {
 }
 
 model Anamnese {
-  id              String   @id @default(uuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Dados Físicos
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ── DADOS FÍSICOS ──────────────────────────────────────────────────────
   peso            Float
   altura          Float
-  imc             Float?    
-  aguaIdeal       Float?    
-  
-  // Objetivos
-  objetivo        String    
-  nivel           String    
-  
-  // Rotina de Treino
-  frequencia      Int       
-  tempoDisponivel Int      @default(60) 
-  
-  // Saúde (Arrays)
-  limitacoes      String[]  
-  cirurgias       String[]  
-  equipamentos    String[]  
+  imc             Float?
+  aguaIdeal       Float?
 
-  // 🔥 NUTRIÇÃO E DIETA (Campos opcionais para o plano Elite) 🔥
-  mealsPerDay     Int?      // Quantas vezes prefere comer ao dia (2 a 8)
-  allergies       String?   @db.Text // Alergias e Intolerâncias
-  foodPreferences String?   @db.Text // Gostos e Preferências
-  foodAversions   String?   @db.Text // O que não gosta de comer
-  supplements     String?   @db.Text // Suplementos que já utiliza
-  wakeUpTime      String?   // Horário que acorda
-  sleepTime       String?   // Horário que dorme
-  workTime        String?   // Horário de trabalho
-  trainTime       String?   // Horário do treino
-  
-  createdAt       DateTime @default(now())
+  // ── OBJETIVOS E NÍVEL ──────────────────────────────────────────────────
+  objetivo        String
+  nivel           String
+
+  // ── ROTINA DE TREINO ───────────────────────────────────────────────────
+  frequencia      Int
+  tempoDisponivel Int      @default(60)
+  trainFasted     Boolean?
+
+  // ── HISTÓRICO CLÍNICO ──────────────────────────────────────────────────
+  limitacoes      String[]
+  cirurgias       String[]
+  equipamentos    String[]
+
+  // ── SAÚDE METABÓLICA ───────────────────────────────────────────────────
+  healthConditions      String[]
+  healthConditionsObs   String?   @db.Text
+  bariatric             Boolean?
+  bariatricType         String?
+  bariatricTime         String?
+  bariatricIntolerances String[]
+  medications           String[]
+  medicationsObs        String?   @db.Text
+
+  // ── DIGESTIVO, SONO E STRESS ───────────────────────────────────────────
+  digestiveIssues String[]
+  digestiveObs    String?   @db.Text
+  sleepHours      String?
+  sleepQuality    String?
+  wakeHungry      Boolean?
+  stressLevel     Int?
+  stressEating    Boolean?
+
+  // ── CICLO MENSTRUAL (só mulheres) ──────────────────────────────────────
+  cycleRegular String?
+  pmsSymptoms  String[]
+  pmsObs       String?   @db.Text
+
+  // ── ROTINA ALIMENTAR ───────────────────────────────────────────────────
+  mealsPerDay        Int?
+  wakeUpTime         String?
+  sleepTime          String?
+  workTime           String?
+  workTimeStart      String?
+  workTimeEnd        String?
+  trainTime          String?
+  eatsOutPerWeek     String?
+  budget             String?
+  preworkoutStrategy String?
+
+  // ── HÁBITOS E HIDRATAÇÃO ───────────────────────────────────────────────
+  waterIntake  String?
+  alcoholFreq  String?
+  coffeePerDay String?
+  smoker       Boolean?
+  eatSpeed     String?
+  nightBinge   String?
+
+  // ── HISTÓRICO DE DIETAS ────────────────────────────────────────────────
+  triedDiets       String[]
+  dietWorked       String?   @db.Text
+  dietHated        String?   @db.Text
+  biggestChallenge String?
+
+  // ── PREFERÊNCIAS E SUPLEMENTOS ─────────────────────────────────────────
+  allergies       String?   @db.Text
+  foodPreferences String?   @db.Text
+  foodAversions   String?   @db.Text
+  supplements     String?   @db.Text
+  extraNotes      String?   @db.Text
+
+  createdAt DateTime @default(now())
 }
 
 model Diet {
