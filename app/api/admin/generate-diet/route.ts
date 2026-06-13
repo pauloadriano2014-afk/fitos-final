@@ -36,6 +36,7 @@ interface Anamnese {
     trainFasted?: boolean;
     preworkoutStrategy?: string; // novo campo
     trainTime?: string; wakeUpTime?: string; sleepTime?: string;
+    freeDays?: string[]; freeWakeUpTime?: string; freeSleepTime?: string; freeTrainTime?: string;
     workTimeStart?: string; workTimeEnd?: string; workTime?: string;
     healthConditions?: string[]; healthConditionsObs?: string;
     bariatric?: boolean; bariatricType?: string; bariatricTime?: string;
@@ -87,19 +88,25 @@ function roundToQuarter(t: string): string {
 
 // ─── CONSTRUTOR DE AGENDA DE REFEIÇÕES ───────────────────────────────────────
 function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
-    const wake      = a.wakeUpTime    || '07:00';
-    const sleep     = a.sleepTime     || '23:00';
-    const train     = a.trainTime     || '08:00';
+    const isFolga = (dayType === 'DESCANSO' || dayType === 'CARDIO') && 
+                    a.freeDays && a.freeDays.length > 0 && !a.freeDays.includes('Nenhum');
+
+    const wake      = isFolga && a.freeWakeUpTime ? a.freeWakeUpTime : (a.wakeUpTime || '07:00');
+    const sleep     = isFolga && a.freeSleepTime  ? a.freeSleepTime  : (a.sleepTime  || '23:00');
+    const train     = isFolga && a.freeTrainTime  ? a.freeTrainTime  : (a.trainTime  || '08:00');
+    
     const workStart = a.workTimeStart || (a.workTime ? a.workTime.split(' às ')[0] : '09:00');
     const workEnd   = a.workTimeEnd   || (a.workTime ? a.workTime.split(' às ')[1] : '18:00');
     const numMeals  = Math.min(8, Math.max(2, Number(a.mealsPerDay) || 5));
     const isBariatric = !!a.bariatric;
     const hasGastrite = (a.digestiveIssues ?? []).some(d => ['Gastrite','Refluxo / DRGE'].includes(d));
-    const strategy  = a.preworkoutStrategy || 'shake'; // novo campo
+    const strategy  = a.preworkoutStrategy || 'shake';
 
     const wakeMin   = timeToMinutes(wake);
     const sleepMin  = timeToMinutes(sleep);
     const trainMin  = timeToMinutes(train);
+    
+    // 🔥 CORREÇÃO: Variável definida no escopo da função para ser acessível por toda ela
     const windowMin = sleepMin > wakeMin ? sleepMin - wakeMin : (1440 - wakeMin + sleepMin);
 
     const slots: MealSlot[] = [];

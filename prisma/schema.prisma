@@ -281,6 +281,10 @@ model Anamnese {
   workTimeStart      String?
   workTimeEnd        String?
   trainTime          String?
+  freeDays             String[]
+  freeWakeUpTime       String?
+  freeSleepTime        String?
+  freeTrainTime        String?
   eatsOutPerWeek     String?
   budget             String?
   preworkoutStrategy String?
