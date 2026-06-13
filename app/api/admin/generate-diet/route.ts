@@ -1,4 +1,4 @@
-// app/api/admin/generate-diet/route.ts — VERSÃO 6.0
+// app/api/admin/generate-diet/route.ts — VERSÃO 6.1
 // Novidades vs v5:
 //   - buildMealSchedule(): calcula horários reais baseado na rotina do aluno
 //   - Detecta conflito acordar→treino e aplica preworkoutStrategy
@@ -14,9 +14,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export const dynamic     = 'force-dynamic';
 export const maxDuration = 90;
 
+// 🔥 CORREÇÃO CRÍTICA: Lendo as chaves EXATAMENTE como no gerar-treino
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const googleAI  = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY ?? '');
+const googleAI  = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 type Provider = 'openai' | 'openai-mini' | 'anthropic' | 'google';
 
@@ -315,7 +316,7 @@ function formatScheduleForPrompt(slots: MealSlot[], trainTime: string, dayType: 
 
 // ─── CATÁLOGO ─────────────────────────────────────────────────────────────────
 const FOOD_CATALOG = [
-    { id:"7fa55081", n:"Frango Grelhado",               sc:"Proteínas Gerais", k:165, p:31, c:0,  f:3  },
+    { id:"7fa55081", n:"Frango Grelhado",              sc:"Proteínas Gerais", k:165, p:31, c:0,  f:3  },
     { id:"b2c9bdb7", n:"Frango Desfiado (Cozido)",      sc:"Proteínas Gerais", k:165, p:31, c:0,  f:3  },
     { id:"c5f3b7e6", n:"Sobrecoxa de Frango (Sem pele)", sc:"Proteínas Gerais",k:210, p:28, c:0,  f:10 },
     { id:"ae77cc5e", n:"Moela de Frango (Cozida)",       sc:"Proteínas Gerais", k:153, p:30, c:0,  f:3  },
@@ -588,7 +589,7 @@ function enrich(rawMeals: any[], dayType: string): any[] {
     }));
 }
 
-// ─── PROVIDERS ────────────────────────────────────────────────────────────────
+// ─── PROVIDERS (AGORA USANDO AS CHAVES CORRETAS) ──────────────────────────────
 async function callOpenAI(prompt: string, model: string): Promise<string> {
     const res = await openai.chat.completions.create({
         model, response_format: { type: 'json_object' }, temperature: 0.3,
@@ -599,7 +600,8 @@ async function callOpenAI(prompt: string, model: string): Promise<string> {
 
 async function callAnthropic(prompt: string): Promise<string> {
     const res = await anthropic.messages.create({
-        model:'claude-sonnet-4-5', max_tokens:4096, temperature:0.3,
+        model:'claude-3-5-sonnet-20241022', // 🔥 Atualizado para modelo válido da Anthropic
+        max_tokens:8000, temperature:0.3,
         messages:[{ role:'user', content:`${prompt}\n\nGere o plano agora. Retorne APENAS o JSON.` }],
     });
     return ((res.content.find(b => b.type === 'text') as any)?.text ?? '{}')
@@ -609,9 +611,11 @@ async function callAnthropic(prompt: string): Promise<string> {
 async function callGoogle(prompt: string): Promise<string> {
     const model = googleAI.getGenerativeModel({
         model: 'gemini-2.5-pro',
-        generationConfig: { responseMimeType:'application/json', temperature:0.3 } as any,
     });
-    return (await model.generateContent(`${prompt}\n\nGere o plano agora.`)).response.text();
+    const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nGere o plano agora.` }] }]
+    });
+    return result.response.text();
 }
 
 // ─── HANDLER ──────────────────────────────────────────────────────────────────
@@ -642,13 +646,16 @@ export async function POST(req: Request) {
 
         let raw: string; let modelUsed: string;
         switch (provider as Provider) {
-            case 'anthropic':   raw = await callAnthropic(prompt);            modelUsed = 'claude-sonnet-4-5'; break;
+            case 'anthropic':   raw = await callAnthropic(prompt);            modelUsed = 'claude-3-5-sonnet-20241022'; break;
             case 'google':      raw = await callGoogle(prompt);               modelUsed = 'gemini-2.5-pro';    break;
             case 'openai-mini': raw = await callOpenAI(prompt,'gpt-4o-mini'); modelUsed = 'gpt-4o-mini';       break;
             default:            raw = await callOpenAI(prompt,'gpt-4o');      modelUsed = 'gpt-4o';
         }
 
-        const meals = enrich((JSON.parse(raw).meals ?? []), dayType);
+        const cleanJson = raw.replace(/^```json\s*/m, '').replace(/^```\s*/m, '').replace(/```\s*$/m, '').trim();
+        const parsed = JSON.parse(cleanJson);
+
+        const meals = enrich((parsed.meals ?? []), dayType);
         return NextResponse.json({ meals, meta:{ dayType, provider, modelUsed, schedule, ...macros } }, { status:200 });
 
     } catch (err: any) {
