@@ -1,10 +1,8 @@
-// app/api/admin/generate-diet/route.ts — VERSÃO 6.1
-// Novidades vs v5:
-//   - buildMealSchedule(): calcula horários reais baseado na rotina do aluno
-//   - Detecta conflito acordar→treino e aplica preworkoutStrategy
-//   - Evita refeições no horário de trabalho (sugere portátil)
-//   - IA recebe horários FIXOS para cada refeição — não inventa mais
-//   - Substitutos obrigatórios: 1 base + 2 subs por grupo em proteínas e carbos
+// app/api/admin/generate-diet/route.ts — VERSÃO 6.3
+// Novidades vs v6.2:
+//   - Reforço de segurança no JSON parser (protege contra alucinações das IAs)
+//   - Gemini forçado a responder puramente em JSON (responseMimeType)
+//   - Mantém 100% da lógica de medidas caseiras, horários e substitutos
 // ─────────────────────────────────────────────────────────────────────────────
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
@@ -14,7 +12,6 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export const dynamic     = 'force-dynamic';
 export const maxDuration = 90;
 
-// 🔥 CORREÇÃO CRÍTICA: Lendo as chaves EXATAMENTE como no gerar-treino
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const googleAI  = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
@@ -89,10 +86,6 @@ function roundToQuarter(t: string): string {
 }
 
 // ─── CONSTRUTOR DE AGENDA DE REFEIÇÕES ───────────────────────────────────────
-/**
- * Calcula os slots de refeição com horários reais baseado na rotina do aluno.
- * Retorna array de MealSlot ordenado por horário.
- */
 function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
     const wake      = a.wakeUpTime    || '07:00';
     const sleep     = a.sleepTime     || '23:00';
@@ -144,18 +137,13 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
     }
 
     // ── DIAS COM TREINO (TREINO, CARDIO, TREINO_CARDIO) ───────────────────────
-
-    // Calcular diferença entre acordar e treino
     const minsTillTrain = ((trainMin - wakeMin) + 1440) % 1440;
     const hasTimeForPreWorkout = minsTillTrain >= 60 && !a.trainFasted;
-
-    // Slots obrigatórios
     const required: MealSlot[] = [];
 
     // 1. PRÉ-TREINO
     if (!a.trainFasted) {
         if (hasTimeForPreWorkout) {
-            // Tem tempo — pré-treino sólido 60-75min antes
             const preTime = roundToQuarter(minutesToTime(trainMin - 70));
             const portable = isInRange(preTime, workStart, workEnd);
             required.push({
@@ -170,9 +158,7 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
                 protPriority: 'medium',
             });
         } else {
-            // Pouco tempo entre acordar e treinar
             if (strategy === 'shake' || strategy === 'shake_rapido') {
-                // Shake 20min antes
                 const shakeTime = roundToQuarter(minutesToTime(trainMin - 20));
                 required.push({
                     time: shakeTime,
@@ -184,7 +170,6 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
                     protPriority: 'low',
                 });
             } else if (strategy === 'ceia_pretreino') {
-                // Ceia pré-treino na noite anterior
                 const ceiaTime = roundToQuarter(minutesToTime(sleepMin - 60));
                 required.push({
                     time: ceiaTime,
@@ -195,13 +180,9 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
                     carbPriority: 'high',
                     protPriority: 'medium',
                 });
-            } else if (strategy === 'reforcar_pos') {
-                // Pula pré-treino, nota no pós
-                // não adiciona slot de pré
             }
         }
     } else {
-        // Treina em jejum — nota informativa
         required.push({
             time: wake,
             name: 'Quebra do Jejum (Pós-Treino)',
@@ -213,7 +194,7 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
         });
     }
 
-    // 2. PÓS-TREINO (sempre, exceto jejum que já foi adicionado)
+    // 2. PÓS-TREINO
     if (!a.trainFasted) {
         const posTime = roundToQuarter(minutesToTime(trainMin + 45));
         const portable = isInRange(posTime, workStart, workEnd);
@@ -230,11 +211,10 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
         });
     }
 
-    // 3. PREENCHER OS SLOTS RESTANTES NA JANELA
+    // 3. PREENCHER OS SLOTS RESTANTES
     const remainingSlots = numMeals - required.length;
     const usedTimes = new Set(required.map(r => r.time));
 
-    // Distribuir refeições na janela, evitando conflitos com pré/pós treino
     const mainMealDefs = [
         { name: 'Café da Manhã',   role: 'main',   carbPriority: 'medium' as const, protPriority: 'medium' as const, idealOffset: 0   },
         { name: 'Lanche da Manhã', role: 'snack',  carbPriority: 'medium' as const, protPriority: 'low'    as const, idealOffset: 0.2 },
@@ -247,7 +227,6 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
     const selected = mainMealDefs.slice(0, remainingSlots);
     selected.forEach(def => {
         let idealMin = wakeMin + Math.round(windowMin * def.idealOffset);
-        // Garante mínimo de 90min de distância dos slots já definidos
         let attempts = 0;
         while (attempts < 20) {
             const t = roundToQuarter(minutesToTime(idealMin));
@@ -270,12 +249,10 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
         }
     });
 
-    // Ordenar por horário
     required.sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
 
-    // Ajuste especial: se bariátrico, garante min 6 refeições e volume pequeno
+    // Ajuste especial: se bariátrico
     if (isBariatric && required.length < 6) {
-        // Adiciona lanches extras entre as refeições existentes
         const extra = 6 - required.length;
         for (let i = 0; i < extra; i++) {
             const insertAfter = required[Math.floor(required.length / 2) + i];
@@ -547,7 +524,7 @@ ${catalog}
 }`;
 }
 
-// ─── ENRIQUECER ───────────────────────────────────────────────────────────────
+// ─── ENRIQUECER E TRADUZIR MEDIDAS CASEIRAS ──────────────────────────────────
 function catOf(sc: string): string {
     const m: Record<string,string> = {
         'Proteínas Gerais':'Carnes e Proteínas','Queijos e Pastas':'Frios e Laticínios',
@@ -570,11 +547,49 @@ function enrich(rawMeals: any[], dayType: string): any[] {
         name:    meal.name, time: meal.time, notes: meal.notes ?? '', dayType,
         items: (meal.items ?? []).map((item: any) => {
             const db = map.get(item.food_id);
+            let itemName = db?.n ?? item.food_name;
+            const amt = parseFloat(item.amount?.toString() ?? '100');
+
+            // 🔥 MÁGICA DE ELITE: Tradutor Automático de Medidas Caseiras
+            if (!isNaN(amt) && (item.unit === 'g' || !item.unit)) {
+                if (itemName === 'Ovos Inteiros') {
+                    const ovos = Math.max(1, Math.round(amt / 50));
+                    itemName += ` (~${ovos} unid.)`;
+                } else if (itemName === 'Clara de Ovo') {
+                    const claras = Math.max(1, Math.round(amt / 30));
+                    itemName += ` (~${claras} unid.)`;
+                } else if (itemName === 'Pão de Forma Tradicional' || itemName === 'Pão Integral') {
+                    const fatias = Math.max(1, Math.round(amt / 25));
+                    itemName += ` (~${fatias} fatia${fatias > 1 ? 's' : ''})`;
+                } else if (itemName === 'Pão Francês') {
+                    const paes = Math.max(1, Math.round(amt / 50));
+                    itemName += ` (~${paes} unid.)`;
+                } else if (itemName === 'Rap10') {
+                    const discos = Math.max(1, Math.round(amt / 40));
+                    itemName += ` (~${discos} disco${discos > 1 ? 's' : ''})`;
+                } else if (['Banana', 'Maçã', 'Laranja', 'Kiwi'].includes(itemName)) {
+                    const frutas = Math.max(1, Math.round(amt / 100));
+                    itemName += ` (~${frutas} unid. média${frutas > 1 ? 's' : ''})`;
+                } else if (['Mamão', 'Melancia'].includes(itemName)) {
+                    const fatias = Math.max(1, Math.round(amt / 150));
+                    itemName += ` (~${fatias} fatia${fatias > 1 ? 's' : ''})`;
+                } else if (itemName === 'Morango') {
+                    const morangos = Math.max(1, Math.round(amt / 12));
+                    itemName += ` (~${morangos} unid.)`;
+                } else if (itemName === 'Castanha do Pará' || itemName === 'Nozes') {
+                    const cast = Math.max(1, Math.round(amt / 5));
+                    itemName += ` (~${cast} unid.)`;
+                } else if (itemName.includes('Queijo Mussarela') || itemName.includes('Queijo Minas') || itemName.includes('Peito de Peru (Fatiado)') || itemName.includes('Presunto')) {
+                    const fatias = Math.max(1, Math.round(amt / 15));
+                    itemName += ` (~${fatias} fatia${fatias > 1 ? 's' : ''})`;
+                }
+            }
+
             return {
                 uniqueId:        crypto.randomUUID(),
                 groupId:         item.groupId ?? crypto.randomUUID(),
                 id:              db?.id    ?? item.food_id,
-                name:            db?.n     ?? item.food_name,
+                name:            itemName,
                 category:        db ? catOf(db.sc) : '',
                 subcategory:     db?.sc   ?? '',
                 calories_per_100:db?.k    ?? 0,
@@ -582,14 +597,14 @@ function enrich(rawMeals: any[], dayType: string): any[] {
                 c:               db?.c    ?? 0,
                 f:               db?.f    ?? 0,
                 base_unit:       'g',
-                amount:          item.amount?.toString() ?? '100',
+                amount:          amt.toString(),
                 unit:            item.unit ?? 'g',
             };
         }),
     }));
 }
 
-// ─── PROVIDERS (AGORA USANDO AS CHAVES CORRETAS) ──────────────────────────────
+// ─── PROVIDERS ────────────────────────────────────────────────────────────────
 async function callOpenAI(prompt: string, model: string): Promise<string> {
     const res = await openai.chat.completions.create({
         model, response_format: { type: 'json_object' }, temperature: 0.3,
@@ -600,7 +615,7 @@ async function callOpenAI(prompt: string, model: string): Promise<string> {
 
 async function callAnthropic(prompt: string): Promise<string> {
     const res = await anthropic.messages.create({
-        model:'claude-3-5-sonnet-20241022', // 🔥 Atualizado para modelo válido da Anthropic
+        model:'claude-3-5-sonnet-20241022',
         max_tokens:8000, temperature:0.3,
         messages:[{ role:'user', content:`${prompt}\n\nGere o plano agora. Retorne APENAS o JSON.` }],
     });
@@ -611,6 +626,7 @@ async function callAnthropic(prompt: string): Promise<string> {
 async function callGoogle(prompt: string): Promise<string> {
     const model = googleAI.getGenerativeModel({
         model: 'gemini-2.5-pro',
+        generationConfig: { responseMimeType: "application/json" } as any // 🔥 Força saída limpa
     });
     const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nGere o plano agora.` }] }]
@@ -628,7 +644,6 @@ export async function POST(req: Request) {
 
         if (!anamnese) return NextResponse.json({ error:'Anamnese não encontrada.' }, { status:400 });
 
-        // Macros: usa override do frontend ou fallback
         const macros: MacrosOverride = macrosOverride ?? (() => {
             const peso = anamnese.peso ?? 70;
             const isH  = (anamnese.gender ?? gender ?? '').toLowerCase().includes('masc');
@@ -639,7 +654,6 @@ export async function POST(req: Request) {
             return { kcal, prot, carb, fat };
         })();
 
-        // Calcular agenda de refeições com horários reais
         const schedule = buildMealSchedule(anamnese, dayType);
         const catalog  = filteredCatalog(anamnese);
         const prompt   = buildPrompt(anamnese, macros, dayType, catalog, schedule);
@@ -652,8 +666,14 @@ export async function POST(req: Request) {
             default:            raw = await callOpenAI(prompt,'gpt-4o');      modelUsed = 'gpt-4o';
         }
 
-        const cleanJson = raw.replace(/^```json\s*/m, '').replace(/^```\s*/m, '').replace(/```\s*$/m, '').trim();
-        const parsed = JSON.parse(cleanJson);
+        let parsed;
+        try {
+            const cleanJson = raw.replace(/^```json\s*/m, '').replace(/^```\s*/m, '').replace(/```\s*$/m, '').trim();
+            parsed = JSON.parse(cleanJson);
+        } catch (e) {
+            console.error('[generate-diet] Erro no JSON Parser:', raw);
+            throw new Error('A IA não gerou um JSON válido.');
+        }
 
         const meals = enrich((parsed.meals ?? []), dayType);
         return NextResponse.json({ meals, meta:{ dayType, provider, modelUsed, schedule, ...macros } }, { status:200 });
