@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
       // ── ROTINA ALIMENTAR ──────────────────────────────────────────────────
       mealsPerDay, wakeUpTime, sleepTime, workTime, trainTime,
-      eatsOutPerWeek, budget,
+      eatsOutPerWeek, budget, freeDays, freeWakeUpTime, freeSleepTime, freeTrainTime,
 
       // ── HÁBITOS ───────────────────────────────────────────────────────────
       waterIntake, alcoholFreq, coffeePerDay,
@@ -103,6 +103,10 @@ export async function POST(req: Request) {
         trainTime:      trainTime   || null,
         eatsOutPerWeek: eatsOutPerWeek || null,
         budget:         budget         || null,
+        freeDays:       Array.isArray(freeDays) ? freeDays : [],
+        freeWakeUpTime: freeWakeUpTime || null,
+        freeSleepTime:  freeSleepTime  || null,
+        freeTrainTime:  freeTrainTime  || null,
 
         // ── HÁBITOS ──────────────────────────────────────────────────────────
         waterIntake:  waterIntake  || null,
