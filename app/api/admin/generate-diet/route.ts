@@ -1,8 +1,6 @@
-// app/api/admin/generate-diet/route.ts — VERSÃO 6.3
-// Novidades vs v6.2:
-//   - Reforço de segurança no JSON parser (protege contra alucinações das IAs)
-//   - Gemini forçado a responder puramente em JSON (responseMimeType)
-//   - Mantém 100% da lógica de medidas caseiras, horários e substitutos
+// app/api/admin/generate-diet/route.ts — VERSÃO 6.4
+// Novidades vs v6.3:
+//   - Modelo Anthropic atualizado: claude-3-5-sonnet-20241022 → claude-sonnet-4-6
 // ─────────────────────────────────────────────────────────────────────────────
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
@@ -21,12 +19,12 @@ type Provider = 'openai' | 'openai-mini' | 'anthropic' | 'google';
 interface MacrosOverride { kcal: number; prot: number; carb: number; fat: number; }
 
 interface MealSlot {
-    time:     string;   // "HH:MM"
-    name:     string;   // "Café da Manhã"
-    role:     string;   // "preworkout" | "postworkout" | "main" | "snack" | "dinner" | "supper"
-    portable: boolean;  // se deve ser refeição portátil (horário de trabalho)
-    note:     string;   // instrução extra para a IA
-    carbPriority: 'high' | 'medium' | 'low'; // prioridade de carbo nesta refeição
+    time:     string;
+    name:     string;
+    role:     string;
+    portable: boolean;
+    note:     string;
+    carbPriority: 'high' | 'medium' | 'low';
     protPriority: 'high' | 'medium' | 'low';
 }
 
@@ -34,7 +32,7 @@ interface Anamnese {
     objetivo?: string; peso?: number; altura?: number; frequencia?: number;
     gender?: string; age?: number;
     trainFasted?: boolean;
-    preworkoutStrategy?: string; // novo campo
+    preworkoutStrategy?: string;
     trainTime?: string; wakeUpTime?: string; sleepTime?: string;
     freeDays?: string[]; freeWakeUpTime?: string; freeSleepTime?: string; freeTrainTime?: string;
     workTimeStart?: string; workTimeEnd?: string; workTime?: string;
@@ -63,7 +61,7 @@ function timeToMinutes(t: string): number {
 }
 
 function minutesToTime(mins: number): string {
-    const total = ((mins % 1440) + 1440) % 1440; // wrap 24h
+    const total = ((mins % 1440) + 1440) % 1440;
     const h = Math.floor(total / 60).toString().padStart(2, '0');
     const m = (total % 60).toString().padStart(2, '0');
     return `${h}:${m}`;
@@ -88,13 +86,13 @@ function roundToQuarter(t: string): string {
 
 // ─── CONSTRUTOR DE AGENDA DE REFEIÇÕES ───────────────────────────────────────
 function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
-    const isFolga = (dayType === 'DESCANSO' || dayType === 'CARDIO') && 
+    const isFolga = (dayType === 'DESCANSO' || dayType === 'CARDIO') &&
                     a.freeDays && a.freeDays.length > 0 && !a.freeDays.includes('Nenhum');
 
     const wake      = isFolga && a.freeWakeUpTime ? a.freeWakeUpTime : (a.wakeUpTime || '07:00');
     const sleep     = isFolga && a.freeSleepTime  ? a.freeSleepTime  : (a.sleepTime  || '23:00');
     const train     = isFolga && a.freeTrainTime  ? a.freeTrainTime  : (a.trainTime  || '08:00');
-    
+
     const workStart = a.workTimeStart || (a.workTime ? a.workTime.split(' às ')[0] : '09:00');
     const workEnd   = a.workTimeEnd   || (a.workTime ? a.workTime.split(' às ')[1] : '18:00');
     const numMeals  = Math.min(8, Math.max(2, Number(a.mealsPerDay) || 5));
@@ -105,8 +103,6 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
     const wakeMin   = timeToMinutes(wake);
     const sleepMin  = timeToMinutes(sleep);
     const trainMin  = timeToMinutes(train);
-    
-    // 🔥 CORREÇÃO: Variável definida no escopo da função para ser acessível por toda ela
     const windowMin = sleepMin > wakeMin ? sleepMin - wakeMin : (1440 - wakeMin + sleepMin);
 
     const slots: MealSlot[] = [];
@@ -115,12 +111,12 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
     if (dayType === 'DESCANSO') {
         const interval = Math.floor(windowMin / (numMeals - 1));
         const mealDefs = [
-            { name: 'Café da Manhã', role: 'main',   carbPriority: 'medium' as const, protPriority: 'medium' as const },
-            { name: 'Lanche da Manhã', role: 'snack', carbPriority: 'low'    as const, protPriority: 'medium' as const },
-            { name: 'Almoço',        role: 'main',   carbPriority: 'medium' as const, protPriority: 'high'   as const },
-            { name: 'Lanche da Tarde',role: 'snack', carbPriority: 'low'    as const, protPriority: 'medium' as const },
-            { name: 'Jantar',        role: 'dinner', carbPriority: 'low'    as const, protPriority: 'high'   as const },
-            { name: 'Ceia',          role: 'supper', carbPriority: 'low'    as const, protPriority: 'medium' as const },
+            { name: 'Café da Manhã',    role: 'main',   carbPriority: 'medium' as const, protPriority: 'medium' as const },
+            { name: 'Lanche da Manhã',  role: 'snack',  carbPriority: 'low'    as const, protPriority: 'medium' as const },
+            { name: 'Almoço',           role: 'main',   carbPriority: 'medium' as const, protPriority: 'high'   as const },
+            { name: 'Lanche da Tarde',  role: 'snack',  carbPriority: 'low'    as const, protPriority: 'medium' as const },
+            { name: 'Jantar',           role: 'dinner', carbPriority: 'low'    as const, protPriority: 'high'   as const },
+            { name: 'Ceia',             role: 'supper', carbPriority: 'low'    as const, protPriority: 'medium' as const },
         ];
 
         const selected = mealDefs.slice(0, numMeals);
@@ -223,12 +219,12 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
     const usedTimes = new Set(required.map(r => r.time));
 
     const mainMealDefs = [
-        { name: 'Café da Manhã',   role: 'main',   carbPriority: 'medium' as const, protPriority: 'medium' as const, idealOffset: 0   },
-        { name: 'Lanche da Manhã', role: 'snack',  carbPriority: 'medium' as const, protPriority: 'low'    as const, idealOffset: 0.2 },
-        { name: 'Almoço',          role: 'main',   carbPriority: 'high'   as const, protPriority: 'high'   as const, idealOffset: 0.4 },
-        { name: 'Lanche da Tarde', role: 'snack',  carbPriority: 'low'    as const, protPriority: 'medium' as const, idealOffset: 0.6 },
-        { name: 'Jantar',          role: 'dinner', carbPriority: 'low'    as const, protPriority: 'high'   as const, idealOffset: 0.8 },
-        { name: 'Ceia',            role: 'supper', carbPriority: 'low'    as const, protPriority: 'medium' as const, idealOffset: 0.95},
+        { name: 'Café da Manhã',   role: 'main',   carbPriority: 'medium' as const, protPriority: 'medium' as const, idealOffset: 0    },
+        { name: 'Lanche da Manhã', role: 'snack',  carbPriority: 'medium' as const, protPriority: 'low'    as const, idealOffset: 0.2  },
+        { name: 'Almoço',          role: 'main',   carbPriority: 'high'   as const, protPriority: 'high'   as const, idealOffset: 0.4  },
+        { name: 'Lanche da Tarde', role: 'snack',  carbPriority: 'low'    as const, protPriority: 'medium' as const, idealOffset: 0.6  },
+        { name: 'Jantar',          role: 'dinner', carbPriority: 'low'    as const, protPriority: 'high'   as const, idealOffset: 0.8  },
+        { name: 'Ceia',            role: 'supper', carbPriority: 'low'    as const, protPriority: 'medium' as const, idealOffset: 0.95 },
     ];
 
     const selected = mainMealDefs.slice(0, remainingSlots);
@@ -398,7 +394,7 @@ const FOOD_CATALOG = [
 
 // ─── FILTRAR CATÁLOGO ─────────────────────────────────────────────────────────
 function filteredCatalog(a: Anamnese): string {
-    const al = (a.allergies    ?? '').toLowerCase();
+    const al = (a.allergies     ?? '').toLowerCase();
     const av = (a.foodAversions ?? '').toLowerCase();
     const bt = (a.bariatricIntolerances ?? []).join(' ').toLowerCase();
 
@@ -557,7 +553,6 @@ function enrich(rawMeals: any[], dayType: string): any[] {
             let itemName = db?.n ?? item.food_name;
             const amt = parseFloat(item.amount?.toString() ?? '100');
 
-            // 🔥 MÁGICA DE ELITE: Tradutor Automático de Medidas Caseiras
             if (!isNaN(amt) && (item.unit === 'g' || !item.unit)) {
                 if (itemName === 'Ovos Inteiros') {
                     const ovos = Math.max(1, Math.round(amt / 50));
@@ -622,9 +617,9 @@ async function callOpenAI(prompt: string, model: string): Promise<string> {
 
 async function callAnthropic(prompt: string): Promise<string> {
     const res = await anthropic.messages.create({
-        model:'claude-3-5-sonnet-20241022',
-        max_tokens:8000, temperature:0.3,
-        messages:[{ role:'user', content:`${prompt}\n\nGere o plano agora. Retorne APENAS o JSON.` }],
+        model: 'claude-sonnet-4-6', // ✅ Atualizado de claude-3-5-sonnet-20241022
+        max_tokens: 8000, temperature: 0.3,
+        messages: [{ role:'user', content:`${prompt}\n\nGere o plano agora. Retorne APENAS o JSON.` }],
     });
     return ((res.content.find(b => b.type === 'text') as any)?.text ?? '{}')
         .replace(/```json\n?|\n?```/g, '').trim();
@@ -633,7 +628,7 @@ async function callAnthropic(prompt: string): Promise<string> {
 async function callGoogle(prompt: string): Promise<string> {
     const model = googleAI.getGenerativeModel({
         model: 'gemini-2.5-pro',
-        generationConfig: { responseMimeType: "application/json" } as any // 🔥 Força saída limpa
+        generationConfig: { responseMimeType: "application/json" } as any,
     });
     const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nGere o plano agora.` }] }]
@@ -667,10 +662,10 @@ export async function POST(req: Request) {
 
         let raw: string; let modelUsed: string;
         switch (provider as Provider) {
-            case 'anthropic':   raw = await callAnthropic(prompt);            modelUsed = 'claude-3-5-sonnet-20241022'; break;
-            case 'google':      raw = await callGoogle(prompt);               modelUsed = 'gemini-2.5-pro';    break;
-            case 'openai-mini': raw = await callOpenAI(prompt,'gpt-4o-mini'); modelUsed = 'gpt-4o-mini';       break;
-            default:            raw = await callOpenAI(prompt,'gpt-4o');      modelUsed = 'gpt-4o';
+            case 'anthropic':   raw = await callAnthropic(prompt); modelUsed = 'claude-sonnet-4-6'; break; // ✅ Atualizado
+            case 'google':      raw = await callGoogle(prompt);    modelUsed = 'gemini-2.5-pro';    break;
+            case 'openai-mini': raw = await callOpenAI(prompt, 'gpt-4o-mini'); modelUsed = 'gpt-4o-mini'; break;
+            default:            raw = await callOpenAI(prompt, 'gpt-4o');      modelUsed = 'gpt-4o';
         }
 
         let parsed;
