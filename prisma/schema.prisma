@@ -349,6 +349,11 @@ model Meal {
   notes     String?    @db.Text 
   // 🔥 ETIQUETA DO TIPO DE DIA (TREINO, CARDIO, DESCANSO)
   dayType   String     @default("TREINO")
+
+  // 🔥 NOVO — versões alternativas
+  alternativeGroupId String?    // refeições com mesmo ID são versões da mesma refeição
+  isMainVersion      Boolean    @default(true)  // false = versão alternativa
+  alternativeLabel   String?    // ex: "Versão Prática", "Versão Rápida"
   
   items     FoodItem[]
 }

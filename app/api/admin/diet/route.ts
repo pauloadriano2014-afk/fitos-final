@@ -1,4 +1,5 @@
-// app/api/admin/diet/route.ts
+// app/api/admin/diet/route.ts — VERSÃO 2.0
+// Novidade: salva alternativeGroupId, isMainVersion e alternativeLabel nas refeições
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -7,7 +8,11 @@ const prisma = new PrismaClient();
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, name, goal, totalKcal, totalProtein, totalCarbs, totalFats, waterIntake, generalNotes, meals } = body;
+    const {
+      userId, name, goal,
+      totalKcal, totalProtein, totalCarbs, totalFats,
+      waterIntake, generalNotes, meals
+    } = body;
 
     if (!userId || userId === '[object Object]' || userId === 'undefined') {
       return NextResponse.json({ error: 'ID do usuário inválido.' }, { status: 400 });
@@ -26,32 +31,37 @@ export async function POST(req: Request) {
           userId: String(userId),
           name: name || 'Plano Alimentar',
           goal: goal || 'Não definido',
-          totalKcal: Number(totalKcal) || 0,
+          totalKcal:    Number(totalKcal)    || 0,
           totalProtein: Number(totalProtein) || 0,
-          totalCarbs: Number(totalCarbs) || 0,
-          totalFats: Number(totalFats) || 0,
-          waterIntake: waterIntake || 'Não definido',
+          totalCarbs:   Number(totalCarbs)   || 0,
+          totalFats:    Number(totalFats)    || 0,
+          waterIntake:  waterIntake  || 'Não definido',
           generalNotes: generalNotes || '',
           isActive: true,
           meals: {
             create: (meals || []).map((meal: any, mIndex: number) => ({
-              name: meal.name || 'Refeição',
-              time: meal.time || '00:00',
-              order: mIndex,
-              notes: meal.notes || '',
-              dayType: meal.dayType || 'TREINO', // 🔥 O GARGALO ESTAVA AQUI! Agora o banco salva a etiqueta da aba!
+              name:    meal.name    || 'Refeição',
+              time:    meal.time    || '00:00',
+              order:   mIndex,
+              notes:   meal.notes  || '',
+              dayType: meal.dayType || 'TREINO',
+
+              // 🔥 NOVO — versões alternativas
+              alternativeGroupId: meal.alternativeGroupId || null,
+              isMainVersion:      meal.isMainVersion !== false, // default true
+              alternativeLabel:   meal.alternativeLabel  || null,
+
               items: {
                 create: (meal.items || []).map((item: any) => {
-                  let groupId = item.groupId || item.substitutionGroupId;
-                  
+                  const groupId = item.groupId || item.substitutionGroupId;
                   return {
-                    name: item.name || 'Alimento',
-                    amount: Number(item.amount) || 0, 
-                    unit: item.unit || 'g',
-                    calories: Number(item.calories_per_100) || Number(item.calories) || 0,
-                    protein: Number(item.p) || Number(item.protein) || 0,
-                    carbs: Number(item.c) || Number(item.carbs) || 0,
-                    fats: Number(item.f) || Number(item.fats) || 0,
+                    name:                item.name   || 'Alimento',
+                    amount:              Number(item.amount)             || 0,
+                    unit:                item.unit   || 'g',
+                    calories:            Number(item.calories_per_100)   || Number(item.calories) || 0,
+                    protein:             Number(item.p)                  || Number(item.protein)  || 0,
+                    carbs:               Number(item.c)                  || Number(item.carbs)    || 0,
+                    fats:                Number(item.f)                  || Number(item.fats)     || 0,
                     substitutionGroupId: groupId ? String(groupId) : null,
                   };
                 })
@@ -63,14 +73,14 @@ export async function POST(req: Request) {
       });
     });
 
-    console.log(`✅ DIETA SALVA COM SUCESSO: ${userId}`);
+    console.log(`✅ DIETA SALVA: ${userId}`);
     return NextResponse.json(newDiet);
 
   } catch (error: any) {
     console.error('❌ ERRO CRÍTICO NO PRISMA:', error.message);
-    return NextResponse.json({ 
-      error: 'Erro no Banco de Dados', 
-      details: error.message 
+    return NextResponse.json({
+      error: 'Erro no Banco de Dados',
+      details: error.message
     }, { status: 500 });
   }
 }

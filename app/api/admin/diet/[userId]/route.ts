@@ -1,8 +1,9 @@
-// app/api/diet/[userId]/route.ts
+// app/api/diet/[userId]/route.ts — VERSÃO 2.0
+// Novidade: agrupa refeições por alternativeGroupId e retorna versões alternativas
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
-export const dynamic = 'force-dynamic';
+export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
 
 const prisma = new PrismaClient();
@@ -26,8 +27,67 @@ export async function GET(req: Request, { params }: { params: { userId: string }
       return NextResponse.json({ error: 'Nenhuma dieta encontrada' }, { status: 404 });
     }
 
-    // 🔥 Mapeia campos do Prisma → formato que o DietScreen.js espera
-    const formatted = {
+    // ─── FORMATAR ITEM ────────────────────────────────────────────────────────
+    const formatItem = (item: any) => ({
+      id:                  item.id,
+      substitutionGroupId: item.substitutionGroupId,
+      name:                item.name,
+      amount:              item.amount,
+      unit:                item.unit,
+      gram_amount:         item.gramAmount ?? item.amount,
+      calories_per_100:    item.calories,
+      p:                   item.protein,
+      c:                   item.carbs,
+      f:                   item.fats,
+    });
+
+    // ─── FORMATAR REFEIÇÃO ────────────────────────────────────────────────────
+    const formatMeal = (meal: any, alternatives: any[] = []) => ({
+      id:                  meal.id,
+      name:                meal.name,
+      time:                meal.time,
+      notes:               meal.notes || '',
+      dayType:             meal.dayType,
+      isMainVersion:       meal.isMainVersion !== false,
+      alternativeGroupId:  meal.alternativeGroupId || null,
+      alternativeLabel:    meal.alternativeLabel   || null,
+      items:               meal.items.map(formatItem),
+      // 🔥 versões alternativas embutidas na refeição principal
+      alternatives: alternatives.map(alt => ({
+        id:               alt.id,
+        name:             alt.name,
+        time:             alt.time,
+        notes:            alt.notes || '',
+        alternativeLabel: alt.alternativeLabel || 'Versão Alternativa',
+        items:            alt.items.map(formatItem),
+      })),
+    });
+
+    // ─── AGRUPAR VERSÕES ALTERNATIVAS ────────────────────────────────────────
+    // Separa principais das alternativas e agrupa pelo alternativeGroupId
+    const mainMeals:  any[] = [];
+    const altMap:     Map<string, any[]> = new Map();
+
+    for (const meal of diet.meals) {
+      if (!meal.alternativeGroupId || meal.isMainVersion !== false) {
+        // É uma refeição principal (ou não tem grupo)
+        mainMeals.push(meal);
+      } else {
+        // É uma versão alternativa — agrupa pelo ID do grupo
+        const existing = altMap.get(meal.alternativeGroupId) ?? [];
+        altMap.set(meal.alternativeGroupId, [...existing, meal]);
+      }
+    }
+
+    // Monta resposta final: cada refeição principal carrega suas alternativas
+    const formattedMeals = mainMeals.map(meal => {
+      const alternatives = meal.alternativeGroupId
+        ? (altMap.get(meal.alternativeGroupId) ?? [])
+        : [];
+      return formatMeal(meal, alternatives);
+    });
+
+    return NextResponse.json({
       id:           diet.id,
       goal:         diet.goal,
       totalKcal:    diet.totalKcal,
@@ -36,32 +96,11 @@ export async function GET(req: Request, { params }: { params: { userId: string }
       totalFats:    diet.totalFats,
       waterIntake:  diet.waterIntake,
       generalNotes: diet.generalNotes,
-      meals: diet.meals.map((meal: any) => ({
-        id:    meal.id,
-        name:  meal.name,
-        time:  meal.time,
-        notes: meal.notes || '',
-        dayType: meal.dayType, // 🔥 A PEÇA QUE FALTAVA PARA ACABAR COM A PALHAÇADA!
-        items: meal.items.map((item: any) => ({
-          id:                  item.id,
-          substitutionGroupId: item.substitutionGroupId,
-          name:                item.name,
-          amount:              item.amount,
-          unit:                item.unit,
-          // DietScreen usa estes nomes para calcular macros por refeição
-          gram_amount:         item.gramAmount ?? item.amount,
-          calories_per_100:    item.calories,
-          p:                   item.protein,
-          c:                   item.carbs,
-          f:                   item.fats,
-        }))
-      }))
-    };
-
-    return NextResponse.json(formatted);
+      meals:        formattedMeals,
+    });
 
   } catch (error) {
-    console.error('Erro ao buscar dieta do aluno:', error);
+    console.error('Erro ao buscar dieta:', error);
     return NextResponse.json({ error: 'Erro interno no servidor' }, { status: 500 });
   }
 }
