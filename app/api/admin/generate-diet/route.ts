@@ -1,7 +1,9 @@
-// app/api/admin/generate-diet/route.ts — VERSÃO 6.4
-// Novidades vs v6.3:
-//   - Modelo Anthropic atualizado: claude-3-5-sonnet-20241022 → claude-sonnet-4-6
-// ─────────────────────────────────────────────────────────────────────────────
+// app/api/admin/generate-diet/route.ts — VERSÃO 6.5
+// Melhorias vs v6.4:
+//   - Prompt reescrito: agenda como lei absoluta, regras culinárias por slot
+//   - Exemplo JSON real de substitutos no prompt
+//   - Regras explícitas de alimentos por horário (café da manhã ≠ arroz)
+//   - Verificação de cobertura: garante jantar/ceia quando aluno dorme tarde
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
 import Anthropic    from '@anthropic-ai/sdk';
@@ -19,11 +21,11 @@ type Provider = 'openai' | 'openai-mini' | 'anthropic' | 'google';
 interface MacrosOverride { kcal: number; prot: number; carb: number; fat: number; }
 
 interface MealSlot {
-    time:     string;
-    name:     string;
-    role:     string;
-    portable: boolean;
-    note:     string;
+    time:         string;
+    name:         string;
+    role:         string;
+    portable:     boolean;
+    note:         string;
     carbPriority: 'high' | 'medium' | 'low';
     protPriority: 'high' | 'medium' | 'low';
 }
@@ -59,202 +61,153 @@ function timeToMinutes(t: string): number {
     const [h, m] = t.split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
 }
-
 function minutesToTime(mins: number): string {
     const total = ((mins % 1440) + 1440) % 1440;
     const h = Math.floor(total / 60).toString().padStart(2, '0');
     const m = (total % 60).toString().padStart(2, '0');
     return `${h}:${m}`;
 }
-
 function addMinutes(t: string, delta: number): string {
     return minutesToTime(timeToMinutes(t) + delta);
 }
-
 function isInRange(t: string, start: string, end: string): boolean {
-    const tm = timeToMinutes(t);
-    const sm = timeToMinutes(start);
-    const em = timeToMinutes(end);
+    const tm = timeToMinutes(t), sm = timeToMinutes(start), em = timeToMinutes(end);
     return tm >= sm && tm <= em;
 }
-
 function roundToQuarter(t: string): string {
-    const mins  = timeToMinutes(t);
-    const round = Math.round(mins / 15) * 15;
-    return minutesToTime(round);
+    return minutesToTime(Math.round(timeToMinutes(t) / 15) * 15);
 }
 
-// ─── CONSTRUTOR DE AGENDA DE REFEIÇÕES ───────────────────────────────────────
+// ─── CONSTRUTOR DE AGENDA ─────────────────────────────────────────────────────
 function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
     const isFolga = (dayType === 'DESCANSO' || dayType === 'CARDIO') &&
                     a.freeDays && a.freeDays.length > 0 && !a.freeDays.includes('Nenhum');
 
-    const wake      = isFolga && a.freeWakeUpTime ? a.freeWakeUpTime : (a.wakeUpTime || '07:00');
-    const sleep     = isFolga && a.freeSleepTime  ? a.freeSleepTime  : (a.sleepTime  || '23:00');
-    const train     = isFolga && a.freeTrainTime  ? a.freeTrainTime  : (a.trainTime  || '08:00');
+    const wake  = isFolga && a.freeWakeUpTime ? a.freeWakeUpTime : (a.wakeUpTime  || '07:00');
+    const sleep = isFolga && a.freeSleepTime  ? a.freeSleepTime  : (a.sleepTime   || '23:00');
+    const train = isFolga && a.freeTrainTime  ? a.freeTrainTime  : (a.trainTime   || '18:00');
 
     const workStart = a.workTimeStart || (a.workTime ? a.workTime.split(' às ')[0] : '09:00');
     const workEnd   = a.workTimeEnd   || (a.workTime ? a.workTime.split(' às ')[1] : '18:00');
     const numMeals  = Math.min(8, Math.max(2, Number(a.mealsPerDay) || 5));
     const isBariatric = !!a.bariatric;
     const hasGastrite = (a.digestiveIssues ?? []).some(d => ['Gastrite','Refluxo / DRGE'].includes(d));
-    const strategy  = a.preworkoutStrategy || 'shake';
+    const strategy    = a.preworkoutStrategy || 'shake';
 
-    const wakeMin   = timeToMinutes(wake);
-    const sleepMin  = timeToMinutes(sleep);
-    const trainMin  = timeToMinutes(train);
+    const wakeMin  = timeToMinutes(wake);
+    const sleepMin = timeToMinutes(sleep);
+    const trainMin = timeToMinutes(train);
     const windowMin = sleepMin > wakeMin ? sleepMin - wakeMin : (1440 - wakeMin + sleepMin);
 
-    const slots: MealSlot[] = [];
-
-    // ── DIAS SEM TREINO (DESCANSO) ────────────────────────────────────────────
+    // ── DESCANSO ──────────────────────────────────────────────────────────────
     if (dayType === 'DESCANSO') {
         const interval = Math.floor(windowMin / (numMeals - 1));
         const mealDefs = [
-            { name: 'Café da Manhã',    role: 'main',   carbPriority: 'medium' as const, protPriority: 'medium' as const },
-            { name: 'Lanche da Manhã',  role: 'snack',  carbPriority: 'low'    as const, protPriority: 'medium' as const },
-            { name: 'Almoço',           role: 'main',   carbPriority: 'medium' as const, protPriority: 'high'   as const },
-            { name: 'Lanche da Tarde',  role: 'snack',  carbPriority: 'low'    as const, protPriority: 'medium' as const },
-            { name: 'Jantar',           role: 'dinner', carbPriority: 'low'    as const, protPriority: 'high'   as const },
-            { name: 'Ceia',             role: 'supper', carbPriority: 'low'    as const, protPriority: 'medium' as const },
+            { name:'Café da Manhã',   role:'main',   carbPriority:'medium' as const, protPriority:'medium' as const },
+            { name:'Lanche da Manhã', role:'snack',  carbPriority:'low'    as const, protPriority:'medium' as const },
+            { name:'Almoço',          role:'main',   carbPriority:'medium' as const, protPriority:'high'   as const },
+            { name:'Lanche da Tarde', role:'snack',  carbPriority:'low'    as const, protPriority:'medium' as const },
+            { name:'Jantar',          role:'dinner', carbPriority:'low'    as const, protPriority:'high'   as const },
+            { name:'Ceia',            role:'supper', carbPriority:'low'    as const, protPriority:'medium' as const },
         ];
-
-        const selected = mealDefs.slice(0, numMeals);
-        selected.forEach((def, i) => {
-            const time = roundToQuarter(minutesToTime(wakeMin + interval * i));
+        return mealDefs.slice(0, numMeals).map((def, i) => {
+            const time     = roundToQuarter(minutesToTime(wakeMin + interval * i));
             const portable = isInRange(time, workStart, workEnd);
-            slots.push({
-                time,
-                name:    def.name,
-                role:    def.role,
-                portable,
-                note: portable
-                    ? 'Refeição durante horário de trabalho — escolha opção prática e portátil.'
-                    : (i === 0 && hasGastrite ? 'Não comece com café puro — inclua algo sólido primeiro.' : ''),
+            return {
+                time, name: def.name, role: def.role, portable,
+                note: portable ? 'Refeição durante horário de trabalho — opção prática e portátil.'
+                    : (i === 0 && hasGastrite ? 'Não comece com café puro — inclua alimento sólido primeiro.' : ''),
                 carbPriority: def.carbPriority,
                 protPriority: def.protPriority,
-            });
+            };
         });
-
-        return slots;
     }
 
-    // ── DIAS COM TREINO (TREINO, CARDIO, TREINO_CARDIO) ───────────────────────
+    // ── DIAS COM TREINO ───────────────────────────────────────────────────────
     const minsTillTrain = ((trainMin - wakeMin) + 1440) % 1440;
-    const hasTimeForPreWorkout = minsTillTrain >= 60 && !a.trainFasted;
+    const hasTimeForPre = minsTillTrain >= 60 && !a.trainFasted;
     const required: MealSlot[] = [];
 
-    // 1. PRÉ-TREINO
     if (!a.trainFasted) {
-        if (hasTimeForPreWorkout) {
-            const preTime = roundToQuarter(minutesToTime(trainMin - 70));
+        if (hasTimeForPre) {
+            const preTime  = roundToQuarter(minutesToTime(trainMin - 70));
             const portable = isInRange(preTime, workStart, workEnd);
             required.push({
-                time: preTime,
-                name: 'Pré-Treino',
-                role: 'preworkout',
-                portable,
+                time: preTime, name: 'Pré-Treino', role: 'preworkout', portable,
                 note: portable
-                    ? 'Pré-treino no trabalho — opção prática: banana + whey ou tapioca + frango fatiado.'
-                    : 'Refeição pré-treino: foco em carboidrato de médio/rápido absorção + proteína leve.',
-                carbPriority: 'high',
-                protPriority: 'medium',
+                    ? 'Pré-treino no trabalho — banana + whey ou tapioca + frango fatiado.'
+                    : 'Pré-treino: carboidrato de rápida absorção + proteína leve.',
+                carbPriority: 'high', protPriority: 'medium',
+            });
+        } else if (strategy === 'ceia_pretreino') {
+            const ceiaTime = roundToQuarter(minutesToTime(sleepMin - 60));
+            required.push({
+                time: ceiaTime, name: 'Ceia Pré-Treino', role: 'preworkout', portable: false,
+                note: `Acorda ${minsTillTrain}min antes do treino — ceia na noite anterior garante energia.`,
+                carbPriority: 'high', protPriority: 'medium',
             });
         } else {
-            if (strategy === 'shake' || strategy === 'shake_rapido') {
-                const shakeTime = roundToQuarter(minutesToTime(trainMin - 20));
-                required.push({
-                    time: shakeTime,
-                    name: 'Pré-Treino Rápido',
-                    role: 'preworkout',
-                    portable: false,
-                    note: `Acorda ${minsTillTrain}min antes do treino — shake rápido: banana + whey. Fácil digestão, sem desconforto.`,
-                    carbPriority: 'high',
-                    protPriority: 'low',
-                });
-            } else if (strategy === 'ceia_pretreino') {
-                const ceiaTime = roundToQuarter(minutesToTime(sleepMin - 60));
-                required.push({
-                    time: ceiaTime,
-                    name: 'Ceia Pré-Treino',
-                    role: 'preworkout',
-                    portable: false,
-                    note: `Acorda apenas ${minsTillTrain}min antes do treino — esta refeição é a noite anterior para garantir energia no treino matinal.`,
-                    carbPriority: 'high',
-                    protPriority: 'medium',
-                });
-            }
+            const shakeTime = roundToQuarter(minutesToTime(trainMin - 20));
+            required.push({
+                time: shakeTime, name: 'Pré-Treino Rápido', role: 'preworkout', portable: false,
+                note: `Acorda ${minsTillTrain}min antes — shake rápido: banana + whey.`,
+                carbPriority: 'high', protPriority: 'low',
+            });
         }
-    } else {
-        required.push({
-            time: wake,
-            name: 'Quebra do Jejum (Pós-Treino)',
-            role: 'postworkout',
-            portable: false,
-            note: 'Treina em jejum. Esta é a primeira refeição do dia, após o treino. Carboidrato + proteína para recuperação.',
-            carbPriority: 'high',
-            protPriority: 'high',
-        });
-    }
-
-    // 2. PÓS-TREINO
-    if (!a.trainFasted) {
-        const posTime = roundToQuarter(minutesToTime(trainMin + 45));
+        const posTime  = roundToQuarter(minutesToTime(trainMin + 45));
         const portable = isInRange(posTime, workStart, workEnd);
         required.push({
-            time: posTime,
-            name: 'Pós-Treino',
-            role: 'postworkout',
-            portable,
-            note: portable
-                ? 'Pós-treino no trabalho — whey + fruta ou iogurte grego + granola.'
-                : 'Pós-treino: prioridade máxima em proteína + carboidrato para recuperação muscular.',
-            carbPriority: 'high',
-            protPriority: 'high',
+            time: posTime, name: 'Pós-Treino', role: 'postworkout', portable,
+            note: portable ? 'Pós-treino no trabalho — whey + fruta ou iogurte + granola.'
+                : 'Pós-treino: proteína máxima + carboidrato para recuperação.',
+            carbPriority: 'high', protPriority: 'high',
+        });
+    } else {
+        required.push({
+            time: wake, name: 'Quebra do Jejum (Pós-Treino)', role: 'postworkout', portable: false,
+            note: 'Treina em jejum — primeira refeição do dia após o treino. Carbo + proteína.',
+            carbPriority: 'high', protPriority: 'high',
         });
     }
 
-    // 3. PREENCHER OS SLOTS RESTANTES
+    // Slots restantes distribuídos pela janela do dia
     const remainingSlots = numMeals - required.length;
     const usedTimes = new Set(required.map(r => r.time));
 
     const mainMealDefs = [
-        { name: 'Café da Manhã',   role: 'main',   carbPriority: 'medium' as const, protPriority: 'medium' as const, idealOffset: 0    },
-        { name: 'Lanche da Manhã', role: 'snack',  carbPriority: 'medium' as const, protPriority: 'low'    as const, idealOffset: 0.2  },
-        { name: 'Almoço',          role: 'main',   carbPriority: 'high'   as const, protPriority: 'high'   as const, idealOffset: 0.4  },
-        { name: 'Lanche da Tarde', role: 'snack',  carbPriority: 'low'    as const, protPriority: 'medium' as const, idealOffset: 0.6  },
-        { name: 'Jantar',          role: 'dinner', carbPriority: 'low'    as const, protPriority: 'high'   as const, idealOffset: 0.8  },
-        { name: 'Ceia',            role: 'supper', carbPriority: 'low'    as const, protPriority: 'medium' as const, idealOffset: 0.95 },
+        { name:'Café da Manhã',   role:'main',   carbPriority:'medium' as const, protPriority:'medium' as const, idealOffset:0    },
+        { name:'Lanche da Manhã', role:'snack',  carbPriority:'medium' as const, protPriority:'low'    as const, idealOffset:0.2  },
+        { name:'Almoço',          role:'main',   carbPriority:'high'   as const, protPriority:'high'   as const, idealOffset:0.4  },
+        { name:'Lanche da Tarde', role:'snack',  carbPriority:'low'    as const, protPriority:'medium' as const, idealOffset:0.6  },
+        { name:'Jantar',          role:'dinner', carbPriority:'low'    as const, protPriority:'high'   as const, idealOffset:0.8  },
+        { name:'Ceia',            role:'supper', carbPriority:'low'    as const, protPriority:'medium' as const, idealOffset:0.95 },
     ];
 
-    const selected = mainMealDefs.slice(0, remainingSlots);
-    selected.forEach(def => {
+    mainMealDefs.slice(0, remainingSlots).forEach(def => {
         let idealMin = wakeMin + Math.round(windowMin * def.idealOffset);
         let attempts = 0;
         while (attempts < 20) {
-            const t = roundToQuarter(minutesToTime(idealMin));
-            const conflict = [...usedTimes].some(ut =>
-                Math.abs(timeToMinutes(ut) - timeToMinutes(t)) < 90
-            );
+            const t        = roundToQuarter(minutesToTime(idealMin));
+            const conflict = [...usedTimes].some(ut => Math.abs(timeToMinutes(ut) - timeToMinutes(t)) < 90);
             if (!conflict) {
                 usedTimes.add(t);
                 const portable = isInRange(t, workStart, workEnd);
-                let note = '';
-                if (portable) note = 'Refeição durante horário de trabalho — opção portátil/prática.';
-                if (def.role === 'main' && hasGastrite && def.idealOffset === 0) {
-                    note = 'Não comece o dia com café puro — inclua alimento sólido antes.';
-                }
-                required.push({ time: t, name: def.name, role: def.role, portable, note, carbPriority: def.carbPriority, protPriority: def.protPriority });
+                required.push({
+                    time: t, name: def.name, role: def.role, portable,
+                    note: portable ? 'Refeição durante horário de trabalho — opção portátil.'
+                        : (def.role === 'main' && hasGastrite && def.idealOffset === 0
+                            ? 'Não comece o dia com café puro — inclua alimento sólido antes.' : ''),
+                    carbPriority: def.carbPriority,
+                    protPriority: def.protPriority,
+                });
                 break;
             }
-            idealMin += 15;
-            attempts++;
+            idealMin += 15; attempts++;
         }
     });
 
     required.sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
 
-    // Ajuste especial: se bariátrico
     if (isBariatric && required.length < 6) {
         const extra = 6 - required.length;
         for (let i = 0; i < extra; i++) {
@@ -263,9 +216,8 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
             if (!usedTimes.has(newTime)) {
                 usedTimes.add(newTime);
                 required.push({
-                    time: newTime, name: `Lanche Extra ${i + 1}`,
-                    role: 'snack', portable: false,
-                    note: 'Bariátrico: refeição de pequeno volume (~150ml), rica em proteína.',
+                    time: newTime, name: `Lanche Extra ${i + 1}`, role: 'snack', portable: false,
+                    note: 'Bariátrico: volume máx ~150ml, rico em proteína.',
                     carbPriority: 'low', protPriority: 'high',
                 });
             }
@@ -276,128 +228,122 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
     return required;
 }
 
-// ─── FORMATAR AGENDA PARA O PROMPT ───────────────────────────────────────────
+// ─── FORMATAR AGENDA PARA PROMPT ─────────────────────────────────────────────
 function formatScheduleForPrompt(slots: MealSlot[], trainTime: string, dayType: string): string {
     const lines = slots.map((s, i) => {
         const portableTag = s.portable ? ' [PORTÁTIL]' : '';
-        const noteStr     = s.note     ? ` | Nota: ${s.note}` : '';
+        const noteStr     = s.note     ? ` | ${s.note}` : '';
         const carbTag     = s.carbPriority === 'high' ? '↑CARBO' : s.carbPriority === 'low' ? '↓CARBO' : '';
         const protTag     = s.protPriority === 'high' ? '↑PROT'  : '';
         const tags        = [carbTag, protTag].filter(Boolean).join(' ');
         return `${i + 1}. ${s.time} — ${s.name}${portableTag} [${tags}]${noteStr}`;
     });
-
-    const trainNote = dayType !== 'DESCANSO'
-        ? `\n⏱️ Treino: ${trainTime}`
-        : '';
-
-    return `${trainNote}\n${lines.join('\n')}`;
+    return `${dayType !== 'DESCANSO' ? `\n⏱️ Treino: ${trainTime}` : ''}\n${lines.join('\n')}`;
 }
 
 // ─── CATÁLOGO ─────────────────────────────────────────────────────────────────
 const FOOD_CATALOG = [
     { id:"7fa55081", n:"Frango Grelhado",              sc:"Proteínas Gerais", k:165, p:31, c:0,  f:3  },
     { id:"b2c9bdb7", n:"Frango Desfiado (Cozido)",      sc:"Proteínas Gerais", k:165, p:31, c:0,  f:3  },
-    { id:"c5f3b7e6", n:"Sobrecoxa de Frango (Sem pele)", sc:"Proteínas Gerais",k:210, p:28, c:0,  f:10 },
-    { id:"ae77cc5e", n:"Moela de Frango (Cozida)",       sc:"Proteínas Gerais", k:153, p:30, c:0,  f:3  },
-    { id:"96d11aa4", n:"Carne Moída (Patinho)",          sc:"Proteínas Gerais", k:219, p:35, c:0,  f:7  },
-    { id:"76ba67e7", n:"Patinho (Cozido / Iscas)",       sc:"Proteínas Gerais", k:219, p:35, c:0,  f:7  },
-    { id:"f46f2036", n:"Alcatra Grelhada",               sc:"Proteínas Gerais", k:240, p:31, c:0,  f:11 },
-    { id:"0b2de140", n:"Carne de Panela (Cozida)",       sc:"Proteínas Gerais", k:220, p:30, c:0,  f:10 },
-    { id:"23f6b995", n:"Carne Seca Desfiada",            sc:"Proteínas Gerais", k:280, p:40, c:0,  f:12 },
-    { id:"928041e8", n:"Tilápia Grelhada",               sc:"Proteínas Gerais", k:128, p:26, c:0,  f:2  },
-    { id:"bdeb253d", n:"Salmão Grelhado",                sc:"Proteínas Gerais", k:200, p:25, c:0,  f:10 },
-    { id:"94776886", n:"Pescada Branca Grelhada",        sc:"Proteínas Gerais", k:110, p:26, c:0,  f:1  },
-    { id:"de802ecf", n:"Atum (Grelhado ou Assado)",      sc:"Proteínas Gerais", k:130, p:29, c:0,  f:1  },
-    { id:"8fad8abc", n:"Sardinha (Enlatada em Água)",    sc:"Proteínas Gerais", k:110, p:24, c:0,  f:2  },
-    { id:"3cee1649", n:"Camarão Grelhado",               sc:"Proteínas Gerais", k:100, p:24, c:0,  f:1  },
-    { id:"d965922a", n:"Peito de Peru Grelhado",         sc:"Proteínas Gerais", k:150, p:29, c:0,  f:3  },
-    { id:"67b01945", n:"Ovos Inteiros",                  sc:"Proteínas Gerais", k:143, p:13, c:1,  f:10 },
-    { id:"fffd8a66", n:"Clara de Ovo",                   sc:"Proteínas Gerais", k:52,  p:11, c:1,  f:0  },
-    { id:"5a27992c", n:"Tofu (Queijo de Soja)",          sc:"Proteínas Gerais", k:76,  p:8,  c:2,  f:4  },
-    { id:"f1826a2c", n:"Proteína de Soja (PTS Crua)",    sc:"Proteínas Gerais", k:320, p:50, c:30, f:1  },
-    { id:"007db8e3", n:"Queijo Cottage Tradicional",     sc:"Queijos e Pastas",  k:98,  p:11, c:3,  f:4  },
-    { id:"5b756560", n:"Queijo Ricota Fresca",           sc:"Queijos e Pastas",  k:140, p:11, c:3,  f:8  },
-    { id:"5173b746", n:"Requeijão Light",                sc:"Queijos e Pastas",  k:180, p:10, c:2,  f:14 },
-    { id:"37933f71", n:"Queijo Mussarela Light",         sc:"Queijos e Pastas",  k:260, p:24, c:2,  f:16 },
-    { id:"c4ef1a39", n:"Queijo Minas Frescal Light",     sc:"Queijos e Pastas",  k:160, p:16, c:3,  f:9  },
-    { id:"e7bdae09", n:"Iogurte Natural Desnatado",      sc:"Leites e Iogurtes", k:40,  p:4,  c:5,  f:0  },
-    { id:"3a90b75d", n:"Iogurte Grego Zero/Light",       sc:"Leites e Iogurtes", k:50,  p:6,  c:5,  f:0  },
-    { id:"f86484b3", n:"Leite Desnatado",                sc:"Leites e Iogurtes", k:35,  p:3,  c:5,  f:0  },
-    { id:"b0401676", n:"Peito de Peru (Fatiado)",        sc:"Frios e Embutidos", k:110, p:21, c:1,  f:2  },
-    { id:"113ea8da", n:"Presunto Magro",                 sc:"Frios e Embutidos", k:105, p:16, c:2,  f:3  },
-    { id:"fa4ba3b8", n:"Arroz Branco",                   sc:"Carbos Base", k:130, p:2,  c:28, f:0  },
-    { id:"eccd514c", n:"Arroz Integral",                 sc:"Carbos Base", k:111, p:2,  c:23, f:1  },
-    { id:"7ff6a7f4", n:"Batata Doce Cozida",             sc:"Carbos Base", k:86,  p:1,  c:20, f:0  },
-    { id:"edc8a4fd", n:"Batata Inglesa Cozida",          sc:"Carbos Base", k:86,  p:1,  c:19, f:0  },
-    { id:"c7d2240a", n:"Mandioca Cozida",                sc:"Carbos Base", k:114, p:1,  c:26, f:0  },
-    { id:"f632556e", n:"Mandioquinha / Batata Baroa",    sc:"Carbos Base", k:100, p:1,  c:20, f:0  },
-    { id:"5e4832bf", n:"Inhame (Cozido)",                sc:"Carbos Base", k:118, p:1,  c:28, f:0  },
-    { id:"8bb16ab4", n:"Macarrão Cozido",                sc:"Carbos Base", k:130, p:4,  c:28, f:0  },
-    { id:"5c9cde6a", n:"Macarrão Integral (Cozido)",     sc:"Carbos Base", k:124, p:5,  c:26, f:1  },
-    { id:"4b6eb78f", n:"Pão de Forma Tradicional",       sc:"Pães e Massas", k:260, p:8,  c:50, f:2  },
-    { id:"a416e4fe", n:"Pão Francês",                    sc:"Pães e Massas", k:300, p:9,  c:58, f:3  },
-    { id:"08301bb2", n:"Pão Integral",                   sc:"Pães e Massas", k:250, p:10, c:46, f:3  },
-    { id:"1f1f1fe",  n:"Tapioca (Goma)",                 sc:"Pães e Massas", k:330, p:0,  c:81, f:0  },
-    { id:"7e243728", n:"Rap10",                          sc:"Pães e Massas", k:300, p:8,  c:52, f:5  },
-    { id:"crepioca", n:"Massa de Crepioca",              sc:"Pães e Massas", k:330, p:0,  c:81, f:0  },
-    { id:"bdb59103", n:"Aveia em Flocos",                sc:"Cereais e Fibras", k:380, p:13, c:60, f:8  },
-    { id:"9d36b48b", n:"Cuscuz de Milho",                sc:"Cereais e Fibras", k:112, p:3,  c:25, f:0  },
-    { id:"91473bf8", n:"Chia",                           sc:"Cereais e Fibras", k:486, p:16, c:40, f:30 },
-    { id:"d6289c5c", n:"Farinha de Linhaça",             sc:"Cereais e Fibras", k:534, p:18, c:30, f:42 },
-    { id:"1837aac1", n:"Granola Sem Açúcar",             sc:"Cereais e Fibras", k:380, p:10, c:60, f:10 },
-    { id:"6fecb9d2", n:"Feijão Carioca Cozido",          sc:"Leguminosas e Grãos", k:76,  p:4,  c:13, f:0  },
-    { id:"7b85d6df", n:"Feijão Preto Cozido",            sc:"Leguminosas e Grãos", k:91,  p:5,  c:14, f:0  },
-    { id:"33e2a094", n:"Lentilha Cozida",                sc:"Leguminosas e Grãos", k:116, p:9,  c:20, f:0  },
-    { id:"38432feb", n:"Grão de Bico Cozido",            sc:"Leguminosas e Grãos", k:164, p:8,  c:27, f:2  },
-    { id:"0ce696b0", n:"Banana",                         sc:"Frutas", k:89,  p:1,  c:23, f:0  },
-    { id:"c6135c45", n:"Maçã",                           sc:"Frutas", k:52,  p:0,  c:14, f:0  },
-    { id:"28800928", n:"Mamão",                          sc:"Frutas", k:43,  p:0,  c:11, f:0  },
-    { id:"d2405198", n:"Morango",                        sc:"Frutas", k:32,  p:1,  c:8,  f:0  },
-    { id:"e1ba74a1", n:"Laranja",                        sc:"Frutas", k:47,  p:1,  c:12, f:0  },
-    { id:"eeae57e2", n:"Kiwi",                           sc:"Frutas", k:61,  p:1,  c:15, f:0  },
-    { id:"fa1e0345", n:"Melancia",                       sc:"Frutas", k:30,  p:1,  c:8,  f:0  },
-    { id:"745c31e4", n:"Azeite de Oliva",                sc:"Gorduras e Oleaginosas", k:884, p:0,  c:0,  f:100 },
-    { id:"9696c9b6", n:"Pasta de Amendoim",              sc:"Gorduras e Oleaginosas", k:588, p:25, c:20, f:50  },
-    { id:"0c1231ef", n:"Castanha do Pará",               sc:"Gorduras e Oleaginosas", k:650, p:14, c:12, f:66  },
-    { id:"200b4eb5", n:"Nozes",                          sc:"Gorduras e Oleaginosas", k:650, p:15, c:14, f:65  },
-    { id:"82a2525d", n:"Abacate",                        sc:"Gorduras e Oleaginosas", k:160, p:2,  c:8,  f:14  },
-    { id:"1813dae5", n:"Manteiga",                       sc:"Gorduras e Oleaginosas", k:717, p:1,  c:1,  f:81  },
-    { id:"32176cad", n:"Brócolis (Cozido)",              sc:"Vegetais e Legumes", k:25, p:2, c:4, f:0 },
-    { id:"ed7041ed", n:"Couve-flor",                     sc:"Vegetais e Legumes", k:25, p:2, c:4, f:0 },
-    { id:"72a49b38", n:"Cenoura (Cozida)",               sc:"Vegetais e Legumes", k:35, p:1, c:8, f:0 },
-    { id:"260caaae", n:"Alface (Qualquer tipo)",         sc:"Vegetais e Legumes", k:14, p:1, c:2, f:0 },
-    { id:"50f4acaa", n:"Tomate",                         sc:"Vegetais e Legumes", k:18, p:1, c:3, f:0 },
-    { id:"5ee331d2", n:"Rúcula",                         sc:"Vegetais e Legumes", k:25, p:3, c:4, f:0 },
-    { id:"3357f827", n:"Couve (Manteiga)",               sc:"Vegetais e Legumes", k:35, p:3, c:6, f:0 },
-    { id:"15f10970", n:"Espinafre",                      sc:"Vegetais e Legumes", k:23, p:3, c:4, f:0 },
-    { id:"35d3ae09", n:"Abobrinha",                      sc:"Vegetais e Legumes", k:17, p:1, c:3, f:0 },
-    { id:"07ee0c78", n:"Abóbora Cabotiá",                sc:"Vegetais e Legumes", k:34, p:1, c:8, f:0 },
-    { id:"ba4cb07b", n:"Beterraba",                      sc:"Vegetais e Legumes", k:43, p:2, c:10,f:0 },
-    { id:"5e622521", n:"Whey Protein Concentrado",       sc:"Suplementos em Pó",  k:400, p:75, c:10, f:5  },
-    { id:"89342d9f", n:"Whey Protein Isolado",           sc:"Suplementos em Pó",  k:370, p:90, c:2,  f:1  },
-    { id:"ffb77725", n:"Albumina",                       sc:"Suplementos em Pó",  k:360, p:80, c:5,  f:0  },
-    { id:"4aada106", n:"Caseína",                        sc:"Suplementos em Pó",  k:360, p:80, c:5,  f:1  },
-    { id:"893d83d0", n:"Creatina",                       sc:"Creatina Isolada",   k:0,   p:0,  c:0,  f:0  },
-    { id:"40d69ef4", n:"YoPRO 15g (Bebida Láctea)",      sc:"Prontos p/ Consumo", k:45,  p:6,  c:5,  f:0  },
-    { id:"7b22ccb6", n:"YoPRO 25g (Bebida Láctea)",      sc:"Prontos p/ Consumo", k:62,  p:10, c:5,  f:0  },
-    { id:"34c424a4", n:"Barra de Proteína Bold",         sc:"Prontos p/ Consumo", k:350, p:33, c:33, f:15 },
-    { id:"2cadb09b", n:"Paçoca (Rolha)",                 sc:"Doces e Açúcares",   k:490, p:15, c:60, f:25 },
-    { id:"9b1aebc9", n:"Chocolate Meio Amargo (70%)",    sc:"Doces e Açúcares",   k:540, p:6,  c:45, f:35 },
-    { id:"638a0cc5", n:"Geleia de Frutas (100% Fruta)",  sc:"Doces e Açúcares",   k:150, p:0,  c:10, f:0  },
-    { id:"08a0c3cb", n:"Café sem Açúcar",                sc:"Bebidas Zero", k:0, p:0, c:0, f:0 },
-    { id:"19aa03fc", n:"Chá sem Açúcar",                 sc:"Bebidas Zero", k:0, p:0, c:0, f:0 },
-    { id:"8e3e9898", n:"Suco Clight/Zero",               sc:"Bebidas Zero", k:0, p:0, c:0, f:0 },
-    { id:"1016e944", n:"Gelatina Zero",                  sc:"Bebidas Zero", k:5, p:1, c:0, f:0 },
-    { id:"752dbe21", n:"Refrigerante Zero",              sc:"Bebidas Zero", k:0, p:0, c:0, f:0 },
+    { id:"c5f3b7e6", n:"Sobrecoxa de Frango (Sem pele)",sc:"Proteínas Gerais", k:210, p:28, c:0,  f:10 },
+    { id:"ae77cc5e", n:"Moela de Frango (Cozida)",      sc:"Proteínas Gerais", k:153, p:30, c:0,  f:3  },
+    { id:"96d11aa4", n:"Carne Moída (Patinho)",         sc:"Proteínas Gerais", k:219, p:35, c:0,  f:7  },
+    { id:"76ba67e7", n:"Patinho (Cozido / Iscas)",      sc:"Proteínas Gerais", k:219, p:35, c:0,  f:7  },
+    { id:"f46f2036", n:"Alcatra Grelhada",              sc:"Proteínas Gerais", k:240, p:31, c:0,  f:11 },
+    { id:"0b2de140", n:"Carne de Panela (Cozida)",      sc:"Proteínas Gerais", k:220, p:30, c:0,  f:10 },
+    { id:"23f6b995", n:"Carne Seca Desfiada",           sc:"Proteínas Gerais", k:280, p:40, c:0,  f:12 },
+    { id:"928041e8", n:"Tilápia Grelhada",              sc:"Proteínas Gerais", k:128, p:26, c:0,  f:2  },
+    { id:"bdeb253d", n:"Salmão Grelhado",               sc:"Proteínas Gerais", k:200, p:25, c:0,  f:10 },
+    { id:"94776886", n:"Pescada Branca Grelhada",       sc:"Proteínas Gerais", k:110, p:26, c:0,  f:1  },
+    { id:"de802ecf", n:"Atum (Grelhado ou Assado)",     sc:"Proteínas Gerais", k:130, p:29, c:0,  f:1  },
+    { id:"8fad8abc", n:"Sardinha (Enlatada em Água)",   sc:"Proteínas Gerais", k:110, p:24, c:0,  f:2  },
+    { id:"3cee1649", n:"Camarão Grelhado",              sc:"Proteínas Gerais", k:100, p:24, c:0,  f:1  },
+    { id:"d965922a", n:"Peito de Peru Grelhado",        sc:"Proteínas Gerais", k:150, p:29, c:0,  f:3  },
+    { id:"67b01945", n:"Ovos Inteiros",                 sc:"Proteínas Gerais", k:143, p:13, c:1,  f:10 },
+    { id:"fffd8a66", n:"Clara de Ovo",                  sc:"Proteínas Gerais", k:52,  p:11, c:1,  f:0  },
+    { id:"5a27992c", n:"Tofu (Queijo de Soja)",         sc:"Proteínas Gerais", k:76,  p:8,  c:2,  f:4  },
+    { id:"f1826a2c", n:"Proteína de Soja (PTS Crua)",   sc:"Proteínas Gerais", k:320, p:50, c:30, f:1  },
+    { id:"007db8e3", n:"Queijo Cottage Tradicional",    sc:"Queijos e Pastas",  k:98,  p:11, c:3,  f:4  },
+    { id:"5b756560", n:"Queijo Ricota Fresca",          sc:"Queijos e Pastas",  k:140, p:11, c:3,  f:8  },
+    { id:"5173b746", n:"Requeijão Light",               sc:"Queijos e Pastas",  k:180, p:10, c:2,  f:14 },
+    { id:"37933f71", n:"Queijo Mussarela Light",        sc:"Queijos e Pastas",  k:260, p:24, c:2,  f:16 },
+    { id:"c4ef1a39", n:"Queijo Minas Frescal Light",    sc:"Queijos e Pastas",  k:160, p:16, c:3,  f:9  },
+    { id:"e7bdae09", n:"Iogurte Natural Desnatado",     sc:"Leites e Iogurtes", k:40,  p:4,  c:5,  f:0  },
+    { id:"3a90b75d", n:"Iogurte Grego Zero/Light",      sc:"Leites e Iogurtes", k:50,  p:6,  c:5,  f:0  },
+    { id:"f86484b3", n:"Leite Desnatado",               sc:"Leites e Iogurtes", k:35,  p:3,  c:5,  f:0  },
+    { id:"b0401676", n:"Peito de Peru (Fatiado)",       sc:"Frios e Embutidos", k:110, p:21, c:1,  f:2  },
+    { id:"113ea8da", n:"Presunto Magro",                sc:"Frios e Embutidos", k:105, p:16, c:2,  f:3  },
+    { id:"fa4ba3b8", n:"Arroz Branco",                  sc:"Carbos Base", k:130, p:2,  c:28, f:0  },
+    { id:"eccd514c", n:"Arroz Integral",                sc:"Carbos Base", k:111, p:2,  c:23, f:1  },
+    { id:"7ff6a7f4", n:"Batata Doce Cozida",            sc:"Carbos Base", k:86,  p:1,  c:20, f:0  },
+    { id:"edc8a4fd", n:"Batata Inglesa Cozida",         sc:"Carbos Base", k:86,  p:1,  c:19, f:0  },
+    { id:"c7d2240a", n:"Mandioca Cozida",               sc:"Carbos Base", k:114, p:1,  c:26, f:0  },
+    { id:"f632556e", n:"Mandioquinha / Batata Baroa",   sc:"Carbos Base", k:100, p:1,  c:20, f:0  },
+    { id:"5e4832bf", n:"Inhame (Cozido)",               sc:"Carbos Base", k:118, p:1,  c:28, f:0  },
+    { id:"8bb16ab4", n:"Macarrão Cozido",               sc:"Carbos Base", k:130, p:4,  c:28, f:0  },
+    { id:"5c9cde6a", n:"Macarrão Integral (Cozido)",    sc:"Carbos Base", k:124, p:5,  c:26, f:1  },
+    { id:"4b6eb78f", n:"Pão de Forma Tradicional",      sc:"Pães e Massas", k:260, p:8,  c:50, f:2  },
+    { id:"a416e4fe", n:"Pão Francês",                   sc:"Pães e Massas", k:300, p:9,  c:58, f:3  },
+    { id:"08301bb2", n:"Pão Integral",                  sc:"Pães e Massas", k:250, p:10, c:46, f:3  },
+    { id:"1f1f1fe",  n:"Tapioca (Goma)",                sc:"Pães e Massas", k:330, p:0,  c:81, f:0  },
+    { id:"7e243728", n:"Rap10",                         sc:"Pães e Massas", k:300, p:8,  c:52, f:5  },
+    { id:"crepioca", n:"Massa de Crepioca",             sc:"Pães e Massas", k:330, p:0,  c:81, f:0  },
+    { id:"bdb59103", n:"Aveia em Flocos",               sc:"Cereais e Fibras", k:380, p:13, c:60, f:8  },
+    { id:"9d36b48b", n:"Cuscuz de Milho",               sc:"Cereais e Fibras", k:112, p:3,  c:25, f:0  },
+    { id:"91473bf8", n:"Chia",                          sc:"Cereais e Fibras", k:486, p:16, c:40, f:30 },
+    { id:"d6289c5c", n:"Farinha de Linhaça",            sc:"Cereais e Fibras", k:534, p:18, c:30, f:42 },
+    { id:"1837aac1", n:"Granola Sem Açúcar",            sc:"Cereais e Fibras", k:380, p:10, c:60, f:10 },
+    { id:"6fecb9d2", n:"Feijão Carioca Cozido",         sc:"Leguminosas e Grãos", k:76,  p:4,  c:13, f:0 },
+    { id:"7b85d6df", n:"Feijão Preto Cozido",           sc:"Leguminosas e Grãos", k:91,  p:5,  c:14, f:0 },
+    { id:"33e2a094", n:"Lentilha Cozida",               sc:"Leguminosas e Grãos", k:116, p:9,  c:20, f:0 },
+    { id:"38432feb", n:"Grão de Bico Cozido",           sc:"Leguminosas e Grãos", k:164, p:8,  c:27, f:2 },
+    { id:"0ce696b0", n:"Banana",     sc:"Frutas", k:89,  p:1, c:23, f:0 },
+    { id:"c6135c45", n:"Maçã",       sc:"Frutas", k:52,  p:0, c:14, f:0 },
+    { id:"28800928", n:"Mamão",      sc:"Frutas", k:43,  p:0, c:11, f:0 },
+    { id:"d2405198", n:"Morango",    sc:"Frutas", k:32,  p:1, c:8,  f:0 },
+    { id:"e1ba74a1", n:"Laranja",    sc:"Frutas", k:47,  p:1, c:12, f:0 },
+    { id:"eeae57e2", n:"Kiwi",       sc:"Frutas", k:61,  p:1, c:15, f:0 },
+    { id:"fa1e0345", n:"Melancia",   sc:"Frutas", k:30,  p:1, c:8,  f:0 },
+    { id:"745c31e4", n:"Azeite de Oliva",    sc:"Gorduras e Oleaginosas", k:884, p:0,  c:0,  f:100 },
+    { id:"9696c9b6", n:"Pasta de Amendoim",  sc:"Gorduras e Oleaginosas", k:588, p:25, c:20, f:50  },
+    { id:"0c1231ef", n:"Castanha do Pará",   sc:"Gorduras e Oleaginosas", k:650, p:14, c:12, f:66  },
+    { id:"200b4eb5", n:"Nozes",              sc:"Gorduras e Oleaginosas", k:650, p:15, c:14, f:65  },
+    { id:"82a2525d", n:"Abacate",            sc:"Gorduras e Oleaginosas", k:160, p:2,  c:8,  f:14  },
+    { id:"1813dae5", n:"Manteiga",           sc:"Gorduras e Oleaginosas", k:717, p:1,  c:1,  f:81  },
+    { id:"32176cad", n:"Brócolis (Cozido)",  sc:"Vegetais e Legumes", k:25, p:2, c:4, f:0 },
+    { id:"ed7041ed", n:"Couve-flor",         sc:"Vegetais e Legumes", k:25, p:2, c:4, f:0 },
+    { id:"72a49b38", n:"Cenoura (Cozida)",   sc:"Vegetais e Legumes", k:35, p:1, c:8, f:0 },
+    { id:"260caaae", n:"Alface (Qualquer tipo)", sc:"Vegetais e Legumes", k:14, p:1, c:2, f:0 },
+    { id:"50f4acaa", n:"Tomate",             sc:"Vegetais e Legumes", k:18, p:1, c:3, f:0 },
+    { id:"5ee331d2", n:"Rúcula",             sc:"Vegetais e Legumes", k:25, p:3, c:4, f:0 },
+    { id:"3357f827", n:"Couve (Manteiga)",   sc:"Vegetais e Legumes", k:35, p:3, c:6, f:0 },
+    { id:"15f10970", n:"Espinafre",          sc:"Vegetais e Legumes", k:23, p:3, c:4, f:0 },
+    { id:"35d3ae09", n:"Abobrinha",          sc:"Vegetais e Legumes", k:17, p:1, c:3, f:0 },
+    { id:"07ee0c78", n:"Abóbora Cabotiá",    sc:"Vegetais e Legumes", k:34, p:1, c:8, f:0 },
+    { id:"ba4cb07b", n:"Beterraba",          sc:"Vegetais e Legumes", k:43, p:2, c:10,f:0 },
+    { id:"5e622521", n:"Whey Protein Concentrado", sc:"Suplementos em Pó", k:400, p:75, c:10, f:5  },
+    { id:"89342d9f", n:"Whey Protein Isolado",     sc:"Suplementos em Pó", k:370, p:90, c:2,  f:1  },
+    { id:"ffb77725", n:"Albumina",                 sc:"Suplementos em Pó", k:360, p:80, c:5,  f:0  },
+    { id:"4aada106", n:"Caseína",                  sc:"Suplementos em Pó", k:360, p:80, c:5,  f:1  },
+    { id:"893d83d0", n:"Creatina",                 sc:"Creatina Isolada",  k:0,   p:0,  c:0,  f:0  },
+    { id:"40d69ef4", n:"YoPRO 15g (Bebida Láctea)",sc:"Prontos p/ Consumo",k:45,  p:6,  c:5,  f:0  },
+    { id:"7b22ccb6", n:"YoPRO 25g (Bebida Láctea)",sc:"Prontos p/ Consumo",k:62,  p:10, c:5,  f:0  },
+    { id:"34c424a4", n:"Barra de Proteína Bold",   sc:"Prontos p/ Consumo",k:350, p:33, c:33, f:15 },
+    { id:"2cadb09b", n:"Paçoca (Rolha)",            sc:"Doces e Açúcares",  k:490, p:15, c:60, f:25 },
+    { id:"9b1aebc9", n:"Chocolate Meio Amargo (70%)",sc:"Doces e Açúcares", k:540, p:6,  c:45, f:35 },
+    { id:"638a0cc5", n:"Geleia de Frutas (100% Fruta)",sc:"Doces e Açúcares",k:150,p:0,  c:10, f:0  },
+    { id:"08a0c3cb", n:"Café sem Açúcar",   sc:"Bebidas Zero", k:0, p:0, c:0, f:0 },
+    { id:"19aa03fc", n:"Chá sem Açúcar",    sc:"Bebidas Zero", k:0, p:0, c:0, f:0 },
+    { id:"8e3e9898", n:"Suco Clight/Zero",  sc:"Bebidas Zero", k:0, p:0, c:0, f:0 },
+    { id:"1016e944", n:"Gelatina Zero",     sc:"Bebidas Zero", k:5, p:1, c:0, f:0 },
+    { id:"752dbe21", n:"Refrigerante Zero", sc:"Bebidas Zero", k:0, p:0, c:0, f:0 },
 ];
 
 // ─── FILTRAR CATÁLOGO ─────────────────────────────────────────────────────────
 function filteredCatalog(a: Anamnese): string {
-    const al = (a.allergies     ?? '').toLowerCase();
+    const al = (a.allergies ?? '').toLowerCase();
     const av = (a.foodAversions ?? '').toLowerCase();
     const bt = (a.bariatricIntolerances ?? []).join(' ').toLowerCase();
-
     return FOOD_CATALOG.filter(f => {
         if (al.includes('lactose') && ['Queijos e Pastas','Leites e Iogurtes'].includes(f.sc)) return false;
         if (al.includes('glúten')  && f.sc === 'Pães e Massas') return false;
@@ -408,9 +354,7 @@ function filteredCatalog(a: Anamnese): string {
         const avWords = av.split(/[,\s]+/).filter(w => w.length > 2);
         if (avWords.some(w => f.n.toLowerCase().includes(w))) return false;
         return true;
-    })
-    .map(f => `${f.id}|${f.n}|k${f.k}|P${f.p}|C${f.c}|G${f.f}|${f.sc}`)
-    .join('\n');
+    }).map(f => `${f.id}|${f.n}|k${f.k}|P${f.p}|C${f.c}|G${f.f}|${f.sc}`).join('\n');
 }
 
 // ─── CONTEXTO CLÍNICO ─────────────────────────────────────────────────────────
@@ -429,29 +373,61 @@ function buildClinicalContext(a: Anamnese): string {
     if (cond.includes('SOP'))
         lines.push('🟡 SOP → baixo IG, gordura boa em cada refeição, proteína em cada refeição');
     if (cond.includes('Hipertensão'))
-        lines.push('🟡 HIPERTENSÃO → sem embutidos/ultraprocessados com sódio elevado');
+        lines.push('🟡 HIPERTENSÃO → sem embutidos com sódio elevado');
     const dig = a.digestiveIssues ?? [];
     if (dig.some(d => ['Gastrite','Refluxo / DRGE'].includes(d)))
-        lines.push('🔵 GASTRITE/REFLUXO → sem café em jejum, refeições menores, evite gordura no pré-treino');
+        lines.push('🔵 GASTRITE/REFLUXO → sem café em jejum, refeições menores, pouca gordura no pré-treino');
     if (dig.some(d => d.includes('Intestino Preso')))
-        lines.push('🔵 CONSTIPAÇÃO → mais fibras (aveia, chia, vegetais)');
+        lines.push('🔵 CONSTIPAÇÃO → mais fibras: aveia, chia, vegetais em toda refeição principal');
     if (dig.some(d => d.includes('Intestino Solto')))
-        lines.push('🔵 SII → fibras solúveis (aveia, cenoura, banana), evite lactose em excesso');
+        lines.push('🔵 SII → fibras solúveis: aveia, cenoura, banana. Evite lactose em excesso');
     if ((a.stressLevel ?? 0) >= 4 || a.stressEating)
-        lines.push('⚡ STRESS → 1 doce controlado no jantar (chocolate 70% ou paçoca)');
+        lines.push('⚡ STRESS ALIMENTAR → 1 doce controlado no jantar (chocolate 70% ou paçoca)');
     if (a.nightBinge && !['never','rarely'].includes(a.nightBinge))
-        lines.push('🌙 COMPULSÃO NOTURNA → ceia obrigatória: proteína + gordura (cottage + pasta amendoim)');
+        lines.push('🌙 COMPULSÃO NOTURNA → ceia OBRIGATÓRIA: proteína + gordura boa (cottage + pasta amendoim)');
     const pms = a.pmsSymptoms ?? [];
     if (pms.includes('Compulsão Alimentar Forte') || pms.includes('Vontade de Doce'))
-        lines.push('🩸 TPM → +20g carbo fase pré-menstrual, 1 doce planejado no plano');
-    if (a.dietHated?.trim())  lines.push(`❌ EVITAR → ${a.dietHated}`);
+        lines.push('🩸 TPM → +20g carbo fase pré-menstrual, 1 doce planejado');
+    if (a.dietHated?.trim())  lines.push(`❌ EVITAR SEMPRE → ${a.dietHated}`);
     if (a.dietWorked?.trim()) lines.push(`✅ PRIORIZAR → ${a.dietWorked}`);
-    if (a.biggestChallenge)   lines.push(`🎯 DESAFIO → "${a.biggestChallenge}"`);
-    if (a.extraNotes?.trim()) lines.push(`📝 NOTA → ${a.extraNotes}`);
-    return lines.length ? `\n━━━ CONTEXTO CLÍNICO (PRIORITÁRIO) ━━━\n${lines.join('\n')}` : '';
+    if (a.biggestChallenge)   lines.push(`🎯 MAIOR DESAFIO → "${a.biggestChallenge}"`);
+    if (a.extraNotes?.trim()) lines.push(`📝 OBSERVAÇÃO DO COACH → ${a.extraNotes}`);
+    return lines.length ? `\n━━━ CONTEXTO CLÍNICO — PRIORIDADE MÁXIMA ━━━\n${lines.join('\n')}` : '';
 }
 
-// ─── PROMPT ───────────────────────────────────────────────────────────────────
+// ─── REGRAS CULINÁRIAS BRASILEIRAS POR SLOT ───────────────────────────────────
+function buildMealRules(slots: MealSlot[]): string {
+    const rules: string[] = [];
+    slots.forEach(s => {
+        switch (s.role) {
+            case 'main': // café da manhã ou almoço identificado pelo horário
+                if (timeToMinutes(s.time) < timeToMinutes('11:00')) {
+                    rules.push(`• ${s.name} (${s.time}): CAFÉ DA MANHÃ → ovos/clara/queijo/iogurte/pão/tapioca/aveia/fruta. NUNCA arroz, feijão, macarrão, carne bovina inteira, marmita.`);
+                } else {
+                    rules.push(`• ${s.name} (${s.time}): ALMOÇO → arroz/batata/mandioca + proteína completa (frango/carne/peixe) + vegetal + leguminosa opcional. NÃO use pão, tapioca, aveia, iogurte.`);
+                }
+                break;
+            case 'snack':
+                rules.push(`• ${s.name} (${s.time}): LANCHE → opção leve e prática: fruta + proteína (iogurte/queijo/whey/ovo) ou oleaginosas. NÃO coloque arroz ou prato quente completo.`);
+                break;
+            case 'preworkout':
+                rules.push(`• ${s.name} (${s.time}): PRÉ-TREINO → carbo rápido + proteína leve. Pão/tapioca/banana + ovo/whey/peito peru. NÃO gordura saturada, NÃO feijão, NÃO fibra excessiva.`);
+                break;
+            case 'postworkout':
+                rules.push(`• ${s.name} (${s.time}): PÓS-TREINO → proteína máxima + carbo rápido. Frango/peixe/whey + arroz/batata/fruta. NÃO gordura excessiva nesta refeição.`);
+                break;
+            case 'dinner':
+                rules.push(`• ${s.name} (${s.time}): JANTAR → refeição completa com ↓CARBO e ↑PROT. Proteína + vegetal + pouco ou nenhum carbo. NÃO pule esta refeição, NÃO coloque tapioca ou aveia.`);
+                break;
+            case 'supper':
+                rules.push(`• ${s.name} (${s.time}): CEIA → leve, rico em proteína de lenta absorção: cottage, iogurte, caseína, ovo. NÃO carboidrato de rápida absorção, NÃO pão, NÃO tapioca.`);
+                break;
+        }
+    });
+    return rules.join('\n');
+}
+
+// ─── PROMPT REESCRITO ─────────────────────────────────────────────────────────
 function buildPrompt(
     a: Anamnese,
     macros: MacrosOverride,
@@ -462,72 +438,94 @@ function buildPrompt(
     const scheduleStr = formatScheduleForPrompt(schedule, a.trainTime ?? '??:??', dayType);
     const numMeals    = schedule.length;
     const clinico     = buildClinicalContext(a);
+    const mealRules   = buildMealRules(schedule);
 
     const orcCtx =
-        a.budget === 'econômico'     ? 'ECONÔMICO → frango, ovos, atum, aveia, batata doce. Evite salmão, whey isolado.' :
-        a.budget === 'sem restrição' ? 'SEM RESTRIÇÃO → pode incluir salmão, whey isolado, barrinhas premium.' : '';
+        a.budget === 'econômico'     ? 'ORÇAMENTO ECONÔMICO → priorize frango, ovos, atum enlatado, aveia, batata doce, arroz. Evite salmão e whey isolado.' :
+        a.budget === 'sem restrição' ? 'SEM RESTRIÇÃO DE ORÇAMENTO → pode usar salmão, whey isolado, barrinhas premium.' :
+        'ORÇAMENTO MODERADO → frango, ovos, iogurte grego, whey concentrado, batata doce.';
 
     const dayLabels: Record<string,string> = {
-        TREINO:        'Treino de Força',
-        TREINO_CARDIO: 'Treino + Cardio (dupla sessão — MAIOR gasto do dia)',
-        CARDIO:        'Dia de Cardio',
-        DESCANSO:      'Dia de Descanso',
+        TREINO:        'TREINO DE FORÇA',
+        TREINO_CARDIO: 'TREINO + CARDIO — dupla sessão, MAIOR gasto calórico do dia',
+        CARDIO:        'CARDIO — aeróbico sem musculação',
+        DESCANSO:      'DESCANSO — recuperação, sem treino',
     };
 
     return `Você é o Nutricionista Especialista do Coach Paulo Adriano (PA TEAM ELITE).
+Sua função é montar um plano alimentar diário COMPLETO, PRÁTICO e CULTURALMENTE ADEQUADO para o contexto brasileiro.
 
-━━━ REGRAS ABSOLUTAS ━━━
-1. USE APENAS alimentos do CATÁLOGO. NUNCA invente alimentos.
-2. "food_id" e "food_name" copiados EXATAMENTE do catálogo (antes do "|").
-3. USE EXATAMENTE os ${numMeals} horários e nomes da AGENDA abaixo — não mude.
-4. SUBSTITUTOS OBRIGATÓRIOS em Proteínas Gerais, Carbos Base, Pães e Massas e Cereais:
-   - Cada grupo DEVE ter 1 alimento BASE + 2 SUBSTITUTOS da MESMA subcategoria
-   - Mesmo "groupId" para base e substitutos
-   - Quantidades dos substitutos já equivalentes caloricamente ao base
-5. Em Vegetais, Bebidas, Gorduras: 1 base sem substitutos é suficiente.
-6. Bata EXATAMENTE ${macros.kcal} kcal ±80. PROT ≥ ${macros.prot}g. CARBO ~${macros.carb}g.
-7. Distribua kcal proporcionalmente: refeições com ↑CARBO recebem mais carbo, com ↓CARBO menos.
-8. Notas motivadoras e práticas em cada refeição, mencionando o porquê quando relevante.
-9. Aplique TODO o contexto clínico — é PRIORITÁRIO.
+━━━ REGRAS ABSOLUTAS — VIOLAÇÃO = RESPOSTA INVÁLIDA ━━━
+
+REGRA 1 — CATÁLOGO: Use APENAS alimentos do CATÁLOGO abaixo. Nunca invente alimentos.
+REGRA 2 — IDs EXATOS: "food_id" e "food_name" devem ser copiados EXATAMENTE do catálogo.
+REGRA 3 — AGENDA SAGRADA: Você DEVE gerar EXATAMENTE ${numMeals} refeições, nos horários e nomes EXATOS da AGENDA. Não mude, não omita, não adicione nenhuma refeição.
+REGRA 4 — SUBSTITUTOS OBRIGATÓRIOS:
+  - Toda fonte de PROTEÍNA principal → 1 base + 2 substitutos (mesmo groupId, mesma subcategoria, caloricamente equivalentes)
+  - Todo CARBO principal (arroz/batata/pão/tapioca) → 1 base + 2 substitutos (mesmo groupId, mesma subcategoria)
+  - Cereal de café da manhã (aveia/granola/cuscuz) → 1 base + 2 substitutos
+  - Vegetais, gorduras, bebidas: 1 base SEM substitutos
+REGRA 5 — METAS: Bater EXATAMENTE ${macros.kcal} kcal ±80kcal. PROT ≥ ${macros.prot}g. CARBO ~${macros.carb}g. GORD ~${macros.fat}g.
+REGRA 6 — CULINÁRIA BRASILEIRA: Respeite rigorosamente as regras de cada refeição abaixo.
+REGRA 7 — CONTEXTO CLÍNICO: Aplique TODAS as restrições clínicas abaixo sem exceção.
 ${clinico}
 
-━━━ DIA: ${(dayLabels[dayType] ?? dayType).toUpperCase()} ━━━
+━━━ DIA: ${dayLabels[dayType] ?? dayType} ━━━
 
-━━━ AGENDA OBRIGATÓRIA ━━━
+━━━ AGENDA OBRIGATÓRIA (${numMeals} refeições — não altere) ━━━
 ${scheduleStr}
 
-━━━ PERFIL ━━━
-Objetivo: ${a.objetivo} | Peso: ${a.peso}kg | Altura: ${a.altura}cm
-Alergias: ${a.allergies ?? 'Nenhuma'} | Aversões: ${a.foodAversions ?? 'Nenhuma'}
+━━━ REGRAS CULINÁRIAS POR REFEIÇÃO ━━━
+${mealRules}
+
+━━━ PERFIL DO ALUNO ━━━
+Objetivo: ${a.objetivo} | Peso: ${a.peso}kg | Altura: ${a.altura}cm | Gênero: ${a.gender ?? 'não informado'}
+Alergias/Intolerâncias: ${a.allergies ?? 'Nenhuma'}
+Aversões (NUNCA use): ${a.foodAversions ?? 'Nenhuma'}
 Preferências: ${a.foodPreferences ?? 'Não informado'}
-Suplementos: ${a.supplements ?? 'Nenhum'}
+Suplementos disponíveis: ${a.supplements ?? 'Nenhum'}
 ${orcCtx}
-Água atual: ${a.waterIntake ?? 'não informado'}
 
 ━━━ METAS DO DIA ━━━
 KCAL: ${macros.kcal} | PROT: ${macros.prot}g | CARBO: ${macros.carb}g | GORD: ${macros.fat}g
 
+━━━ DISTRIBUIÇÃO DE MACROS POR REFEIÇÃO ━━━
+- Refeições marcadas ↑CARBO: recebem 60-70% do carbo total do dia (pós-treino, almoço, pré-treino)
+- Refeições marcadas ↓CARBO: recebem 10-20% do carbo total (jantar, ceia, lanches noturnos)
+- Proteína: distribua uniformemente em TODAS as refeições (mínimo 25-30g por refeição principal)
+
 ━━━ CATÁLOGO (id|nome|kcal/100g|P|C|G|subcategoria) ━━━
 ${catalog}
 
-━━━ FORMATO DE SAÍDA (JSON apenas, sem markdown) ━━━
+━━━ EXEMPLO CORRETO DE SUBSTITUTOS NO JSON ━━━
+Proteína principal com 2 substitutos (mesmo groupId "grp_prot_almoco"):
+{ "food_id": "7fa55081", "food_name": "Frango Grelhado",         "amount": "150", "unit": "g", "groupId": "grp_prot_almoco" },
+{ "food_id": "928041e8", "food_name": "Tilápia Grelhada",        "amount": "193", "unit": "g", "groupId": "grp_prot_almoco" },
+{ "food_id": "96d11aa4", "food_name": "Carne Moída (Patinho)",   "amount": "113", "unit": "g", "groupId": "grp_prot_almoco" }
+
+Carbo principal com 2 substitutos (mesmo groupId "grp_carbo_almoco"):
+{ "food_id": "7ff6a7f4", "food_name": "Batata Doce Cozida",      "amount": "300", "unit": "g", "groupId": "grp_carbo_almoco" },
+{ "food_id": "fa4ba3b8", "food_name": "Arroz Branco",            "amount": "231", "unit": "g", "groupId": "grp_carbo_almoco" },
+{ "food_id": "c7d2240a", "food_name": "Mandioca Cozida",         "amount": "263", "unit": "g", "groupId": "grp_carbo_almoco" }
+
+Nota: os substitutos têm amounts diferentes mas equivalentes em calorias ao item base.
+
+━━━ FORMATO DE SAÍDA (JSON puro, sem markdown, sem explicações) ━━━
 {
   "meals": [
     {
-      "name": "Nome exato da agenda",
-      "time": "HH:MM exato da agenda",
-      "notes": "Instrução prática e motivadora",
+      "name": "Nome EXATO da agenda",
+      "time": "HH:MM EXATO da agenda",
+      "notes": "Dica prática e motivadora (1-2 frases) mencionando o objetivo desta refeição",
       "items": [
-        { "food_id": "id-exato", "food_name": "nome-exato", "amount": "150", "unit": "g", "groupId": "grp1" },
-        { "food_id": "id-exato", "food_name": "nome-exato", "amount": "130", "unit": "g", "groupId": "grp1" },
-        { "food_id": "id-exato", "food_name": "nome-exato", "amount": "120", "unit": "g", "groupId": "grp1" }
+        { "food_id": "id-exato-catálogo", "food_name": "nome-exato-catálogo", "amount": "150", "unit": "g", "groupId": "grp_unico_por_grupo" }
       ]
     }
   ]
 }`;
 }
 
-// ─── ENRIQUECER E TRADUZIR MEDIDAS CASEIRAS ──────────────────────────────────
+// ─── ENRIQUECER COM MEDIDAS CASEIRAS ─────────────────────────────────────────
 function catOf(sc: string): string {
     const m: Record<string,string> = {
         'Proteínas Gerais':'Carnes e Proteínas','Queijos e Pastas':'Frios e Laticínios',
@@ -546,61 +544,36 @@ function catOf(sc: string): string {
 function enrich(rawMeals: any[], dayType: string): any[] {
     const map = new Map(FOOD_CATALOG.map(f => [f.id, f]));
     return rawMeals.map((meal: any) => ({
-        id:      crypto.randomUUID(),
-        name:    meal.name, time: meal.time, notes: meal.notes ?? '', dayType,
+        id: crypto.randomUUID(),
+        name: meal.name, time: meal.time, notes: meal.notes ?? '', dayType,
         items: (meal.items ?? []).map((item: any) => {
             const db = map.get(item.food_id);
             let itemName = db?.n ?? item.food_name;
             const amt = parseFloat(item.amount?.toString() ?? '100');
-
             if (!isNaN(amt) && (item.unit === 'g' || !item.unit)) {
-                if (itemName === 'Ovos Inteiros') {
-                    const ovos = Math.max(1, Math.round(amt / 50));
-                    itemName += ` (~${ovos} unid.)`;
-                } else if (itemName === 'Clara de Ovo') {
-                    const claras = Math.max(1, Math.round(amt / 30));
-                    itemName += ` (~${claras} unid.)`;
-                } else if (itemName === 'Pão de Forma Tradicional' || itemName === 'Pão Integral') {
-                    const fatias = Math.max(1, Math.round(amt / 25));
-                    itemName += ` (~${fatias} fatia${fatias > 1 ? 's' : ''})`;
-                } else if (itemName === 'Pão Francês') {
-                    const paes = Math.max(1, Math.round(amt / 50));
-                    itemName += ` (~${paes} unid.)`;
-                } else if (itemName === 'Rap10') {
-                    const discos = Math.max(1, Math.round(amt / 40));
-                    itemName += ` (~${discos} disco${discos > 1 ? 's' : ''})`;
-                } else if (['Banana', 'Maçã', 'Laranja', 'Kiwi'].includes(itemName)) {
-                    const frutas = Math.max(1, Math.round(amt / 100));
-                    itemName += ` (~${frutas} unid. média${frutas > 1 ? 's' : ''})`;
-                } else if (['Mamão', 'Melancia'].includes(itemName)) {
-                    const fatias = Math.max(1, Math.round(amt / 150));
-                    itemName += ` (~${fatias} fatia${fatias > 1 ? 's' : ''})`;
-                } else if (itemName === 'Morango') {
-                    const morangos = Math.max(1, Math.round(amt / 12));
-                    itemName += ` (~${morangos} unid.)`;
-                } else if (itemName === 'Castanha do Pará' || itemName === 'Nozes') {
-                    const cast = Math.max(1, Math.round(amt / 5));
-                    itemName += ` (~${cast} unid.)`;
-                } else if (itemName.includes('Queijo Mussarela') || itemName.includes('Queijo Minas') || itemName.includes('Peito de Peru (Fatiado)') || itemName.includes('Presunto')) {
-                    const fatias = Math.max(1, Math.round(amt / 15));
-                    itemName += ` (~${fatias} fatia${fatias > 1 ? 's' : ''})`;
-                }
+                if (itemName === 'Ovos Inteiros')         { const n = Math.max(1, Math.round(amt/50));  itemName += ` (~${n} unid.)`; }
+                else if (itemName === 'Clara de Ovo')     { const n = Math.max(1, Math.round(amt/30));  itemName += ` (~${n} unid.)`; }
+                else if (['Pão de Forma Tradicional','Pão Integral'].includes(itemName)) { const n = Math.max(1,Math.round(amt/25)); itemName += ` (~${n} fatia${n>1?'s':''})`; }
+                else if (itemName === 'Pão Francês')      { const n = Math.max(1, Math.round(amt/50));  itemName += ` (~${n} unid.)`; }
+                else if (itemName === 'Rap10')            { const n = Math.max(1, Math.round(amt/40));  itemName += ` (~${n} disco${n>1?'s':''})`; }
+                else if (['Banana','Maçã','Laranja','Kiwi'].includes(itemName)) { const n=Math.max(1,Math.round(amt/100)); itemName+=` (~${n} unid. média${n>1?'s':''})`; }
+                else if (['Mamão','Melancia'].includes(itemName)) { const n=Math.max(1,Math.round(amt/150)); itemName+=` (~${n} fatia${n>1?'s':''})`; }
+                else if (itemName === 'Morango')          { const n = Math.max(1, Math.round(amt/12));  itemName += ` (~${n} unid.)`; }
+                else if (['Castanha do Pará','Nozes'].includes(itemName)) { const n=Math.max(1,Math.round(amt/5)); itemName+=` (~${n} unid.)`; }
+                else if (itemName.includes('Queijo Mussarela')||itemName.includes('Queijo Minas')||itemName.includes('Peito de Peru (Fatiado)')||itemName.includes('Presunto')) { const n=Math.max(1,Math.round(amt/15)); itemName+=` (~${n} fatia${n>1?'s':''})`; }
             }
-
             return {
-                uniqueId:        crypto.randomUUID(),
-                groupId:         item.groupId ?? crypto.randomUUID(),
-                id:              db?.id    ?? item.food_id,
-                name:            itemName,
-                category:        db ? catOf(db.sc) : '',
-                subcategory:     db?.sc   ?? '',
-                calories_per_100:db?.k    ?? 0,
-                p:               db?.p    ?? 0,
-                c:               db?.c    ?? 0,
-                f:               db?.f    ?? 0,
-                base_unit:       'g',
-                amount:          amt.toString(),
-                unit:            item.unit ?? 'g',
+                uniqueId: crypto.randomUUID(),
+                groupId:  item.groupId ?? crypto.randomUUID(),
+                id:       db?.id ?? item.food_id,
+                name:     itemName,
+                category: db ? catOf(db.sc) : '',
+                subcategory: db?.sc ?? '',
+                calories_per_100: db?.k ?? 0,
+                p: db?.p ?? 0, c: db?.c ?? 0, f: db?.f ?? 0,
+                base_unit: 'g',
+                amount: amt.toString(),
+                unit: item.unit ?? 'g',
             };
         }),
     }));
@@ -609,17 +582,17 @@ function enrich(rawMeals: any[], dayType: string): any[] {
 // ─── PROVIDERS ────────────────────────────────────────────────────────────────
 async function callOpenAI(prompt: string, model: string): Promise<string> {
     const res = await openai.chat.completions.create({
-        model, response_format: { type: 'json_object' }, temperature: 0.3,
-        messages: [{ role:'system', content:prompt }, { role:'user', content:'Gere o plano agora.' }],
+        model, response_format: { type: 'json_object' }, temperature: 0.2,
+        messages: [{ role:'system', content: prompt }, { role:'user', content:'Gere o plano agora. Retorne APENAS o JSON.' }],
     });
     return res.choices[0].message.content ?? '{}';
 }
 
 async function callAnthropic(prompt: string): Promise<string> {
     const res = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6', // ✅ Atualizado de claude-3-5-sonnet-20241022
-        max_tokens: 8000, temperature: 0.3,
-        messages: [{ role:'user', content:`${prompt}\n\nGere o plano agora. Retorne APENAS o JSON.` }],
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8000, temperature: 0.2,
+        messages: [{ role:'user', content:`${prompt}\n\nGere o plano agora. Retorne APENAS o JSON válido.` }],
     });
     return ((res.content.find(b => b.type === 'text') as any)?.text ?? '{}')
         .replace(/```json\n?|\n?```/g, '').trim();
@@ -639,18 +612,15 @@ async function callGoogle(prompt: string): Promise<string> {
 // ─── HANDLER ──────────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
     try {
-        const {
-            anamnese, dayType = 'TREINO', provider = 'anthropic',
-            birthDate, gender, macrosOverride,
-        } = await req.json();
+        const { anamnese, dayType = 'TREINO', provider = 'anthropic', birthDate, gender, macrosOverride } = await req.json();
 
         if (!anamnese) return NextResponse.json({ error:'Anamnese não encontrada.' }, { status:400 });
 
         const macros: MacrosOverride = macrosOverride ?? (() => {
             const peso = anamnese.peso ?? 70;
             const isH  = (anamnese.gender ?? gender ?? '').toLowerCase().includes('masc');
-            const prot = Math.round(peso * (isH ? 2.2 : 1.4));
-            const fat  = Math.round(peso * 1.0);
+            const prot = Math.round(peso * (isH ? 2.2 : 1.6));
+            const fat  = Math.round(peso * 0.7);
             const kcal = Math.round(2000 + (isH ? 200 : 0));
             const carb = Math.max(20, Math.round((kcal - prot*4 - fat*9) / 4));
             return { kcal, prot, carb, fat };
@@ -662,18 +632,18 @@ export async function POST(req: Request) {
 
         let raw: string; let modelUsed: string;
         switch (provider as Provider) {
-            case 'anthropic':   raw = await callAnthropic(prompt); modelUsed = 'claude-sonnet-4-6'; break; // ✅ Atualizado
+            case 'anthropic':   raw = await callAnthropic(prompt); modelUsed = 'claude-sonnet-4-6'; break;
             case 'google':      raw = await callGoogle(prompt);    modelUsed = 'gemini-2.5-pro';    break;
-            case 'openai-mini': raw = await callOpenAI(prompt, 'gpt-4o-mini'); modelUsed = 'gpt-4o-mini'; break;
-            default:            raw = await callOpenAI(prompt, 'gpt-4o');      modelUsed = 'gpt-4o';
+            case 'openai-mini': raw = await callOpenAI(prompt,'gpt-4o-mini'); modelUsed = 'gpt-4o-mini'; break;
+            default:            raw = await callOpenAI(prompt,'gpt-4o');      modelUsed = 'gpt-4o';
         }
 
         let parsed;
         try {
-            const cleanJson = raw.replace(/^```json\s*/m, '').replace(/^```\s*/m, '').replace(/```\s*$/m, '').trim();
+            const cleanJson = raw.replace(/^```json\s*/m,'').replace(/^```\s*/m,'').replace(/```\s*$/m,'').trim();
             parsed = JSON.parse(cleanJson);
         } catch (e) {
-            console.error('[generate-diet] Erro no JSON Parser:', raw);
+            console.error('[generate-diet] JSON inválido:', raw.slice(0, 500));
             throw new Error('A IA não gerou um JSON válido.');
         }
 
