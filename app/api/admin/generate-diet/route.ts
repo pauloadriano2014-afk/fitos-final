@@ -1,9 +1,9 @@
-// app/api/admin/generate-diet/route.ts — VERSÃO 6.5
-// Melhorias vs v6.4:
-//   - Prompt reescrito: agenda como lei absoluta, regras culinárias por slot
-//   - Exemplo JSON real de substitutos no prompt
-//   - Regras explícitas de alimentos por horário (café da manhã ≠ arroz)
-//   - Verificação de cobertura: garante jantar/ceia quando aluno dorme tarde
+// app/api/admin/generate-diet/route.ts — VERSÃO 6.6
+// Melhorias vs v6.5:
+//   - FIX CRÍTICO: Lógica de distribuição de refeições (Fim do jejum forçado).
+//   - O sistema agora prioriza manter Jantar e Ceia nos slots restantes, em vez de focar só na manhã.
+//   - Adicionado regra explícita de Dias Livres no Prompt para a IA não zerar os macros.
+
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
 import Anthropic    from '@anthropic-ai/sdk';
@@ -159,7 +159,7 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
         required.push({
             time: posTime, name: 'Pós-Treino', role: 'postworkout', portable,
             note: portable ? 'Pós-treino no trabalho — whey + fruta ou iogurte + granola.'
-                : 'Pós-treino: proteína máxima + carboidrato para recuperação.',
+                : 'Pós-treino: proteína máxima + carbo para recuperação.',
             carbPriority: 'high', protPriority: 'high',
         });
     } else {
@@ -170,7 +170,7 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
         });
     }
 
-    // Slots restantes distribuídos pela janela do dia
+    // 🔥 FIX CRÍTICO: Cálculo inteligente dos slots restantes para não apagar o jantar/ceia
     const remainingSlots = numMeals - required.length;
     const usedTimes = new Set(required.map(r => r.time));
 
@@ -183,12 +183,36 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
         { name:'Ceia',            role:'supper', carbPriority:'low'    as const, protPriority:'medium' as const, idealOffset:0.95 },
     ];
 
-    mainMealDefs.slice(0, remainingSlots).forEach(def => {
+    // Calcula a distância de cada refeição padrão até os horários já ocupados pelo Pré e Pós treino
+    const mappedDefs = mainMealDefs.map(def => {
+        const idealMin = wakeMin + Math.round(windowMin * def.idealOffset);
+        let minDistance = Infinity;
+        required.forEach(r => {
+            let dist = Math.abs(timeToMinutes(r.time) - idealMin);
+            if (dist > 720) dist = 1440 - dist; 
+            if (dist < minDistance) minDistance = dist;
+        });
+        return { def, idealMin, minDistance };
+    });
+
+    // Ordena pegando as refeições que estão mais LONGE do horário de treino
+    // Isso garante que Jantar e Ceia sejam mantidos quando o treino é cedo.
+    mappedDefs.sort((a, b) => b.minDistance - a.minDistance);
+    const selectedDefs = mappedDefs.slice(0, remainingSlots).map(m => m.def);
+
+    // Reorganiza na ordem cronológica correta
+    selectedDefs.sort((a, b) => a.idealOffset - b.idealOffset);
+
+    // Atribui os horários evitando colisões
+    selectedDefs.forEach(def => {
         let idealMin = wakeMin + Math.round(windowMin * def.idealOffset);
         let attempts = 0;
         while (attempts < 20) {
-            const t        = roundToQuarter(minutesToTime(idealMin));
-            const conflict = [...usedTimes].some(ut => Math.abs(timeToMinutes(ut) - timeToMinutes(t)) < 90);
+            const t = roundToQuarter(minutesToTime(idealMin));
+            const conflict = [...usedTimes].some(ut => {
+                let d = Math.abs(timeToMinutes(ut) - timeToMinutes(t));
+                return d < 60 || (1440 - d) < 60; // Mantém mínimo de 1h entre refeições
+            });
             if (!conflict) {
                 usedTimes.add(t);
                 const portable = isInRange(t, workStart, workEnd);
@@ -243,7 +267,7 @@ function formatScheduleForPrompt(slots: MealSlot[], trainTime: string, dayType: 
 
 // ─── CATÁLOGO ─────────────────────────────────────────────────────────────────
 const FOOD_CATALOG = [
-    { id:"7fa55081", n:"Frango Grelhado",              sc:"Proteínas Gerais", k:165, p:31, c:0,  f:3  },
+    { id:"7fa55081", n:"Frango Grelhado",             sc:"Proteínas Gerais", k:165, p:31, c:0,  f:3  },
     { id:"b2c9bdb7", n:"Frango Desfiado (Cozido)",      sc:"Proteínas Gerais", k:165, p:31, c:0,  f:3  },
     { id:"c5f3b7e6", n:"Sobrecoxa de Frango (Sem pele)",sc:"Proteínas Gerais", k:210, p:28, c:0,  f:10 },
     { id:"ae77cc5e", n:"Moela de Frango (Cozida)",      sc:"Proteínas Gerais", k:153, p:30, c:0,  f:3  },
@@ -440,6 +464,9 @@ function buildPrompt(
     const clinico     = buildClinicalContext(a);
     const mealRules   = buildMealRules(schedule);
 
+    const isFolga = (dayType === 'DESCANSO' || dayType === 'CARDIO') &&
+                    a.freeDays && a.freeDays.length > 0 && !a.freeDays.includes('Nenhum');
+
     const orcCtx =
         a.budget === 'econômico'     ? 'ORÇAMENTO ECONÔMICO → priorize frango, ovos, atum enlatado, aveia, batata doce, arroz. Evite salmão e whey isolado.' :
         a.budget === 'sem restrição' ? 'SEM RESTRIÇÃO DE ORÇAMENTO → pode usar salmão, whey isolado, barrinhas premium.' :
@@ -459,7 +486,7 @@ Sua função é montar um plano alimentar diário COMPLETO, PRÁTICO e CULTURALM
 
 REGRA 1 — CATÁLOGO: Use APENAS alimentos do CATÁLOGO abaixo. Nunca invente alimentos.
 REGRA 2 — IDs EXATOS: "food_id" e "food_name" devem ser copiados EXATAMENTE do catálogo.
-REGRA 3 — AGENDA SAGRADA: Você DEVE gerar EXATAMENTE ${numMeals} refeições, nos horários e nomes EXATOS da AGENDA. Não mude, não omita, não adicione nenhuma refeição.
+REGRA 3 — AGENDA SAGRADA: Você DEVE gerar EXATAMENTE ${numMeals} refeições, nos horários e nomes EXATOS da AGENDA. Não mude, não omita, não adicione nenhuma refeição. A última refeição da lista NUNCA pode ficar vazia.
 REGRA 4 — SUBSTITUTOS OBRIGATÓRIOS:
   - Toda fonte de PROTEÍNA principal → 1 base + 2 substitutos (mesmo groupId, mesma subcategoria, caloricamente equivalentes)
   - Todo CARBO principal (arroz/batata/pão/tapioca) → 1 base + 2 substitutos (mesmo groupId, mesma subcategoria)
@@ -468,6 +495,7 @@ REGRA 4 — SUBSTITUTOS OBRIGATÓRIOS:
 REGRA 5 — METAS: Bater EXATAMENTE ${macros.kcal} kcal ±80kcal. PROT ≥ ${macros.prot}g. CARBO ~${macros.carb}g. GORD ~${macros.fat}g.
 REGRA 6 — CULINÁRIA BRASILEIRA: Respeite rigorosamente as regras de cada refeição abaixo.
 REGRA 7 — CONTEXTO CLÍNICO: Aplique TODAS as restrições clínicas abaixo sem exceção.
+${isFolga ? 'REGRA 8 — DIAS LIVRES: Este é um dia de FOLGA/DESCANSO. A ingestão calórica total DEVE ser distribuída uniformemente entre as refeições para garantir a recuperação. NÃO gere calorias vazias.' : ''}
 ${clinico}
 
 ━━━ DIA: ${dayLabels[dayType] ?? dayType} ━━━
