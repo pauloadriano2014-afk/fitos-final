@@ -1,9 +1,8 @@
-// app/api/admin/generate-diet/route.ts — VERSÃO 6.7
-// Melhorias vs v6.6:
-//   - FIX IA: Modelo do Claude corrigido para a string válida da API (claude-3-5-sonnet-20240620).
-//   - MATEMÁTICA: Substituído cálculo genérico pela Equação de Mifflin-St Jeor baseada em Anamnese.
-//   - OBJETIVOS: Déficit/Superávit automático com fator de atividade (Frequência de treinos).
-//   - BLINDAGEM: Teto rigoroso de proteína no prompt para impedir a IA de "alucinar" na quantidade.
+// app/api/admin/generate-diet/route.ts — VERSÃO 6.8
+// Melhorias vs v6.7:
+//   - FIX MACROS: Remoção da tag [↑PROT] e do termo "proteína máxima" que faziam a IA estourar a meta.
+//   - MATEMÁTICA GUIADA: A IA agora recebe a média exata de gramas de proteína permitida por refeição.
+//   - CULINÁRIA: Ajustes finos nos termos para evitar "overdose" de carnes em refeições únicas.
 
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
@@ -160,7 +159,7 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
         required.push({
             time: posTime, name: 'Pós-Treino', role: 'postworkout', portable,
             note: portable ? 'Pós-treino no trabalho — whey + fruta ou iogurte + granola.'
-                : 'Pós-treino: proteína máxima + carbo para recuperação.',
+                : 'Pós-treino: focar na recuperação. Frango/Peixe/Whey com carbo.',
             carbPriority: 'high', protPriority: 'high',
         });
     } else {
@@ -252,10 +251,13 @@ function formatScheduleForPrompt(slots: MealSlot[], trainTime: string, dayType: 
     const lines = slots.map((s, i) => {
         const portableTag = s.portable ? ' [PORTÁTIL]' : '';
         const noteStr     = s.note     ? ` | ${s.note}` : '';
+        
+        // 🔴 FIX CRÍTICO: Removido a tag [↑PROT] para evitar que a IA super-estime as carnes
         const carbTag     = s.carbPriority === 'high' ? '↑CARBO' : s.carbPriority === 'low' ? '↓CARBO' : '';
-        const protTag     = s.protPriority === 'high' ? '↑PROT'  : '';
-        const tags        = [carbTag, protTag].filter(Boolean).join(' ');
-        return `${i + 1}. ${s.time} — ${s.name}${portableTag} [${tags}]${noteStr}`;
+        const tags        = [carbTag].filter(Boolean).join(' ');
+        const tagStr      = tags ? ` [${tags}]` : '';
+
+        return `${i + 1}. ${s.time} — ${s.name}${portableTag}${tagStr}${noteStr}`;
     });
     return `${dayType !== 'DESCANSO' ? `\n⏱️ Treino: ${trainTime}` : ''}\n${lines.join('\n')}`;
 }
@@ -419,27 +421,29 @@ function buildMealRules(slots: MealSlot[]): string {
     const rules: string[] = [];
     slots.forEach(s => {
         switch (s.role) {
-            case 'main': // café da manhã ou almoço identificado pelo horário
+            case 'main': 
                 if (timeToMinutes(s.time) < timeToMinutes('11:00')) {
-                    rules.push(`• ${s.name} (${s.time}): CAFÉ DA MANHÃ → ovos/clara/queijo/iogurte/pão/tapioca/aveia/fruta. NUNCA arroz, feijão, macarrão, carne bovina inteira, marmita.`);
+                    rules.push(`• ${s.name} (${s.time}): CAFÉ DA MANHÃ → ovos/clara/queijo/iogurte/pão/tapioca/aveia/fruta. NUNCA arroz, feijão, macarrão, carne bovina inteira.`);
                 } else {
-                    rules.push(`• ${s.name} (${s.time}): ALMOÇO → arroz/batata/mandioca + proteína completa (frango/carne/peixe) + vegetal + leguminosa opcional. NÃO use pão, tapioca, aveia, iogurte.`);
+                    rules.push(`• ${s.name} (${s.time}): ALMOÇO → arroz/batata/mandioca + porção moderada de carne/frango/peixe + vegetal. NÃO use pão, tapioca, aveia.`);
                 }
                 break;
             case 'snack':
-                rules.push(`• ${s.name} (${s.time}): LANCHE → opção leve e prática: fruta + proteína (iogurte/queijo/whey/ovo) ou oleaginosas. NÃO coloque arroz ou prato quente completo.`);
+                rules.push(`• ${s.name} (${s.time}): LANCHE → opção leve: fruta + laticínio ou proteína leve. NÃO coloque arroz ou prato quente.`);
                 break;
             case 'preworkout':
-                rules.push(`• ${s.name} (${s.time}): PRÉ-TREINO → carbo rápido + proteína leve. Pão/tapioca/banana + ovo/whey/peito peru. NÃO gordura saturada, NÃO feijão, NÃO fibra excessiva.`);
+                rules.push(`• ${s.name} (${s.time}): PRÉ-TREINO → carbo rápido + proteína leve. NÃO gordura saturada, NÃO feijão.`);
                 break;
             case 'postworkout':
-                rules.push(`• ${s.name} (${s.time}): PÓS-TREINO → proteína máxima + carbo rápido. Frango/peixe/whey + arroz/batata/fruta. NÃO gordura excessiva nesta refeição.`);
+                // 🔴 FIX: Avisando para NÃO exagerar na proteína aqui
+                rules.push(`• ${s.name} (${s.time}): PÓS-TREINO → porção moderada de proteína + carbo rápido. Frango/peixe/whey + arroz/batata/fruta. NUNCA coloque "proteína máxima" para não estourar o limite diário.`);
                 break;
             case 'dinner':
-                rules.push(`• ${s.name} (${s.time}): JANTAR → refeição completa com ↓CARBO e ↑PROT. Proteína + vegetal + pouco ou nenhum carbo. NÃO pule esta refeição, NÃO coloque tapioca ou aveia.`);
+                // 🔴 FIX: Retirado o '↑PROT'
+                rules.push(`• ${s.name} (${s.time}): JANTAR → refeição completa com ↓CARBO. Proteína + vegetal. NÃO pule esta refeição.`);
                 break;
             case 'supper':
-                rules.push(`• ${s.name} (${s.time}): CEIA → leve, rico em proteína de lenta absorção: cottage, iogurte, caseína, ovo. NÃO carboidrato de rápida absorção, NÃO pão, NÃO tapioca.`);
+                rules.push(`• ${s.name} (${s.time}): CEIA → leve, fonte de proteína de lenta absorção: cottage, iogurte, caseína, ovo.`);
                 break;
         }
     });
@@ -474,6 +478,9 @@ function buildPrompt(
         DESCANSO:      'DESCANSO — recuperação, sem treino',
     };
 
+    // 🔴 FIX: Cálculo da média para engessar a IA matematicamente
+    const avgProtPerMeal = Math.round(macros.prot / numMeals);
+
     return `Você é o Nutricionista Especialista do Coach Paulo Adriano (PA TEAM ELITE).
 Sua função é montar um plano alimentar diário COMPLETO, PRÁTICO e CULTURALMENTE ADEQUADO para o contexto brasileiro.
 
@@ -489,10 +496,9 @@ REGRA 4 — SUBSTITUTOS OBRIGATÓRIOS:
   - Vegetais, gorduras, bebidas: 1 base SEM substitutos
 REGRA 5 — METAS RÍGIDAS (CALORIAS E MACROS):
   - KCAL: Você DEVE atingir ${macros.kcal} kcal (tolerância ±50kcal).
-  - PROT: Você DEVE atingir exatamente ${macros.prot}g (tolerância ±5g). NUNCA ultrapasse ${macros.prot + 10}g.
+  - PROT: Você DEVE atingir exatamente ${macros.prot}g (tolerância ±5g). NUNCA ultrapasse ${macros.prot + 5}g.
   - CARBO: Você DEVE atingir exatamente ${macros.carb}g (tolerância ±10g).
   - GORD: Você DEVE atingir exatamente ${macros.fat}g (tolerância ±5g).
-  - PRIORIDADE: Se precisar ajustar, reduza a proteína antes de alterar as calorias totais.
 REGRA 6 — CULINÁRIA BRASILEIRA: Respeite rigorosamente as regras de cada refeição abaixo.
 REGRA 7 — CONTEXTO CLÍNICO: Aplique TODAS as restrições clínicas abaixo sem exceção.
 ${isFolga ? 'REGRA 8 — DIAS LIVRES: Este é um dia de FOLGA/DESCANSO. A ingestão calórica total DEVE ser distribuída uniformemente entre as refeições para garantir a recuperação. NÃO gere calorias vazias.' : ''}
@@ -518,10 +524,10 @@ ${orcCtx}
 KCAL: ${macros.kcal} | PROT: ${macros.prot}g | CARBO: ${macros.carb}g | GORD: ${macros.fat}g
 
 ━━━ DISTRIBUIÇÃO DE MACROS POR REFEIÇÃO ━━━
-- Proteína: Você TEM um limite estrito de proteína por refeição (máximo 30-40g). NÃO adicione fontes de proteína extras se a meta do dia já estiver próxima de ser batida.
-- Carbo: Distribua o restante das calorias prioritariamente em carbo para atingir a meta de ${macros.carb}g.
-- Refeições marcadas ↑CARBO: recebem 60-70% do carbo total do dia (pós-treino, almoço, pré-treino).
-- Refeições marcadas ↓CARBO: recebem 10-20% do carbo total (jantar, ceia, lanches noturnos).
+- Proteína: A meta é um TETO INTRANSPONÍVEL de ${macros.prot}g no total do dia. Para não estourar a soma matemática, use uma MÉDIA de EXATAMENTE ${avgProtPerMeal}g de proteína por refeição. NÃO use "doses duplas" de whey ou porções gigantes de carne em nenhuma refeição.
+- Carbo: Distribua as calorias restantes prioritariamente em carbo para atingir a meta de ${macros.carb}g.
+- Refeições marcadas ↑CARBO: recebem 60-70% do carbo total do dia.
+- Refeições marcadas ↓CARBO: recebem 10-20% do carbo total.
 
 ━━━ CATÁLOGO (id|nome|kcal/100g|P|C|G|subcategoria) ━━━
 ${catalog}
