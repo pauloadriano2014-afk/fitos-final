@@ -1,8 +1,9 @@
-// app/api/admin/generate-diet/route.ts — VERSÃO 6.6
-// Melhorias vs v6.5:
-//   - FIX CRÍTICO: Lógica de distribuição de refeições (Fim do jejum forçado).
-//   - O sistema agora prioriza manter Jantar e Ceia nos slots restantes, em vez de focar só na manhã.
-//   - Adicionado regra explícita de Dias Livres no Prompt para a IA não zerar os macros.
+// app/api/admin/generate-diet/route.ts — VERSÃO 6.7
+// Melhorias vs v6.6:
+//   - FIX IA: Modelo do Claude corrigido para a string válida da API (claude-3-5-sonnet-20240620).
+//   - MATEMÁTICA: Substituído cálculo genérico pela Equação de Mifflin-St Jeor baseada em Anamnese.
+//   - OBJETIVOS: Déficit/Superávit automático com fator de atividade (Frequência de treinos).
+//   - BLINDAGEM: Teto rigoroso de proteína no prompt para impedir a IA de "alucinar" na quantidade.
 
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
@@ -170,7 +171,6 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
         });
     }
 
-    // 🔥 FIX CRÍTICO: Cálculo inteligente dos slots restantes para não apagar o jantar/ceia
     const remainingSlots = numMeals - required.length;
     const usedTimes = new Set(required.map(r => r.time));
 
@@ -183,7 +183,6 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
         { name:'Ceia',            role:'supper', carbPriority:'low'    as const, protPriority:'medium' as const, idealOffset:0.95 },
     ];
 
-    // Calcula a distância de cada refeição padrão até os horários já ocupados pelo Pré e Pós treino
     const mappedDefs = mainMealDefs.map(def => {
         const idealMin = wakeMin + Math.round(windowMin * def.idealOffset);
         let minDistance = Infinity;
@@ -195,15 +194,11 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
         return { def, idealMin, minDistance };
     });
 
-    // Ordena pegando as refeições que estão mais LONGE do horário de treino
-    // Isso garante que Jantar e Ceia sejam mantidos quando o treino é cedo.
     mappedDefs.sort((a, b) => b.minDistance - a.minDistance);
     const selectedDefs = mappedDefs.slice(0, remainingSlots).map(m => m.def);
 
-    // Reorganiza na ordem cronológica correta
     selectedDefs.sort((a, b) => a.idealOffset - b.idealOffset);
 
-    // Atribui os horários evitando colisões
     selectedDefs.forEach(def => {
         let idealMin = wakeMin + Math.round(windowMin * def.idealOffset);
         let attempts = 0;
@@ -211,7 +206,7 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
             const t = roundToQuarter(minutesToTime(idealMin));
             const conflict = [...usedTimes].some(ut => {
                 let d = Math.abs(timeToMinutes(ut) - timeToMinutes(t));
-                return d < 60 || (1440 - d) < 60; // Mantém mínimo de 1h entre refeições
+                return d < 60 || (1440 - d) < 60; 
             });
             if (!conflict) {
                 usedTimes.add(t);
@@ -492,7 +487,12 @@ REGRA 4 — SUBSTITUTOS OBRIGATÓRIOS:
   - Todo CARBO principal (arroz/batata/pão/tapioca) → 1 base + 2 substitutos (mesmo groupId, mesma subcategoria)
   - Cereal de café da manhã (aveia/granola/cuscuz) → 1 base + 2 substitutos
   - Vegetais, gorduras, bebidas: 1 base SEM substitutos
-REGRA 5 — METAS: Bater EXATAMENTE ${macros.kcal} kcal ±80kcal. PROT ≥ ${macros.prot}g. CARBO ~${macros.carb}g. GORD ~${macros.fat}g.
+REGRA 5 — METAS RÍGIDAS (CALORIAS E MACROS):
+  - KCAL: Você DEVE atingir ${macros.kcal} kcal (tolerância ±50kcal).
+  - PROT: Você DEVE atingir exatamente ${macros.prot}g (tolerância ±5g). NUNCA ultrapasse ${macros.prot + 10}g.
+  - CARBO: Você DEVE atingir exatamente ${macros.carb}g (tolerância ±10g).
+  - GORD: Você DEVE atingir exatamente ${macros.fat}g (tolerância ±5g).
+  - PRIORIDADE: Se precisar ajustar, reduza a proteína antes de alterar as calorias totais.
 REGRA 6 — CULINÁRIA BRASILEIRA: Respeite rigorosamente as regras de cada refeição abaixo.
 REGRA 7 — CONTEXTO CLÍNICO: Aplique TODAS as restrições clínicas abaixo sem exceção.
 ${isFolga ? 'REGRA 8 — DIAS LIVRES: Este é um dia de FOLGA/DESCANSO. A ingestão calórica total DEVE ser distribuída uniformemente entre as refeições para garantir a recuperação. NÃO gere calorias vazias.' : ''}
@@ -518,9 +518,10 @@ ${orcCtx}
 KCAL: ${macros.kcal} | PROT: ${macros.prot}g | CARBO: ${macros.carb}g | GORD: ${macros.fat}g
 
 ━━━ DISTRIBUIÇÃO DE MACROS POR REFEIÇÃO ━━━
-- Refeições marcadas ↑CARBO: recebem 60-70% do carbo total do dia (pós-treino, almoço, pré-treino)
-- Refeições marcadas ↓CARBO: recebem 10-20% do carbo total (jantar, ceia, lanches noturnos)
-- Proteína: distribua uniformemente em TODAS as refeições (mínimo 25-30g por refeição principal)
+- Proteína: Você TEM um limite estrito de proteína por refeição (máximo 30-40g). NÃO adicione fontes de proteína extras se a meta do dia já estiver próxima de ser batida.
+- Carbo: Distribua o restante das calorias prioritariamente em carbo para atingir a meta de ${macros.carb}g.
+- Refeições marcadas ↑CARBO: recebem 60-70% do carbo total do dia (pós-treino, almoço, pré-treino).
+- Refeições marcadas ↓CARBO: recebem 10-20% do carbo total (jantar, ceia, lanches noturnos).
 
 ━━━ CATÁLOGO (id|nome|kcal/100g|P|C|G|subcategoria) ━━━
 ${catalog}
@@ -618,7 +619,7 @@ async function callOpenAI(prompt: string, model: string): Promise<string> {
 
 async function callAnthropic(prompt: string): Promise<string> {
     const res = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-3-5-sonnet-20240620',
         max_tokens: 8000, temperature: 0.2,
         messages: [{ role:'user', content:`${prompt}\n\nGere o plano agora. Retorne APENAS o JSON válido.` }],
     });
@@ -646,11 +647,44 @@ export async function POST(req: Request) {
 
         const macros: MacrosOverride = macrosOverride ?? (() => {
             const peso = anamnese.peso ?? 70;
+            const altura = anamnese.altura ?? 170;
+            const idade = anamnese.age ?? 30;
             const isH  = (anamnese.gender ?? gender ?? '').toLowerCase().includes('masc');
-            const prot = Math.round(peso * (isH ? 2.2 : 1.6));
-            const fat  = Math.round(peso * 0.7);
-            const kcal = Math.round(2000 + (isH ? 200 : 0));
-            const carb = Math.max(20, Math.round((kcal - prot*4 - fat*9) / 4));
+            
+            // 1. Equação de Mifflin-St Jeor
+            const tmb = (10 * peso) + (6.25 * altura) - (5 * idade) + (isH ? 5 : -161);
+            
+            // 2. Fator de Atividade
+            const freq = anamnese.frequencia ?? 4;
+            let fatorAtividade = 1.2; // Sedentário
+            if (freq >= 1 && freq <= 2) fatorAtividade = 1.375;
+            else if (freq >= 3 && freq <= 4) fatorAtividade = 1.55;
+            else if (freq >= 5 && freq <= 6) fatorAtividade = 1.725;
+            else if (freq >= 7) fatorAtividade = 1.9;
+
+            const tdee = tmb * fatorAtividade;
+
+            // 3. Ajuste por Objetivo
+            const obj = (anamnese.objetivo ?? '').toLowerCase();
+            let kcalTarget = tdee;
+            let protPerKg = 1.8; 
+            
+            if (obj.includes('hipertrofia') || obj.includes('ganho')) {
+                kcalTarget = tdee * 1.1; // +10% Superávit
+                protPerKg = 2.0;
+            } else if (obj.includes('emagrecimento') || obj.includes('perda') || obj.includes('defini')) {
+                kcalTarget = tdee * 0.8; // -20% Déficit
+                protPerKg = 2.2; // Aumenta a proteína em restrição
+            } else {
+                kcalTarget = tdee; // Saúde / Manutenção
+                protPerKg = 1.8;
+            }
+
+            const kcal = Math.round(kcalTarget);
+            const prot = Math.round(peso * protPerKg);
+            const fat  = Math.round(peso * 1.0); // Gordura travada em 1g/kg
+            const carb = Math.max(20, Math.round((kcal - (prot * 4) - (fat * 9)) / 4));
+
             return { kcal, prot, carb, fat };
         })();
 
@@ -660,7 +694,7 @@ export async function POST(req: Request) {
 
         let raw: string; let modelUsed: string;
         switch (provider as Provider) {
-            case 'anthropic':   raw = await callAnthropic(prompt); modelUsed = 'claude-sonnet-4-6'; break;
+            case 'anthropic':   raw = await callAnthropic(prompt); modelUsed = 'claude-3-5-sonnet-20240620'; break;
             case 'google':      raw = await callGoogle(prompt);    modelUsed = 'gemini-2.5-pro';    break;
             case 'openai-mini': raw = await callOpenAI(prompt,'gpt-4o-mini'); modelUsed = 'gpt-4o-mini'; break;
             default:            raw = await callOpenAI(prompt,'gpt-4o');      modelUsed = 'gpt-4o';
