@@ -19,8 +19,9 @@ export async function GET(req: Request) {
         name: true, 
         currentXP: true, 
         plan: true,
-        nextCheckInDate: true, // 🔥 Crucial para a Home saber a data
-        disableCheckIn: true   // 🔥 Crucial para a Home saber se deve cobrar
+        nextCheckInDate: true, 
+        disableCheckIn: true,
+        anamnesePendente: true // 🔥 ADICIONE APENAS ESTA LINHA AQUI
       }
     });
 
