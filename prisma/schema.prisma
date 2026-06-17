@@ -85,7 +85,8 @@ model User {
   createdTemplates  WorkoutTemplate[]   @relation("CoachTemplates")
   createdNotices    Notice[]            @relation("CoachNotices")
   createdContents   Content[]           @relation("CoachContents")
-  createdCollections TemplateCollection[] @relation("CoachCollections") 
+  createdCollections TemplateCollection[] @relation("CoachCollections")
+  createdTechniques Technique[]         @relation("CoachTechniques") 
 
   // 🔥 NOVO: Matrizes do Laboratório de IA
   createdMotorTemplates MotorTemplate[] @relation("CoachMotorTemplates")
@@ -197,31 +198,37 @@ model Workout {
 }
 
 model WorkoutExercise {
-  id           String   @id @default(uuid())
-  workoutId    String
-  workout      Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  id                String     @id @default(uuid())
+  workoutId         String
+  workout           Workout    @relation(fields: [workoutId], references: [id], onDelete: Cascade)
   
   // Exercício Principal
-  exerciseId   String
-  exercise     Exercise @relation(fields: [exerciseId], references: [id])
+  exerciseId        String
+  exercise          Exercise   @relation(fields: [exerciseId], references: [id])
   
   // Exercício Substituto (Opcional - Legado)
-  substituteId String?
-  substitute   Exercise? @relation("SubstituteRelation", fields: [substituteId], references: [id])
+  substituteId      String?
+  substitute        Exercise?  @relation("SubstituteRelation", fields: [substituteId], references: [id])
 
   // 🔥 AQUI ESTÁ A COLUNA NOVA PARA OS MÚLTIPLOS SUBSTITUTOS 🔥
-  substitutes  String[] @default([])
+  substitutes       String[]   @default([])
 
-  restTime     Int      @default(60)
-  title        String?  
-  sets         Int      @default(3)
-  reps         String   @default("12") 
-  notes        String?  
-  technique    String?  
-  day          String   @default("A") 
-  order        Int      @default(0) 
+  restTime          Int        @default(60)
+  title             String?  
+  sets              Int        @default(3)
+  reps              String     @default("12") 
+  notes             String?  
+  
+  technique         String?    // (MANTÉM PARA RETROCOMPATIBILIDADE DOS TREINOS ANTIGOS)
+  
+  // 🔥 NOVO: ELO COM A TÉCNICA INTELIGENTE MULTI-STEPS 🔥
+  customTechniqueId String?
+  customTechnique   Technique? @relation(fields: [customTechniqueId], references: [id], onDelete: SetNull)
 
-  observation  String?  
+  day               String     @default("A") 
+  order             Int        @default(0) 
+
+  observation       String?  
 }
 
 model Anamnese {
@@ -841,4 +848,28 @@ model RunningLog {
   rpe              Int?     // 1 a 10
 
   createdAt   DateTime @default(now())
+}
+
+// 🔥 MÓDULO DE TÉCNICAS CUSTOMIZADAS E MULTI-STEPS 🔥
+model Technique {
+  id          String   @id @default(uuid())
+  name        String   // Ex: "Drop-Pause", "FST-7", "SST"
+  description String?  @db.Text
+  
+  // A Linha do Tempo da Técnica (Onde a mágica acontece)
+  // Ex: [{ type: "EXECUTION" }, { type: "DROP", drops: 2 }, { type: "REST_PAUSE", time: 20 }]
+  steps       Json     
+
+  // Permite que o sistema tenha técnicas "Globais" para todos, além das do próprio Coach
+  isGlobal    Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Isolamento do Coach
+  coachId     String?
+  coach       User?    @relation("CoachTechniques", fields: [coachId], references: [id], onDelete: Cascade)
+
+  // Relacionamento com as séries dos treinos
+  workoutExercises WorkoutExercise[]
 }
