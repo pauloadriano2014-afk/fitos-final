@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = (global as any).prisma || new PrismaClient();
 if (process.env.NODE_ENV === 'development') (global as any).prisma = prisma;
 
-// 🔥 Tratamento de CORS para evitar bloqueios no Chrome (Web)
+// 🔥 Tratamento de CORS GLOBAL
 export async function OPTIONS() {
   return NextResponse.json({}, {
     status: 200,
@@ -65,5 +65,52 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('[POST_TECHNIQUE_ERROR]', error);
     return NextResponse.json({ error: 'Erro interno ao criar a técnica.' }, { status: 500 });
+  }
+}
+
+// 🔥 PUT AGORA LÊ O ID DO CORPO DA REQUISIÇÃO
+export async function PUT(req: Request) {
+  try {
+    const body = await req.json();
+    const { id, name, description, steps } = body;
+
+    if (!id) {
+        return NextResponse.json({ error: 'ID da técnica é obrigatório.' }, { status: 400 });
+    }
+
+    const updatedTechnique = await prisma.technique.update({
+      where: { id },
+      data: {
+        name,
+        description,
+        steps,
+      }
+    });
+
+    return NextResponse.json(updatedTechnique, { status: 200 });
+  } catch (error) {
+    console.error('[PUT_TECHNIQUE_ERROR]', error);
+    return NextResponse.json({ error: 'Erro interno ao atualizar a técnica.' }, { status: 500 });
+  }
+}
+
+// 🔥 DELETE AGORA LÊ O ID DA URL BASE (?id=123)
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+        return NextResponse.json({ error: 'ID da técnica é obrigatório.' }, { status: 400 });
+    }
+
+    await prisma.technique.delete({
+      where: { id }
+    });
+
+    return NextResponse.json({ message: 'Técnica deletada com sucesso.' }, { status: 200 });
+  } catch (error) {
+    console.error('[DELETE_TECHNIQUE_ERROR]', error);
+    return NextResponse.json({ error: 'Erro interno ao deletar a técnica.' }, { status: 500 });
   }
 }
