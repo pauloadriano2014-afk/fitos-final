@@ -863,7 +863,8 @@ model Technique {
   
   // A Linha do Tempo da Técnica (Onde a mágica acontece)
   // Ex: [{ type: "EXECUTION" }, { type: "DROP", drops: 2 }, { type: "REST_PAUSE", time: 20 }]
-  steps       Json     
+  steps       Json
+  videoUrl    String?     
 
   // Permite que o sistema tenha técnicas "Globais" para todos, além das do próprio Coach
   isGlobal    Boolean  @default(false)
@@ -877,4 +878,12 @@ model Technique {
 
   // Relacionamento com as séries dos treinos
   workoutExercises WorkoutExercise[]
+}
+
+model SystemTechniqueVideo {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  videoUrl  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

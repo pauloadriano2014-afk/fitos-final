@@ -45,7 +45,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, description, steps, coachId, isGlobal } = body;
+    const { name, description, steps, coachId, isGlobal, videoUrl } = body; // 🔥 videoUrl adicionado
 
     if (!name || !steps || !coachId) {
       return NextResponse.json({ error: 'Nome, steps e coachId são obrigatórios.' }, { status: 400 });
@@ -58,6 +58,7 @@ export async function POST(req: Request) {
         steps,
         coachId,
         isGlobal: isGlobal || false,
+        videoUrl: videoUrl || null, // 🔥 videoUrl adicionado (opcional)
       }
     });
 
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { id, name, description, steps } = body;
+    const { id, name, description, steps, videoUrl } = body; // 🔥 videoUrl adicionado
 
     if (!id) {
         return NextResponse.json({ error: 'ID da técnica é obrigatório.' }, { status: 400 });
@@ -84,6 +85,7 @@ export async function PUT(req: Request) {
         name,
         description,
         steps,
+        videoUrl: videoUrl || null, // 🔥 videoUrl adicionado (opcional)
       }
     });
 
