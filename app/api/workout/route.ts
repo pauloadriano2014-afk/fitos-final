@@ -86,7 +86,15 @@ export async function GET(req: Request) {
     const workouts = await prisma.workout.findMany({
         where: { userId: userId },
         orderBy: { createdAt: 'desc' },
-        include: { exercises: { include: { exercise: true, substitute: true } } }
+        include: { 
+            exercises: { 
+                include: { exercise: true, substitute: true },
+                orderBy: { order: 'asc' } // 🔥 CORREÇÃO: preserva a ordem dos dias definida no admin (state.workoutTabs),
+                                          // que é a ordem em que o campo `order` foi gravado no salvarTreinoFinal.
+                                          // Sem isso, o Prisma retorna na ordem física da tabela, que pode divergir
+                                          // da ordem visual configurada, embaralhando os cards na TrainingScreen.
+            } 
+        }
     });
 
     // 🔥 TRADUÇÃO PARA A LISTA GERAL DE TREINOS 🔥
