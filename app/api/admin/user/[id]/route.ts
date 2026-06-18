@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// 👇 BUSCA DADOS CIRÚRGICOS DO ALUNO (USADO NO RAIO-X DO ADMIN)
+// 👇 BUSCA DADOS CIRÚRGICOS DO ALUNO (USADO NO RAIO-X DO ADMIN E NO MERGE DO useHomeData)
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const userId = params.id;
@@ -39,7 +39,13 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         contractType: true,
         contractValue: true,
         paymentDueDate: true,
+        isFinanceActive: true, // 🔥 ADICIONADO — necessário pro merge no useHomeData
         nextWorkoutUpdate: true,
+
+        // 🔥 SISTEMA DE "JÁ PAGUEI" (CLAIM DE PAGAMENTO) — ADICIONADO
+        paymentClaimedAt: true,
+        paymentClaimStatus: true,
+        paymentClaimCycleDueDate: true,
 
         // 🔥 CICLO MENSTRUAL
         isMenstruating: true,

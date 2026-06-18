@@ -37,6 +37,11 @@ model User {
   financeCategory   String?   @default("Consultoria Online") // 🔥 CATEGORIA INDEPENDENTE NO FINANCEIRO 🔥
   isFinanceActive   Boolean   @default(true)
 
+  // 🔥 SISTEMA DE "JÁ PAGUEI" (CLAIM DE PAGAMENTO PELO ALUNO) 🔥
+  paymentClaimedAt         DateTime? // Quando o aluno clicou em "Já paguei"
+  paymentClaimStatus       String?   // null | "PENDING" | "REJECTED"
+  paymentClaimCycleDueDate DateTime? // Snapshot do paymentDueDate no momento do claim (garante 1x por ciclo)
+
   // Dados Rápidos (Cache)
   currentWeight   Float? 
   

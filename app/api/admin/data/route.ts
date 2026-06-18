@@ -43,6 +43,13 @@ export async function GET(req: Request) {
         financeCategory: true,
         isFinanceActive: true,
 
+        // 🔥 SISTEMA DE "JÁ PAGUEI" (CLAIM DE PAGAMENTO) — ADICIONADO
+        // Necessário pro FinanceStudentList mostrar o badge
+        // "Pagamento a confirmar" e os botões de confirmar/recusar.
+        paymentClaimedAt: true,
+        paymentClaimStatus: true,
+        paymentClaimCycleDueDate: true,
+
         workouts: {
             where: { archived: false },
             orderBy: { createdAt: 'desc' }, 

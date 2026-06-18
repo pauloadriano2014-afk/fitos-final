@@ -21,7 +21,16 @@ export async function GET(req: Request) {
         plan: true,
         nextCheckInDate: true, 
         disableCheckIn: true,
-        anamnesePendente: true // 🔥 ADICIONE APENAS ESTA LINHA AQUI
+        anamnesePendente: true,
+
+        // 🔥 FINANCEIRO — necessário pro useHomeData calcular isFinanceLocked
+        paymentDueDate: true,
+        isFinanceActive: true,
+
+        // 🔥 SISTEMA DE "JÁ PAGUEI" (CLAIM DE PAGAMENTO)
+        paymentClaimedAt: true,
+        paymentClaimStatus: true,
+        paymentClaimCycleDueDate: true,
       }
     });
 
