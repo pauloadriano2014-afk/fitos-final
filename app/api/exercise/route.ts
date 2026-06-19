@@ -140,6 +140,10 @@ export async function POST(req: Request) {
         tags: tags, // O Prisma agora aceita o objeto JSON direto
         videoUrl: body.videoUrl || "",
         instructions: body.instructions || "Execução padrão FIT OS.",
+        howToExecute: body.howToExecute || null, // 🔥 NOVO
+        commonMistakes: body.commonMistakes || null, // 🔥 NOVO
+        maleFocus: body.maleFocus || null, // 🔥 NOVO
+        femaleFocus: body.femaleFocus || null, // 🔥 NOVO
         coachId: body.adminId || null,
         defaultSubstitutes: body.defaultSubstitutes || [] // 🔥 AQUI ESTÁ O QUE FALTAVA
       }
@@ -170,6 +174,10 @@ export async function PUT(req: Request) {
         tags: tags, // O Prisma agora aceita o objeto JSON direto
         videoUrl: body.videoUrl || "",
         instructions: body.instructions || "Execução padrão FIT OS.",
+        howToExecute: body.howToExecute || null, // 🔥 NOVO
+        commonMistakes: body.commonMistakes || null, // 🔥 NOVO
+        maleFocus: body.maleFocus || null, // 🔥 NOVO
+        femaleFocus: body.femaleFocus || null, // 🔥 NOVO
         defaultSubstitutes: body.defaultSubstitutes || [] // 🔥 AQUI ESTÁ O QUE FALTAVA
       }
     });

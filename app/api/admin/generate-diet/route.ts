@@ -635,7 +635,7 @@ async function callAnthropic(prompt: string): Promise<string> {
 
 async function callGoogle(prompt: string): Promise<string> {
     const model = googleAI.getGenerativeModel({
-        model: 'gemini-2.5-pro',
+        model: 'gemini-2.5-flash',
         generationConfig: { responseMimeType: "application/json" } as any,
     });
     const result = await model.generateContent({
@@ -701,7 +701,7 @@ export async function POST(req: Request) {
         let raw: string; let modelUsed: string;
         switch (provider as Provider) {
             case 'anthropic':   raw = await callAnthropic(prompt); modelUsed = 'claude-3-5-sonnet-20240620'; break;
-            case 'google':      raw = await callGoogle(prompt);    modelUsed = 'gemini-2.5-pro';    break;
+            case 'google':      raw = await callGoogle(prompt);    modelUsed = 'gemini-2.5-flash';    break;
             case 'openai-mini': raw = await callOpenAI(prompt,'gpt-4o-mini'); modelUsed = 'gpt-4o-mini'; break;
             default:            raw = await callOpenAI(prompt,'gpt-4o');      modelUsed = 'gpt-4o';
         }

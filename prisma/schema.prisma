@@ -153,6 +153,11 @@ model Exercise {
   name            String   
   category        String
   subCategory     String?  @default("Geral") 
+
+  howToExecute    String?  @db.Text
+  commonMistakes  String?  @db.Text
+  maleFocus       String?  @db.Text
+  femaleFocus     String?  @db.Text
   
   // 🔥 A NOVA COLUNA DE TAGS DE AMBIENTE 🔥
   environments    String[] @default(["ACADEMIA"])
