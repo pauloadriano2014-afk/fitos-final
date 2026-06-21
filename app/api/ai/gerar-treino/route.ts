@@ -402,7 +402,7 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
 
     if (selectedAI === 'GEMINI') {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }]
       });
@@ -427,11 +427,16 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 6000,
+        max_tokens: 8000,
         system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
+        messages: [
+          { role: 'user', content: userMessage },
+          { role: 'assistant', content: '{' }, // 🔥 Prefill: força a resposta a começar direto no JSON, sem markdown nem texto extra
+        ],
       });
-      rawText = response.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('');
+      const completion = response.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('');
+      // Como o assistant message começou com "{", precisamos recolocar na frente da resposta
+      rawText = '{' + completion;
     }
 
     // ─── 9. VALIDAR E ENRIQUECER ───
@@ -441,8 +446,10 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
     try {
       parsed = JSON.parse(cleanJson);
     } catch (e) {
-      console.error('[gerar-treino] JSON inválido:', cleanJson.substring(0, 600));
-      return NextResponse.json({ error: 'A IA retornou formato inválido. Tente novamente.' }, { status: 500 });
+      console.error(`[gerar-treino] JSON inválido (motor: ${selectedAI}). Tamanho da resposta: ${cleanJson.length} chars.`);
+      console.error('[gerar-treino] Primeiros 600 chars:', cleanJson.substring(0, 600));
+      console.error('[gerar-treino] Últimos 300 chars:', cleanJson.substring(Math.max(0, cleanJson.length - 300)));
+      return NextResponse.json({ error: `A IA (${selectedAI}) retornou formato inválido. Tente novamente ou troque de motor.` }, { status: 500 });
     }
 
     const validatedDays: Record<string, any[]> = {};
