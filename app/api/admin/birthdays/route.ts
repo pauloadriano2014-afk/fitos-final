@@ -9,17 +9,72 @@ export const revalidate = 0;
 
 const prisma = new PrismaClient();
 
+// Faz parse resiliente de birthDate em vários formatos possíveis:
+// "DD/MM/YYYY", "DD/MM", "YYYY-MM-DD" (ISO), ou data ISO completa
+function parseBirthDate(raw: string): { day: number; month: number } | null {
+    if (!raw || typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    // Formato "DD/MM/YYYY" ou "DD/MM"
+    if (trimmed.includes('/')) {
+        const parts = trimmed.split('/').map(p => p.trim());
+        if (parts.length >= 2) {
+            const day   = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1; // 0-indexed
+            if (!isNaN(day) && !isNaN(month) && day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+                return { day, month };
+            }
+        }
+        return null;
+    }
+
+    // Formato ISO "YYYY-MM-DD" ou data completa
+    if (trimmed.includes('-') || trimmed.includes('T')) {
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) {
+            return { day: d.getUTCDate(), month: d.getUTCMonth() };
+        }
+        return null;
+    }
+
+    // Formato "DDMMYYYY" ou "DDMM" sem separadores (ex: "27051987")
+    if (/^\d{8}$/.test(trimmed)) {
+        const day   = parseInt(trimmed.slice(0, 2), 10);
+        const month = parseInt(trimmed.slice(2, 4), 10) - 1;
+        if (!isNaN(day) && !isNaN(month) && day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+            return { day, month };
+        }
+        return null;
+    }
+    if (/^\d{4}$/.test(trimmed)) {
+        const day   = parseInt(trimmed.slice(0, 2), 10);
+        const month = parseInt(trimmed.slice(2, 4), 10) - 1;
+        if (!isNaN(day) && !isNaN(month) && day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+            return { day, month };
+        }
+        return null;
+    }
+
+    // Tenta como timestamp numérico bruto (alguns bancos salvam assim)
+    const asDate = new Date(trimmed);
+    if (!isNaN(asDate.getTime())) {
+        return { day: asDate.getUTCDate(), month: asDate.getUTCMonth() };
+    }
+
+    return null;
+}
+
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
-        const adminId  = searchParams.get('adminId');
-        const days     = parseInt(searchParams.get('days') || '7', 10);
+        const adminId = searchParams.get('adminId');
+        const days    = parseInt(searchParams.get('days') || '7', 10);
 
         if (!adminId) {
             return NextResponse.json({ error: 'adminId obrigatório.' }, { status: 400 });
         }
 
-        // Busca todos os alunos ativos do coach com birthDate preenchido
         const users = await prisma.user.findMany({
             where: {
                 coachId:   adminId,
@@ -43,24 +98,14 @@ export async function GET(req: Request) {
             .map(u => {
                 if (!u.birthDate) return null;
 
-                // birthDate pode ser string "DD/MM/YYYY" ou ISO
-                let day: number, month: number;
+                const parsed = parseBirthDate(u.birthDate);
+                if (!parsed) return null; // Ignora silenciosamente registros com data inválida/vazia
 
-                if (u.birthDate.includes('/')) {
-                    const parts = u.birthDate.split('/');
-                    day   = parseInt(parts[0], 10);
-                    month = parseInt(parts[1], 10) - 1; // 0-indexed
-                } else {
-                    const d = new Date(u.birthDate);
-                    day   = d.getUTCDate();
-                    month = d.getUTCMonth();
-                }
+                const { day, month } = parsed;
 
-                // Próximo aniversário este ano
                 let nextBirthday = new Date(today.getFullYear(), month, day);
                 nextBirthday.setHours(0, 0, 0, 0);
 
-                // Se já passou este ano, pega o do próximo ano
                 if (nextBirthday < today) {
                     nextBirthday = new Date(today.getFullYear() + 1, month, day);
                 }
@@ -77,13 +122,13 @@ export async function GET(req: Request) {
                     phone:     u.phone,
                     plan:      u.plan,
                     birthDate: u.birthDate,
-                    daysUntil: diffDays,        // 0 = hoje, 1 = amanhã, etc.
+                    daysUntil: diffDays,
                     day,
                     month: month + 1,
                 };
             })
-            .filter(Boolean)
-            .sort((a, b) => (a!.daysUntil - b!.daysUntil));
+            .filter((x): x is NonNullable<typeof x> => x !== null)
+            .sort((a, b) => a.daysUntil - b.daysUntil);
 
         return NextResponse.json(upcoming);
 
