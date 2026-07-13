@@ -135,7 +135,11 @@ model User {
   // 🔥 SISTEMA DE ALERTAS IA 🔥
   alertsAsStudent   StudentAlert[] @relation("UserAlerts")
   alertsAsCoach     StudentAlert[] @relation("CoachAlerts")
+
+  // 🔥 WHITE-LABEL E CUSTOMIZAÇÃO 🔥
+  brandLogoSize  Int?     @default(220) // 🔥 NOVO: Armazena o tamanho
 }
+
 
 // 🔥 TABELA EXCLUSIVA PARA ALUNOS DO FINANCEIRO (OFFLINE) 🔥
 model OfflineClient {
