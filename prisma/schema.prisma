@@ -16,6 +16,7 @@ model User {
   name            String?
   birthDate       String?
   phone           String?
+  cpf             String?
   gender          String?
   aiLogs          AiLog[]
   dailyCheckins   DailyCheckin[]
