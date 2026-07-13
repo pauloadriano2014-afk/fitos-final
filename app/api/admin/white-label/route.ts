@@ -7,7 +7,9 @@ const prisma = new PrismaClient();
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { coachId, brandColor, brandLogoUrl } = body;
+        
+        // 🔥 AGORA O BACKEND RECEBE O TAMANHO (brandLogoSize)
+        const { coachId, brandColor, brandLogoUrl, brandLogoSize } = body;
 
         if (!coachId) {
             return NextResponse.json({ error: 'ID do Coach é obrigatório' }, { status: 400 });
@@ -17,7 +19,8 @@ export async function POST(request: Request) {
             where: { id: coachId },
             data: {
                 brandColor: brandColor || 'verde',
-                brandLogoUrl: brandLogoUrl || null
+                brandLogoUrl: brandLogoUrl || null,
+                brandLogoSize: brandLogoSize || 220 // 🔥 SALVA O TAMANHO NO BANCO
             }
         });
 
