@@ -28,6 +28,17 @@ model User {
   plan            String   @default("PERFORMANCE") // FREE, ELITE, VIP
   active          Boolean  @default(true)
   
+  // 🔥 INTEGRAÇÃO ASAAS (PAGAMENTOS E ASSINATURAS DO SAAS) 🔥
+  asaasCustomerId     String?
+  asaasSubscriptionId String?
+
+  // 🔥 WHITE-LABEL E CUSTOMIZAÇÃO DO COACH 🔥
+  brandLogoUrl        String?
+  brandColor          String?
+
+  // 🔥 MODO "VISUALIZAR COMO ALUNO" 🔥
+  isTestAccount       Boolean  @default(false) // Identifica se é o aluno fantasma do coach
+  
   // 🔥 GESTÃO FINANCEIRA E CONTRATOS 🔥
   contractType      String?   @default("Mensal") // Mensal, Trimestral, Semestral, Anual, Projeto 90, Ficha 8S
   contractValue     Float?    @default(0.0)
