@@ -7,6 +7,12 @@ import OpenAI from 'openai';
 
 const prisma = new PrismaClient();
 
+// IDs que pertencem ao time Master (Você e a Adri)
+const MASTER_IDS = [
+  '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
+  'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
+];
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -15,6 +21,8 @@ export async function POST(req: NextRequest) {
     if (!userId || !adminId) {
       return NextResponse.json({ error: 'userId e adminId obrigatórios' }, { status: 400 });
     }
+
+    const isMasterCoach = MASTER_IDS.includes(adminId);
 
     // ─── 1. BUSCAR BANCO DO ADMIN ───
     const trainingEnv = cycleConfig?.trainingEnvironment || null;
@@ -64,11 +72,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Nenhum exercício encontrado para este admin.' }, { status: 404 });
     }
 
-    // Mapa completo por id
     const exerciseMap = new Map(adminExercises.map((ex) => [ex.id, ex]));
 
     // ─── 2. MONTAR MAPA DE VARIAÇÕES POR TARGET ───
-    // Para substitutos: só exercícios do mesmo ambiente
     const byTarget: Record<string, Array<{ id: string; name: string; equipment: string; mechanic: string }>> = {};
 
     adminExercises.forEach((ex) => {
@@ -191,8 +197,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── 6. PRÉ-CALCULAR SUBSTITUTOS VÁLIDOS POR EXERCÍCIO ───
-    // Mapeamos os defaultSubstitutes já filtrados pelo ambiente
-    // Isso garante que a IA só receba substitutos válidos para o ambiente escolhido
     const substitutesByExercise: Record<string, Array<{ id: string; name: string }>> = {};
 
     adminExercises.forEach((ex) => {
@@ -295,7 +299,6 @@ ALUNO: ${user.name || 'Não informado'}
       ? `\nHISTÓRICO (mais recente primeiro):\n${JSON.stringify(previousWorkouts, null, 2)}`
       : '\nSem treinos anteriores — crie rotina do zero.';
 
-    // Banco enriquecido com substitutos pré-calculados
     const bankForPrompt = adminExercises.map(ex => {
       const tags = ex.tags as any;
       return {
@@ -307,7 +310,6 @@ ALUNO: ${user.name || 'Não informado'}
         equipment: tags?.equipment || '',
         mechanic: tags?.mechanic || '',
         jointRisk: tags?.jointRisk || [],
-        // 🔥 Substitutos pré-filtrados pelo ambiente — a IA SÓ pode usar esses
         suggestedSubstitutes: substitutesByExercise[ex.id] || [],
       };
     });
@@ -394,15 +396,62 @@ ${JSON.stringify(bankForPrompt)}
 
 Gere a rotina. Responda APENAS com o JSON.`.trim();
 
-    // ─── 8. ROTEAMENTO DE IA ───
-    const selectedAI = cycleConfig?.selectedAI || 'GEMINI';
+    // ─── 8. ROTEAMENTO E TRAVA DE CUSTOS DE IA ───
+    let selectedAI = cycleConfig?.selectedAI || 'GEMINI_FLASH';
+    
+    // 🔥 TRAVA DE SEGURANÇA: Impede que terceiros usem modelos caros da plataforma
+    if (!isMasterCoach && ['GEMINI', 'GPT', 'CLAUDE'].includes(selectedAI)) {
+      selectedAI = 'GEMINI_FLASH'; // Força o fallback para o modelo mais barato
+    }
+
     let rawText = '';
+    console.log(`[gerar-treino] Admin: ${adminId} | Modelo Resolvido: ${selectedAI} | Ambiente: ${trainingEnv || 'UNIVERSAL'}`);
 
-    console.log(`[gerar-treino] Modelo: ${selectedAI} | Ambiente: ${trainingEnv || 'UNIVERSAL'}`);
+    // EXECUTORES
+    if (selectedAI === 'OWN_KEY') {
+      const customKey = cycleConfig?.customKey;
+      if (!customKey || !customKey.startsWith('sk-')) {
+        return NextResponse.json({ error: 'Chave OpenAI inválida ou não fornecida. Volte, preencha a chave ou escolha a IA grátis.' }, { status: 400 });
+      }
+      // Instancia a OpenAI COM O CARTÃO DO TREINADOR PARCEIRO
+      const openai = new OpenAI({ apiKey: customKey });
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.7,
+        max_tokens: 16000,
+        response_format: { type: 'json_object' },
+      });
+      rawText = response.choices[0].message.content || '';
 
-    if (selectedAI === 'GEMINI') {
+    } else if (selectedAI === 'GPT_MINI') {
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.7,
+        max_tokens: 16000,
+        response_format: { type: 'json_object' },
+      });
+      rawText = response.choices[0].message.content || '';
+
+    } else if (selectedAI === 'GEMINI_FLASH') {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }]
+      });
+      rawText = result.response.text();
+
+    } else if (selectedAI === 'GEMINI') {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }]
       });
@@ -422,20 +471,18 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
       });
       rawText = response.choices[0].message.content || '';
 
-    } else {
-      // Claude Sonnet — qualidade próxima ao Opus, custo ~10x menor
+    } else if (selectedAI === 'CLAUDE') {
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-3-5-sonnet-20241022',
         max_tokens: 8000,
         system: systemPrompt,
         messages: [
           { role: 'user', content: userMessage },
-          { role: 'assistant', content: '{' }, // 🔥 Prefill: força a resposta a começar direto no JSON, sem markdown nem texto extra
+          { role: 'assistant', content: '{' },
         ],
       });
       const completion = response.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('');
-      // Como o assistant message começou com "{", precisamos recolocar na frente da resposta
       rawText = '{' + completion;
     }
 
@@ -447,9 +494,7 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
       parsed = JSON.parse(cleanJson);
     } catch (e) {
       console.error(`[gerar-treino] JSON inválido (motor: ${selectedAI}). Tamanho da resposta: ${cleanJson.length} chars.`);
-      console.error('[gerar-treino] Primeiros 600 chars:', cleanJson.substring(0, 600));
-      console.error('[gerar-treino] Últimos 300 chars:', cleanJson.substring(Math.max(0, cleanJson.length - 300)));
-      return NextResponse.json({ error: `A IA (${selectedAI}) retornou formato inválido. Tente novamente ou troque de motor.` }, { status: 500 });
+      return NextResponse.json({ error: `A IA (${selectedAI}) retornou um formato inválido. Tente novamente ou use outra IA.` }, { status: 500 });
     }
 
     const validatedDays: Record<string, any[]> = {};
@@ -465,19 +510,16 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
         .map((ex) => {
           const dbEx = exerciseMap.get(ex.exerciseId)!;
 
-          // 🔥 Substituto: priorizar defaultSubstitutes pré-filtrados pelo ambiente
           let substitute = null;
           const preCalculatedSubs = substitutesByExercise[ex.exerciseId];
 
           if (preCalculatedSubs && preCalculatedSubs.length > 0) {
-            // Usar o primeiro substituto pré-calculado (já filtrado pelo ambiente)
             const bestSub = preCalculatedSubs[0];
             const dbSub = exerciseMap.get(bestSub.id);
             if (dbSub) {
               substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' };
             }
           } else if (ex.substitute?.exerciseId && exerciseMap.has(ex.substitute.exerciseId)) {
-            // Fallback: substituto sugerido pela IA (validado no banco)
             const dbSub = exerciseMap.get(ex.substitute.exerciseId)!;
             substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' };
           }
@@ -537,6 +579,6 @@ Gere a rotina. Responda APENAS com o JSON.`.trim();
 
   } catch (error: any) {
     console.error('[gerar-treino] erro:', error);
-    return NextResponse.json({ error: error.message || 'Erro interno' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Erro interno no servidor' }, { status: 500 });
   }
 }
