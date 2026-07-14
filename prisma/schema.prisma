@@ -1004,7 +1004,11 @@ model SalesPageConfig {
   pageTitle       String?  @default("Minha Consultoria")
   aboutText       String?  @db.Text
   videoUrl        String?  // Link de um vídeo pitch (YouTube, Vimeo)
+  coachPhotoUrl   String?  // 🔥 NOVO: Foto de perfil para autoridade
   galleryPhotos   String[] @default([]) // Array de URLs (Antes e Depois)
+
+  themeColor      String?  @default("#4DE38F") // Cor principal da página
+  appFeatures     String[] @default([]) // Funcionalidades que ele quer mostrar
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
