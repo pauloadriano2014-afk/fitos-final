@@ -6,6 +6,11 @@ import { sendNotificationToAll } from '../../utils/sendNotification';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
+const MASTER_IDS = [
+    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
+    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
+];
+
 // 1. GET: Busca os conteúdos blindados
 export async function GET(request: Request) {
   try {
@@ -13,7 +18,6 @@ export async function GET(request: Request) {
     const userId = searchParams.get('userId'); // Se for Aluno pedindo
     const adminId = searchParams.get('adminId'); // Se for o Painel Admin pedindo
     const format = searchParams.get('format'); 
-    const isGlobal = searchParams.get('global') === 'true'; // 🔥 LÊ A FLAG GLOBAL DO APP
 
     // 🔥 INTELIGÊNCIA DE ROTEAMENTO: Descobre de qual Coach puxar o conteúdo
     let targetCoachId = null;
@@ -25,10 +29,26 @@ export async function GET(request: Request) {
         if (user && user.coachId) targetCoachId = user.coachId;
     }
 
-    // 🔥 O SEGREDO DO SUCESSO AQUI:
-    // Se isGlobal for true (pedido da aba do aluno), ignoramos o filtro de coachId e trazemos a biblioteca inteira da consultoria.
-    // O bloqueio VIP (as chavinhas) fará o trabalho de trancar o que for pago lá no frontend.
-    const whereClause = (targetCoachId && !isGlobal) ? { coachId: targetCoachId } : {};
+    // 🔥 ISOLAMENTO TOTAL (A MURALHA BIDIRECIONAL):
+    const isMaster = MASTER_IDS.includes(targetCoachId || '');
+    
+    let whereClause: any = {};
+
+    if (isMaster) {
+        // Paulo e Adri veem APENAS o conteúdo deles ou o conteúdo global (null)
+        whereClause = {
+            OR: [
+                { coachId: null },
+                { coachId: { in: MASTER_IDS } }
+            ]
+        };
+    } else if (targetCoachId) {
+        // Coach parceiro vê APENAS o conteúdo que ele próprio adicionou
+        whereClause = { coachId: targetCoachId };
+    } else {
+        // Fallback de segurança: bloqueia acesso se não identificar dono
+        whereClause = { coachId: 'BLOQUEIO_DE_SEGURANCA' };
+    }
 
     const allContent = await prisma.content.findMany({
       where: whereClause,
@@ -102,7 +122,7 @@ export async function POST(request: Request) {
         thumbUrl: thumbUrl || null,
         duration: duration || null,
         description: description || "",
-        coachId: adminId || null // 🔥 CARIMBA A ETIQUETA DO DONO (Paulo ou Adri)
+        coachId: adminId || null // 🔥 CARIMBA A ETIQUETA DO DONO (Paulo, Adri ou Parceiro)
       }
     });
 
