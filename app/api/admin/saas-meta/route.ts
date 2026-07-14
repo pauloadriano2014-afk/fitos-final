@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma'; // Confirme se o caminho do seu prisma é esse
+import prisma from '@/lib/prisma'; 
 
 export async function GET(req: Request) {
     try {
@@ -13,8 +13,18 @@ export async function GET(req: Request) {
             where: { coachId, isActive: true },
             orderBy: { value: 'asc' }
         });
+        
+        // 🔥 BUSCA A LOGO DO COACH NA TABELA USER
+        const coachUser = await prisma.user.findUnique({ 
+            where: { id: coachId }, 
+            select: { brandLogoUrl: true } 
+        });
 
-        return NextResponse.json({ config, plans });
+        return NextResponse.json({ 
+            config, 
+            plans, 
+            brandLogoUrl: coachUser?.brandLogoUrl // Envia a logo pro front!
+        });
     } catch (error) {
         console.error("Erro ao buscar SaaS meta:", error);
         return NextResponse.json({ error: "Erro interno" }, { status: 500 });

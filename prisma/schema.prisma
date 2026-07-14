@@ -1007,6 +1007,11 @@ model SalesPageConfig {
   coachPhotoUrl   String?  // 🔥 NOVO: Foto de perfil para autoridade
   galleryPhotos   String[] @default([]) // Array de URLs (Antes e Depois)
 
+// 🔥 NOVOS CAMPOS PARA TEXTOS E DEPOIMENTOS:
+  galleryTexts      String[] @default([]) // A historinha do antes e depois
+  testimonialNames  String[] @default([]) // Nome do aluno do depoimento
+  testimonialTexts  String[] @default([]) // O texto do depoimento
+  
   themeColor      String?  @default("#4DE38F") // Cor principal da página
   appFeatures     String[] @default([]) // Funcionalidades que ele quer mostrar
   

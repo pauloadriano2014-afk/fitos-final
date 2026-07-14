@@ -4,31 +4,31 @@ import prisma from '@/lib/prisma';
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        // 🔥 INCLUA O coachPhotoUrl AQUI:
-        const { coachId, pageTitle, aboutText, videoUrl, themeColor, appFeatures, galleryPhotos, coachPhotoUrl } = body;
+        const { 
+            coachId, pageTitle, aboutText, videoUrl, themeColor, 
+            appFeatures, galleryPhotos, coachPhotoUrl,
+            galleryTexts, testimonialNames, testimonialTexts // 🔥 NOVOS
+        } = body;
         
         if (!coachId) return NextResponse.json({ error: "coachId obrigatório" }, { status: 400 });
 
         const updatedConfig = await prisma.salesPageConfig.upsert({
             where: { coachId },
             update: { 
-                pageTitle, 
-                aboutText, 
-                videoUrl,
-                coachPhotoUrl, // 🔥 ATUALIZA AQUI
-                themeColor,
+                pageTitle, aboutText, videoUrl, coachPhotoUrl, themeColor,
                 appFeatures: appFeatures || [],
-                galleryPhotos: galleryPhotos || []
+                galleryPhotos: galleryPhotos || [],
+                galleryTexts: galleryTexts || [],
+                testimonialNames: testimonialNames || [],
+                testimonialTexts: testimonialTexts || []
             },
             create: { 
-                coachId, 
-                pageTitle, 
-                aboutText, 
-                videoUrl,
-                coachPhotoUrl, // 🔥 CRIA AQUI
-                themeColor,
+                coachId, pageTitle, aboutText, videoUrl, coachPhotoUrl, themeColor,
                 appFeatures: appFeatures || [],
-                galleryPhotos: galleryPhotos || []
+                galleryPhotos: galleryPhotos || [],
+                galleryTexts: galleryTexts || [],
+                testimonialNames: testimonialNames || [],
+                testimonialTexts: testimonialTexts || []
             }
         });
 
