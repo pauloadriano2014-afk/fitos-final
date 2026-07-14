@@ -10,24 +10,27 @@ datasource db {
 }
 
 model User {
-  id              String   @id @default(uuid())
-  email           String   @unique
-  password        String
-  name            String?
-  birthDate       String?
-  phone           String?
-  cpf             String?
-  gender          String?
-  aiLogs          AiLog[]
-  dailyCheckins   DailyCheckin[]
-  dietFeedbacks   DietFeedback[]
-  npsRequested    Boolean  @default(false) // Gatilho manual para disparar o NPS
+  id                String   @id @default(uuid())
+  email             String   @unique
+  password          String
+  name              String?
+  birthDate         String?
+  phone             String?
+  cpf               String?
+  gender            String?
+  aiLogs            AiLog[]
+  dailyCheckins     DailyCheckin[]
+  dietFeedbacks     DietFeedback[]
+  npsRequested      Boolean  @default(false) // Gatilho manual para disparar o NPS
+  accountStatus    String  @default("ACTIVE") // ACTIVE, PENDING_APPROVAL, REJECTED
+  inviteCode       String? @unique
+  coachRequestInfo Json?
   
   // Controle de Acesso e Planos
-  plan_tier       String   @default("standard")
-  role            String   @default("USER") // ADMIN, USER ou COACH
-  plan            String   @default("PERFORMANCE") // FREE, ELITE, VIP
-  active          Boolean  @default(true)
+  plan_tier         String   @default("standard")
+  role              String   @default("USER") // ADMIN, USER ou COACH
+  plan              String   @default("PERFORMANCE") // FREE, ELITE, VIP
+  active            Boolean  @default(true)
   
   // 🔥 INTEGRAÇÃO ASAAS (PAGAMENTOS E ASSINATURAS DO SAAS) 🔥
   asaasCustomerId     String?
@@ -132,17 +135,24 @@ model User {
   contentLikes      ContentLike[]
   contentComments   ContentComment[]
   contentCompletions ContentCompletion[] 
-  unlockedContents  ContentAccess[]      
+  unlockedContents  ContentAccess[]     
 
   // Relacionamento de Pesquisas de Satisfação
   surveys           SatisfactionSurvey[]
+
+  resetToken       String?
+  resetTokenExpiry DateTime?
 
   // 🔥 SISTEMA DE ALERTAS IA 🔥
   alertsAsStudent   StudentAlert[] @relation("UserAlerts")
   alertsAsCoach     StudentAlert[] @relation("CoachAlerts")
 
   // 🔥 WHITE-LABEL E CUSTOMIZAÇÃO 🔥
-  brandLogoSize  Int?     @default(220) // 🔥 NOVO: Armazena o tamanho
+  brandLogoSize  Int?     @default(220) // 🔥 Mantido aqui, sem duplicar no final
+
+  // 🔥 NOVO: SAAS WHITE-LABEL - PÁGINAS DE VENDAS E PLANOS CUSTOMIZADOS 🔥
+  salesPageConfig   SalesPageConfig?
+  coachPlans        CoachPlan[]         @relation("CoachPlans")
 }
 
 
@@ -982,4 +992,39 @@ model Payment {
   @@index([userId])
   @@index([coachId])
   @@index([asaasPaymentId])
+}
+
+// 🔥 NOVO: PÁGINA DE VENDAS DO COACH 🔥
+model SalesPageConfig {
+  id              String   @id @default(uuid())
+  
+  coachId         String   @unique
+  coach           User     @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  
+  pageTitle       String?  @default("Minha Consultoria")
+  aboutText       String?  @db.Text
+  videoUrl        String?  // Link de um vídeo pitch (YouTube, Vimeo)
+  galleryPhotos   String[] @default([]) // Array de URLs (Antes e Depois)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// 🔥 NOVO: PLANOS CUSTOMIZADOS DO COACH 🔥
+model CoachPlan {
+  id               String   @id @default(uuid())
+  
+  coachId          String
+  coach            User     @relation("CoachPlans", fields: [coachId], references: [id], onDelete: Cascade)
+  
+  name             String   // Ex: "Projeto Verão 90 Dias"
+  description      String?  @db.Text
+  value            Float    // Valor original
+  promotionalValue Float?   // Se preenchido, é o valor com desconto
+  durationInMonths Int      @default(1) // 1 = Mensal, 3 = Trimestral, etc
+  isActive         Boolean  @default(true)
+  isPromoActive    Boolean  @default(false)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
