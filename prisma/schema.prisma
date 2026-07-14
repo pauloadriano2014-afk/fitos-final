@@ -1012,6 +1012,10 @@ model SalesPageConfig {
   testimonialNames  String[] @default([]) // Nome do aluno do depoimento
   testimonialTexts  String[] @default([]) // O texto do depoimento
 
+  // 🔥 NOVOS CAMPOS: Configuração do PIX
+  pixKey            String?
+  pixName           String?
+
   themeColor      String?  @default("#4DE38F") // Cor principal da página
   appFeatures     String[] @default([]) // Funcionalidades que ele quer mostrar
   
@@ -1032,6 +1036,9 @@ model CoachPlan {
   promotionalValue Float?   // Se preenchido, é o valor com desconto
   durationInMonths Int      @default(1) // 1 = Mensal, 3 = Trimestral, etc
   discountPerc     Int      @default(0)
+
+  // 🔥 NOVO CAMPO: Link de Checkout externo
+  paymentUrl       String?
   isActive         Boolean  @default(true)
   isPromoActive    Boolean  @default(false)
   

@@ -1,39 +1,33 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
-// CRIA OU ATUALIZA O PLANO
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { coachId, planId, name, value, durationInMonths, discountPerc } = body;
+        // 🔥 INCLUA paymentUrl AQUI:
+        const { coachId, planId, name, value, durationInMonths, discountPerc, paymentUrl } = body;
         
-        if (!coachId || !name || value === undefined) {
-            return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
-        }
+        if (!coachId || !name || value === undefined) return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
 
         const parsedValue = parseFloat(value);
         const parsedMonths = parseInt(durationInMonths) || 1;
         const parsedDiscount = parseInt(discountPerc) || 0;
 
         if (planId) {
-            // Se mandou planId, é EDIÇÃO
             const updatedPlan = await prisma.coachPlan.update({
                 where: { id: planId },
-                data: { name, value: parsedValue, durationInMonths: parsedMonths, discountPerc: parsedDiscount }
+                data: { name, value: parsedValue, durationInMonths: parsedMonths, discountPerc: parsedDiscount, paymentUrl }
             });
             return NextResponse.json({ success: true, plan: updatedPlan });
         } else {
-            // Se NÃO mandou planId, é CRIAÇÃO NOVA
             const newPlan = await prisma.coachPlan.create({
-                data: { coachId, name, value: parsedValue, durationInMonths: parsedMonths, discountPerc: parsedDiscount }
+                data: { coachId, name, value: parsedValue, durationInMonths: parsedMonths, discountPerc: parsedDiscount, paymentUrl }
             });
             return NextResponse.json({ success: true, plan: newPlan });
         }
-    } catch (error) {
-        console.error("Erro ao salvar plano:", error);
-        return NextResponse.json({ error: "Erro interno" }, { status: 500 });
-    }
+    } catch (error) { return NextResponse.json({ error: "Erro interno" }, { status: 500 }); }
 }
+// Mantenha o seu DELETE() intacto embaixo...
 
 // DELETA O PLANO
 export async function DELETE(req: Request) {
