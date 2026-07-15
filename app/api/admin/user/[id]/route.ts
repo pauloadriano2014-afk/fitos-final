@@ -63,6 +63,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         goal: true,
         level: true,
 
+        // 🔑 CÓDIGO DE CONVITE DO COACH (usado no AdminInviteModal para
+        // montar o link /registro?coach=... — sem isso o front recebia
+        // undefined mesmo com o valor preenchido no banco)
+        inviteCode: true,
+        accountStatus: true,
+
         // 🔥 GESTÃO FINANCEIRA E CONTRATOS
         contractType: true,
         contractValue: true,
