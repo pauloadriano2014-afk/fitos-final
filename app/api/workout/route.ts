@@ -7,13 +7,40 @@ const prisma = new PrismaClient();
 const expo = new Expo();
 export const dynamic = 'force-dynamic';
 
+// 🔥 IDs MASTER PARA BLINDAGEM DA TELA DE TREINOS
+const MASTER_IDS = [
+    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
+    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
+];
+
+// 🔥 FUNÇÃO DE MURALHA: Verifica se o Coach é dono deste Aluno
+async function checkUserOwnership(userId: string, adminId: string | null) {
+    if (!adminId) return false; 
+    if (MASTER_IDS.includes(adminId)) return true; // Master tem passe livre
+    
+    const targetUser = await prisma.user.findUnique({ 
+        where: { id: userId }, 
+        select: { coachId: true, nutritionistId: true } 
+    });
+    
+    if (!targetUser) return false;
+    return targetUser.coachId === adminId || targetUser.nutritionistId === adminId;
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     const workoutId = searchParams.get('workoutId'); 
+    const adminId = searchParams.get('adminId'); // 🔥 Pega quem está pedindo (Painel Admin)
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
+
+    // 🔥 BLOQUEIO DE SEGURANÇA (MURALHA): Se a requisição vier do painel admin, checa a posse
+    if (adminId) {
+        const isOwner = await checkUserOwnership(userId, adminId);
+        if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Aluno não pertence a você." }, { status: 403 });
+    }
 
     // 🔥 O SEGREDO ESTÁ AQUI: Buscamos o dicionário de exercícios para traduzir as IDs em Nomes 🔥
     const allExercises = await prisma.exercise.findMany({
@@ -77,7 +104,7 @@ export async function GET(req: Request) {
 
         return NextResponse.json({ 
             ...workout, 
-            exercises: populatedExercises, // 🔥 Enviamos os exercícios já traduzidos!
+            exercises: populatedExercises, 
             lastWeights: lastWeightsMap,
             lastLog: calculatedLastLog 
         });
@@ -89,10 +116,7 @@ export async function GET(req: Request) {
         include: { 
             exercises: { 
                 include: { exercise: true, substitute: true },
-                orderBy: { order: 'asc' } // 🔥 CORREÇÃO: preserva a ordem dos dias definida no admin (state.workoutTabs),
-                                          // que é a ordem em que o campo `order` foi gravado no salvarTreinoFinal.
-                                          // Sem isso, o Prisma retorna na ordem física da tabela, que pode divergir
-                                          // da ordem visual configurada, embaralhando os cards na TrainingScreen.
+                orderBy: { order: 'asc' } 
             } 
         }
     });
@@ -124,7 +148,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     
-    // Se a requisição vier do Setup Automático
+    // Se a requisição vier do Setup Automático (App do Aluno)
     if (body.gender && body.goal && body.focus) {
         const { userId, gender, goal, focus, level } = body;
 
@@ -142,28 +166,29 @@ export async function POST(req: Request) {
         });
 
         // 2. Cria um Treino de Boas-Vindas (Coringa)
-        // Isso permite que o aluno entre no app e você veja no Admin que ele já escolheu o foco.
         const workout = await prisma.workout.create({
             data: {
                 userId,
                 name: `PROTOCOLO: ${focus.toUpperCase()}`,
                 goal: goal,
                 level: level,
-                workoutModel: "CARGA", // Garantia do modelo
+                workoutModel: "CARGA", 
                 startDate: new Date(),
                 isVisible: true
             }
         });
 
-        // NOTA PARA O COACH: Aqui nós vamos conectar os seus WorkoutTemplates reais em breve.
-        // Por enquanto, ele cria apenas o cabeçalho do treino para liberar o acesso ao app.
-
         return NextResponse.json({ success: true, workoutId: workout.id });
     }
 
-    // Lógica original de criação manual do Admin (Mantida Intocada)
-    // 🔥 ADICIONADO A CHAVE DE CARGA E INTENSIDADE
-    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel, intensityMultiplier, intensityEndDate } = body;
+    // Lógica original de criação manual do Admin
+    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel, intensityMultiplier, intensityEndDate, adminId } = body;
+
+    // 🔥 BLOQUEIO DE SEGURANÇA NA CRIAÇÃO (Painel Admin)
+    if (adminId) {
+        const isOwner = await checkUserOwnership(userId, adminId);
+        if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Aluno não pertence a você." }, { status: 403 });
+    }
 
     if (archiveCurrent) {
         await prisma.workout.updateMany({
@@ -176,12 +201,9 @@ export async function POST(req: Request) {
       data: { 
           userId, 
           name: name || "Planejamento Atual",
-          workoutModel: workoutModel || "CARGA", // 🔥 INJETANDO NO BANCO DE DADOS
-          
-          // 🔥 MOTOR DE PERIODIZAÇÃO INJETADO AQUI 🔥
+          workoutModel: workoutModel || "CARGA", 
           intensityMultiplier: intensityMultiplier !== undefined ? parseFloat(intensityMultiplier) : 1.0,
           intensityEndDate: intensityEndDate ? new Date(intensityEndDate) : null,
-
           level: "Personalizado",
           startDate: startDate ? new Date(startDate) : new Date(),
           endDate: endDate ? new Date(endDate) : null
@@ -207,7 +229,6 @@ export async function POST(req: Request) {
       const exercisesToCreate = exercises
         .filter((ex: any) => validIds.includes(ex.exerciseId)) 
         .map((ex: any, index: number) => {
-            // Valida quais substitutos do array realmente existem no banco
             const validSubstitutes = Array.isArray(ex.substitutes) 
                 ? ex.substitutes.filter((id: string) => validIds.includes(id)) 
                 : [];
@@ -222,9 +243,7 @@ export async function POST(req: Request) {
                 technique: ex.technique || "",
                 order: index, 
                 observation: ex.observation || "",
-                // Mantemos o legado para não quebrar treinos antigos
                 substituteId: (ex.substituteId && validIds.includes(ex.substituteId)) ? ex.substituteId : null,
-                // 🔥 O NOVO ARRAY ENTRA AQUI 🔥
                 substitutes: validSubstitutes 
             };
         });
@@ -247,8 +266,18 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const body = await req.json();
-    const { id, archived } = body;
+    const { id, archived, adminId } = body;
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+
+    // 🔥 BLOQUEIO DE SEGURANÇA NO ARQUIVAMENTO
+    if (adminId) {
+        const workoutTarget = await prisma.workout.findUnique({ where: { id }, select: { userId: true } });
+        if (workoutTarget) {
+            const isOwner = await checkUserOwnership(workoutTarget.userId, adminId);
+            if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Treino não pertence ao seu aluno." }, { status: 403 });
+        }
+    }
+
     const updated = await prisma.workout.update({ where: { id }, data: { archived } });
     return NextResponse.json({ success: true, updated });
   } catch (error: any) {
@@ -256,15 +285,21 @@ export async function PATCH(req: Request) {
   }
 }
 
-// 🔥 A ROTA PUT DEVE SEGUIR A MESMA LÓGICA DA POST 🔥
-// Na sua API original, a rota PUT estava apenas atualizando o status 'archived'.
-// Como o React Native envia PUT na edição do treino (em `app/api/workout/[id]/route.ts`),
-// Se for atualizar o treino por aqui também, o PUT deve deletar e recriar os exercícios (como faz na criação).
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { id, archived } = body;
+    const { id, archived, adminId } = body;
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+
+    // 🔥 BLOQUEIO DE SEGURANÇA NA ATUALIZAÇÃO
+    if (adminId) {
+        const workoutTarget = await prisma.workout.findUnique({ where: { id }, select: { userId: true } });
+        if (workoutTarget) {
+            const isOwner = await checkUserOwnership(workoutTarget.userId, adminId);
+            if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Treino não pertence ao seu aluno." }, { status: 403 });
+        }
+    }
+
     const updated = await prisma.workout.update({ where: { id }, data: { archived } });
     return NextResponse.json({ success: true, updated });
   } catch (error: any) {

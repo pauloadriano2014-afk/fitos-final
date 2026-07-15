@@ -1,8 +1,8 @@
 // app/api/admin/data/route.ts
-// 🔒 COM ISOLAMENTO MULTI-TENANT:
-//   - MASTER (Paulo/Adri, role ADMIN): vê tudo (comportamento original, toggle PAULO/ADRI funciona)
-//   - COACH (role COACH): vê APENAS os alunos amarrados a ele (coachId ou nutritionistId),
-//     apenas os logs dos alunos dele, e a biblioteca de exercícios dele + a do master (herança)
+// 🔒 COM ISOLAMENTO MULTI-TENANT (MURALHA BIDIRECIONAL ABSOLUTA):
+//   - MASTER (Paulo/Adri): vê APENAS os seus próprios alunos ou alunos globais (sem coach).
+//   - COACH (Parceiro): vê APENAS os alunos amarrados a ele (coachId ou nutritionistId).
+//   - BIBLIOTECA DE EXERCÍCIOS: Parceiros herdam a base do Master para não recadastrar exercícios do zero.
 
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
@@ -11,6 +11,12 @@ const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 const ADRI_EMAIL = 'adri.personal@hotmail.com';
+
+// 🔥 IDs MASTER PARA BLINDAGEM DO DASHBOARD
+const MASTER_IDS = [
+    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
+    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
+];
 
 export async function GET(req: Request) {
   try {
@@ -36,7 +42,7 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "Conta aguardando aprovação" }, { status: 403 });
     }
 
-    const isMasterAdmin = requester.role === 'ADMIN';
+    const isMasterAdmin = MASTER_IDS.includes(adminId);
 
     const querySelect: any = {
         id: true,
@@ -92,16 +98,26 @@ export async function GET(req: Request) {
         }
     };
 
-    // 🔒 2. FILTRO DE ALUNOS POR PAPEL
-    // Master: todos (comportamento original). Coach: só os alunos DELE.
-    const userWhere: any = isMasterAdmin
-        ? undefined
-        : {
+    // 🔒 2. FILTRO DE ALUNOS POR PAPEL (A MURALHA)
+    let userWhere: any = {};
+    
+    if (isMasterAdmin) {
+        // Master não vê aluno de Coach Parceiro. Vê apenas os seus e os sem dono.
+        userWhere = {
+            OR: [
+                { coachId: null },
+                { coachId: { in: MASTER_IDS } }
+            ]
+        };
+    } else {
+        // Parceiro vê apenas os seus
+        userWhere = {
             OR: [
                 { coachId: adminId },
                 { nutritionistId: adminId },
-            ],
-          };
+            ]
+        };
+    }
 
     const rawUsers = await prisma.user.findMany({
       where: userWhere,
@@ -110,6 +126,7 @@ export async function GET(req: Request) {
     });
 
     const finalUsers = rawUsers.filter((u: any) => 
+        !MASTER_IDS.includes(u.id) && 
         u.id !== adminId && 
         u.role !== 'ADMIN' && 
         u.role !== 'COACH' &&
@@ -119,20 +136,37 @@ export async function GET(req: Request) {
     const activeUsers = finalUsers.filter((u: any) => u.active !== false);
     const inactiveUsers = finalUsers.filter((u: any) => u.active === false);
 
-    // 🔒 3. FEED DE ATIVIDADES: coach só vê logs dos alunos dele
+    // 🔒 3. FEED DE ATIVIDADES: muralha aplicada aos logs
+    let logsWhere: any = {};
+    if (isMasterAdmin) {
+        logsWhere = {
+            user: {
+                OR: [
+                    { coachId: null },
+                    { coachId: { in: MASTER_IDS } }
+                ]
+            }
+        };
+    } else {
+        logsWhere = {
+            user: {
+                OR: [
+                    { coachId: adminId },
+                    { nutritionistId: adminId }
+                ]
+            }
+        };
+    }
+
     const recentLogs = await prisma.workoutHistory.findMany({
-      where: isMasterAdmin
-          ? undefined
-          : { user: { OR: [ { coachId: adminId }, { nutritionistId: adminId } ] } },
+      where: logsWhere,
       take: 50, 
       orderBy: { date: 'desc' },
       include: { user: { select: { id: true, name: true, photoUrl: true, coachId: true } } } 
     });
 
     // 🔒 4. BIBLIOTECA DE EXERCÍCIOS
-    // - Master Paulo: só os dele (original)
-    // - Adri: os dela + herança do Paulo (original)
-    // - Coach novo: os dele + herança do Paulo (biblioteca padrão do sistema)
+    // - Parceiros e Adri herdam os exercícios básicos do Paulo para não recadastrar do zero
     const isAdri = (requester.email || '').toLowerCase() === ADRI_EMAIL;
     let exerciseWhere: any = { coachId: adminId };
 
@@ -163,7 +197,6 @@ export async function GET(req: Request) {
         inactiveUsers,
         recentLogs, 
         exercises,
-        // 🔒 Papel do solicitante — o front pode usar para esconder o toggle PAULO/ADRI
         requesterRole: requester.role,
     });
 

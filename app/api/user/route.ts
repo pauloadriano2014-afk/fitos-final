@@ -5,9 +5,36 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
+const MASTER_IDS = [
+    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
+    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
+];
+
 export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const adminId = searchParams.get('adminId');
+
+    // 🔥 BLOQUEIO TOTAL DA LISTA GLOBAL
+    let whereClause: any = {};
+    if (adminId) {
+        if (MASTER_IDS.includes(adminId)) {
+            whereClause = {
+                OR: [
+                    { coachId: null },
+                    { coachId: { in: MASTER_IDS } }
+                ]
+            };
+        } else {
+            whereClause = { coachId: adminId };
+        }
+    } else {
+       // Se chamarem a rota sem dizer quem é, bloqueia vazamento devolvendo vazio ou erro.
+       return NextResponse.json({ error: "Acesso Negado. Credenciais ausentes." }, { status: 403 });
+    }
+
     const users = await prisma.user.findMany({
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
       include: {
         anamneses: { orderBy: { createdAt: 'desc' }, take: 1 },

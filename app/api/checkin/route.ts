@@ -18,6 +18,12 @@ const s3 = new S3Client({
     },
 });
 
+// 🔥 IDs MASTER PARA BLINDAGEM DA TELA DE EVOLUÇÃO
+const MASTER_IDS = [
+    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
+    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
+];
+
 const PLAN_AUTO_DAYS: Record<string, number> = {
     PREMIUM: 14,
     PERFORMANCE: 30,
@@ -115,7 +121,7 @@ export async function POST(req: Request) {
         photoSide: sideUrl,
         extraPhotos: extraUrls, 
         date: new Date(),
-        allowMarketing: allowMarketing || false // 🔥 INSERIDO AQUI PARA GRAVAR NO BANCO 🔥
+        allowMarketing: allowMarketing || false 
     };
 
     const checkIn = await prisma.checkIn.create({
@@ -190,12 +196,34 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
+    const adminId = searchParams.get('adminId'); // 🔥 PEGA QUEM ESTÁ PEDINDO A LISTA
 
     try {
         const whereClause: any = {};
+        
+        // Se a busca for por um aluno específico, mantemos
         if (userId) {
             whereClause.userId = userId; 
         } 
+        
+        // 🔥 MURALHA APLICADA: Filtra os check-ins pelo Dono do Aluno
+        if (adminId) {
+            const isMaster = MASTER_IDS.includes(adminId);
+            if (isMaster) {
+                // Paulo e Adri veem checkins dos seus alunos e alunos globais (null)
+                whereClause.user = {
+                    OR: [
+                        { coachId: null },
+                        { coachId: { in: MASTER_IDS } }
+                    ]
+                };
+            } else {
+                // Parceiro vê SÓ dos alunos DELE
+                whereClause.user = {
+                    coachId: adminId
+                };
+            }
+        }
 
         const checkins = await prisma.checkIn.findMany({
             where: whereClause,

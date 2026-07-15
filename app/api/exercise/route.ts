@@ -5,6 +5,24 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
+// 🔥 IDs MASTER PARA BLINDAGEM DA BIBLIOTECA DE EXERCÍCIOS
+const MASTER_IDS = [
+    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
+    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
+];
+
+// 🔥 Função auxiliar para verificar quem é o dono do exercício
+async function checkExerciseOwnership(exerciseId: string, adminId: string | null) {
+    if (!adminId) return false;
+    if (MASTER_IDS.includes(adminId)) return true; // Master pode tudo
+    
+    const exercise = await prisma.exercise.findUnique({ where: { id: exerciseId }, select: { coachId: true } });
+    if (!exercise) return false;
+    
+    // Parceiro só edita/apaga se o coachId do exercício for exatamente o ID dele
+    return exercise.coachId === adminId;
+}
+
 function guessSubCategory(name: string, category: string): string {
   const n = name.toLowerCase();
   const c = category.toLowerCase();
@@ -44,12 +62,10 @@ function guessSubCategory(name: string, category: string): string {
   return 'Geral';
 }
 
-// 🔥 GERADOR DE TAGS AUTOMÁTICO (VOLTANDO AO FORMATO JSON DO PRISMA)
 function generateTags(name: string, category: string): object {
   const n = name.toLowerCase();
   const c = category.toLowerCase();
 
-  // TARGET — músculo alvo real
   let target = category.toUpperCase();
   if (n.includes('stiff') || n.includes('flexora') || n.includes('posterior') || n.includes('romeno')) target = 'POSTERIOR';
   else if (n.includes('extensora') || n.includes('agachamento') || n.includes('leg press') || n.includes('hack') || n.includes('sissy')) target = 'QUADRICEPS';
@@ -67,7 +83,6 @@ function generateTags(name: string, category: string): object {
   else if (n.includes('bíceps') || n.includes('biceps') || n.includes('rosca') || n.includes('scott')) target = 'BICEPS';
   else if (n.includes('abdominal') || n.includes('prancha') || n.includes('infra') || n.includes('oblíquo')) target = 'ABDOMEN';
 
-  // MECHANIC
   let mechanic = 'ISOLADO';
   if (
     n.includes('agachamento') || n.includes('leg press') || n.includes('supino') ||
@@ -77,7 +92,6 @@ function generateTags(name: string, category: string): object {
     n.includes('mergulho') || n.includes('barra fixa')
   ) mechanic = 'COMPOSTO';
 
-  // EQUIPMENT
   let equipment = 'LIVRE';
   if (n.includes('máquina') || n.includes('maquina') || n.includes('extensora') || n.includes('flexora') || n.includes('peck deck') || n.includes('hack') || n.includes('articulado') || n.includes('smart')) {
     equipment = 'MAQUINA';
@@ -93,7 +107,6 @@ function generateTags(name: string, category: string): object {
     equipment = 'PESO_CORPORAL';
   }
 
-  // JOINT RISK
   const jointRisk: string[] = [];
   if (n.includes('stiff') || n.includes('terra') || n.includes('remada curvada') || n.includes('agachamento livre') || n.includes('bom dia')) jointRisk.push('LOMBAR');
   if (n.includes('agachamento') || n.includes('extensora') || n.includes('leg press') || n.includes('hack') || n.includes('sissy') || n.includes('afundo') || n.includes('passada')) jointRisk.push('JOELHO');
@@ -102,6 +115,7 @@ function generateTags(name: string, category: string): object {
   return { target, mechanic, equipment, jointRisk };
 }
 
+// 👇 LISTAGEM (O parceiro pode ver os exercícios da biblioteca para herança)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -123,6 +137,7 @@ export async function GET(req: Request) {
   }
 }
 
+// 👇 CRIAÇÃO (Sempre atrela ao coach criador)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -130,6 +145,9 @@ export async function POST(req: Request) {
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
     const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
     const tags = generateTags(body.name, cat);
+    const adminId = body.adminId;
+
+    if (!adminId) return NextResponse.json({ error: "Acesso Negado: Faltando Admin ID" }, { status: 403 });
 
     const exercise = await prisma.exercise.create({
       data: {
@@ -137,15 +155,15 @@ export async function POST(req: Request) {
         category: cat,
         subCategory: subCat,
         environments: envs,
-        tags: tags, // O Prisma agora aceita o objeto JSON direto
+        tags: tags,
         videoUrl: body.videoUrl || "",
         instructions: body.instructions || "Execução padrão FIT OS.",
-        howToExecute: body.howToExecute || null, // 🔥 NOVO
-        commonMistakes: body.commonMistakes || null, // 🔥 NOVO
-        maleFocus: body.maleFocus || null, // 🔥 NOVO
-        femaleFocus: body.femaleFocus || null, // 🔥 NOVO
-        coachId: body.adminId || null,
-        defaultSubstitutes: body.defaultSubstitutes || [] // 🔥 AQUI ESTÁ O QUE FALTAVA
+        howToExecute: body.howToExecute || null,
+        commonMistakes: body.commonMistakes || null,
+        maleFocus: body.maleFocus || null,
+        femaleFocus: body.femaleFocus || null,
+        coachId: adminId, // 🔥 CARIMBA O DONO 
+        defaultSubstitutes: body.defaultSubstitutes || []
       }
     });
     return NextResponse.json(exercise);
@@ -156,29 +174,36 @@ export async function POST(req: Request) {
   }
 }
 
+// 👇 EDIÇÃO (Só pode editar se for dono)
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
+    const { id, adminId } = body;
+
+    // 🔥 MURALHA DE EDIÇÃO
+    const isOwner = await checkExerciseOwnership(id, adminId);
+    if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Apenas o dono pode editar este exercício." }, { status: 403 });
+
     const cat = body.muscleGroup || body.category || "Geral";
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
     const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
     const tags = generateTags(body.name, cat);
 
     const updatedExercise = await prisma.exercise.update({
-      where: { id: body.id },
+      where: { id: id },
       data: {
         name: body.name,
         category: cat,
         subCategory: subCat,
         environments: envs,
-        tags: tags, // O Prisma agora aceita o objeto JSON direto
+        tags: tags,
         videoUrl: body.videoUrl || "",
         instructions: body.instructions || "Execução padrão FIT OS.",
-        howToExecute: body.howToExecute || null, // 🔥 NOVO
-        commonMistakes: body.commonMistakes || null, // 🔥 NOVO
-        maleFocus: body.maleFocus || null, // 🔥 NOVO
-        femaleFocus: body.femaleFocus || null, // 🔥 NOVO
-        defaultSubstitutes: body.defaultSubstitutes || [] // 🔥 AQUI ESTÁ O QUE FALTAVA
+        howToExecute: body.howToExecute || null,
+        commonMistakes: body.commonMistakes || null,
+        maleFocus: body.maleFocus || null,
+        femaleFocus: body.femaleFocus || null,
+        defaultSubstitutes: body.defaultSubstitutes || []
       }
     });
     return NextResponse.json(updatedExercise);
@@ -188,11 +213,18 @@ export async function PUT(req: Request) {
   }
 }
 
+// 👇 EXCLUSÃO (Só pode apagar se for dono)
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
+    const adminId = searchParams.get('adminId');
+
     if (!id) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 });
+
+    // 🔥 MURALHA DE EXCLUSÃO
+    const isOwner = await checkExerciseOwnership(id, adminId);
+    if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Apenas o dono pode excluir este exercício." }, { status: 403 });
 
     await prisma.exercise.delete({ where: { id: id } });
 
