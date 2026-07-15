@@ -115,7 +115,7 @@ function generateTags(name: string, category: string): object {
   return { target, mechanic, equipment, jointRisk };
 }
 
-// 👇 LISTAGEM (O parceiro pode ver os exercícios da biblioteca para herança)
+// 👇 LISTAGEM: Libera a herança para os parceiros verem a biblioteca Master
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -125,8 +125,30 @@ export async function GET(req: Request) {
       return NextResponse.json([]);
     }
 
+    const isMaster = MASTER_IDS.includes(adminId);
+    let whereClause: any = {};
+
+    if (isMaster) {
+        // Master vê os globais (sem dono) e os da equipe master
+        whereClause = {
+            OR: [
+                { coachId: null },
+                { coachId: { in: MASTER_IDS } }
+            ]
+        };
+    } else {
+        // Parceiro vê os próprios exercícios DELE + Herda os exercícios base da equipe Master
+        whereClause = {
+            OR: [
+                { coachId: adminId },
+                { coachId: { in: MASTER_IDS } },
+                { coachId: null }
+            ]
+        };
+    }
+
     const exercises = await prisma.exercise.findMany({
-      where: { coachId: adminId },
+      where: whereClause,
       orderBy: { name: 'asc' }
     });
 
@@ -182,7 +204,7 @@ export async function PUT(req: Request) {
 
     // 🔥 MURALHA DE EDIÇÃO
     const isOwner = await checkExerciseOwnership(id, adminId);
-    if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Apenas o dono pode editar este exercício." }, { status: 403 });
+    if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Apenas o criador pode editar este exercício." }, { status: 403 });
 
     const cat = body.muscleGroup || body.category || "Geral";
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
@@ -224,7 +246,7 @@ export async function DELETE(req: Request) {
 
     // 🔥 MURALHA DE EXCLUSÃO
     const isOwner = await checkExerciseOwnership(id, adminId);
-    if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Apenas o dono pode excluir este exercício." }, { status: 403 });
+    if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Apenas o criador pode excluir este exercício." }, { status: 403 });
 
     await prisma.exercise.delete({ where: { id: id } });
 
