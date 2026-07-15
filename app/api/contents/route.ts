@@ -30,24 +30,19 @@ export async function GET(request: Request) {
     }
 
     // 🔥 ISOLAMENTO TOTAL (A MURALHA BIDIRECIONAL):
-    const isMaster = MASTER_IDS.includes(targetCoachId || '');
-    
     let whereClause: any = {};
 
-    if (isMaster) {
-        // Paulo e Adri veem APENAS o conteúdo deles ou o conteúdo global (null)
+    // Se identificamos que o Coach (ou o dono do Aluno) é da equipe Master, ou se a requisição não mandou ID nenhum (segurança fallback da dashboard)
+    if (!targetCoachId || MASTER_IDS.includes(targetCoachId)) {
         whereClause = {
             OR: [
                 { coachId: null },
                 { coachId: { in: MASTER_IDS } }
             ]
         };
-    } else if (targetCoachId) {
-        // Coach parceiro vê APENAS o conteúdo que ele próprio adicionou
-        whereClause = { coachId: targetCoachId };
     } else {
-        // Fallback de segurança: bloqueia acesso se não identificar dono
-        whereClause = { coachId: 'BLOQUEIO_DE_SEGURANCA' };
+        // Coach parceiro (e alunos dele) veem APENAS o conteúdo que ele próprio adicionou
+        whereClause = { coachId: targetCoachId };
     }
 
     const allContent = await prisma.content.findMany({
