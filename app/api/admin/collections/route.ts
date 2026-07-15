@@ -4,6 +4,12 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
+// 🔥 IDs MASTER PARA BLINDAGEM DAS PASTAS
+const MASTER_IDS = [
+    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
+    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
+];
+
 // 👇 BUSCA AS PASTAS DO COACH
 export async function GET(req: Request) {
   try {
@@ -12,8 +18,23 @@ export async function GET(req: Request) {
 
     if (!adminId) return NextResponse.json({ error: "Admin ID obrigatório" }, { status: 400 });
 
-    // 🔥 Removido o where: { coachId: adminId } para liberar a biblioteca da equipe
+    // 🔥 ISOLAMENTO TOTAL DA MURALHA (COLEÇÕES):
+    const isMaster = MASTER_IDS.includes(adminId);
+    let whereClause: any = {};
+
+    if (isMaster) {
+        // Paulo e Adri não veem pastas de parceiros. 
+        whereClause.OR = [
+            { coachId: null },
+            { coachId: { in: MASTER_IDS } }
+        ];
+    } else {
+        // Parceiro vê ESTRITAMENTE as pastas criadas por ele.
+        whereClause.coachId = adminId;
+    }
+
     const collections = await prisma.templateCollection.findMany({
+      where: whereClause,
       include: {
         _count: { select: { templates: true } }
       },
