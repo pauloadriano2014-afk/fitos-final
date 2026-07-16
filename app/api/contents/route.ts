@@ -11,37 +11,34 @@ const MASTER_IDS = [
     'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
 ];
 
-// 1. GET: Busca os conteúdos blindados
+// 1. GET: Busca os conteúdos blindados e devolve os crachás de acesso
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId'); // Se for Aluno pedindo
-    const adminId = searchParams.get('adminId'); // Se for o Painel Admin pedindo
+    const userId = searchParams.get('userId'); 
+    const adminId = searchParams.get('adminId'); 
     const format = searchParams.get('format'); 
 
-    // 🔥 INTELIGÊNCIA DE ROTEAMENTO: Descobre de qual Coach puxar o conteúdo
     let targetCoachId = null;
 
-    if (adminId) {
+    if (adminId && adminId !== 'null' && adminId !== 'undefined') {
         targetCoachId = adminId;
-    } else if (userId) {
+    } else if (userId && userId !== 'null' && userId !== 'undefined') {
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (user && user.coachId) targetCoachId = user.coachId;
     }
 
-    // 🔥 ISOLAMENTO TOTAL (A MURALHA BIDIRECIONAL):
     let whereClause: any = {};
 
-    // Se identificamos que o Coach (ou o dono do Aluno) é da equipe Master, ou se a requisição não mandou ID nenhum (segurança fallback da dashboard)
     if (!targetCoachId || MASTER_IDS.includes(targetCoachId)) {
         whereClause = {
             OR: [
                 { coachId: null },
+                { coachId: '' },
                 { coachId: { in: MASTER_IDS } }
             ]
         };
     } else {
-        // Coach parceiro (e alunos dele) veem APENAS o conteúdo que ele próprio adicionou
         whereClause = { coachId: targetCoachId };
     }
 
@@ -53,10 +50,25 @@ export async function GET(request: Request) {
       }
     });
 
-    // MANTÉM A COMPATIBILIDADE SE VOCÊ REATIVAR O PAFLIX ANTIGO
+    // 🔥 BUSCA ACESSOS PARA LIBERAR OS VÍDEOS VIP NO APP DO ALUNO
+    let userAccessList: string[] = [];
+    if (userId && userId !== 'null' && userId !== 'undefined') {
+        const accessRecords = await prisma.contentAccess.findMany({
+            where: { userId },
+            select: { contentId: true }
+        });
+        userAccessList = accessRecords.map(a => a.contentId);
+    }
+
+    // 🔥 ADICIONA A CHAVE "hasAccess" PARA O FRONT-END NÃO OCULTAR O CONTEÚDO
+    const processedContent = allContent.map(video => ({
+        ...video,
+        hasAccess: !video.isVIP || userAccessList.includes(video.id)
+    }));
+
     if (format === 'grouped') {
       let userLikes: string[] = [];
-      if (userId) {
+      if (userId && userId !== 'null' && userId !== 'undefined') {
         const likes = await prisma.contentLike.findMany({
           where: { userId },
           select: { contentId: true }
@@ -67,11 +79,12 @@ export async function GET(request: Request) {
       type CategoryGroup = { id: string; title: string; videos: any[] };
       const categoriesMap: Record<string, CategoryGroup> = {};
 
-      allContent.forEach((video) => {
-        if (!categoriesMap[video.category]) {
-          categoriesMap[video.category] = { id: video.category, title: video.category, videos: [] };
+      processedContent.forEach((video) => {
+        const cat = video.category || 'GERAL';
+        if (!categoriesMap[cat]) {
+          categoriesMap[cat] = { id: cat, title: cat, videos: [] };
         }
-        categoriesMap[video.category].videos.push({
+        categoriesMap[cat].videos.push({
           ...video,
           likedByMe: userLikes.includes(video.id),
           likesCount: video._count.likes,
@@ -82,8 +95,7 @@ export async function GET(request: Request) {
       return NextResponse.json(Object.values(categoriesMap));
     }
 
-    // FORMATO NOVO PARA A BIBLIOTECA (Lista Plana)
-    return NextResponse.json(allContent);
+    return NextResponse.json(processedContent);
 
   } catch (error) {
     console.error("Erro PA FLIX (GET):", error);
@@ -97,7 +109,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { 
       title, subtitle, category, videoUrl, thumbUrl, duration, description, 
-      type, isVIP, pdfUrl, audioUrl, adminId // 🔥 Agora ele recebe QUEM está criando
+      type, isVIP, pdfUrl, audioUrl, adminId 
     } = body;
 
     if (!title || !category) {
@@ -117,7 +129,7 @@ export async function POST(request: Request) {
         thumbUrl: thumbUrl || null,
         duration: duration || null,
         description: description || "",
-        coachId: adminId || null // 🔥 CARIMBA A ETIQUETA DO DONO (Paulo, Adri ou Parceiro)
+        coachId: adminId || null 
       }
     });
 

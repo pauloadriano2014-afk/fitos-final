@@ -1,12 +1,8 @@
 // app/api/admin/payments/route.ts
 // 📊 PAINEL DE PAGAMENTOS (ADMIN)
-//
-// GET → lista as cobranças Asaas registradas no banco (atualizadas pelo webhook)
-//       + métricas resumidas do mês corrente.
-//
-// Query params (opcionais):
-//   ?status=PENDING|CONFIRMED|RECEIVED|OVERDUE|REFUNDED|CANCELED
-//   ?limit=100 (default 100, máx 300)
+// 🔒 ISOLAMENTO MULTI-TENANT:
+//   - ADMIN (Paulo/Adri): vê todos os pagamentos
+//   - COACH parceiro: vê só os pagamentos com coachId dele
 
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
@@ -20,12 +16,39 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
+    const adminId = searchParams.get('adminId');
     const limitParam = parseInt(searchParams.get('limit') || '100', 10);
     const limit = Math.min(Math.max(limitParam, 1), 300);
 
+    // 🔒 ISOLAMENTO MULTI-TENANT
+    let tenantWhere: any = {};
+
+    if (adminId) {
+      const requester = await prisma.user.findUnique({
+        where: { id: adminId },
+        select: { id: true, role: true, accountStatus: true },
+      });
+
+      if (!requester || !['ADMIN', 'COACH'].includes(requester.role)) {
+        return NextResponse.json({ error: 'Acesso não autorizado' }, { status: 403 });
+      }
+
+      if (requester.role === 'COACH') {
+        if (requester.accountStatus !== 'ACTIVE') {
+          return NextResponse.json({ error: 'Conta aguardando aprovação' }, { status: 403 });
+        }
+        // Coach só vê cobranças geradas com o coachId dele
+        tenantWhere = { coachId: adminId };
+      }
+      // ADMIN: tenantWhere fica {} → vê tudo
+    }
+
     // ---- Lista de pagamentos (mais recentes primeiro) ----
     const payments = await prisma.payment.findMany({
-      where: status ? { status } : undefined,
+      where: {
+        ...tenantWhere,
+        ...(status ? { status } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
       include: {
@@ -45,10 +68,9 @@ export async function GET(req: NextRequest) {
 
     const monthPayments = await prisma.payment.findMany({
       where: {
+        ...tenantWhere,
         OR: [
-          // Pagos neste mês (pela data de pagamento)
           { status: { in: PAID_STATUSES }, paymentDate: { gte: monthStart, lte: monthEnd } },
-          // Pendentes/vencidos com vencimento neste mês
           { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { gte: monthStart, lte: monthEnd } },
         ],
       },
