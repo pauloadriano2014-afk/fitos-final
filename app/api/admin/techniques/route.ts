@@ -25,6 +25,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'O ID do Treinador é obrigatório.' }, { status: 400 });
     }
 
+    // Já estava certo: só retorna técnicas globais OU do próprio coach.
     const techniques = await prisma.technique.findMany({
       where: {
         OR: [
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, description, steps, coachId, isGlobal, videoUrl } = body; // 🔥 videoUrl adicionado
+    const { name, description, steps, coachId, isGlobal, videoUrl } = body;
 
     if (!name || !steps || !coachId) {
       return NextResponse.json({ error: 'Nome, steps e coachId são obrigatórios.' }, { status: 400 });
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
         steps,
         coachId,
         isGlobal: isGlobal || false,
-        videoUrl: videoUrl || null, // 🔥 videoUrl adicionado (opcional)
+        videoUrl: videoUrl || null,
       }
     });
 
@@ -69,14 +70,28 @@ export async function POST(req: Request) {
   }
 }
 
-// 🔥 PUT AGORA LÊ O ID DO CORPO DA REQUISIÇÃO
+// 🔥 PUT agora exige coachId e verifica se quem está editando é o dono
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { id, name, description, steps, videoUrl } = body; // 🔥 videoUrl adicionado
+    const { id, name, description, steps, videoUrl, coachId } = body;
 
     if (!id) {
-        return NextResponse.json({ error: 'ID da técnica é obrigatório.' }, { status: 400 });
+      return NextResponse.json({ error: 'ID da técnica é obrigatório.' }, { status: 400 });
+    }
+    if (!coachId) {
+      return NextResponse.json({ error: 'coachId é obrigatório.' }, { status: 400 });
+    }
+
+    const existing = await prisma.technique.findUnique({ where: { id } });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Técnica não encontrada.' }, { status: 404 });
+    }
+
+    // 🔒 Só o dono pode editar. Técnicas globais não são editáveis por aqui.
+    if (existing.isGlobal || existing.coachId !== coachId) {
+      return NextResponse.json({ error: 'Você não tem permissão para editar esta técnica.' }, { status: 403 });
     }
 
     const updatedTechnique = await prisma.technique.update({
@@ -85,7 +100,7 @@ export async function PUT(req: Request) {
         name,
         description,
         steps,
-        videoUrl: videoUrl || null, // 🔥 videoUrl adicionado (opcional)
+        videoUrl: videoUrl || null,
       }
     });
 
@@ -96,19 +111,32 @@ export async function PUT(req: Request) {
   }
 }
 
-// 🔥 DELETE AGORA LÊ O ID DA URL BASE (?id=123)
+// 🔥 DELETE agora exige coachId (via query) e verifica se quem está apagando é o dono
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
+    const coachId = searchParams.get('coachId');
 
     if (!id) {
-        return NextResponse.json({ error: 'ID da técnica é obrigatório.' }, { status: 400 });
+      return NextResponse.json({ error: 'ID da técnica é obrigatório.' }, { status: 400 });
+    }
+    if (!coachId) {
+      return NextResponse.json({ error: 'coachId é obrigatório.' }, { status: 400 });
     }
 
-    await prisma.technique.delete({
-      where: { id }
-    });
+    const existing = await prisma.technique.findUnique({ where: { id } });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Técnica não encontrada.' }, { status: 404 });
+    }
+
+    // 🔒 Só o dono pode apagar. Técnicas globais não são apagáveis por aqui.
+    if (existing.isGlobal || existing.coachId !== coachId) {
+      return NextResponse.json({ error: 'Você não tem permissão para apagar esta técnica.' }, { status: 403 });
+    }
+
+    await prisma.technique.delete({ where: { id } });
 
     return NextResponse.json({ message: 'Técnica deletada com sucesso.' }, { status: 200 });
   } catch (error) {

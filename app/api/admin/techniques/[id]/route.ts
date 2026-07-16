@@ -16,11 +16,27 @@ export async function OPTIONS() {
   });
 }
 
+// 🔥 PUT agora exige coachId no corpo e verifica se quem está editando é o dono
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = params.id;
     const body = await req.json();
-    const { name, description, steps } = body;
+    const { name, description, steps, coachId } = body;
+
+    if (!coachId) {
+      return NextResponse.json({ error: 'coachId é obrigatório.' }, { status: 400 });
+    }
+
+    const existing = await prisma.technique.findUnique({ where: { id } });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Técnica não encontrada.' }, { status: 404 });
+    }
+
+    // 🔒 Só o dono pode editar. Técnicas globais não são editáveis por aqui.
+    if (existing.isGlobal || existing.coachId !== coachId) {
+      return NextResponse.json({ error: 'Você não tem permissão para editar esta técnica.' }, { status: 403 });
+    }
 
     const updatedTechnique = await prisma.technique.update({
       where: { id },
@@ -38,9 +54,27 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
+// 🔥 DELETE agora exige coachId (via query ?coachId=) e verifica se quem está apagando é o dono
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = params.id;
+    const { searchParams } = new URL(req.url);
+    const coachId = searchParams.get('coachId');
+
+    if (!coachId) {
+      return NextResponse.json({ error: 'coachId é obrigatório.' }, { status: 400 });
+    }
+
+    const existing = await prisma.technique.findUnique({ where: { id } });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Técnica não encontrada.' }, { status: 404 });
+    }
+
+    // 🔒 Só o dono pode apagar. Técnicas globais não são apagáveis por aqui.
+    if (existing.isGlobal || existing.coachId !== coachId) {
+      return NextResponse.json({ error: 'Você não tem permissão para apagar esta técnica.' }, { status: 403 });
+    }
 
     await prisma.technique.delete({
       where: { id }
