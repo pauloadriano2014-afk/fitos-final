@@ -422,6 +422,27 @@ model FoodItem {
   substitutionGroupId String?  
 }
 
+model SubstitutionGroup {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  teamId      String
+  createdAt   DateTime @default(now())
+
+  members SubstitutionGroupMember[]
+}
+
+model SubstitutionGroupMember {
+  id      String @id @default(uuid())
+  groupId String
+  foodId  String
+
+  group SubstitutionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, foodId])
+  @@index([foodId])
+}
+
 model Food {
   id         String   @id @default(uuid())
   source     String   // "TACO" | "CUSTOM"
