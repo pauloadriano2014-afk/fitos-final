@@ -422,6 +422,37 @@ model FoodItem {
   substitutionGroupId String?  
 }
 
+model Food {
+  id         String   @id @default(uuid())
+  source     String   // "TACO" | "CUSTOM"
+  externalId String?  // ID original na TACO
+  teamId     String?  // null = global (TACO), preenchido = exclusivo do coach
+
+  name        String
+  category    String
+  subcategory String?
+  baseUnit    String   @default("g")
+
+  kcal       Float
+  protein    Float
+  carbs      Float
+  fat        Float
+  fiber      Float?
+
+  isLactoseFree     Boolean? @default(false)
+  equivalenceFactor Float?   @default(1)
+  conversionFactor  Float?   @default(1)
+  isFavorite        Boolean  @default(false)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([source, externalId])
+  @@index([teamId])
+  @@index([category])
+  @@index([name])
+}
+
 model TemplateCollection {
   id        String   @id @default(uuid())
   name      String
