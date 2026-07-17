@@ -16,13 +16,14 @@ const MASTER_IDS  = [
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const q            = (searchParams.get('q') ?? '').trim();
-    const coachId      = searchParams.get('coachId') ?? '';
-    const category     = searchParams.get('category') ?? '';
+    const q             = (searchParams.get('q') ?? '').trim();
+    const coachId       = searchParams.get('coachId') ?? '';
+    const category      = searchParams.get('category') ?? '';
     const favoritesOnly = searchParams.get('favorites') === 'true';
-    const page         = parseInt(searchParams.get('page') ?? '1');
-    const limit        = Math.min(parseInt(searchParams.get('limit') ?? '50'), 100);
-    const skip         = (page - 1) * limit;
+    const sourceFilter  = searchParams.get('source') ?? ''; // 'TACO' | 'CUSTOM' | ''
+    const page          = parseInt(searchParams.get('page') ?? '1');
+    const limit         = Math.min(parseInt(searchParams.get('limit') ?? '50'), 100);
+    const skip          = (page - 1) * limit;
 
     // Determina o teamId do coach
     const teamId = MASTER_IDS.includes(coachId) ? MASTER_TEAM : (coachId || null);
@@ -51,6 +52,13 @@ export async function GET(req: Request) {
     // Filtro por categoria
     if (category && category !== 'Todas') {
       where.AND.push({ category });
+    }
+
+    // Filtro por source (TACO ou CUSTOM)
+    if (sourceFilter === 'TACO') {
+      where.AND.push({ source: 'TACO' });
+    } else if (sourceFilter === 'CUSTOM') {
+      where.AND.push({ source: 'CUSTOM' });
     }
 
     // Filtro favoritos
