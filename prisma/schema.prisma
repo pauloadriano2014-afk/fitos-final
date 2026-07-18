@@ -46,6 +46,10 @@ model User {
   aiCheckinPrompt String?  @db.Text
 aiPromptMode    String?  @default("ADD")
 
+coachPlan           String?  @default("PERSONAL")
+  // PERSONAL | NUTRICIONISTA | ELITE
+  // Define o que o coach pode usar e oferecer aos alunos
+
   // 🔥 MODO "VISUALIZAR COMO ALUNO" 🔥
   isTestAccount       Boolean  @default(false) // Identifica se é o aluno fantasma do coach
   
