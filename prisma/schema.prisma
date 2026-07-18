@@ -43,6 +43,8 @@ model User {
   // 🔥 WHITE-LABEL E CUSTOMIZAÇÃO DO COACH 🔥
   brandLogoUrl        String?
   brandColor          String?
+  aiCheckinPrompt String?  @db.Text
+aiPromptMode    String?  @default("ADD")
 
   // 🔥 MODO "VISUALIZAR COMO ALUNO" 🔥
   isTestAccount       Boolean  @default(false) // Identifica se é o aluno fantasma do coach
@@ -625,6 +627,7 @@ photoBackOriginal   String?
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt       DateTime @default(now())
+  aiEvaluatedAt DateTime?
 }
 
 model Notice {

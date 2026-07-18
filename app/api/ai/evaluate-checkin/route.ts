@@ -1,265 +1,248 @@
-// app/api/ai/evaluate-checkin/route.ts
+// app/api/ai/evaluate-checkin/route.ts — v2
+// v2: isolamento multi-tenant, lock 1 avaliação/checkin,
+//     prompt customizável por coach (adicionar | substituir),
+//     assinatura dinâmica, só Gemini 2.5 Flash (retry com delay)
+
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// 🔥 AUMENTA O TEMPO LIMITE SE AS FOTOS FOREM PESADAS 🔥
-export const maxDuration = 60; 
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
 
 const prisma = new PrismaClient();
 
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const MASTER_IDS = [
+    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
+    'b7c0c181-41fd-4156-b8fe-963a267759a3', // Adri
+];
+
+const ADRI_ID = 'b7c0c181-41fd-4156-b8fe-963a267759a3';
+
+const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+async function imageUrlToBase64(url: string): Promise<{ inlineData: { data: string; mimeType: string } } | null> {
+    try {
+        if (url.startsWith('data:image')) {
+            const base64Data = url.replace(/^data:image\/\w+;base64,/, '');
+            return { inlineData: { data: base64Data, mimeType: 'image/jpeg' } };
+        }
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const buffer = await response.arrayBuffer();
+        return { inlineData: { data: Buffer.from(buffer).toString('base64'), mimeType: 'image/jpeg' } };
+    } catch (e: any) {
+        console.error(`❌ Erro ao processar imagem ${url}:`, e.message);
+        return null;
+    }
+}
+
+// ─── MAIN ─────────────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
-  try {
-    // 🔥 AGORA PUXAMOS O labUserId E O coachName (PARA IDENTIDADE DINÂMICA)
-    const { checkInId, oldCheckInId, customOldPhotos, customOldWeight, isFromLab, customCurrentPhotos, contextText, labUserId, coachName } = await req.json();
+    try {
+        const {
+            checkInId,
+            oldCheckInId,
+            customOldPhotos,
+            customOldWeight,
+            customCurrentPhotos,
+            contextText,
+            isFromLab,
+            labUserId,
+            coachId,          // ← quem pediu a avaliação (obrigatório para isolamento)
+            forceRetry,       // ← true = ignora lock (para quando a IA falhou antes)
+        } = await req.json();
 
-    let user: any = null;
-    let anamnese: any = null;
-    let checkIn: any = null;
-    let oldCheckIn: any = null;
-
-    let currentWeight = null;
-    let oldWeight = customOldWeight ? parseFloat(customOldWeight) : null;
-    let userFeedback = "";
-
-    // ── 1. COLETA DE DADOS (SE VIER DO BANCO DE DADOS - PADRÃO CHECKIN) ──
-    if (checkInId) {
-        checkIn = await prisma.checkIn.findUnique({
-            where: { id: checkInId },
-            include: { 
-                user: { 
-                    include: { anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } } 
-                } 
+        // ── 1. ISOLAMENTO: valida que o coach tem acesso ao checkin ──────────
+        if (checkInId && coachId) {
+            const checkinOwner = await prisma.checkIn.findUnique({
+                where: { id: checkInId },
+                select: { user: { select: { coachId: true } } },
+            });
+            if (!checkinOwner) {
+                return NextResponse.json({ error: 'Check-in não encontrado' }, { status: 404 });
             }
-        });
-
-        if (!checkIn) return NextResponse.json({ error: "Check-in não encontrado" }, { status: 404 });
-        
-        user = checkIn.user;
-        anamnese = user.anamneses[0];
-        currentWeight = checkIn.weight;
-        userFeedback = checkIn.feedback || "";
-
-        if (oldCheckInId) {
-            oldCheckIn = await prisma.checkIn.findUnique({ where: { id: oldCheckInId } });
-            if (oldCheckIn && !customOldWeight) oldWeight = oldCheckIn.weight;
-        }
-    } 
-    // ── 2. COLETA DE DADOS (SE VIER DO LAB IA E TIVER ALUNO SELECIONADO) ──
-    else if (isFromLab && labUserId) { 
-        user = await prisma.user.findUnique({
-            where: { id: labUserId },
-            include: { anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } }
-        });
-        if (user) anamnese = user.anamneses[0];
-    }
-
-    // ── IDENTIFICAÇÃO DO PLANO E REGRAS DE NEGÓCIO ──
-    let isChallenge = false;
-    let isFichas = false;
-    let isBasico = false;
-    let isPremium = true; 
-    let isFirstCheckIn = !oldCheckInId && (!customOldPhotos || customOldPhotos.length === 0);
-    let isFinalCheckIn = false;
-
-    if (user) {
-        isChallenge = user.plan === 'CHALLENGE_21';
-        isFichas = user.plan === 'FICHA_8S' || user.plan === 'FICHAS'; 
-        isBasico = user.plan === 'PERFORMANCE' || user.plan === 'standard' || user.plan === 'LOW_COST';
-        isPremium = !isChallenge && !isFichas && !isBasico;
-
-        const checkInCount = await prisma.checkIn.count({ where: { userId: user.id } });
-        isFinalCheckIn = (isChallenge && checkInCount >= 2) || (isFichas && checkInCount >= 2);
-    }
-
-    // ── IDENTIDADE DINÂMICA DO COACH ──
-    const ADRI_COACH_ID = 'b7c0c181-41fd-4156-b8fe-963a267759a3';
-    const isAdri = (user?.coachId === ADRI_COACH_ID) || (coachName === 'Adri Kern') || (coachName === 'Adri');
-
-    const coachIdentity = isAdri 
-        ? "Coach Adri Kern — Personal Trainer especializada em estética feminina e saúde." 
-        : "Coach Paulo Adriano — Fisiculturista natural e Personal Trainer de Elite.";
-
-    const coachTone = isAdri
-        ? "- Tom feminino, empático, altamente motivacional e acolhedor. Use expressões de incentivo vibrantes ('maravilhosa', 'arrasou', 'orgulho da sua dedicação', 'bora pra cima').\n- Quando o resultado for ruim ou estagnado, acolha a dificuldade, mas cobre constância: 'Calma, isso é normal, mas precisamos focar agora. Seu plano já prevê isso, confia no processo!'\n- Quando for bom: comemore muito como se fosse parceira de treino dela.\n- SEMPRE transmita acolhimento e força."
-        : "- Você é um PROFESSOR com didática afiada. Explica as coisas de um jeito que qualquer pessoa entende, mesmo quem nunca pisou numa academia.\n- Quando o resultado é ruim ou estagnado: você NÃO se mostra satisfeito, mas entende o momento. Não julga. Ajusta a rota e mantém o aluno motivado. Ex: 'Olha, a região da cintura ainda não respondeu como a gente queria. Mas calma — isso é normal nessa fase. Seu plano já está ajustado pra atacar essa frente...'\n- Quando o resultado é bom: você se empolga DE VERDADE. Fica informal, celebra. Ex: 'Caramba, olha a diferença nas costas! Alargou bonito...'\n- SEMPRE transmita motivação. Mesmo nos feedbacks mais duros, o aluno precisa sair querendo treinar amanhã.";
-
-    // 🔥 TRAVA DE ASSINATURA UNIFICADA 🔥
-    const signatureBlock = isAdri 
-        ? "Sua Coach,\nAdri Kern / PA ELITE TEAM" 
-        : "Seu Coach,\nPaulo Adriano / PA ELITE TEAM";
-
-    // ── COLETA DE FOTOS PARA O GEMINI ──
-    let allPhotoUrls: string[] = [];
-
-    // Fotos Atuais
-    if (customCurrentPhotos && customCurrentPhotos.length > 0) {
-        allPhotoUrls = [...customCurrentPhotos]; 
-    } else if (checkIn) {
-        allPhotoUrls = [checkIn.photoFront, checkIn.photoSide, checkIn.photoBack, ...(checkIn.extraPhotos || [])];
-    }
-
-    // Fotos Antigas (Para Comparação)
-    if (customOldPhotos && customOldPhotos.length > 0) {
-        allPhotoUrls = [...allPhotoUrls, ...customOldPhotos]; 
-        isFirstCheckIn = false;
-    } else if (oldCheckIn) {
-        allPhotoUrls.push(oldCheckIn.photoFront, oldCheckIn.photoSide, oldCheckIn.photoBack);
-    }
-
-    const validUrls = allPhotoUrls.filter(Boolean) as string[];
-    
-    const imageParts = await Promise.all(validUrls.map(async (url) => {
-        try {
-            if (url.startsWith('data:image')) {
-                const base64Data = url.replace(/^data:image\/\w+;base64,/, "");
-                return { inlineData: { data: base64Data, mimeType: "image/jpeg" } };
+            const studentCoachId = checkinOwner.user?.coachId;
+            const isMaster       = MASTER_IDS.includes(coachId);
+            const isOwner        = studentCoachId === coachId;
+            const isMasterStudent = isMaster && (studentCoachId === null || MASTER_IDS.includes(studentCoachId ?? ''));
+            if (!isMaster && !isOwner && !isMasterStudent) {
+                return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
             }
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`Falha ao baixar imagem: ${url}`);
-            const buffer = await response.arrayBuffer();
-            return { inlineData: { data: Buffer.from(buffer).toString("base64"), mimeType: "image/jpeg" } };
-        } catch (e: any) {
-            console.error(`❌ Erro crítico ao processar a imagem ${url}:`, e.message);
-            return null; 
         }
-    }));
 
-    const validImageParts = imageParts.filter(Boolean) as any[];
-
-    if (validImageParts.length === 0) {
-        throw new Error("Nenhuma imagem válida conseguiu ser processada para enviar para a IA.");
-    }
-
-    // ── CONSTRUÇÃO DO PROMPT ──
-    let blocoAnamnese = "";
-    if (isPremium && anamnese) {
-      blocoAnamnese = `
-── ANAMNESE COMPLETA (ALUNO PREMIUM — USE NA ANÁLISE) ──
-- Frequência semanal: \${anamnese.frequencia}x
-- Tempo por sessão: \${anamnese.tempoDisponivel}min
-- Limitações/Dores: \${anamnese.limitacoes?.join(', ') || 'Nenhuma reportada'}
-- Cirurgias: \${anamnese.cirurgias?.join(', ') || 'Nenhuma'}
-- Equipamentos disponíveis: \${anamnese.equipamentos?.join(', ') || 'Academia completa'}
-- Objetivo declarado: \${anamnese.objetivo || user?.goal || 'Estética Geral'}
-
-INSTRUÇÃO: Cruze esses dados com o que você VÊ nas fotos de forma natural na conversa.
-Exemplo: "Como você treina 3x por semana, as costas ainda estão precisando de mais estímulo — mas seu plano já está ajustado pra isso."
-      `;
-    }
-
-    let planoLabel = "CONSULTORIA PREMIUM";
-    let planoContexto = "Acompanhamento individualizado 1 a 1. Check-ins a cada 15 dias. Esta é a análise mais completa e personalizada. Use TODOS os dados da anamnese. Aponte detalhes sutis entre check-ins próximos. O aluno paga por essa profundidade — entregue.";
-
-    if (user) {
-        if (isChallenge) {
-            planoLabel = "DESAFIO 21 DIAS";
-            planoContexto = "Ciclo curto de emagrecimento. O aluno envia fotos no Dia 1 e no Dia 21. Foque em mudanças visíveis de composição: barriga, cintura, inchaço, definição. Use linguagem motivacional — 21 dias é curto e o aluno precisa sentir que valeu a pena.";
-        } else if (isFichas) {
-            planoLabel = "FICHAS DE TREINO 8 SEMANAS";
-            planoContexto = "Ciclo de 56 dias. O aluno envia fotos no Dia 1 e no Dia 56. 8 semanas é tempo suficiente para cobrar mudanças reais de corpo. Seja mais detalhado na análise.";
-        } else if (isBasico) {
-            planoLabel = "PLANO BÁSICO";
-            planoContexto = "Acompanhamento mensal. Check-ins a cada 30 dias. A análise deve ser objetiva e direta, sem enrolação. Pode haver vários check-ins ao longo do tempo.";
+        // ── 2. LOCK: 1 avaliação por checkin (salvo forceRetry) ─────────────
+        if (checkInId && !forceRetry) {
+            const existing = await prisma.checkIn.findUnique({
+                where: { id: checkInId },
+                select: { aiEvaluatedAt: true },
+            });
+            if (existing?.aiEvaluatedAt) {
+                return NextResponse.json({ error: 'already_evaluated', evaluatedAt: existing.aiEvaluatedAt }, { status: 409 });
+            }
         }
-    }
 
-    let blocoMomento = "";
+        // ── 3. COLETA DE DADOS ───────────────────────────────────────────────
+        let user: any    = null;
+        let anamnese: any = null;
+        let checkIn: any  = null;
+        let oldCheckIn: any = null;
+        let currentWeight: number | null = null;
+        let oldWeight: number | null = customOldWeight ? parseFloat(customOldWeight) : null;
+        let userFeedback = '';
 
-    if (isFromLab && !oldCheckInId && (!customOldPhotos || customOldPhotos.length === 0)) {
-        blocoMomento = `
-── MOMENTO: ANÁLISE AVULSA (LABORATÓRIO IA) ──
-Esta é uma análise de rotina ou avaliação isolada do shape atual.
-\${contextText ? \`\\nDIRECIONAMENTO DO COACH: "\${contextText}" (Dê extrema prioridade a este direcionamento na sua análise).\` : ''}
+        if (checkInId) {
+            checkIn = await prisma.checkIn.findUnique({
+                where: { id: checkInId },
+                include: {
+                    user: { include: { anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } } },
+                },
+            });
+            if (!checkIn) return NextResponse.json({ error: 'Check-in não encontrado' }, { status: 404 });
+            user         = checkIn.user;
+            anamnese     = user.anamneses[0];
+            currentWeight = checkIn.weight;
+            userFeedback = checkIn.feedback || '';
 
-O QUE FAZER:
-- Faça um raio-X visual honesto do corpo atual.
-- Aponte os pontos fortes e o que precisa de trabalho.
-- NÃO fale em "ponto de partida" ou "evolução", pois é uma foto avulsa. Apenas analise o momento atual.
-        `;
-    } else if (isFirstCheckIn) {
-      blocoMomento = `
+            if (oldCheckInId) {
+                oldCheckIn = await prisma.checkIn.findUnique({ where: { id: oldCheckInId } });
+                if (oldCheckIn && !customOldWeight) oldWeight = oldCheckIn.weight;
+            }
+        } else if (isFromLab && labUserId) {
+            user = await prisma.user.findUnique({
+                where: { id: labUserId },
+                include: { anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } },
+            });
+            if (user) anamnese = user.anamneses[0];
+        }
+
+        // ── 4. DADOS DO COACH QUE PEDIU (assinatura + prompt custom) ────────
+        let requestingCoach: any = null;
+        if (coachId) {
+            requestingCoach = await prisma.user.findUnique({
+                where: { id: coachId },
+                select: {
+                    id:              true,
+                    name:            true,
+                    aiCheckinPrompt: true,       // ← prompt customizado
+                    aiPromptMode:    true,       // ← 'ADD' | 'REPLACE'
+                },
+            });
+        }
+
+        // Assinatura dinâmica — usa o nome do coach que pediu
+        const coachDisplayName = requestingCoach?.name ?? 'Seu Coach';
+        const signatureBlock   = `Seu Coach,\n${coachDisplayName}`;
+
+        // ── 5. IDENTIDADE (Paulo / Adri / Coach parceiro) ───────────────────
+        const isAdri   = coachId === ADRI_ID;
+        const isMaster = MASTER_IDS.includes(coachId ?? '');
+        const isPartner = !!coachId && !isMaster;
+
+        let coachIdentity: string;
+        let coachTone: string;
+
+        if (isPartner) {
+            // Coach parceiro: identidade neutra baseada no nome dele
+            coachIdentity = `${coachDisplayName} — Personal Trainer e Consultor(a) de Elite.`;
+            coachTone = `- Tom profissional, motivacional e empático.
+- Elogie a constância e os resultados com genuinidade.
+- Quando o resultado for bom: comemore com o aluno.
+- Quando não houver mudança ou houver piora: seja honesto mas construtivo. Nunca desanime.
+- SEMPRE transmita que o plano está sendo monitorado e ajustado.`;
+        } else if (isAdri) {
+            coachIdentity = 'Coach Adri Kern — Personal Trainer especializada em estética feminina e saúde.';
+            coachTone = `- Tom feminino, empático, altamente motivacional e acolhedor. Use expressões de incentivo vibrantes ('maravilhosa', 'arrasou', 'orgulho da sua dedicação', 'bora pra cima').
+- Quando o resultado for ruim ou estagnado, acolha a dificuldade, mas cobre constância.
+- Quando for bom: comemore muito como se fosse parceira de treino dela.
+- SEMPRE transmita acolhimento e força.`;
+        } else {
+            // Paulo
+            coachIdentity = 'Coach Paulo Adriano — Fisiculturista natural e Personal Trainer de Elite.';
+            coachTone = `- Você é um PROFESSOR com didática afiada. Explica de um jeito que qualquer pessoa entende.
+- Quando o resultado é ruim ou estagnado: não se mostra satisfeito, mas entende o momento. Ajusta a rota e mantém o aluno motivado.
+- Quando o resultado é bom: se empolga DE VERDADE. Fica informal, celebra.
+- SEMPRE transmita motivação. Mesmo nos feedbacks mais duros, o aluno precisa sair querendo treinar amanhã.`;
+        }
+
+        // ── 6. PLANO E MOMENTO ───────────────────────────────────────────────
+        let isChallenge = false, isFichas = false, isBasico = false, isPremium = true;
+        let isFinalCheckIn = false;
+        const isFirstCheckIn = !oldCheckInId && (!customOldPhotos?.length) && (!customCurrentPhotos?.length);
+
+        if (user) {
+            isChallenge = user.plan === 'CHALLENGE_21';
+            isFichas    = ['FICHA_8S', 'FICHAS'].includes(user.plan);
+            isBasico    = ['PERFORMANCE', 'standard', 'LOW_COST'].includes(user.plan);
+            isPremium   = !isChallenge && !isFichas && !isBasico;
+            const checkInCount = await prisma.checkIn.count({ where: { userId: user.id } });
+            isFinalCheckIn = (isChallenge || isFichas) && checkInCount >= 2;
+        }
+
+        let planoLabel    = 'CONSULTORIA PREMIUM';
+        let planoContexto = 'Acompanhamento individualizado 1 a 1. Check-ins a cada 15 dias. Análise completa e personalizada.';
+        if (isChallenge) { planoLabel = 'DESAFIO 21 DIAS';        planoContexto = 'Ciclo curto de emagrecimento. Foque em mudanças visíveis de composição.'; }
+        if (isFichas)    { planoLabel = 'FICHAS DE TREINO 8 SEMANAS'; planoContexto = 'Ciclo de 56 dias. Cobrar mudanças reais de corpo.'; }
+        if (isBasico)    { planoLabel = 'PLANO BÁSICO';            planoContexto = 'Acompanhamento mensal. Análise objetiva e direta.'; }
+
+        const blocoAnamnese = (isPremium && anamnese) ? `
+── ANAMNESE COMPLETA (PREMIUM) ──
+- Frequência: ${anamnese.frequencia}x/sem | Tempo: ${anamnese.tempoDisponivel}min
+- Limitações: ${anamnese.limitacoes?.join(', ') || 'Nenhuma'}
+- Objetivo: ${anamnese.objetivo || user?.goal || 'Estética Geral'}
+- Equipamentos: ${anamnese.equipamentos?.join(', ') || 'Academia completa'}
+Cruze esses dados com o que você vê nas fotos de forma natural.` : '';
+
+        const blocoMomento = isFirstCheckIn ? `
 ── MOMENTO: PONTO DE PARTIDA (DIA 01) ──
-Este é o primeiro registro visual do aluno. Não existe "antes" para comparar.
-
-O QUE FAZER:
-- Faça um raio-X visual honesto do corpo atual, usando linguagem simples.
-- Aponte os pontos fortes: o que o aluno já tem de bom para construir em cima.
-- Aponte os pontos que vamos atacar primeiro e explique POR QUÊ de forma didática.
-- Reforce que o treino que ele já tem em mãos foi montado para atacar exatamente essas frentes.
-- Dê expectativas realistas do que pode mudar no período do plano dele.
-
-O QUE NÃO FAZER:
-- NÃO fale em "evolução", "melhora" ou "progresso". O aluno está começando hoje.
-- NÃO seja genérico. Aponte O QUE você vê e ONDE, mas explique de um jeito que qualquer pessoa entenda.
-      `;
-    } else {
-      blocoMomento = `
+Primeiro registro visual. Não existe "antes" para comparar.
+- Faça um raio-X honesto do corpo atual.
+- Aponte pontos fortes e o que vamos atacar primeiro.
+- Dê expectativas realistas.
+- NÃO fale em "evolução" ou "melhora".` : `
 ── MOMENTO: COMPARATIVO DE EVOLUÇÃO ──
-Você está recebendo fotos ATUAIS e fotos ANTERIORES do mesmo aluno.
-As primeiras fotos (geralmente 3) são as ATUAIS. As últimas são as ANTERIORES (Base de comparação).
-\${contextText ? \`\\nDIRECIONAMENTO DO COACH: "\${contextText}" (Leve isso em consideração ao comparar).\` : ''}
+Fotos ATUAIS e ANTERIORES do mesmo aluno (atuais primeiro).
+${contextText ? `\nDIRECIONAMENTO DO COACH: "${contextText}" (priorize isso na análise).` : ''}
+- Compare ângulo por ângulo com linguagem acessível.
+- Se houve evolução: celebre e seja específico.
+- Se não houve mudança: seja honesto e construtivo.
+- Se houve piora: aborde com empatia. Nunca desanime.
+- NÃO invente evolução que não existe.`;
 
-O QUE FAZER:
-- Compare foto por foto (frente com frente, lado com lado, costas com costas).
-- Aponte mudanças concretas que você VÊ, usando linguagem acessível. Ex: "a região da cintura afinou visualmente", "os ombros estão mais largos em relação à cintura", "as costas estão com mais volume".
-- Se houve perda de peso, comente se visualmente parece que perdeu gordura ou se o corpo ficou "murcho" (indicando perda de massa).
-- Se houve EVOLUÇÃO: celebre, seja específico sobre onde melhorou e diga que o plano está funcionando.
-- Se NÃO houve mudança visível: seja honesto mas construtivo. Explique que vamos ajustar a rota, e que isso faz parte. Nunca desanime o aluno.
-- Se houve PIORA: aborde com empatia. Entenda o momento, pergunte (no texto) se algo mudou na rotina, e reforce que vamos corrigir juntos.
-
-O QUE NÃO FAZER:
-- NÃO invente evolução que não existe nas fotos. Se não mudou, diga que não mudou.
-- NÃO seja vago. "Melhorou bastante" não serve. Diga ONDE e O QUE mudou.
-      `;
-    }
-
-    let blocoUpsell = "";
-    if (isFinalCheckIn && (isChallenge || isFichas)) {
-      blocoUpsell = `
-── MOMENTO DE TRANSIÇÃO (UPSELL NATURAL) ──
-O aluno FINALIZOU o ciclo do plano "\ref{\${planoLabel}}".
-
-INSTRUÇÃO:
-- Primeiro, parabenize genuinamente. Chegar ao final exige disciplina real e isso merece reconhecimento.
-- Depois, conecte com a análise: aponte 2-3 pontos que você identificou que precisam de um acompanhamento mais próximo para dar o próximo passo.
-- Explique de forma natural que esses ajustes finos e individuais são exatamente o que a Consultoria Premium oferece: acompanhamento 1 a 1 com treino, dieta e check-ins personalizados.
-- Finalize com: para aproveitar o desconto especial de encerramento, é só responder *PREMIUM* aqui no WhatsApp.
-- O tom deve ser de oportunidade natural, como um próximo passo lógico. Nunca como vendedor.
-      `;
-    } else {
-      blocoUpsell = `
+        const blocoUpsell = (isFinalCheckIn && (isChallenge || isFichas)) ? `
+── TRANSIÇÃO (UPSELL NATURAL) ──
+Aluno finalizou o ciclo "${planoLabel}".
+- Parabenize genuinamente.
+- Aponte 2-3 pontos que precisam de acompanhamento mais próximo.
+- Conecte naturalmente com a Consultoria Premium.
+- Tom de oportunidade, nunca de vendedor.` : `
 ── SEM UPSELL ──
-NÃO faça nenhuma oferta, promoção ou menção a outros planos. Foco 100% na análise do aluno.
-      `;
-    }
+NÃO faça nenhuma oferta ou menção a outros planos.`;
 
-    const prompt = `
+        // ── 7. PROMPT BASE (estrutura PA ELITE TEAM) ─────────────────────────
+        const promptBase = `
 ═══════════════════════════════════════════════════
 IDENTIDADE E PERSONALIDADE
 ═══════════════════════════════════════════════════
 Você é o/a ${coachIdentity}
 
-CONTEXTO IMPORTANTE:
-- Você é o personal/consultor de TODOS os alunos. Todos já possuem treinos periodizados montados por você.
-- Este feedback será enviado DIRETAMENTE ao aluno pelo aplicativo. O aluno vai ler isso no celular.
-- Portanto, escreva PARA o aluno, como se estivesse conversando com ele.
+Este feedback será enviado DIRETAMENTE ao aluno pelo aplicativo. Escreva PARA o aluno.
 
-SUA VOZ E PERSONALIDADE:
+SUA VOZ:
 ${coachTone}
-- NUNCA use jargão técnico sem explicar. Em vez de "V-taper", diga "aquele formato em V, onde os ombros são mais largos que a cintura". Em vez de "retenção hídrica", diga "inchaço/retenção de líquido". Em vez de "deltóide", diga "ombro". Em vez de "dorsal", diga "costas" ou "músculo das costas". Em vez de "eretores da espinha", diga "musculatura da lombar".
+- NUNCA use jargão técnico sem explicar. Em vez de "V-taper" → "formato em V". Em vez de "deltóide" → "ombro". Em vez de "dorsal" → "costas".
 - Nunca seja genérico. Cada frase deve se referir a algo que você VIU nas fotos.
-- Quando falar de treino, reforce que "o seu plano já está montado para atacar isso" ou "com base no que estou vendo, vamos ajustar a rota para focar em X".
 
 ═══════════════════════════════════════════════════
-REGRAS ESTRITAS DE GÊNERO E AVALIAÇÃO (OBRIGATÓRIO)
+REGRAS DE GÊNERO (OBRIGATÓRIO)
 ═══════════════════════════════════════════════════
-O motor de visão deve identificar se a pessoa nas fotos é HOMEM ou MULHER.
-- SE FOR MULHER: É terminantemente PROIBIDO focar ou fazer qualquer comentário sobre a região do "peito" ou "peitoral". A análise estética feminina deve focar ESTRITAMENTE em: Costas (largura e densidade), Ombros (arredondamento), Abdômen (linha de cintura, retenção) e Membros Inferiores (volume e contorno de Glúteos, Coxas e Quadríceps).
-- SE FOR HOMEM: Analise a estética masculina normalmente (proporção em V, Peitoral, Braços, Costas, Abdômen e Pernas).
+- SE FOR MULHER: PROIBIDO comentar sobre peitoral. Foco em: Costas, Ombros, Abdômen, Glúteos, Coxas.
+- SE FOR HOMEM: Analise normalmente (Peitoral, Braços, Costas, Abdômen, Pernas).
 
 ═══════════════════════════════════════════════════
-PLANO DO ALUNO: ${planoLabel}
+PLANO: ${planoLabel}
 ═══════════════════════════════════════════════════
 ${planoContexto}
 
@@ -267,10 +250,10 @@ ${planoContexto}
 DADOS DO ALUNO
 ═══════════════════════════════════════════════════
 - Nome: ${user?.name || 'Aluno'}
-- Objetivo: ${user?.goal || anamnese?.objetivo || "Estética Geral"}
+- Objetivo: ${user?.goal || anamnese?.objetivo || 'Estética Geral'}
 - Peso atual: ${currentWeight ? currentWeight + ' kg' : 'Não informado'}
-${oldWeight ? "- Peso anterior da base de comparação: " + oldWeight + " kg (diferença: " + (parseFloat(currentWeight || 0) - oldWeight).toFixed(1) + " kg)" : ""}
-- Comentário do aluno: "${userFeedback || "Nenhum comentário enviado"}"
+${oldWeight ? `- Peso anterior: ${oldWeight} kg (diferença: ${(parseFloat(String(currentWeight ?? 0)) - oldWeight).toFixed(1)} kg)` : ''}
+- Comentário do aluno: "${userFeedback || 'Nenhum'}"
 ${blocoAnamnese}
 
 ═══════════════════════════════════════════════════
@@ -279,86 +262,146 @@ MOMENTO DA ANÁLISE
 ${blocoMomento}
 
 ═══════════════════════════════════════════════════
-ANÁLISE VISUAL — O QUE OBSERVAR EM CADA FOTO
+ANÁLISE VISUAL
 ═══════════════════════════════════════════════════
-Analise CADA ângulo separadamente. Baseie-se no que você VÊ nas fotos, APLICANDO A REGRA RESTRITA DE GÊNERO DEFINIDA ACIMA. Use linguagem SIMPLES e DIDÁTICA.
+Analise cada ângulo separadamente com linguagem simples e didática.
 
-*📸 FOTO DE FRENTE:*
-Observe e comente com palavras acessíveis: se os ombros estão proporcionais em relação à cintura (se está formando aquele "V" ou se ainda está mais reto), se os dois lados do corpo estão simétricos, como está a barriga (definida? com gordurinha? inchada?), como está o volume (peitoral para homens; quadríceps para mulheres), e como estão as pernas de frente.
+*📸 FRENTE:* proporção ombro/cintura, simetria, barriga, volume.
+*📸 LADO:* postura, barriga de perfil, proporção geral.
+*📸 COSTAS:* largura, formato, lombar, simetria, glúteos/posteriores (mulheres).
 
-*📸 FOTO DE LADO:*
-Observe e comente: postura (ombros jogados pra frente? curvatura nas costas?), se a barriga está saliente ou retraída de perfil, a proporção geral do corpo visto de lado, e o volume/contorno das pernas e glúteos (especialmente para mulheres) ou profundidade do peitoral/braço (para homens).
-
-*📸 FOTO DE COSTAS:*
-Observe e comente: se as costas estão largas ou estreitas, se tem formato de "V" ou está mais reto, como está a região da lombar (com gordura acumulada ou mais sequinha), se os dois lados estão simétricos, e se a musculatura das costas está aparecendo ou ainda está escondida. Foco também em posteriores de coxa e glúteo para mulheres.
-
-${isPremium ? `
-*🔬 ANÁLISE DETALHADA (PREMIUM):*
-Como aluno Premium com acompanhamento 1 a 1, adicione:
-- Cruze o que você vê nas fotos com os dados da anamnese (limitações, frequência de treino, equipamentos disponíveis). Ex: "Como você treina 3x por semana e as costas ainda estão estreitas, seu plano já está ajustado pra priorizar isso."
-- Aponte detalhes sutis que o aluno provavelmente não percebeu sozinho (pequenas mudanças de definição, redução de inchaço, assimetrias leves).
-- Indique o foco das próximas 2 semanas com base no que você viu.
-` : ''}
+${isPremium ? `*🔬 ANÁLISE PREMIUM:* Cruze fotos com dados da anamnese. Aponte detalhes sutis. Indique foco das próximas 2 semanas.` : ''}
 
 ═══════════════════════════════════════════════════
-TRANSIÇÃO / UPSELL
+TRANSIÇÃO
 ═══════════════════════════════════════════════════
 ${blocoUpsell}
 
 ═══════════════════════════════════════════════════
 FORMATO DE SAÍDA
 ═══════════════════════════════════════════════════
-- Texto PRONTO para enviar direto ao aluno (ele vai ler no celular).
-- Use *negrito* com asteriscos para títulos e destaques importantes.
-- Parágrafos curtos (máximo 3 linhas). Ninguém lê textão no celular.
-- Use emojis com moderação: 🔥 para destaque positivo, 👊 para motivação, 📸 para marcar os ângulos, ⚠️ para pontos de atenção, 🎯 para metas/foco.
-- Comece com uma saudação usando o primeiro nome do aluno. Seja pessoal.
-- ${isPremium ? 'Texto completo e detalhado — este aluno paga por isso.' : isBasico ? 'Texto objetivo e direto, sem enrolação.' : 'Texto conciso mas completo.'}
-- NÃO use markdown com # (heading). Apenas *negrito* e emojis.
-- NÃO use listas com hífen ou bullet points. Escreva em parágrafos corridos e naturais.
-- NÃO use termos técnicos sem explicar.
-- NUNCA use frases clichês de inteligência artificial como "Em resumo", "Por fim", "Lembre-se que", "Espero que isso ajude", "Continue o excelente trabalho". Seja direto e natural, encerre a mensagem com a força da sua análise e vá direto para a assinatura.
-- VALORIZE A CONSTÂNCIA: Se o aluno teve resultado, elogie a disciplina dele antes de elogiar o corpo. Mostre que você sabe que o resultado veio do esforço diário dele com o treino e a dieta.
-- OBRIGATÓRIO: Termine a avaliação assinando EXATAMENTE com o bloco de texto abaixo:
+- Texto pronto para enviar ao aluno (leitura no celular).
+- *Negrito* com asteriscos para destaques. Emojis com moderação.
+- Parágrafos curtos (máx 3 linhas).
+- Comece com saudação pelo primeiro nome.
+- NÃO use # headings. NÃO use listas com hífen/bullet.
+- NÃO use frases clichê de IA ("Em resumo", "Lembre-se que", "Espero que ajude").
+- Valorize a constância antes de elogiar o corpo.
+- OBRIGATÓRIO: termine assinando EXATAMENTE:
 
-${signatureBlock}
-    `;
+${signatureBlock}`;
 
-    const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("Chave da API não encontrada no Render. Verifique a aba Environment Variables.");
-    
-    // 🔥 SISTEMA DE MOTOR DUPLO (SÉRIE 2.5 - OS MAIS POTENTES) 🔥
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const modelMain = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
-    const modelReserve = genAI.getGenerativeModel({ model: "gemini-2.5-pro" }); 
+        // ── 8. PROMPT FINAL (considera modo do coach) ────────────────────────
+        // aiPromptMode: 'ADD' = adiciona junto ao base | 'REPLACE' = substitui o base
+        const customPrompt  = requestingCoach?.aiCheckinPrompt?.trim() ?? '';
+        const promptMode    = requestingCoach?.aiPromptMode ?? 'ADD';
 
-    let finalAnalysisText = "";
+        let finalPrompt: string;
 
-    try {
-        console.log("🔥 Tentando motor principal em FOTOS (gemini-2.5-flash)...");
-        const result = await modelMain.generateContent([prompt, ...validImageParts]);
-        finalAnalysisText = result.response.text();
-    } catch (err: any) {
-        console.log("⚠️ O Google bloqueou o 2.5 Flash nas FOTOS. Erro:", err.message);
-        try {
-            console.log("🔥 Acionando o Tanque de Guerra (gemini-2.5-pro)...");
-            const resultPro = await modelReserve.generateContent([prompt, ...validImageParts]);
-            finalAnalysisText = resultPro.response.text();
-            console.log("✅ Análise de FOTOS salva com sucesso pelo motor 2.5-PRO!");
-        } catch (errPro: any) {
-            console.log("❌ Ambos os motores falharam nas FOTOS. Erro:", errPro.message);
-            finalAnalysisText = "Sistema de análise temporariamente sobrecarregado. Por favor, aguarde 1 minuto e tente novamente.";
-            return NextResponse.json({ analysis: finalAnalysisText, isFinal: isFinalCheckIn }, { status: 200 }); 
+        if (customPrompt && promptMode === 'REPLACE') {
+            // Coach quer controle total — usa só o prompt dele
+            // Ainda injetamos dados básicos e a assinatura para não perder contexto mínimo
+            finalPrompt = `
+${customPrompt}
+
+═══════════════════════════════════════════════════
+DADOS DO ALUNO (INJETADOS AUTOMATICAMENTE)
+═══════════════════════════════════════════════════
+- Nome: ${user?.name || 'Aluno'}
+- Peso atual: ${currentWeight ? currentWeight + ' kg' : 'Não informado'}
+${oldWeight ? `- Peso anterior: ${oldWeight} kg` : ''}
+- Comentário do aluno: "${userFeedback || 'Nenhum'}"
+${contextText ? `\nDIRECIONAMENTO ADICIONAL: "${contextText}"` : ''}
+
+OBRIGATÓRIO: termine assinando EXATAMENTE:
+${signatureBlock}`;
+        } else if (customPrompt && promptMode === 'ADD') {
+            // Adiciona o prompt do coach como bloco extra no prompt base
+            finalPrompt = `${promptBase}
+
+═══════════════════════════════════════════════════
+DIRECIONAMENTO PERSONALIZADO DO COACH
+═══════════════════════════════════════════════════
+${customPrompt}
+${contextText ? `\nCONTEXTO ADICIONAL DO CHECKIN: "${contextText}"` : ''}`;
+        } else {
+            // Sem customização — usa o base puro
+            finalPrompt = promptBase;
         }
+
+        // ── 9. COLETA E PROCESSAMENTO DAS FOTOS ─────────────────────────────
+        let allPhotoUrls: string[] = [];
+
+        if (customCurrentPhotos?.length) {
+            allPhotoUrls = [...customCurrentPhotos];
+        } else if (checkIn) {
+            allPhotoUrls = [
+                checkIn.photoFront, checkIn.photoSide, checkIn.photoBack,
+                ...(checkIn.extraPhotos || []),
+            ];
+        }
+
+        if (customOldPhotos?.length) {
+            allPhotoUrls = [...allPhotoUrls, ...customOldPhotos];
+        } else if (oldCheckIn) {
+            allPhotoUrls.push(oldCheckIn.photoFront, oldCheckIn.photoSide, oldCheckIn.photoBack);
+        }
+
+        const validUrls    = allPhotoUrls.filter(Boolean) as string[];
+        const imageParts   = (await Promise.all(validUrls.map(imageUrlToBase64))).filter(Boolean) as any[];
+
+        if (!imageParts.length) {
+            throw new Error('Nenhuma imagem válida para processar.');
+        }
+
+        // ── 10. CHAMADA GEMINI 2.5 FLASH (com retry) ────────────────────────
+        const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;
+        if (!apiKey) throw new Error('Chave da API Gemini não configurada.');
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+        let analysisText = '';
+
+        try {
+            console.log('🔥 Chamando Gemini 2.5 Flash...');
+            const result = await model.generateContent([finalPrompt, ...imageParts]);
+            analysisText = result.response.text();
+            console.log('✅ Flash respondeu com sucesso.');
+        } catch (err: any) {
+            console.warn('⚠️ Flash falhou na primeira tentativa:', err.message);
+            // Retry após 4s (rate limit / sobrecarga momentânea)
+            await delay(4000);
+            try {
+                console.log('🔁 Retry Gemini 2.5 Flash...');
+                const result2 = await model.generateContent([finalPrompt, ...imageParts]);
+                analysisText  = result2.response.text();
+                console.log('✅ Flash respondeu no retry.');
+            } catch (err2: any) {
+                console.error('❌ Flash falhou nos dois retry:', err2.message);
+                // Retorna erro recuperável — frontend oferece "Tentar novamente"
+                return NextResponse.json(
+                    { error: 'ai_unavailable', message: 'Motor de IA indisponível. Tente novamente em alguns instantes.' },
+                    { status: 503 }
+                );
+            }
+        }
+
+        // ── 11. GRAVA O LOCK no banco ────────────────────────────────────────
+        if (checkInId) {
+            await prisma.checkIn.update({
+                where: { id: checkInId },
+                data:  { aiEvaluatedAt: new Date() },
+            }).catch(e => console.warn('⚠️ Falha ao gravar aiEvaluatedAt:', e.message));
+        }
+
+        return NextResponse.json({ analysis: analysisText, isFinal: isFinalCheckIn });
+
+    } catch (error: any) {
+        console.error('❌ Erro FATAL evaluate-checkin:', error);
+        return NextResponse.json(
+            { error: 'Falha interna no servidor', details: error.message },
+            { status: 500 }
+        );
     }
-
-    return NextResponse.json({ analysis: finalAnalysisText, isFinal: isFinalCheckIn });
-
-  } catch (error: any) {
-    console.error("❌ Erro FATAL na rota de Check-in ANTES da IA:", error);
-    return NextResponse.json({ 
-        error: "Falha interna no servidor", 
-        details: error.message || String(error) 
-    }, { status: 500 });
-  }
 }
