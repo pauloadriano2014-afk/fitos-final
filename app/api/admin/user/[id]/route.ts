@@ -74,6 +74,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
                 onboardingCompleted: true,
                 onboardingStep:      true,
                 coachPlan:           true,
+                studentModules:      true, // ← módulos do aluno (TREINO | DIETA | AMBOS)
 
                 anamneses: { orderBy: { createdAt: 'desc' }, take: 1 },
                 workouts:  { where: { archived: false }, orderBy: { createdAt: 'desc' }, take: 1 },
