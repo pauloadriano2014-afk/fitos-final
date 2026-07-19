@@ -47,6 +47,8 @@ model User {
 aiPromptMode    String?  @default("ADD")
 
 coachPlan           String?  @default("PERSONAL")
+onboardingCompleted Boolean  @default(false)
+  onboardingStep      Int      @default(0)
   // PERSONAL | NUTRICIONISTA | ELITE
   // Define o que o coach pode usar e oferecer aos alunos
 
@@ -1103,4 +1105,55 @@ model CoachPlan {
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+// ============================================
+// 📝 MÓDULO DE FORMULÁRIOS / ANAMNESES CUSTOMIZÁVEIS (SAAS)
+// ============================================
+
+model FormTemplate {
+  id          String   @id @default(uuid())
+  coachId     String   // Dono deste template
+  
+  // "TRAINING" (Treino), "NUTRITION" (Dieta), "FULL" (Ambos/Completa)
+  type        String   @default("TRAINING") 
+  
+  name        String   // Ex: "Anamnese de Treino Padrão"
+  description String?  @db.Text
+  
+  // Aqui guardamos a estrutura do formulário (as perguntas, tipos de campos, obrigatoriedade)
+  // Ex: [{ id: "q1", type: "TEXT", question: "Qual sua principal meta?", required: true }]
+  schema      Json     
+  
+  isActive    Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  responses   FormResponse[]
+
+  @@index([coachId])
+}
+
+model FormResponse {
+  id              String   @id @default(uuid())
+  
+  templateId      String
+  template        FormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  
+  userId          String   // O aluno que respondeu
+  
+  // Link gerado temporário para acesso externo (caso aluno ainda não tenha conta)
+  publicToken     String?  @unique 
+  
+  // As respostas do aluno batendo com a chave do 'schema' do template
+  // Ex: { "q1": "Quero perder 5kg para o casamento" }
+  answers         Json     
+  
+  submittedAt     DateTime? // Se nulo, significa que está pendente de preenchimento
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([templateId])
 }
