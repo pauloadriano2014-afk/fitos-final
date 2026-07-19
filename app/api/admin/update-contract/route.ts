@@ -1,68 +1,86 @@
+// app/api/admin/update-contract/route.ts — v2
+// v2: valida que o coach tem acesso ao aluno antes de atualizar contrato
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { userId, contractType, contractValue, paymentDueDate, startDate, financeCategory, isFinanceActive } = body;
+const MASTER_IDS = [
+    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
+    'b7c0c181-41fd-4156-b8fe-963a267759a3', // Adri
+];
 
-    if (!userId) {
-      return NextResponse.json({ error: "ID do aluno é obrigatório" }, { status: 400 });
+async function checkAccess(userId: string, adminId: string): Promise<boolean> {
+    if (MASTER_IDS.includes(adminId)) return true;
+
+    // Aluno offline — valida coachId do OfflineClient
+    if (userId.startsWith('offline_')) {
+        const client = await prisma.offlineClient.findUnique({
+            where:  { id: userId },
+            select: { coachId: true },
+        });
+        return client?.coachId === adminId;
     }
 
-    const parsedValue = parseFloat(String(contractValue).replace(',', '.')) || 0;
-
-    const parsedPaymentDueDate = paymentDueDate ? new Date(paymentDueDate) : null;
-    const parsedStartDate = startDate ? new Date(startDate) : null;
-
-    // 🔥 BIFURCAÇÃO PARA ALUNOS OFFLINE 🔥
-    if (String(userId).startsWith('offline_')) {
-      const updatedOfflineClient = await prisma.offlineClient.update({
-        where: { id: userId },
-        data: {
-          contractType: contractType || 'Mensal',
-          contractValue: parsedValue,
-          paymentDueDate: parsedPaymentDueDate,
-          startDate: parsedStartDate,
-          financeCategory: financeCategory || 'Consultoria Online',
-          isFinanceActive: isFinanceActive !== undefined ? isFinanceActive : true
-        },
-      });
-
-      return NextResponse.json({ success: true, client: updatedOfflineClient });
-    }
-
-    // 🔥 FLUXO NORMAL PARA ALUNOS DO APP (Users) 🔥
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        contractType: contractType || 'Mensal',
-        contractValue: parsedValue,
-        paymentDueDate: parsedPaymentDueDate,
-        startDate: parsedStartDate,
-        financeCategory: financeCategory || 'Consultoria Online',
-        isFinanceActive: isFinanceActive !== undefined ? isFinanceActive : true
-      },
+    // Aluno normal — valida coachId ou nutritionistId
+    const user = await prisma.user.findUnique({
+        where:  { id: userId },
+        select: { coachId: true, nutritionistId: true },
     });
+    return user?.coachId === adminId || user?.nutritionistId === adminId;
+}
 
-    return NextResponse.json({ success: true, user: updatedUser });
-  } catch (error: unknown) { // Explicitamente tipar como unknown
-    console.error("Erro ao atualizar contrato financeiro:", error);
+export async function POST(req: NextRequest) {
+    try {
+        const body = await req.json();
+        const {
+            userId, adminId, // ← v2: adminId obrigatório
+            contractType, contractValue, paymentDueDate,
+            startDate, financeCategory, isFinanceActive,
+        } = body;
 
-    // Adicione a verificação de tipo aqui
-    let errorMessage = "Erro interno no servidor ao salvar contrato";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    } else if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as any).message === 'string') {
-      // Caso o erro seja um objeto com uma propriedade 'message'
-      errorMessage = (error as any).message;
-    } else if (typeof error === 'string') {
-      // Caso o erro seja uma string
-      errorMessage = error;
+        if (!userId) {
+            return NextResponse.json({ error: 'ID do aluno é obrigatório.' }, { status: 400 });
+        }
+
+        // ← v2: validação de acesso
+        if (adminId) {
+            const allowed = await checkAccess(userId, adminId);
+            if (!allowed) {
+                return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+            }
+        }
+
+        const parsedValue        = parseFloat(String(contractValue).replace(',', '.')) || 0;
+        const parsedPaymentDueDate = paymentDueDate ? new Date(paymentDueDate) : null;
+        const parsedStartDate      = startDate      ? new Date(startDate)      : null;
+
+        const contractData = {
+            contractType:   contractType    || 'Mensal',
+            contractValue:  parsedValue,
+            paymentDueDate: parsedPaymentDueDate,
+            startDate:      parsedStartDate,
+            financeCategory:financeCategory || 'Consultoria Online',
+            isFinanceActive:isFinanceActive !== undefined ? isFinanceActive : true,
+        };
+
+        // Bifurcação offline / online
+        if (String(userId).startsWith('offline_')) {
+            const updatedOfflineClient = await prisma.offlineClient.update({
+                where: { id: userId },
+                data:  contractData,
+            });
+            return NextResponse.json({ success: true, client: updatedOfflineClient });
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data:  contractData,
+        });
+        return NextResponse.json({ success: true, user: updatedUser });
+
+    } catch (error: any) {
+        console.error('Erro ao atualizar contrato financeiro:', error);
+        return NextResponse.json({ error: error?.message || 'Erro interno.' }, { status: 500 });
     }
-
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
-  }
 }
