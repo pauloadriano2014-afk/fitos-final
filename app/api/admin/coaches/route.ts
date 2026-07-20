@@ -1,6 +1,6 @@
 // app/api/admin/coaches/route.ts
-// GET  → lista todos os coaches com contagem de alunos
-// PATCH → { coachId, action: 'BLOCK'|'UNBLOCK'|'SET_PLAN', coachPlan? }
+// GET  → lista todos os coaches com contagem de alunos e dados financeiros
+// PATCH → { coachId, action: 'BLOCK'|'UNBLOCK'|'SET_PLAN', coachPlan?, contractValue?, coachBillingEnd?, ... }
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -22,6 +22,14 @@ export async function GET() {
                 coachPlan:     true,  // ← PERSONAL | NUTRICIONISTA | ELITE
                 createdAt:     true,
                 coachRequestInfo: true,
+                // 🔥 NOVOS CAMPOS ADICIONADOS PARA O FINANCEIRO:
+                contractValue: true,
+                contractType: true,
+                paymentDueDate: true,
+                coachBillingPlan: true,
+                coachBillingStart: true,
+                coachBillingEnd: true,
+                isFinanceActive: true,
                 _count: {
                     select: { students: true }, // relação CoachStudents
                 },
@@ -41,7 +49,10 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
     try {
-        const { coachId, action, coachPlan } = await req.json();
+        const { 
+            coachId, action, coachPlan, 
+            contractValue, coachBillingEnd, paymentDueDate, contractType, isFinanceActive 
+        } = await req.json();
 
         if (!coachId || !action) {
             return NextResponse.json({ error: 'coachId e action são obrigatórios.' }, { status: 400 });
@@ -69,15 +80,29 @@ export async function PATCH(req: NextRequest) {
         }
 
         if (action === 'SET_PLAN') {
-            const valid = ['PERSONAL', 'NUTRICIONISTA', 'ELITE'];
-            if (!valid.includes(coachPlan)) {
-                return NextResponse.json({ error: 'coachPlan inválido.' }, { status: 400 });
+            const dataToUpdate: any = {};
+
+            // Valida e atualiza o plano se ele for enviado
+            if (coachPlan) {
+                const valid = ['PERSONAL', 'NUTRICIONISTA', 'ELITE'];
+                if (!valid.includes(coachPlan)) {
+                    return NextResponse.json({ error: 'coachPlan inválido.' }, { status: 400 });
+                }
+                dataToUpdate.coachPlan = coachPlan;
             }
+
+            // Atualiza os dados financeiros se eles forem enviados do painel
+            if (contractValue !== undefined) dataToUpdate.contractValue = contractValue;
+            if (coachBillingEnd !== undefined) dataToUpdate.coachBillingEnd = coachBillingEnd;
+            if (paymentDueDate !== undefined) dataToUpdate.paymentDueDate = paymentDueDate;
+            if (contractType !== undefined) dataToUpdate.contractType = contractType;
+            if (isFinanceActive !== undefined) dataToUpdate.isFinanceActive = isFinanceActive;
+
             await prisma.user.update({
                 where: { id: coachId },
-                data:  { coachPlan } as any,
+                data:  dataToUpdate,
             });
-            return NextResponse.json({ ok: true, coachPlan });
+            return NextResponse.json({ ok: true, updated: dataToUpdate });
         }
 
         return NextResponse.json({ error: 'Action inválida.' }, { status: 400 });
