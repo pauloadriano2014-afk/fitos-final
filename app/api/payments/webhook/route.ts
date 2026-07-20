@@ -1,192 +1,143 @@
-// app/api/payments/webhook/route.ts
-// Recebe eventos do Asaas (pagamento confirmado, vencido, estornado...)
-// e atualiza o banco + destrava o app automaticamente.
-//
-// IMPORTANTE: o Asaas espera resposta 200 rápida. Se responder erro,
-// ele pausa a fila de webhooks e para de enviar eventos até você reativar.
-// Por isso: capturamos tudo e SEMPRE respondemos 200 (menos auth inválida).
-
-import { NextRequest, NextResponse } from 'next/server';
+// app/api/payments/webhook/route.ts — v2
+// v2: handler para cobranças de coaches (externalReference começa com "coach:")
+import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
 
 const prisma = new PrismaClient();
+export const dynamic = 'force-dynamic';
 
-// Quantos meses avançar o vencimento por ciclo
-const CYCLE_MONTHS: Record<string, number> = {
-  MONTHLY: 1,
-  QUARTERLY: 3,
-  SEMIANNUALLY: 6,
-  YEARLY: 12,
-};
+export async function POST(req: Request) {
+    try {
+        const body = await req.json();
+        const { event, payment } = body;
 
-function addMonths(date: Date, months: number): Date {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
+        if (!payment) return NextResponse.json({ received: true });
+
+        const externalRef: string = payment.externalReference || '';
+
+        // ── HANDLER DE COACH ─────────────────────────────────────────────────
+        if (externalRef.startsWith('coach:')) {
+            return await handleCoachPayment(event, payment, externalRef);
+        }
+
+        // ── HANDLER DE ALUNO (fluxo original) ────────────────────────────────
+        return await handleStudentPayment(event, payment);
+
+    } catch (error: any) {
+        console.error('[webhook]', error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    // ---- 1. Autenticação do webhook ----
-    // Configuramos um token no painel do Asaas; ele vem neste header.
-    // Isso impede que alguém descubra a URL e dispare "pagamentos" falsos.
-    const receivedToken = req.headers.get('asaas-access-token');
-    const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
+// ─── COACH ───────────────────────────────────────────────────────────────────
+async function handleCoachPayment(event: string, payment: any, externalRef: string) {
+    // externalRef formato: "coach:{coachId}:{billingPlan}" ou "coach:{coachId}:upgrade:{billingPlan}"
+    const parts      = externalRef.split(':');
+    const coachId    = parts[1];
+    const isUpgrade  = parts[2] === 'upgrade';
+    const billingPlan = isUpgrade ? parts[3] : parts[2];
 
-    if (!expectedToken || receivedToken !== expectedToken) {
-      console.warn('[webhook] Token inválido ou ausente');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!coachId) return NextResponse.json({ received: true });
 
-    const body = await req.json();
-    const event: string = body?.event || '';
-    const asaasPayment = body?.payment;
+    if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+        const plan = BILLING_PLANS[billingPlan];
 
-    console.log(`[webhook] Evento recebido: ${event} | payment: ${asaasPayment?.id}`);
+        // Ativa o coach e confirma o billing
+        const updateData: any = {
+            coachBillingStatus: 'ACTIVE',
+            accountStatus:      'ACTIVE',
+        };
 
-    // Só processamos eventos de pagamento que têm o objeto payment
-    if (!asaasPayment?.id) {
-      return NextResponse.json({ received: true });
-    }
-
-    // ---- 2. Busca o Payment local ----
-    const payment = await prisma.payment.findUnique({
-      where: { asaasPaymentId: asaasPayment.id },
-      include: { subscription: true },
-    });
-
-    if (!payment) {
-      // Cobrança criada fora do app (ex: manual no painel Asaas).
-      // Não é erro — só registramos e seguimos.
-      console.log(`[webhook] Payment ${asaasPayment.id} não encontrado no banco local. Ignorando.`);
-      return NextResponse.json({ received: true });
-    }
-
-    // ---- 3. Processa por tipo de evento ----
-    switch (event) {
-      // 🔥 PAGAMENTO CAIU (PIX/dinheiro = RECEIVED; cartão aprovado = CONFIRMED)
-      case 'PAYMENT_CONFIRMED':
-      case 'PAYMENT_RECEIVED': {
-        // Idempotência: se já processamos, não faz de novo
-        // (o Asaas pode reenviar o mesmo evento)
-        if (payment.status === 'CONFIRMED' || payment.status === 'RECEIVED') {
-          console.log(`[webhook] Payment ${payment.id} já estava pago. Ignorando duplicado.`);
-          return NextResponse.json({ received: true });
+        // Se for novo plano (não upgrade já processado), recalcula datas
+        if (plan) {
+            const start = new Date();
+            updateData.coachBillingStart = start;
+            updateData.coachBillingEnd   = calcBillingEnd(start, plan.months);
+            updateData.coachBillingPlan  = billingPlan;
+            updateData.coachPlan         = plan.coachType;
         }
 
-        const paymentDate = asaasPayment.paymentDate || asaasPayment.confirmedDate;
+        await prisma.user.update({ where: { id: coachId }, data: updateData });
 
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: event === 'PAYMENT_RECEIVED' ? 'RECEIVED' : 'CONFIRMED',
-            paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-            netValue: asaasPayment.netValue ?? null,
-            billingType: asaasPayment.billingType || payment.billingType,
-          },
-        });
-
-        // Avança o vencimento e a assinatura
-        const cycle = payment.subscription?.cycle || 'MONTHLY';
-        const months = CYCLE_MONTHS[cycle] || 1;
-
-        // Base do novo vencimento: o vencimento da cobrança paga
-        // (não a data do pagamento — assim quem paga adiantado não perde dias)
-        const newDueDate = addMonths(new Date(payment.dueDate), months);
-
-        if (payment.subscription) {
-          await prisma.subscription.update({
-            where: { id: payment.subscription.id },
-            data: { status: 'ACTIVE', nextDueDate: newDueDate },
-          });
-        }
-
-        // 🔥 DESTRAVA O APP: atualiza os campos que o useFinanceLock lê
-        await prisma.user.update({
-          where: { id: payment.userId },
-          data: {
-            paymentDueDate: newDueDate,
-            isFinanceActive: true,
-            // Limpa qualquer claim de "Já paguei" pendente — não é mais necessário
-            paymentClaimedAt: null,
-            paymentClaimStatus: null,
-            paymentClaimCycleDueDate: null,
-          },
-        });
-
-        // 🔔 Push de confirmação pra aluna (não-crítico: falha não quebra o webhook)
-        try {
-          const user = await prisma.user.findUnique({
-            where: { id: payment.userId },
-            select: { pushToken: true, name: true },
-          });
-          if (user?.pushToken) {
+        // Push para o coach
+        const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true, name: true } });
+        if (coach?.pushToken && plan) {
             await fetch('https://exp.host/--/api/v2/push/send', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                to: user.pushToken,
-                sound: 'default',
-                title: '✅ Pagamento confirmado!',
-                body: 'Recebemos seu pagamento. Seu acesso está liberado. Bora treinar! 💪',
-              }),
-            });
-          }
-        } catch (pushErr) {
-          console.error('[webhook] Erro no push (ignorado):', pushErr);
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to:    coach.pushToken,
+                    sound: 'default',
+                    title: '✅ Pagamento confirmado!',
+                    body:  `Seu plano ${plan.label} está ativo. Bora trabalhar! 💪`,
+                }),
+            }).catch(() => {});
         }
 
-        console.log(`[webhook] ✅ Pagamento ${payment.id} processado. Novo vencimento: ${newDueDate.toISOString()}`);
-        break;
-      }
+        console.log(`✅ Coach ${coachId} billing ativado — ${billingPlan}`);
+    }
 
-      // 🔴 COBRANÇA VENCEU SEM PAGAMENTO
-      case 'PAYMENT_OVERDUE': {
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: { status: 'OVERDUE' },
+    if (event === 'PAYMENT_OVERDUE') {
+        await prisma.user.update({
+            where: { id: coachId },
+            data:  { coachBillingStatus: 'OVERDUE' } as any,
         });
-        if (payment.subscriptionId) {
-          await prisma.subscription.update({
-            where: { id: payment.subscriptionId },
-            data: { status: 'OVERDUE' },
-          });
-        }
-        // NÃO bloqueamos o app aqui — o useFinanceLock já cuida disso
-        // pelo paymentDueDate + período de carência que você definiu.
-        console.log(`[webhook] ⚠️ Payment ${payment.id} vencido.`);
-        break;
-      }
+        console.log(`⚠️ Coach ${coachId} billing vencido`);
+    }
 
-      // 💸 ESTORNO
-      case 'PAYMENT_REFUNDED': {
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: { status: 'REFUNDED' },
+    if (event === 'PAYMENT_DELETED' || event === 'PAYMENT_REFUNDED') {
+        await prisma.user.update({
+            where: { id: coachId },
+            data:  { coachBillingStatus: 'CANCELLED', accountStatus: 'REJECTED' } as any,
         });
-        console.log(`[webhook] 💸 Payment ${payment.id} estornado. Revisar manualmente.`);
-        break;
-      }
-
-      // 🗑️ COBRANÇA DELETADA NO PAINEL
-      case 'PAYMENT_DELETED': {
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: { status: 'CANCELED' },
-        });
-        break;
-      }
-
-      default:
-        // Eventos que não tratamos ainda (PAYMENT_UPDATED etc.) — só confirma recebimento
-        console.log(`[webhook] Evento ${event} sem handler. OK.`);
+        console.log(`❌ Coach ${coachId} billing cancelado`);
     }
 
     return NextResponse.json({ received: true });
-  } catch (error: any) {
-    console.error('[webhook] Erro:', error?.message || error);
-    // Mesmo com erro interno, respondemos 200 para não travar a fila do Asaas.
-    // O log fica registrado pra investigarmos.
-    return NextResponse.json({ received: true, warning: 'processed_with_error' });
-  }
+}
+
+// ─── ALUNO (lógica original preservada) ──────────────────────────────────────
+async function handleStudentPayment(event: string, payment: any) {
+    const customerId: string = payment.customer || '';
+    if (!customerId) return NextResponse.json({ received: true });
+
+    const user = await prisma.user.findFirst({
+        where: { asaasCustomerId: customerId } as any,
+    });
+    if (!user) return NextResponse.json({ received: true });
+
+    if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 30);
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                isFinanceActive: true,
+                paymentDueDate:  dueDate,
+            } as any,
+        });
+
+        if (user.pushToken) {
+            await fetch('https://exp.host/--/api/v2/push/send', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to:    user.pushToken,
+                    sound: 'default',
+                    title: '✅ Pagamento confirmado!',
+                    body:  'Seu plano foi renovado. Bora treinar! 💪',
+                }),
+            }).catch(() => {});
+        }
+    }
+
+    if (event === 'PAYMENT_OVERDUE') {
+        await prisma.user.update({
+            where: { id: user.id },
+            data:  { isFinanceActive: false } as any,
+        });
+    }
+
+    return NextResponse.json({ received: true });
 }

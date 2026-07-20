@@ -47,6 +47,19 @@ model User {
 aiPromptMode    String?  @default("ADD")
 
 coachPlan           String?  @default("PERSONAL")
+coachBillingPlan    String?
+  // PERSONAL_MONTHLY | PERSONAL_QUARTERLY | PERSONAL_SEMIANNUAL | PERSONAL_ANNUAL
+  // NUTRI_MONTHLY | NUTRI_QUARTERLY | NUTRI_SEMIANNUAL | NUTRI_ANNUAL
+  // ELITE_MONTHLY | ELITE_QUARTERLY | ELITE_SEMIANNUAL | ELITE_ANNUAL
+  // PERSONAL_LAUNCH | ELITE_LAUNCH (promoção lançamento)
+ 
+  coachBillingStart   DateTime?  // início do ciclo atual
+  coachBillingEnd     DateTime?  // fim do ciclo atual
+  coachAsaasId        String?    // ID do cliente no Asaas
+  coachAsaasChargeId  String?    // ID da última cobrança
+  coachBillingStatus  String?    @default("PENDING")
+  // ACTIVE | PENDING | OVERDUE | CANCELLED
+  isLaunchPromo       Boolean    @default(false)
 onboardingCompleted Boolean  @default(false)
   onboardingStep      Int      @default(0)
   // PERSONAL | NUTRICIONISTA | ELITE
@@ -161,6 +174,8 @@ onboardingCompleted Boolean  @default(false)
   // 🔥 NOVO: SAAS WHITE-LABEL - PÁGINAS DE VENDAS E PLANOS CUSTOMIZADOS 🔥
   salesPageConfig   SalesPageConfig?
   coachPlans        CoachPlan[]         @relation("CoachPlans")
+
+  studentModules   String   @default("TREINO")
 }
 
 
