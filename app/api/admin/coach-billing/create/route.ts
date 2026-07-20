@@ -1,6 +1,6 @@
 // app/api/admin/coach-billing/create/route.ts
 // Paulo gera cobrança de plano para um coach parceiro
-// Cria cliente no Asaas se não existir, gera cobrança PIX/boleto
+// Cria cliente no Asaas se não existir, gera cobrança Híbrida (PIX/Boleto/Cartão)
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { BILLING_PLANS, LAUNCH_PROMO_MAX, calcBillingEnd } from '@/config/coachBillingPlans';
@@ -50,7 +50,7 @@ async function getOrCreateAsaasCustomer(coach: any): Promise<string> {
         body: JSON.stringify({
             name:     coach.name,
             email:    coach.email,
-            cpfCnpj: cpfClean || undefined,
+            cpfCnpj:  cpfClean || undefined,
             phone:    (coach.phone || '').replace(/\D/g, '') || undefined,
         }),
     });
@@ -63,17 +63,17 @@ async function getOrCreateAsaasCustomer(coach: any): Promise<string> {
 // ─── HANDLER PRINCIPAL ───────────────────────────────────────────────────────
 export async function POST(req: Request) {
     try {
-        const { adminId, coachId, billingPlan, paymentMethod = 'PIX', customValue } = await req.json();
+        // Recebe UNDEFINED por padrão para abrir o checkout completo no Asaas
+        const { adminId, coachId, billingPlan, paymentMethod = 'UNDEFINED', customValue } = await req.json();
 
         // Só masters podem gerar cobranças de terceiros, mas o coach pode gerar a própria (adminId === coachId)
-if (!MASTER_IDS.includes(adminId) && adminId !== coachId) {
-
+        if (!MASTER_IDS.includes(adminId) && adminId !== coachId) {
             return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         const plan = BILLING_PLANS[billingPlan];
         if (!plan) {
-            return NextResponse.json({ error: 'Plano inválido.' }, { status: 400 });
+            return NextResponse.json({ error: `Plano não reconhecido: ${billingPlan}` }, { status: 400 });
         }
 
         // Busca o coach
@@ -114,10 +114,10 @@ if (!MASTER_IDS.includes(adminId) && adminId !== coachId) {
         const charge = await asaasFetch('/payments', {
             method: 'POST',
             body: JSON.stringify({
-                customer:      asaasCustomerId,
-                billingType:   paymentMethod === 'BOLETO' ? 'BOLETO' : 'PIX',
-                value:         finalValue,
-                dueDate:       dueDateStr,
+                customer:          asaasCustomerId,
+                billingType:       paymentMethod, // Permite PIX, BOLETO, CREDIT_CARD ou UNDEFINED
+                value:             finalValue,
+                dueDate:           dueDateStr,
                 description,
                 externalReference: `coach:${coachId}:${billingPlan}`,
             }),
@@ -154,7 +154,7 @@ if (!MASTER_IDS.includes(adminId) && adminId !== coachId) {
             });
         }
 
-        // Retorna link de pagamento
+        // Retorna link de pagamento e dados
         return NextResponse.json({
             ok:          true,
             chargeId:    charge.id,
