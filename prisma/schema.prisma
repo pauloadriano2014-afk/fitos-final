@@ -25,6 +25,19 @@ model User {
   accountStatus    String  @default("ACTIVE") // ACTIVE, PENDING_APPROVAL, REJECTED
   inviteCode       String? @unique
   coachRequestInfo Json?
+  studentModules      String?   @default("TREINO")
+  coachPlan           String?   @default("PERSONAL")
+  coachBillingPlan    String?
+  coachBillingStart   DateTime?
+  coachBillingEnd     DateTime?
+  coachAsaasId        String?
+  coachAsaasChargeId  String?
+  coachBillingStatus  String?   @default("PENDING")
+  isLaunchPromo       Boolean   @default(false)
+  onboardingCompleted Boolean   @default(false)
+  onboardingStep      Int       @default(0)
+  aiCheckinPrompt     String?   @db.Text
+  aiPromptMode        String?   @default("ADD")
   
   // Controle de Acesso e Planos
   plan_tier         String   @default("standard")
@@ -43,25 +56,7 @@ model User {
   // 🔥 WHITE-LABEL E CUSTOMIZAÇÃO DO COACH 🔥
   brandLogoUrl        String?
   brandColor          String?
-  aiCheckinPrompt String?  @db.Text
-aiPromptMode    String?  @default("ADD")
 
-coachPlan           String?  @default("PERSONAL")
-coachBillingPlan    String?
-  // PERSONAL_MONTHLY | PERSONAL_QUARTERLY | PERSONAL_SEMIANNUAL | PERSONAL_ANNUAL
-  // NUTRI_MONTHLY | NUTRI_QUARTERLY | NUTRI_SEMIANNUAL | NUTRI_ANNUAL
-  // ELITE_MONTHLY | ELITE_QUARTERLY | ELITE_SEMIANNUAL | ELITE_ANNUAL
-  // PERSONAL_LAUNCH | ELITE_LAUNCH (promoção lançamento)
- 
-  coachBillingStart   DateTime?  // início do ciclo atual
-  coachBillingEnd     DateTime?  // fim do ciclo atual
-  coachAsaasId        String?    // ID do cliente no Asaas
-  coachAsaasChargeId  String?    // ID da última cobrança
-  coachBillingStatus  String?    @default("PENDING")
-  // ACTIVE | PENDING | OVERDUE | CANCELLED
-  isLaunchPromo       Boolean    @default(false)
-onboardingCompleted Boolean  @default(false)
-  onboardingStep      Int      @default(0)
   // PERSONAL | NUTRICIONISTA | ELITE
   // Define o que o coach pode usar e oferecer aos alunos
 
@@ -174,10 +169,14 @@ onboardingCompleted Boolean  @default(false)
   // 🔥 NOVO: SAAS WHITE-LABEL - PÁGINAS DE VENDAS E PLANOS CUSTOMIZADOS 🔥
   salesPageConfig   SalesPageConfig?
   coachPlans        CoachPlan[]         @relation("CoachPlans")
-
-  studentModules   String   @default("TREINO")
 }
 
+model PlatformConfig {
+  id               String   @id @default("singleton")
+  launchPromoUsed  Int      @default(0)
+  launchPromoMax   Int      @default(10)
+  updatedAt        DateTime @updatedAt
+}
 
 // 🔥 TABELA EXCLUSIVA PARA ALUNOS DO FINANCEIRO (OFFLINE) 🔥
 model OfflineClient {
