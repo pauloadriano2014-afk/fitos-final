@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
         const {
-            userId, adminId, // ← v2: adminId obrigatório
+            userId, adminId, 
             contractType, contractValue, paymentDueDate,
             startDate, financeCategory, isFinanceActive,
         } = body;
@@ -43,7 +43,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'ID do aluno é obrigatório.' }, { status: 400 });
         }
 
-        // ← v2: validação de acesso
         if (adminId) {
             const allowed = await checkAccess(userId, adminId);
             if (!allowed) {
@@ -51,15 +50,26 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        const parsedValue        = parseFloat(String(contractValue).replace(',', '.')) || 0;
-        const parsedPaymentDueDate = paymentDueDate ? new Date(paymentDueDate) : null;
-        const parsedStartDate      = startDate      ? new Date(startDate)      : null;
+        const parsedValue = parseFloat(String(contractValue).replace(',', '.')) || 0;
+        
+        // 🔥 Reforço na validação e conversão de datas para evitar valores nulos
+        let parsedPaymentDueDate = null;
+        if (paymentDueDate) {
+            const dateObj = new Date(paymentDueDate);
+            if (!isNaN(dateObj.getTime())) parsedPaymentDueDate = dateObj;
+        }
+
+        let parsedStartDate = null;
+        if (startDate) {
+            const dateObj = new Date(startDate);
+            if (!isNaN(dateObj.getTime())) parsedStartDate = dateObj;
+        }
 
         const contractData = {
             contractType:   contractType    || 'Mensal',
             contractValue:  parsedValue,
             paymentDueDate: parsedPaymentDueDate,
-            startDate:      parsedStartDate,
+            startDate:      parsedStartDate, // Garante que a data inicial vá perfeitamente
             financeCategory:financeCategory || 'Consultoria Online',
             isFinanceActive:isFinanceActive !== undefined ? isFinanceActive : true,
         };
