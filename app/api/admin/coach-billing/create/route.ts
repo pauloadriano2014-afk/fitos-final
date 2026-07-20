@@ -65,8 +65,9 @@ export async function POST(req: Request) {
     try {
         const { adminId, coachId, billingPlan, paymentMethod = 'PIX', customValue } = await req.json();
 
-        // Só masters podem gerar cobranças de coaches
-        if (!MASTER_IDS.includes(adminId)) {
+        // Só masters podem gerar cobranças de terceiros, mas o coach pode gerar a própria (adminId === coachId)
+if (!MASTER_IDS.includes(adminId) && adminId !== coachId) {
+
             return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
