@@ -22,7 +22,6 @@ export async function GET() {
                 coachPlan:     true,  // ← PERSONAL | NUTRICIONISTA | ELITE
                 createdAt:     true,
                 coachRequestInfo: true,
-                // 🔥 NOVOS CAMPOS ADICIONADOS PARA O FINANCEIRO:
                 contractValue: true,
                 contractType: true,
                 paymentDueDate: true,
@@ -30,12 +29,13 @@ export async function GET() {
                 coachBillingStart: true,
                 coachBillingEnd: true,
                 isFinanceActive: true,
+                startDate: true, // Adicionado por segurança
                 _count: {
-                    select: { students: true }, // relação CoachStudents
+                    select: { students: true }, 
                 },
             } as any,
             orderBy: [
-                { accountStatus: 'asc' }, // ACTIVE primeiro
+                { accountStatus: 'asc' }, 
                 { name: 'asc' },
             ],
         });
@@ -51,7 +51,8 @@ export async function PATCH(req: NextRequest) {
     try {
         const { 
             coachId, action, coachPlan, 
-            contractValue, coachBillingEnd, paymentDueDate, contractType, isFinanceActive 
+            contractValue, coachBillingEnd, paymentDueDate, contractType, isFinanceActive,
+            coachBillingStart, startDate // 🔥 ADICIONADO AQUI
         } = await req.json();
 
         if (!coachId || !action) {
@@ -82,7 +83,6 @@ export async function PATCH(req: NextRequest) {
         if (action === 'SET_PLAN') {
             const dataToUpdate: any = {};
 
-            // Valida e atualiza o plano se ele for enviado
             if (coachPlan) {
                 const valid = ['PERSONAL', 'NUTRICIONISTA', 'ELITE'];
                 if (!valid.includes(coachPlan)) {
@@ -91,12 +91,14 @@ export async function PATCH(req: NextRequest) {
                 dataToUpdate.coachPlan = coachPlan;
             }
 
-            // Atualiza os dados financeiros se eles forem enviados do painel
+            // 🔥 TODOS OS CAMPOS FINANCEIROS ATUALIZÁVEIS AQUI
             if (contractValue !== undefined) dataToUpdate.contractValue = contractValue;
             if (coachBillingEnd !== undefined) dataToUpdate.coachBillingEnd = coachBillingEnd;
             if (paymentDueDate !== undefined) dataToUpdate.paymentDueDate = paymentDueDate;
             if (contractType !== undefined) dataToUpdate.contractType = contractType;
             if (isFinanceActive !== undefined) dataToUpdate.isFinanceActive = isFinanceActive;
+            if (coachBillingStart !== undefined) dataToUpdate.coachBillingStart = coachBillingStart; // Data inicial do SaaS
+            if (startDate !== undefined) dataToUpdate.startDate = startDate; // Data inicial genérica para segurança
 
             await prisma.user.update({
                 where: { id: coachId },
