@@ -1,12 +1,12 @@
 // app/api/admin/diet/[userId]/export-pdf/route.ts
-// Gera PDF profissional da dieta do aluno e retorna como base64
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import { generateDietHtml } from '@/utils/dietPdfTemplate';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Render permite até 60s no plano pago
+export const maxDuration = 60;
 
 const prisma = new PrismaClient();
 
@@ -42,7 +42,6 @@ export async function GET(
         meals: {
           orderBy: { order: 'asc' },
           where: {
-            // Só versões principais (não alternativas)
             OR: [
               { isMainVersion: true },
               { alternativeGroupId: null },
@@ -60,22 +59,19 @@ export async function GET(
     // ── 3. Gera o HTML ───────────────────────────────────────────────────────
     const html = generateDietHtml(user, diet);
 
-    // ── 4. Puppeteer → PDF ───────────────────────────────────────────────────
+    // ── 4. Puppeteer-core + @sparticuz/chromium → PDF ────────────────────────
+    // @sparticuz/chromium traz o binário do Chrome embutido — funciona no Render
+    const executablePath = await chromium.executablePath();
+
     const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process', // Importante no Render
-      ],
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath,
+      headless: chromium.headless,
     });
 
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, { waitUntil: 'load' });
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
