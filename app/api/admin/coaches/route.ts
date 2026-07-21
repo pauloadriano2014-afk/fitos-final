@@ -1,6 +1,6 @@
 // app/api/admin/coaches/route.ts
 // GET  → lista todos os coaches com contagem de alunos e dados financeiros
-// PATCH → { coachId, action: 'BLOCK'|'UNBLOCK'|'SET_PLAN'|'UPDATE_PROFILE', coachPlan?, contractValue?, coachBillingEnd?, name?, email?, cpf?, phone?, instagram? ... }
+// PATCH → { coachId, action: 'BLOCK'|'UNBLOCK'|'SET_PLAN'|'UPDATE_PROFILE', coachPlan?, contractValue?, coachBillingEnd?, name?, email?, cpf?, phone? ... }
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -17,7 +17,6 @@ export async function GET() {
                 email:         true,
                 phone:         true,
                 cpf:           true,
-                instagram:     true, // 🔥 Garantindo que o instagram vem na busca
                 accountStatus: true,
                 inviteCode:    true,
                 coachPlan:     true,  // ← PERSONAL | NUTRICIONISTA | ELITE
@@ -54,7 +53,7 @@ export async function PATCH(req: NextRequest) {
             coachId, action, coachPlan, 
             contractValue, coachBillingEnd, paymentDueDate, contractType, isFinanceActive,
             coachBillingStart, startDate, 
-            name, email, cpf, phone, instagram // 🔥 ADICIONADOS PARA O PERFIL
+            name, email, cpf, phone // Removido o instagram aqui também
         } = await req.json();
 
         if (!coachId || !action) {
@@ -93,14 +92,13 @@ export async function PATCH(req: NextRequest) {
                 dataToUpdate.coachPlan = coachPlan;
             }
 
-            // 🔥 TODOS OS CAMPOS FINANCEIROS ATUALIZÁVEIS AQUI
             if (contractValue !== undefined) dataToUpdate.contractValue = contractValue;
             if (coachBillingEnd !== undefined) dataToUpdate.coachBillingEnd = coachBillingEnd;
             if (paymentDueDate !== undefined) dataToUpdate.paymentDueDate = paymentDueDate;
             if (contractType !== undefined) dataToUpdate.contractType = contractType;
             if (isFinanceActive !== undefined) dataToUpdate.isFinanceActive = isFinanceActive;
-            if (coachBillingStart !== undefined) dataToUpdate.coachBillingStart = coachBillingStart; // Data inicial do SaaS
-            if (startDate !== undefined) dataToUpdate.startDate = startDate; // Data inicial genérica para segurança
+            if (coachBillingStart !== undefined) dataToUpdate.coachBillingStart = coachBillingStart; 
+            if (startDate !== undefined) dataToUpdate.startDate = startDate; 
 
             await prisma.user.update({
                 where: { id: coachId },
@@ -117,7 +115,6 @@ export async function PATCH(req: NextRequest) {
             if (email !== undefined) dataToUpdate.email = email;
             if (cpf !== undefined) dataToUpdate.cpf = cpf;
             if (phone !== undefined) dataToUpdate.phone = phone;
-            if (instagram !== undefined) dataToUpdate.instagram = instagram;
             if (contractValue !== undefined) dataToUpdate.contractValue = contractValue;
 
             await prisma.user.update({
