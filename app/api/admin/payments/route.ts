@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const monthParam = searchParams.get('month');
     const yearParam = searchParams.get('year');
 
-    // 🔒 ISOLAMENTO MULTI-TENANT
+    // 🔒 O SEU ISOLAMENTO MULTI-TENANT ORIGINAL
     let tenantWhere: any = {};
 
     if (adminId) {
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 🔥 BLINDAGEM DE DATA: Garante que "JULHO", "07" ou "7" virem o número correto
+    // 🗓️ CONVERSÃO DE DATA SEGURA
     const now = new Date();
     let targetMonth = now.getMonth() + 1;
     let targetYear = now.getFullYear();
@@ -55,69 +55,52 @@ export async function GET(req: NextRequest) {
       if (!isNaN(parsedM) && parsedM >= 1 && parsedM <= 12) {
         targetMonth = parsedM;
       } else {
-        // Converte string como "JULHO" para índice do array
         const str = monthParam.substring(0, 3).toUpperCase();
         const idx = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'].indexOf(str);
         if (idx >= 0) targetMonth = idx + 1;
       }
     }
-
     if (yearParam) {
       const parsedY = parseInt(yearParam, 10);
       if (!isNaN(parsedY) && parsedY > 2000) targetYear = parsedY;
     }
 
+    // ---- Mês e Ano Alvo ----
     const monthStart = new Date(targetYear, targetMonth - 1, 1);
     const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
 
-    // 🔥 FILTRO CIRÚRGICO DA LISTA
-    const listFilter = {
-      AND: [
-        {
-          OR: [
-            { paymentDate: { gte: monthStart, lte: monthEnd } },
-            { dueDate: { gte: monthStart, lte: monthEnd } }
-          ]
-        },
-        {
-          OR: [
-            // Se for pago/estornado/cancelado, mostra o registro de qualquer jeito
-            { status: { notIn: ['PENDING', 'OVERDUE'] } },
-            // Se for pendente/vencido, SÓ MOSTRA se o aluno for ATIVO no financeiro
-            {
-              status: { in: ['PENDING', 'OVERDUE'] },
-              user: { isFinanceActive: true }
-            }
-          ]
-        }
-      ]
+    // O SEU FILTRO ORIGINAL (só que agora usa a data selecionada na tela, não a data atual fixa)
+    const dateFilter = {
+      OR: [
+        { status: { in: PAID_STATUSES }, paymentDate: { gte: monthStart, lte: monthEnd } },
+        { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { gte: monthStart, lte: monthEnd } },
+      ],
     };
 
-    // ---- 1. Lista de pagamentos (Com limite de 100 para o app não engasgar) ----
+    // ---- Lista de pagamentos (mais recentes primeiro) ----
     const payments = await prisma.payment.findMany({
       where: {
         ...tenantWhere,
-        ...listFilter,
+        ...dateFilter, // <-- Adicionamos o filtro aqui para limpar a tela
         ...(status ? { status } : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
       include: {
-        user: { select: { id: true, name: true, photoUrl: true, phone: true, email: true } },
-        subscription: { select: { id: true, planName: true, cycle: true, status: true } },
+        user: {
+          select: { id: true, name: true, photoUrl: true, phone: true, email: true },
+        },
+        subscription: {
+          select: { id: true, planName: true, cycle: true, status: true },
+        },
       },
     });
 
-    // ---- 2. Métricas do Mês (Sem limite, soma absolutamente tudo do mês) ----
+    // ---- Métricas do mês (A SUA LÓGICA ORIGINAL EXATA) ----
     const monthPayments = await prisma.payment.findMany({
       where: {
         ...tenantWhere,
-        OR: [
-          // Recebidos somam todos, independente se o aluno foi inativado depois
-          { status: { in: PAID_STATUSES }, paymentDate: { gte: monthStart, lte: monthEnd } },
-          // Pendentes apenas de quem está com o isFinanceActive ligado
-          { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { gte: monthStart, lte: monthEnd }, user: { isFinanceActive: true } },
-        ],
+        ...dateFilter,
       },
       select: { status: true, value: true, netValue: true },
     });
@@ -178,7 +161,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 🔥 ROTA DE EXCLUSÃO DE FATURA
+// 🔥 ROTA DE EXCLUSÃO DE FATURA NO ASAAS
 export async function DELETE(req: NextRequest) {
   try {
     const { paymentId } = await req.json();
