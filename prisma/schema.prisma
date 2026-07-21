@@ -48,6 +48,7 @@ model User {
   // 🔥 INTEGRAÇÃO ASAAS (PAGAMENTOS E ASSINATURAS DO SAAS) 🔥
   asaasCustomerId     String?
   asaasSubscriptionId String?
+  coachAsaasApiKey String?
 
   // 🔥 PAGAMENTOS DE ALUNOS (COBRANÇAS VIA ASAAS) 🔥
   subscriptions   Subscription[]
