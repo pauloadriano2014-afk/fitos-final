@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     const limitParam = parseInt(searchParams.get('limit') || '100', 10);
     const limit = Math.min(Math.max(limitParam, 1), 300);
 
-    // 🔥 NOVOS PARÂMETROS DE DATA (Vindos do AsaasPaymentsPanel)
+    // Parâmetros de Data do Front-end
     const monthParam = searchParams.get('month');
     const yearParam = searchParams.get('year');
 
@@ -42,10 +42,8 @@ export async function GET(req: NextRequest) {
         if (requester.accountStatus !== 'ACTIVE') {
           return NextResponse.json({ error: 'Conta aguardando aprovação' }, { status: 403 });
         }
-        // Coach só vê cobranças geradas com o coachId dele
         tenantWhere = { coachId: adminId };
       }
-      // ADMIN: tenantWhere fica {} → vê tudo
     }
 
     // ---- Mês e Ano Alvo ----
@@ -56,19 +54,23 @@ export async function GET(req: NextRequest) {
     const monthStart = new Date(targetYear, targetMonth - 1, 1);
     const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
 
-    // 🔥 FILTRO DE DATA: Impede que faturas de Agosto apareçam em Julho
-    const dateFilter = {
+    // 🔥 CORREÇÃO 1: Bloqueia qualquer fatura de aluno que não esteja 'ACTIVE'
+    const userFilter = { user: { accountStatus: 'ACTIVE' } };
+
+    // Filtro de data geral para a lista
+    const dateFilterList = {
       OR: [
-        { status: { in: PAID_STATUSES }, paymentDate: { gte: monthStart, lte: monthEnd } },
-        { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { gte: monthStart, lte: monthEnd } },
-      ],
+        { dueDate: { gte: monthStart, lte: monthEnd } },
+        { paymentDate: { gte: monthStart, lte: monthEnd } }
+      ]
     };
 
-    // ---- Lista de pagamentos (mais recentes primeiro) ----
+    // ---- 1. Lista de pagamentos (Com limite para não travar a tela) ----
     const payments = await prisma.payment.findMany({
       where: {
         ...tenantWhere,
-        ...dateFilter, // Aplica o filtro de data na busca
+        ...userFilter, 
+        ...dateFilterList,
         ...(status ? { status } : {}),
       },
       orderBy: { createdAt: 'desc' },
@@ -83,7 +85,19 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // ---- Métricas do mês (Reaproveitando a lista para otimizar velocidade) ----
+    // ---- 2. Métricas do Mês (🔥 CORREÇÃO 2: Feita separada e sem limite de 100 itens!) ----
+    const monthPayments = await prisma.payment.findMany({
+      where: {
+        ...tenantWhere,
+        ...userFilter,
+        OR: [
+          { status: { in: PAID_STATUSES }, paymentDate: { gte: monthStart, lte: monthEnd } },
+          { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { gte: monthStart, lte: monthEnd } },
+        ],
+      },
+      select: { status: true, value: true, netValue: true },
+    });
+
     let receivedGross = 0;
     let receivedNet = 0;
     let receivedCount = 0;
@@ -92,7 +106,7 @@ export async function GET(req: NextRequest) {
     let overdueValue = 0;
     let overdueCount = 0;
 
-    for (const p of payments) {
+    for (const p of monthPayments) {
       if (PAID_STATUSES.includes(p.status)) {
         receivedGross += p.value;
         receivedNet += p.netValue ?? p.value;
@@ -140,14 +154,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 🔥 NOVA ROTA: EXCLUSÃO DE FATURA
+// 🔥 ROTA DE EXCLUSÃO DE FATURA
 export async function DELETE(req: NextRequest) {
   try {
     const { paymentId } = await req.json();
 
     if (!paymentId) return NextResponse.json({ error: 'Falta o ID do pagamento.' }, { status: 400 });
 
-    // 1. Busca o pagamento no banco
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId }
     });
@@ -156,7 +169,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Cobrança não encontrada ou sem ID do Asaas.' }, { status: 404 });
     }
 
-    // 2. Descobre qual API Key usar (Master ou da Subconta do Coach parceiro)
     let apiKey = process.env.ASAAS_API_KEY!;
     if (payment.coachId) {
       const coach: any = await prisma.user.findUnique({ 
@@ -168,13 +180,11 @@ export async function DELETE(req: NextRequest) {
       }
     }
 
-    // 3. Cancela a fatura na API oficial do Asaas
     const asaasRes = await fetch(`${ASAAS_BASE_URL}/payments/${payment.asaasPaymentId}`, {
       method: 'DELETE',
       headers: { 'access_token': apiKey }
     });
 
-    // 4. Se deu certo lá, removemos do nosso banco também
     if (asaasRes.ok) {
       await prisma.payment.delete({ where: { id: paymentId } });
       return NextResponse.json({ ok: true });
