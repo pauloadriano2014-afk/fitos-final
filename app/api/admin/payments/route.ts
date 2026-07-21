@@ -21,7 +21,6 @@ export async function GET(req: NextRequest) {
     const limitParam = parseInt(searchParams.get('limit') || '100', 10);
     const limit = Math.min(Math.max(limitParam, 1), 300);
 
-    // Parâmetros de Data do Front-end
     const monthParam = searchParams.get('month');
     const yearParam = searchParams.get('year');
 
@@ -54,46 +53,45 @@ export async function GET(req: NextRequest) {
     const monthStart = new Date(targetYear, targetMonth - 1, 1);
     const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
 
-    // 🔥 CORREÇÃO 1: Bloqueia qualquer fatura de aluno que não esteja 'ACTIVE'
-    const userFilter = { user: { accountStatus: 'ACTIVE' } };
-
-    // Filtro de data geral para a lista
-    const dateFilterList = {
+    // 🔥 A MÁGICA DO FILTRO EXATO
+    const filterLogic = {
       OR: [
-        { dueDate: { gte: monthStart, lte: monthEnd } },
-        { paymentDate: { gte: monthStart, lte: monthEnd } }
+        // 1. RECEBIDOS no mês (Soma o dinheiro recebido de todos, inclusive de quem foi cancelado depois)
+        {
+          status: { in: PAID_STATUSES },
+          paymentDate: { gte: monthStart, lte: monthEnd }
+        },
+        // 2. PENDENTES/VENCIDOS no mês (Esconde as cobranças fantasma dos alunos inativados/bloqueados)
+        {
+          status: { in: ['PENDING', 'OVERDUE'] },
+          dueDate: { gte: monthStart, lte: monthEnd },
+          user: {
+            accountStatus: { notIn: ['REJECTED', 'INACTIVE', 'BLOCKED'] }
+          }
+        }
       ]
     };
 
-    // ---- 1. Lista de pagamentos (Com limite para não travar a tela) ----
+    // ---- 1. Lista de pagamentos VISUAL (com limite de 100 para não travar o app) ----
     const payments = await prisma.payment.findMany({
       where: {
         ...tenantWhere,
-        ...userFilter, 
-        ...dateFilterList,
+        ...filterLogic,
         ...(status ? { status } : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
       include: {
-        user: {
-          select: { id: true, name: true, photoUrl: true, phone: true, email: true },
-        },
-        subscription: {
-          select: { id: true, planName: true, cycle: true, status: true },
-        },
+        user: { select: { id: true, name: true, photoUrl: true, phone: true, email: true } },
+        subscription: { select: { id: true, planName: true, cycle: true, status: true } },
       },
     });
 
-    // ---- 2. Métricas do Mês (🔥 CORREÇÃO 2: Feita separada e sem limite de 100 itens!) ----
+    // ---- 2. Cálculo das MÉTRICAS (Sem limite de itens, soma TUDO do mês exato) ----
     const monthPayments = await prisma.payment.findMany({
       where: {
         ...tenantWhere,
-        ...userFilter,
-        OR: [
-          { status: { in: PAID_STATUSES }, paymentDate: { gte: monthStart, lte: monthEnd } },
-          { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { gte: monthStart, lte: monthEnd } },
-        ],
+        ...filterLogic,
       },
       select: { status: true, value: true, netValue: true },
     });
@@ -154,7 +152,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 🔥 ROTA DE EXCLUSÃO DE FATURA
+// 🔥 ROTA DE EXCLUSÃO DE FATURA NO ASAAS
 export async function DELETE(req: NextRequest) {
   try {
     const { paymentId } = await req.json();
