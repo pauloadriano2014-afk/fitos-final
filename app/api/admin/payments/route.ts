@@ -45,38 +45,59 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ---- Mês e Ano Alvo ----
+    // 🔥 BLINDAGEM DE DATA: Garante que "JULHO", "07" ou "7" virem o número correto
     const now = new Date();
-    const targetMonth = monthParam ? parseInt(monthParam, 10) : now.getMonth() + 1;
-    const targetYear = yearParam ? parseInt(yearParam, 10) : now.getFullYear();
+    let targetMonth = now.getMonth() + 1;
+    let targetYear = now.getFullYear();
+
+    if (monthParam) {
+      const parsedM = parseInt(monthParam, 10);
+      if (!isNaN(parsedM) && parsedM >= 1 && parsedM <= 12) {
+        targetMonth = parsedM;
+      } else {
+        // Converte string como "JULHO" para índice do array
+        const str = monthParam.substring(0, 3).toUpperCase();
+        const idx = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'].indexOf(str);
+        if (idx >= 0) targetMonth = idx + 1;
+      }
+    }
+
+    if (yearParam) {
+      const parsedY = parseInt(yearParam, 10);
+      if (!isNaN(parsedY) && parsedY > 2000) targetYear = parsedY;
+    }
 
     const monthStart = new Date(targetYear, targetMonth - 1, 1);
     const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
 
-    // 🔥 A MÁGICA DO FILTRO EXATO
-    const filterLogic = {
-      OR: [
-        // 1. RECEBIDOS no mês (Soma o dinheiro recebido de todos, inclusive de quem foi cancelado depois)
+    // 🔥 FILTRO CIRÚRGICO DA LISTA
+    const listFilter = {
+      AND: [
         {
-          status: { in: PAID_STATUSES },
-          paymentDate: { gte: monthStart, lte: monthEnd }
+          OR: [
+            { paymentDate: { gte: monthStart, lte: monthEnd } },
+            { dueDate: { gte: monthStart, lte: monthEnd } }
+          ]
         },
-        // 2. PENDENTES/VENCIDOS no mês (Esconde as cobranças fantasma dos alunos inativados/bloqueados)
         {
-          status: { in: ['PENDING', 'OVERDUE'] },
-          dueDate: { gte: monthStart, lte: monthEnd },
-          user: {
-            accountStatus: { notIn: ['REJECTED', 'INACTIVE', 'BLOCKED'] }
-          }
+          OR: [
+            // Se for pago/estornado/cancelado, mostra o registro de qualquer jeito
+            { status: { notIn: ['PENDING', 'OVERDUE'] } },
+            // Se for pendente/vencido, SÓ MOSTRA se o aluno for ATIVO no financeiro
+            {
+              status: { in: ['PENDING', 'OVERDUE'] },
+              user: { isFinanceActive: true }
+            }
+          ]
         }
       ]
     };
 
-    // ---- 1. Lista de pagamentos VISUAL (com limite de 100 para não travar o app) ----
+    // ---- 1. Lista de pagamentos (Com limite de 100 para o app não engasgar) ----
     const payments = await prisma.payment.findMany({
       where: {
         ...tenantWhere,
-        ...filterLogic,
+        ...listFilter,
         ...(status ? { status } : {}),
       },
       orderBy: { createdAt: 'desc' },
@@ -87,11 +108,16 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // ---- 2. Cálculo das MÉTRICAS (Sem limite de itens, soma TUDO do mês exato) ----
+    // ---- 2. Métricas do Mês (Sem limite, soma absolutamente tudo do mês) ----
     const monthPayments = await prisma.payment.findMany({
       where: {
         ...tenantWhere,
-        ...filterLogic,
+        OR: [
+          // Recebidos somam todos, independente se o aluno foi inativado depois
+          { status: { in: PAID_STATUSES }, paymentDate: { gte: monthStart, lte: monthEnd } },
+          // Pendentes apenas de quem está com o isFinanceActive ligado
+          { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { gte: monthStart, lte: monthEnd }, user: { isFinanceActive: true } },
+        ],
       },
       select: { status: true, value: true, netValue: true },
     });
@@ -152,7 +178,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 🔥 ROTA DE EXCLUSÃO DE FATURA NO ASAAS
+// 🔥 ROTA DE EXCLUSÃO DE FATURA
 export async function DELETE(req: NextRequest) {
   try {
     const { paymentId } = await req.json();
