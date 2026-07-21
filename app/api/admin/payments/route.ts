@@ -11,6 +11,7 @@ const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 const PAID_STATUSES = ['CONFIRMED', 'RECEIVED'];
+const ASAAS_BASE_URL = process.env.ASAAS_BASE_URL || 'https://api.asaas.com/v3';
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,6 +20,10 @@ export async function GET(req: NextRequest) {
     const adminId = searchParams.get('adminId');
     const limitParam = parseInt(searchParams.get('limit') || '100', 10);
     const limit = Math.min(Math.max(limitParam, 1), 300);
+
+    // 🔥 NOVOS PARÂMETROS DE DATA (Vindos do AsaasPaymentsPanel)
+    const monthParam = searchParams.get('month');
+    const yearParam = searchParams.get('year');
 
     // 🔒 ISOLAMENTO MULTI-TENANT
     let tenantWhere: any = {};
@@ -43,10 +48,27 @@ export async function GET(req: NextRequest) {
       // ADMIN: tenantWhere fica {} → vê tudo
     }
 
+    // ---- Mês e Ano Alvo ----
+    const now = new Date();
+    const targetMonth = monthParam ? parseInt(monthParam, 10) : now.getMonth() + 1;
+    const targetYear = yearParam ? parseInt(yearParam, 10) : now.getFullYear();
+
+    const monthStart = new Date(targetYear, targetMonth - 1, 1);
+    const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+
+    // 🔥 FILTRO DE DATA: Impede que faturas de Agosto apareçam em Julho
+    const dateFilter = {
+      OR: [
+        { status: { in: PAID_STATUSES }, paymentDate: { gte: monthStart, lte: monthEnd } },
+        { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { gte: monthStart, lte: monthEnd } },
+      ],
+    };
+
     // ---- Lista de pagamentos (mais recentes primeiro) ----
     const payments = await prisma.payment.findMany({
       where: {
         ...tenantWhere,
+        ...dateFilter, // Aplica o filtro de data na busca
         ...(status ? { status } : {}),
       },
       orderBy: { createdAt: 'desc' },
@@ -61,22 +83,7 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // ---- Métricas do mês corrente ----
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-
-    const monthPayments = await prisma.payment.findMany({
-      where: {
-        ...tenantWhere,
-        OR: [
-          { status: { in: PAID_STATUSES }, paymentDate: { gte: monthStart, lte: monthEnd } },
-          { status: { in: ['PENDING', 'OVERDUE'] }, dueDate: { gte: monthStart, lte: monthEnd } },
-        ],
-      },
-      select: { status: true, value: true, netValue: true },
-    });
-
+    // ---- Métricas do mês (Reaproveitando a lista para otimizar velocidade) ----
     let receivedGross = 0;
     let receivedNet = 0;
     let receivedCount = 0;
@@ -85,7 +92,7 @@ export async function GET(req: NextRequest) {
     let overdueValue = 0;
     let overdueCount = 0;
 
-    for (const p of monthPayments) {
+    for (const p of payments) {
       if (PAID_STATUSES.includes(p.status)) {
         receivedGross += p.value;
         receivedNet += p.netValue ?? p.value;
@@ -101,8 +108,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       metrics: {
-        month: now.getMonth() + 1,
-        year: now.getFullYear(),
+        month: targetMonth,
+        year: targetYear,
         receivedGross,
         receivedNet,
         receivedCount,
@@ -130,5 +137,55 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     console.error('[admin/payments] Erro:', error?.message || error);
     return NextResponse.json({ error: 'Erro ao listar pagamentos' }, { status: 500 });
+  }
+}
+
+// 🔥 NOVA ROTA: EXCLUSÃO DE FATURA
+export async function DELETE(req: NextRequest) {
+  try {
+    const { paymentId } = await req.json();
+
+    if (!paymentId) return NextResponse.json({ error: 'Falta o ID do pagamento.' }, { status: 400 });
+
+    // 1. Busca o pagamento no banco
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId }
+    });
+
+    if (!payment || !payment.asaasPaymentId) {
+      return NextResponse.json({ error: 'Cobrança não encontrada ou sem ID do Asaas.' }, { status: 404 });
+    }
+
+    // 2. Descobre qual API Key usar (Master ou da Subconta do Coach parceiro)
+    let apiKey = process.env.ASAAS_API_KEY!;
+    if (payment.coachId) {
+      const coach: any = await prisma.user.findUnique({ 
+        where: { id: payment.coachId },
+        select: { coachAsaasApiKey: true }
+      });
+      if (coach && coach.coachAsaasApiKey) {
+        apiKey = String(coach.coachAsaasApiKey);
+      }
+    }
+
+    // 3. Cancela a fatura na API oficial do Asaas
+    const asaasRes = await fetch(`${ASAAS_BASE_URL}/payments/${payment.asaasPaymentId}`, {
+      method: 'DELETE',
+      headers: { 'access_token': apiKey }
+    });
+
+    // 4. Se deu certo lá, removemos do nosso banco também
+    if (asaasRes.ok) {
+      await prisma.payment.delete({ where: { id: paymentId } });
+      return NextResponse.json({ ok: true });
+    } else {
+      const asaasData = await asaasRes.json();
+      const errorMsg = asaasData.errors?.[0]?.description || 'Erro ao cancelar no Asaas.';
+      return NextResponse.json({ error: errorMsg }, { status: 400 });
+    }
+
+  } catch (error: any) {
+    console.error('[admin/payments DELETE] Erro:', error?.message || error);
+    return NextResponse.json({ error: 'Erro interno ao cancelar fatura.' }, { status: 500 });
   }
 }
