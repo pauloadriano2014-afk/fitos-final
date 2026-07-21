@@ -5,28 +5,22 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
-// 🔥 IDs MASTER PARA BLINDAGEM DA BIBLIOTECA DE EXERCÍCIOS
 const MASTER_IDS = [
     '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
     'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
 ];
 
-// 🔥 Função auxiliar para verificar quem é o dono do exercício
 async function checkExerciseOwnership(exerciseId: string, adminId: string | null) {
     if (!adminId) return false;
-    if (MASTER_IDS.includes(adminId)) return true; // Master pode tudo
-    
+    if (MASTER_IDS.includes(adminId)) return true;
     const exercise = await prisma.exercise.findUnique({ where: { id: exerciseId }, select: { coachId: true } });
     if (!exercise) return false;
-    
-    // Parceiro só edita/apaga se o coachId do exercício for exatamente o ID dele
     return exercise.coachId === adminId;
 }
 
 function guessSubCategory(name: string, category: string): string {
   const n = name.toLowerCase();
   const c = category.toLowerCase();
-
   if (c.includes('peit')) {
     if (n.includes('inclinado') || n.includes('superior')) return 'Superior';
     if (n.includes('declinado') || n.includes('inferior')) return 'Inferior';
@@ -64,8 +58,6 @@ function guessSubCategory(name: string, category: string): string {
 
 function generateTags(name: string, category: string): object {
   const n = name.toLowerCase();
-  const c = category.toLowerCase();
-
   let target = category.toUpperCase();
   if (n.includes('stiff') || n.includes('flexora') || n.includes('posterior') || n.includes('romeno')) target = 'POSTERIOR';
   else if (n.includes('extensora') || n.includes('agachamento') || n.includes('leg press') || n.includes('hack') || n.includes('sissy')) target = 'QUADRICEPS';
@@ -84,28 +76,15 @@ function generateTags(name: string, category: string): object {
   else if (n.includes('abdominal') || n.includes('prancha') || n.includes('infra') || n.includes('oblíquo')) target = 'ABDOMEN';
 
   let mechanic = 'ISOLADO';
-  if (
-    n.includes('agachamento') || n.includes('leg press') || n.includes('supino') ||
-    n.includes('remada') || n.includes('puxada') || n.includes('desenvolvimento') ||
-    n.includes('stiff') || n.includes('terra') || n.includes('hack') ||
-    n.includes('afundo') || n.includes('passada') || n.includes('búlgaro') ||
-    n.includes('mergulho') || n.includes('barra fixa')
-  ) mechanic = 'COMPOSTO';
+  if (n.includes('agachamento') || n.includes('leg press') || n.includes('supino') || n.includes('remada') || n.includes('puxada') || n.includes('desenvolvimento') || n.includes('stiff') || n.includes('terra') || n.includes('hack') || n.includes('afundo') || n.includes('passada') || n.includes('búlgaro') || n.includes('mergulho') || n.includes('barra fixa')) mechanic = 'COMPOSTO';
 
   let equipment = 'LIVRE';
-  if (n.includes('máquina') || n.includes('maquina') || n.includes('extensora') || n.includes('flexora') || n.includes('peck deck') || n.includes('hack') || n.includes('articulado') || n.includes('smart')) {
-    equipment = 'MAQUINA';
-  } else if (n.includes('cross') || n.includes('polia') || n.includes('cabo') || n.includes('corda')) {
-    equipment = 'POLIA';
-  } else if (n.includes('halter') || n.includes('halteres')) {
-    equipment = 'HALTER';
-  } else if (n.includes('barra') || n.includes('smith')) {
-    equipment = 'BARRA';
-  } else if (n.includes('caneleira')) {
-    equipment = 'CANELEIRA';
-  } else if (n.includes('prancha') || n.includes('corporal') || n.includes('livre')) {
-    equipment = 'PESO_CORPORAL';
-  }
+  if (n.includes('máquina') || n.includes('maquina') || n.includes('extensora') || n.includes('flexora') || n.includes('peck deck') || n.includes('hack') || n.includes('articulado') || n.includes('smart')) equipment = 'MAQUINA';
+  else if (n.includes('cross') || n.includes('polia') || n.includes('cabo') || n.includes('corda')) equipment = 'POLIA';
+  else if (n.includes('halter') || n.includes('halteres')) equipment = 'HALTER';
+  else if (n.includes('barra') || n.includes('smith')) equipment = 'BARRA';
+  else if (n.includes('caneleira')) equipment = 'CANELEIRA';
+  else if (n.includes('prancha') || n.includes('corporal') || n.includes('livre')) equipment = 'PESO_CORPORAL';
 
   const jointRisk: string[] = [];
   if (n.includes('stiff') || n.includes('terra') || n.includes('remada curvada') || n.includes('agachamento livre') || n.includes('bom dia')) jointRisk.push('LOMBAR');
@@ -115,7 +94,7 @@ function generateTags(name: string, category: string): object {
   return { target, mechanic, equipment, jointRisk };
 }
 
-// 👇 LISTAGEM: Libera a herança para os parceiros verem a biblioteca Master
+// 👇 LISTAGEM — sem duplicatas
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -129,22 +108,24 @@ export async function GET(req: Request) {
     let whereClause: any = {};
 
     if (isMaster) {
-        // Master vê os globais (sem dono) e os da equipe master
-        whereClause = {
-            OR: [
-                { coachId: null },
-                { coachId: { in: MASTER_IDS } }
-            ]
-        };
+      // 🔥 CORREÇÃO: Master vê APENAS os próprios exercícios + globais (sem coachId)
+      // Não mistura com exercícios de outros admins do MASTER_IDS — evita duplicatas
+      whereClause = {
+        OR: [
+          { coachId: adminId },   // Só os dele
+          { coachId: null }       // Globais sem dono
+        ]
+      };
     } else {
-        // Parceiro vê os próprios exercícios DELE + Herda os exercícios base da equipe Master
-        whereClause = {
-            OR: [
-                { coachId: adminId },
-                { coachId: { in: MASTER_IDS } },
-                { coachId: null }
-            ]
-        };
+      // Parceiro vê os próprios + herda APENAS do Paulo (master principal)
+      // Não inclui a Adri como fonte de herança para evitar duplicatas
+      whereClause = {
+        OR: [
+          { coachId: adminId },
+          { coachId: '3c82f763-66b4-48da-836e-16817d4f57c0' }, // Paulo — fonte única de herança
+          { coachId: null }
+        ]
+      };
     }
 
     const exercises = await prisma.exercise.findMany({
@@ -159,7 +140,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 👇 CRIAÇÃO (Sempre atrela ao coach criador)
+// 👇 CRIAÇÃO
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -184,7 +165,7 @@ export async function POST(req: Request) {
         commonMistakes: body.commonMistakes || null,
         maleFocus: body.maleFocus || null,
         femaleFocus: body.femaleFocus || null,
-        coachId: adminId, // 🔥 CARIMBA O DONO 
+        coachId: adminId,
         defaultSubstitutes: body.defaultSubstitutes || []
       }
     });
@@ -196,13 +177,12 @@ export async function POST(req: Request) {
   }
 }
 
-// 👇 EDIÇÃO (Só pode editar se for dono)
+// 👇 EDIÇÃO
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
     const { id, adminId } = body;
 
-    // 🔥 MURALHA DE EDIÇÃO
     const isOwner = await checkExerciseOwnership(id, adminId);
     if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Apenas o criador pode editar este exercício." }, { status: 403 });
 
@@ -235,7 +215,7 @@ export async function PUT(req: Request) {
   }
 }
 
-// 👇 EXCLUSÃO (Só pode apagar se for dono)
+// 👇 EXCLUSÃO
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -244,12 +224,10 @@ export async function DELETE(req: Request) {
 
     if (!id) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 });
 
-    // 🔥 MURALHA DE EXCLUSÃO
     const isOwner = await checkExerciseOwnership(id, adminId);
     if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Apenas o criador pode excluir este exercício." }, { status: 403 });
 
     await prisma.exercise.delete({ where: { id: id } });
-
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: "Erro ao excluir" }, { status: 500 });
