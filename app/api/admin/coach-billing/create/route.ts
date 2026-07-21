@@ -1,6 +1,7 @@
 // app/api/admin/coach-billing/create/route.ts
 // Paulo gera cobrança de plano para um coach parceiro
 // Cria cliente no Asaas se não existir, gera cobrança Híbrida (PIX/Boleto/Cartão)
+// COM LOGS EXPLÍCITOS DE ERRO DO ASAAS
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { BILLING_PLANS, LAUNCH_PROMO_MAX, calcBillingEnd } from '@/config/coachBillingPlans';
@@ -55,7 +56,13 @@ async function getOrCreateAsaasCustomer(coach: any): Promise<string> {
         }),
     });
 
-    if (!created.id) throw new Error('Falha ao criar cliente no Asaas');
+    // 🔥 LOG EXPLÍCITO DO ASAAS: Se falhar, extrai a descrição do erro e joga para o frontend
+    if (!created.id) {
+        console.error('[Asaas] Erro ao criar cliente:', created);
+        const asaasError = created.errors?.[0]?.description || 'Erro desconhecido ao criar cliente no Asaas.';
+        throw new Error(`Asaas recusou o cliente: ${asaasError}`);
+    }
+
     await prisma.user.update({ where: { id: coach.id }, data: { coachAsaasId: created.id } as any });
     return created.id;
 }
@@ -96,7 +103,7 @@ export async function POST(req: Request) {
             }
         }
 
-        // Valor final (Paulo pode sobrescrever com customValue para promoções especiais)
+        // Valor final
         const finalValue = customValue ?? plan.totalPrice;
 
         // Data de vencimento — amanhã (dá tempo do coach pagar)
@@ -104,8 +111,13 @@ export async function POST(req: Request) {
         dueDate.setDate(dueDate.getDate() + 1);
         const dueDateStr = dueDate.toISOString().split('T')[0];
 
-        // Garante cliente no Asaas
-        const asaasCustomerId = await getOrCreateAsaasCustomer(coach);
+        // Garante cliente no Asaas (Captura o erro descritivo se falhar)
+        let asaasCustomerId;
+        try {
+            asaasCustomerId = await getOrCreateAsaasCustomer(coach);
+        } catch (err: any) {
+            return NextResponse.json({ error: err.message }, { status: 500 });
+        }
 
         // Descrição da cobrança
         const description = `ELITE FIT — ${plan.label}${customValue ? ` (valor especial)` : ''}`;
@@ -123,9 +135,11 @@ export async function POST(req: Request) {
             }),
         });
 
+        // 🔥 LOG EXPLÍCITO DO ASAAS: Se falhar na cobrança, extrai o erro exato
         if (!charge.id) {
-            console.error('[coach-billing/create] Asaas error:', charge);
-            return NextResponse.json({ error: 'Falha ao gerar cobrança no Asaas.', details: charge }, { status: 500 });
+            console.error('[Asaas] Erro ao gerar cobrança:', charge);
+            const asaasError = charge.errors?.[0]?.description || 'Erro desconhecido na geração da fatura.';
+            return NextResponse.json({ error: `Asaas recusou a cobrança: ${asaasError}`, details: charge }, { status: 500 });
         }
 
         // Calcula datas do ciclo
@@ -169,7 +183,7 @@ export async function POST(req: Request) {
         });
 
     } catch (error: any) {
-        console.error('[coach-billing/create]', error.message);
-        return NextResponse.json({ error: 'Erro interno.', details: error.message }, { status: 500 });
+        console.error('[coach-billing/create] Erro Interno:', error.message);
+        return NextResponse.json({ error: 'Erro interno do servidor.', details: error.message }, { status: 500 });
     }
 }
