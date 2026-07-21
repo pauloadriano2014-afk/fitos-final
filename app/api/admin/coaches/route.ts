@@ -1,6 +1,6 @@
 // app/api/admin/coaches/route.ts
 // GET  → lista todos os coaches com contagem de alunos e dados financeiros
-// PATCH → { coachId, action: 'BLOCK'|'UNBLOCK'|'SET_PLAN', coachPlan?, contractValue?, coachBillingEnd?, ... }
+// PATCH → { coachId, action: 'BLOCK'|'UNBLOCK'|'SET_PLAN'|'UPDATE_PROFILE', coachPlan?, contractValue?, coachBillingEnd?, name?, email?, cpf?, phone?, instagram? ... }
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -17,6 +17,7 @@ export async function GET() {
                 email:         true,
                 phone:         true,
                 cpf:           true,
+                instagram:     true, // 🔥 Garantindo que o instagram vem na busca
                 accountStatus: true,
                 inviteCode:    true,
                 coachPlan:     true,  // ← PERSONAL | NUTRICIONISTA | ELITE
@@ -52,7 +53,8 @@ export async function PATCH(req: NextRequest) {
         const { 
             coachId, action, coachPlan, 
             contractValue, coachBillingEnd, paymentDueDate, contractType, isFinanceActive,
-            coachBillingStart, startDate // 🔥 ADICIONADO AQUI
+            coachBillingStart, startDate, 
+            name, email, cpf, phone, instagram // 🔥 ADICIONADOS PARA O PERFIL
         } = await req.json();
 
         if (!coachId || !action) {
@@ -103,6 +105,24 @@ export async function PATCH(req: NextRequest) {
             await prisma.user.update({
                 where: { id: coachId },
                 data:  dataToUpdate,
+            });
+            return NextResponse.json({ ok: true, updated: dataToUpdate });
+        }
+
+        // 🚀 NOVA AÇÃO: ATUALIZAR PERFIL DO COACH
+        if (action === 'UPDATE_PROFILE') {
+            const dataToUpdate: any = {};
+            
+            if (name !== undefined) dataToUpdate.name = name;
+            if (email !== undefined) dataToUpdate.email = email;
+            if (cpf !== undefined) dataToUpdate.cpf = cpf;
+            if (phone !== undefined) dataToUpdate.phone = phone;
+            if (instagram !== undefined) dataToUpdate.instagram = instagram;
+            if (contractValue !== undefined) dataToUpdate.contractValue = contractValue;
+
+            await prisma.user.update({
+                where: { id: coachId },
+                data: dataToUpdate,
             });
             return NextResponse.json({ ok: true, updated: dataToUpdate });
         }
