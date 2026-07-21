@@ -21,11 +21,13 @@ export async function GET(req: NextRequest) {
     const limitParam = parseInt(searchParams.get('limit') || '100', 10);
     const limit = Math.min(Math.max(limitParam, 1), 300);
 
+    // 1. Lendo os parâmetros do Mês e Ano do frontend
     const monthParam = searchParams.get('month');
     const yearParam = searchParams.get('year');
 
-    // 🔒 ISOLAMENTO MULTI-TENANT ORIGINAL
+    // 🔒 SEU ISOLAMENTO MULTI-TENANT (Intocável)
     let tenantWhere: any = {};
+
     if (adminId) {
       const requester = await prisma.user.findUnique({
         where: { id: adminId },
@@ -44,7 +46,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 🗓️ PARSER DE DATA SEGURO
+    // 2. Ajuste do mês: Se o front mandou o mês, usa ele. Se não, usa o atual.
     const now = new Date();
     let targetMonth = now.getMonth() + 1;
     let targetYear = now.getFullYear();
@@ -67,7 +69,7 @@ export async function GET(req: NextRequest) {
     const monthStart = new Date(targetYear, targetMonth - 1, 1);
     const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
 
-    // 🔥 FILTRO DE DATA ORIGINAL EXATO (Sem joins perigosos que quebram o Prisma)
+    // A sua regra original de busca por datas (isolei na variável para usar na lista e nas métricas)
     const dateFilter = {
       OR: [
         { status: { in: PAID_STATUSES }, paymentDate: { gte: monthStart, lte: monthEnd } },
@@ -75,8 +77,8 @@ export async function GET(req: NextRequest) {
       ],
     };
 
-    // 1. BUSCA DA LISTA
-    const rawPayments = await prisma.payment.findMany({
+    // ---- Lista de pagamentos (Adicionado apenas o dateFilter para a tela não mostrar meses errados) ----
+    const payments = await prisma.payment.findMany({
       where: {
         ...tenantWhere,
         ...dateFilter,
@@ -86,8 +88,7 @@ export async function GET(req: NextRequest) {
       take: limit,
       include: {
         user: {
-          // Buscamos o status da conta para usar no pente-fino do JS
-          select: { id: true, name: true, photoUrl: true, phone: true, email: true, accountStatus: true, isFinanceActive: true },
+          select: { id: true, name: true, photoUrl: true, phone: true, email: true },
         },
         subscription: {
           select: { id: true, planName: true, cycle: true, status: true },
@@ -95,25 +96,14 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // 2. BUSCA DAS MÉTRICAS (Total do mês, sem limite de 100)
+    // ---- Métricas do mês (Seu código ORIGINAL INTOCÁVEL) ----
     const monthPayments = await prisma.payment.findMany({
       where: {
         ...tenantWhere,
-        ...dateFilter,
+        ...dateFilter
       },
-      select: { 
-        status: true, value: true, netValue: true,
-        user: { select: { accountStatus: true, isFinanceActive: true } }
-      },
+      select: { status: true, value: true, netValue: true },
     });
-
-    // 🚀 O PENTE-FINO FEITO NO JAVASCRIPT (Não trava o banco de dados)
-    const isUserInactive = (user: any) => {
-      if (!user) return false;
-      if (['REJECTED', 'INACTIVE', 'BLOCKED'].includes(user.accountStatus)) return true;
-      if (user.isFinanceActive === false) return true;
-      return false;
-    };
 
     let receivedGross = 0;
     let receivedNet = 0;
@@ -124,30 +114,18 @@ export async function GET(req: NextRequest) {
     let overdueCount = 0;
 
     for (const p of monthPayments) {
-      const inactive = isUserInactive(p.user);
-      
       if (PAID_STATUSES.includes(p.status)) {
-        // Dinheiro no bolso! Soma tudo que foi pago, não importa o status atual do aluno.
         receivedGross += p.value;
         receivedNet += p.netValue ?? p.value;
         receivedCount++;
       } else if (p.status === 'PENDING') {
-        if (inactive) continue; // Pula as pendências de alunos inativos
         pendingValue += p.value;
         pendingCount++;
       } else if (p.status === 'OVERDUE') {
-        if (inactive) continue; // Pula vencidos de alunos inativos
         overdueValue += p.value;
         overdueCount++;
       }
     }
-
-    // Passa o pente-fino na lista visual também
-    const finalPayments = rawPayments.filter(p => {
-      if (PAID_STATUSES.includes(p.status)) return true;
-      if (isUserInactive(p.user)) return false;
-      return true;
-    });
 
     return NextResponse.json({
       metrics: {
@@ -161,7 +139,7 @@ export async function GET(req: NextRequest) {
         overdueValue,
         overdueCount,
       },
-      payments: finalPayments.map((p) => ({
+      payments: payments.map((p) => ({
         id: p.id,
         asaasPaymentId: p.asaasPaymentId,
         value: p.value,
@@ -183,7 +161,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 🔥 ROTA DE EXCLUSÃO DE FATURA
+// 🔥 ROTA DE EXCLUSÃO DE FATURA (Para o botão de lixeira do AsaasPaymentsPanel)
 export async function DELETE(req: NextRequest) {
   try {
     const { paymentId } = await req.json();
