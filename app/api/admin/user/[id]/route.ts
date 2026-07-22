@@ -1,9 +1,9 @@
-// app/api/admin/user/[id]/route.ts — v2
-// v2: retorna onboardingCompleted, onboardingStep e coachPlan no GET
+// app/api/admin/user/[id]/route.ts — v3 (Blindado)
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const prisma = (global as any).prisma || new PrismaClient();
+if (process.env.NODE_ENV === 'development') (global as any).prisma = prisma;
 
 const MASTER_IDS = [
     '3c82f763-66b4-48da-836e-16817d4f57c0',
@@ -21,6 +21,22 @@ async function checkOwnership(userId: string, adminId: string | null) {
     return targetUser.coachId === adminId || targetUser.nutritionistId === adminId;
 }
 
+// 🔥 Tratamento de CORS GLOBAL para evitar bloqueios na PWA
+function corsResponse(body: any, status = 200) {
+    return NextResponse.json(body, {
+        status,
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+    });
+}
+
+export async function OPTIONS() {
+    return corsResponse({});
+}
+
 export async function GET(req: Request, { params }: { params: { id: string } }) {
     try {
         const userId = params.id;
@@ -29,7 +45,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
         if (adminId) {
             const isOwner = await checkOwnership(userId, adminId);
-            if (!isOwner) return NextResponse.json({ error: 'Acesso não autorizado a este aluno.' }, { status: 403 });
+            if (!isOwner) return corsResponse({ error: 'Acesso não autorizado a este aluno.' }, 403);
         }
 
         const user = await prisma.user.findUnique({
@@ -69,13 +85,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
                 paymentClaimCycleDueDate: true,
                 isMenstruating: true,
                 menstruationStartDate: true,
-
-                // ← v2: campos de onboarding e plano do coach
                 onboardingCompleted: true,
                 onboardingStep:      true,
                 coachPlan:           true,
-                studentModules:      true, // ← módulos do aluno (TREINO | DIETA | AMBOS)
-
+                // 🔥 "studentModules" foi removido daqui pois não existe na tabela e dava Erro 500!
                 anamneses: { orderBy: { createdAt: 'desc' }, take: 1 },
                 workouts:  { where: { archived: false }, orderBy: { createdAt: 'desc' }, take: 1 },
                 diets: {
@@ -87,13 +100,13 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             }
         });
 
-        if (!user) return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+        if (!user) return corsResponse({ error: 'Usuário não encontrado' }, 404);
 
-        return NextResponse.json(user);
+        return corsResponse(user);
 
     } catch (error) {
         console.error('Erro GET Admin User ID:', error);
-        return NextResponse.json({ error: 'Erro ao buscar usuário' }, { status: 500 });
+        return corsResponse({ error: 'Erro ao buscar usuário' }, 500);
     }
 }
 
@@ -105,17 +118,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
         if (adminId) {
             const isOwner = await checkOwnership(userId, adminId);
-            if (!isOwner) return NextResponse.json({ error: 'Acesso não autorizado.' }, { status: 403 });
+            if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
         }
 
         const dataToUpdate = { ...body };
         delete dataToUpdate.adminId;
 
         const user = await prisma.user.update({ where: { id: userId }, data: dataToUpdate });
-        return NextResponse.json(user);
+        return corsResponse(user);
     } catch (error) {
         console.error('Erro PATCH Admin User:', error);
-        return NextResponse.json({ error: 'Erro ao atualizar usuário' }, { status: 500 });
+        return corsResponse({ error: 'Erro ao atualizar usuário' }, 500);
     }
 }
 
@@ -127,7 +140,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
         if (adminId) {
             const isOwner = await checkOwnership(userId, adminId);
-            if (!isOwner) return NextResponse.json({ error: 'Acesso não autorizado.' }, { status: 403 });
+            if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
         }
 
         const dataToUpdate = { ...body };
@@ -149,10 +162,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
             });
         }
 
-        return NextResponse.json(user);
+        return corsResponse(user);
     } catch (error) {
         console.error('Erro PUT Admin User:', error);
-        return NextResponse.json({ error: 'Erro ao atualizar usuário' }, { status: 500 });
+        return corsResponse({ error: 'Erro ao atualizar usuário' }, 500);
     }
 }
 
@@ -162,17 +175,17 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
         const { searchParams } = new URL(req.url);
         const adminId = searchParams.get('adminId');
 
-        if (!id) return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+        if (!id) return corsResponse({ error: 'User ID is required' }, 400);
 
         if (adminId) {
             const isOwner = await checkOwnership(id, adminId);
-            if (!isOwner) return NextResponse.json({ error: 'Apenas o Coach responsável pode apagar este aluno.' }, { status: 403 });
+            if (!isOwner) return corsResponse({ error: 'Apenas o Coach responsável pode apagar este aluno.' }, 403);
         }
 
         await prisma.user.delete({ where: { id } });
-        return NextResponse.json({ success: true });
+        return corsResponse({ success: true });
     } catch (error: any) {
         console.error('Erro ao apagar utilizador:', error);
-        return NextResponse.json({ error: 'Falha ao eliminar utilizador.' }, { status: 500 });
+        return corsResponse({ error: 'Falha ao eliminar utilizador.' }, 500);
     }
 }
