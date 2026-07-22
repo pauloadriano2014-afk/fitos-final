@@ -178,8 +178,11 @@ model Technique {
 
 model SystemTechniqueVideo {
   id        String   @id @default(uuid())
-  key       String   @unique
+  key       String   // 🔥 O @unique saiu daqui!
   videoUrl  String
+  teamId    String   @default("MASTER_TEAM") // 🔥 Nova coluna
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([key, teamId]) // 🔥 Agora a exclusividade é a combinação da técnica com o time
 }
