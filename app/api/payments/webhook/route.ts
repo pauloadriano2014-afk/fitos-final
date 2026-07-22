@@ -97,8 +97,29 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
     return NextResponse.json({ received: true });
 }
 
-// ─── ALUNO (lógica original preservada) ──────────────────────────────────────
+// ─── ALUNO (lógica original preservada e expandida para o painel) ────────────
 async function handleStudentPayment(event: string, payment: any) {
+    // 🔥 ATUALIZA A FATURA (PAYMENT) PARA APARECER VERDE NO SEU PAINEL NOVO
+    if (payment && payment.id) {
+        const cobrancaExistente = await prisma.payment.findUnique({
+            where: { asaasPaymentId: payment.id }
+        });
+
+        if (cobrancaExistente) {
+            await prisma.payment.update({
+                where: { id: cobrancaExistente.id },
+                data: {
+                    status: payment.status, // Atualiza para CONFIRMED, RECEIVED, OVERDUE, etc.
+                    netValue: payment.netValue,
+                    paymentDate: payment.clientPaymentDate ? new Date(payment.clientPaymentDate) : (['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'].includes(event) ? new Date() : null),
+                    billingType: payment.billingType,
+                }
+            });
+            console.log(`✅ Fatura atualizada no banco: ${payment.id} -> ${payment.status}`);
+        }
+    }
+
+    // ── LÓGICA ORIGINAL INTACTA: RENOVAÇÃO DO ALUNO ──
     const customerId: string = payment.customer || '';
     if (!customerId) return NextResponse.json({ received: true });
 
