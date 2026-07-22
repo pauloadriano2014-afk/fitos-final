@@ -403,6 +403,14 @@ model Diet {
   generalNotes  String?   @db.Text 
   
   isActive      Boolean   @default(true)
+
+  // 🔥 ESTRATÉGIAS TEMPORÁRIAS
+  isStrategy        Boolean   @default(false)
+  strategyName      String?
+  strategyActive    Boolean   @default(false)
+  strategyStartDate DateTime?
+  strategyEndDate   DateTime?
+
   meals         Meal[]    
   
   createdAt     DateTime  @default(now())
