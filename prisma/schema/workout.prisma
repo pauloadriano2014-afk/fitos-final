@@ -1,0 +1,185 @@
+// prisma/schema/workout.prisma
+
+model Exercise {
+  id              String   @id @default(uuid())
+  name            String   
+  category        String
+  subCategory     String?  @default("Geral") 
+
+  howToExecute    String?  @db.Text
+  commonMistakes  String?  @db.Text
+  maleFocus       String?  @db.Text
+  femaleFocus     String?  @db.Text
+  
+  environments    String[] @default(["ACADEMIA"])
+
+  tags            Json?
+  defaultSubstitutes String[] @default([])
+  
+  videoUrl        String?
+  instructions    String?
+  createdAt       DateTime @default(now())
+  
+  coachId         String?
+  coach           User?    @relation("CoachExercises", fields: [coachId], references: [id], onDelete: Cascade)
+
+  workoutExercises WorkoutExercise[] 
+  asSubstitute     WorkoutExercise[] @relation("SubstituteRelation")
+
+  @@unique([name, coachId])
+}
+
+model Workout {
+  id        String   @id @default(uuid())
+  name      String   
+  goal      String?   
+  level     String?   
+  isVisible Boolean   @default(true)
+  
+  startDate DateTime? @default(now()) 
+  endDate   DateTime? 
+  archived  Boolean   @default(false) 
+
+  workoutModel String @default("CARGA")
+
+  intensityMultiplier Float     @default(1.0)
+  intensityEndDate    DateTime? 
+  
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises WorkoutExercise[]
+  createdAt DateTime  @default(now())
+}
+
+model WorkoutExercise {
+  id                String     @id @default(uuid())
+  workoutId         String
+  workout           Workout    @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  
+  exerciseId        String
+  exercise          Exercise   @relation(fields: [exerciseId], references: [id])
+  
+  substituteId      String?
+  substitute        Exercise?  @relation("SubstituteRelation", fields: [substituteId], references: [id])
+
+  substitutes       String[]   @default([])
+
+  restTime          Int        @default(60)
+  title             String?  
+  sets              Int        @default(3)
+  reps              String     @default("12") 
+  notes             String?  
+  
+  technique         String?    
+  
+  customTechniqueId String?
+  customTechnique   Technique? @relation(fields: [customTechniqueId], references: [id], onDelete: SetNull)
+
+  day               String     @default("A") 
+  order             Int        @default(0) 
+
+  observation       String?  
+}
+
+model TemplateCollection {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#22c55e") 
+  createdAt DateTime @default(now())
+
+  coachId   String?
+  coach     User?    @relation("CoachCollections", fields: [coachId], references: [id], onDelete: Cascade)
+
+  templates WorkoutTemplate[]
+}
+
+model WorkoutTemplate {
+  id        String   @id @default(uuid())
+  name      String   
+  goal      String   
+  level     String   
+  data      String   @db.Text 
+  createdAt DateTime @default(now())
+
+  coachId   String?
+  coach     User?    @relation("CoachTemplates", fields: [coachId], references: [id], onDelete: Cascade)
+
+  collectionId String?
+  collection   TemplateCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+}
+
+model MotorTemplate {
+  id          String   @id @default(uuid())
+  name        String   
+  
+  objectives  String[] 
+  levels      String[] 
+  times       Int[]    
+  days        Int[]    
+  
+  structure   String   @db.Text 
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  coachId     String?
+  coach       User?    @relation("CoachMotorTemplates", fields: [coachId], references: [id], onDelete: Cascade)
+}
+
+model WorkoutHistory {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name             String   
+  workoutName      String? 
+  date             DateTime @default(now())
+  xpEarned         Int      @default(0)
+  duration         Int?     
+  progressions     Int      @default(0) 
+
+  rpe              Int?     
+  feedback         String?  
+
+  details          ExerciseHistory[]
+}
+
+model ExerciseHistory {
+  id               String         @id @default(uuid())
+  workoutHistoryId String
+  workoutHistory   WorkoutHistory @relation(fields: [workoutHistoryId], references: [id], onDelete: Cascade)
+  
+  exerciseId       String
+  exerciseName     String
+  
+  setNumber        Int
+  weight           Float  
+  reps             String 
+}
+
+model Technique {
+  id          String   @id @default(uuid())
+  name        String   
+  description String?  @db.Text
+  
+  steps       Json
+  videoUrl    String?     
+
+  isGlobal    Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  coachId     String?
+  coach       User?    @relation("CoachTechniques", fields: [coachId], references: [id], onDelete: Cascade)
+
+  workoutExercises WorkoutExercise[]
+}
+
+model SystemTechniqueVideo {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  videoUrl  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

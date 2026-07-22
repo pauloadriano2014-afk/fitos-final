@@ -1,0 +1,99 @@
+// prisma/schema/content.prisma
+
+model Notice {
+  id        String   @id @default(uuid())
+  title     String
+  content   String   @db.Text
+  active    Boolean  @default(true)
+  date      DateTime @default(now())
+
+  coachId   String?
+  coach     User?    @relation("CoachNotices", fields: [coachId], references: [id], onDelete: Cascade)
+}
+
+model Content {
+  id          String   @id @default(uuid())
+  title       String
+  subtitle    String?
+  description String?  @db.Text
+  
+  category    String   
+  
+  type        String   @default("video") 
+  isVIP       Boolean  @default(false)   
+  
+  videoUrl    String?  
+  pdfUrl      String?  
+  audioUrl    String?  
+  thumbUrl    String?  
+  duration    String?  
+  
+  createdAt   DateTime @default(now())
+
+  coachId     String?
+  coach       User?    @relation("CoachContents", fields: [coachId], references: [id], onDelete: Cascade)
+  
+  likes       ContentLike[]
+  comments    ContentComment[]
+  completions ContentCompletion[] 
+  unlockedFor ContentAccess[]
+}
+
+model ContentLike {
+  id        String   @id @default(uuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  @@unique([userId, contentId])
+}
+
+model ContentComment {
+  id        String   @id @default(uuid())
+  text      String   @db.Text
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  parentId  String?
+  parent    ContentComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   ContentComment[] @relation("CommentReplies")
+}
+
+model ContentCompletion {
+  id        String   @id @default(uuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  @@unique([userId, contentId]) 
+}
+
+model ContentAccess {
+  id        String   @id @default(uuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, contentId]) 
+}

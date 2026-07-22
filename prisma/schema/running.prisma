@@ -1,0 +1,94 @@
+// prisma/schema/running.prisma
+
+model RunningAnamnese {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  token     String   @unique @default(uuid())
+  filled    Boolean  @default(false)
+  filledAt  DateTime?
+
+  runningExperience   String?  
+  timeStopped         String?  
+  maxDistanceBefore   String?  
+  weeklyFrequencyNow  String?  
+  completedRaces      Boolean  @default(false)
+  racesDescription    String?  
+
+  canWalk30min        Boolean  @default(false)
+  canJog5min          Boolean  @default(false)
+  breathingDifficulty String?  
+  fitnessLevel        Int?     
+
+  injuries            String[] @default([]) 
+  heartCondition      Boolean  @default(false)
+  jointIssues         Boolean  @default(false)
+  medications         String?
+  medicalClearance    String?  
+
+  runningGoal         String?  
+  goalDeadline        String?  
+  previousFailures    String?  @db.Text
+
+  availableDays       String[] @default([]) 
+  preferredTime       String?  
+  trainingLocation    String?  
+  hasProperShoes      String?  
+
+  weight              Float?
+  height              Float?
+  bodyPainDuringWalk  String?  @db.Text
+  sleepQuality        String?  
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RunningProtocol {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String   @default("Protocolo 5K")
+  isActive    Boolean  @default(true)
+  startDate   DateTime @default(now())
+
+  startBlock  Int      @default(1)  
+  startWeek   Int      @default(1)  
+
+  customNotes       String?  @db.Text  
+  customSpeeds      Json?              
+  adaptations       String?  @db.Text  
+
+  generatedByAI     Boolean  @default(false)
+  aiPromptSnapshot  String?  @db.Text  
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  logs        RunningLog[]
+}
+
+model RunningLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  protocolId  String
+  protocol    RunningProtocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+
+  week        Int              
+  block       Int              
+  sessionDay  String           
+
+  date             DateTime @default(now())
+  durationMinutes  Int?
+  distanceKm       Float?
+  avgPace          String?  
+  notes            String?  @db.Text
+
+  rpe              Int?     
+
+  createdAt   DateTime @default(now())
+}

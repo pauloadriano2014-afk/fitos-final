@@ -1,0 +1,239 @@
+// prisma/schema/tracking.prisma
+
+model Anamnese {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  peso            Float
+  altura          Float
+  imc             Float?
+  aguaIdeal       Float?
+
+  objetivo        String
+  nivel           String
+
+  frequencia      Int
+  tempoDisponivel Int      @default(60)
+  trainFasted     Boolean?
+
+  limitacoes      String[]
+  cirurgias       String[]
+  equipamentos    String[]
+
+  healthConditions      String[]
+  healthConditionsObs   String?   @db.Text
+  bariatric             Boolean?
+  bariatricType         String?
+  bariatricTime         String?
+  bariatricIntolerances String[]
+  medications           String[]
+  medicationsObs        String?   @db.Text
+
+  digestiveIssues String[]
+  digestiveObs    String?   @db.Text
+  sleepHours      String?
+  sleepQuality    String?
+  wakeHungry      Boolean?
+  stressLevel     Int?
+  stressEating    Boolean?
+
+  cycleRegular String?
+  pmsSymptoms  String[]
+  pmsObs       String?   @db.Text
+
+  mealsPerDay        Int?
+  wakeUpTime         String?
+  sleepTime          String?
+  workTime           String?
+  workTimeStart      String?
+  workTimeEnd        String?
+  trainTime          String?
+  freeDays             String[]
+  freeWakeUpTime       String?
+  freeSleepTime        String?
+  freeTrainTime        String?
+  eatsOutPerWeek     String?
+  budget             String?
+  preworkoutStrategy String?
+
+  waterIntake  String?
+  alcoholFreq  String?
+  coffeePerDay String?
+  smoker       Boolean?
+  eatSpeed     String?
+  nightBinge   String?
+
+  triedDiets       String[]
+  dietWorked       String?   @db.Text
+  dietHated        String?   @db.Text
+  biggestChallenge String?
+
+  allergies       String?   @db.Text
+  foodPreferences String?   @db.Text
+  foodAversions   String?   @db.Text
+  supplements     String?   @db.Text
+  extraNotes      String?   @db.Text
+
+  createdAt DateTime @default(now())
+}
+
+model Assessment {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime @default(now())
+  
+  age             Int?     
+  
+  weight          Float    
+  height          Float?   
+  photos          String[] 
+  
+  neck            Float?   
+  shoulders       Float?   
+  chest           Float?   
+  waist           Float?   
+  abdomen         Float?   
+  hips            Float?   
+  
+  arms            Float?   
+  armLeft         Float?   
+  forearms        Float?   
+  forearmLeft     Float?   
+  
+  thighs          Float?   
+  thighLeft       Float?   
+  calves          Float?   
+  calfLeft        Float?   
+  
+  method          String?  
+  
+  foldTriceps     Float?
+  foldSubscapular Float?
+  foldChest       Float?
+  foldAxillary    Float?
+  foldSuprailiac  Float?
+  foldAbdominal   Float?
+  foldThigh       Float?
+  
+  bodyFat         Float?   
+  visceralFat     Float?   
+  muscleMass      Float?   
+  
+  notes           String?   
+  createdAt       DateTime @default(now())
+}
+
+model CheckIn {
+  id              String   @id @default(uuid())
+  date            DateTime @default(now())
+  
+  weight          Float?
+  feedback        String?  
+  
+  photoFront      String?  
+  photoBack       String?
+  coachFeedback   String?  
+  allowMarketing  Boolean @default(false)  
+  photoSide       String?
+  extraPhotos     String[]
+  photoFrontOriginal  String?
+  photoSideOriginal   String?
+  photoBackOriginal   String? 
+  
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  aiEvaluatedAt DateTime?
+}
+
+model DailyCheckin {
+  id        String   @id @default(uuid())
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      String   
+  water_ml  Int      @default(0)
+  fome      String?
+  digestao  String?
+  energia   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, date])
+}
+
+model SatisfactionSurvey {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  appExperience     String   
+  appExpReason      String?  @db.Text 
+  
+  visualExperience  String?  
+  visualReason      String?  @db.Text 
+
+  toolsExperience   String?  
+  toolsReason       String?  @db.Text 
+  
+  libraryExperience String?
+
+  appImprovement    String?  @db.Text 
+  coachSupport      String?  @db.Text 
+  
+  checkinExperience String   
+  checkinReason     String?  @db.Text 
+  
+  dietExperience    String?  @db.Text 
+  dietAdherence     String?  
+  dietRoutine       String?  
+  dietTools         String?  
+  dietToolsReason   String?  @db.Text 
+  dietSubstitutions String?  
+  
+  createdAt         DateTime @default(now())
+  readByAdmin       Boolean  @default(false)
+}
+
+model FormTemplate {
+  id          String   @id @default(uuid())
+  coachId     String   
+  
+  type        String   @default("TRAINING") 
+  
+  name        String   
+  description String?  @db.Text
+  
+  schema      Json     
+  
+  isActive    Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  responses   FormResponse[]
+
+  @@index([coachId])
+}
+
+model FormResponse {
+  id              String   @id @default(uuid())
+  
+  templateId      String
+  template        FormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  
+  userId          String   
+  
+  publicToken     String?  @unique 
+  
+  answers         Json     
+  
+  submittedAt     DateTime? 
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([templateId])
+}

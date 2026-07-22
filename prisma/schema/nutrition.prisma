@@ -1,0 +1,149 @@
+// prisma/schema/nutrition.prisma
+
+model Diet {
+  id            String   @id @default(uuid())
+  userId        String   
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  pdfUrl        String?   
+  
+  name          String    @default("Plano Alimentar")
+  goal          String?   
+  
+  totalKcal     Float?
+  totalProtein  Float?
+  totalCarbs    Float?
+  totalFats     Float?
+  
+  waterIntake   String?   
+  freeMeal      String?   
+  generalNotes  String?   @db.Text 
+  
+  isActive      Boolean   @default(true)
+
+  // 🔥 ESTRATÉGIAS TEMPORÁRIAS
+  isStrategy        Boolean   @default(false)
+  strategyName      String?
+  strategyActive    Boolean   @default(false)
+  strategyStartDate DateTime?
+  strategyEndDate   DateTime?
+
+  meals         Meal[]    
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Meal {
+  id        String     @id @default(uuid())
+  dietId    String
+  diet      Diet       @relation(fields: [dietId], references: [id], onDelete: Cascade)
+  name      String     
+  time      String?    
+  order     Int        @default(0) 
+  notes     String?    @db.Text 
+  dayType   String     @default("TREINO")
+
+  alternativeGroupId String?    
+  isMainVersion      Boolean    @default(true)  
+  alternativeLabel   String?    
+  
+  items     FoodItem[]
+}
+
+model FoodItem {
+  id                  String   @id @default(uuid())
+  mealId              String
+  meal                Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  
+  name                String   
+  amount              Float    
+  unit                String   
+  
+  protein             Float?
+  carbs               Float?
+  fats                Float?
+  calories            Float?
+
+  substitutionGroupId String?  
+}
+
+model SubstitutionGroup {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  teamId      String
+  createdAt   DateTime @default(now())
+
+  members SubstitutionGroupMember[]
+}
+
+model SubstitutionGroupMember {
+  id      String @id @default(uuid())
+  groupId String
+  foodId  String
+
+  group SubstitutionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, foodId])
+  @@index([foodId])
+}
+
+model Food {
+  id         String   @id @default(uuid())
+  source     String   
+  externalId String?  
+  teamId     String?  
+
+  name        String
+  category    String
+  subcategory String?
+  baseUnit    String   @default("g")
+
+  kcal       Float
+  protein    Float
+  carbs      Float
+  fat        Float
+  fiber      Float?
+
+  isLactoseFree     Boolean? @default(false)
+  equivalenceFactor Float?   @default(1)
+  conversionFactor  Float?   @default(1)
+  isFavorite        Boolean  @default(false)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([source, externalId])
+  @@index([teamId])
+  @@index([category])
+  @@index([name])
+}
+
+model DietTemplate {
+  id        String   @id @default(uuid())
+  name      String   
+  goal      String?
+  totalKcal Float?
+  meals     Json     
+  createdAt DateTime @default(now())
+}
+
+model MealTemplate {
+  id        String   @id @default(uuid())
+  name      String   
+  category  String?  
+  items     Json     
+  createdAt DateTime @default(now())
+}
+
+model DietFeedback {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  satiety          String?
+  difficulty       String?
+  requestedChanges String?  @db.Text
+  read             Boolean  @default(false)
+  createdAt        DateTime @default(now())
+}

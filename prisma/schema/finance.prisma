@@ -1,0 +1,114 @@
+// prisma/schema/finance.prisma
+
+model PaymentGatewayAccount {
+  id            String   @id @default(uuid())
+  coachId       String   @unique 
+  provider      String   @default("ASAAS")
+  asaasApiKey   String   
+  asaasWalletId String?  
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  subscriptions Subscription[]
+  payments      Payment[]
+}
+
+model Subscription {
+  id                  String    @id @default(uuid())
+  userId              String
+  coachId             String    
+  gatewayAccountId    String
+  asaasCustomerId     String    
+  asaasSubscriptionId String?   
+  planName            String    
+  value               Float
+  cycle               String    @default("MONTHLY") 
+  billingType         String    @default("UNDEFINED") 
+  status              String    @default("ACTIVE") 
+  nextDueDate         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gatewayAccount PaymentGatewayAccount @relation(fields: [gatewayAccountId], references: [id])
+  payments       Payment[]
+
+  @@index([userId])
+  @@index([coachId])
+}
+
+model Payment {
+  id               String    @id @default(uuid())
+  subscriptionId   String?
+  userId           String
+  coachId          String    
+  gatewayAccountId String
+  asaasPaymentId   String    @unique 
+  value            Float
+  netValue         Float?    
+  billingType      String    
+  status           String    @default("PENDING") 
+  dueDate          DateTime
+  paymentDate      DateTime?
+  invoiceUrl       String?   
+  pixQrCode        String?   @db.Text 
+  pixCopyPaste     String?   @db.Text 
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  subscription   Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gatewayAccount PaymentGatewayAccount @relation(fields: [gatewayAccountId], references: [id])
+
+  @@index([userId])
+  @@index([coachId])
+  @@index([asaasPaymentId])
+}
+
+model SalesPageConfig {
+  id              String   @id @default(uuid())
+  
+  coachId         String   @unique
+  coach           User     @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  
+  pageTitle       String?  @default("Minha Consultoria")
+  aboutText       String?  @db.Text
+  videoUrl        String?  
+  coachPhotoUrl   String?  
+  galleryPhotos   String[] @default([]) 
+
+  galleryTexts      String[] @default([]) 
+  testimonialNames  String[] @default([]) 
+  testimonialTexts  String[] @default([]) 
+
+  pixKey            String?
+  pixName           String?
+
+  themeColor      String?  @default("#4DE38F") 
+  appFeatures     String[] @default([]) 
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CoachPlan {
+  id               String   @id @default(uuid())
+  
+  coachId          String
+  coach            User     @relation("CoachPlans", fields: [coachId], references: [id], onDelete: Cascade)
+  
+  name             String   
+  description      String?  @db.Text
+  value            Float    
+  promotionalValue Float?   
+  durationInMonths Int      @default(1) 
+  discountPerc     Int      @default(0)
+
+  paymentUrl       String?
+  isActive         Boolean  @default(true)
+  isPromoActive    Boolean  @default(false)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

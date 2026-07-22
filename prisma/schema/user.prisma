@@ -1,0 +1,183 @@
+// prisma/schema/user.prisma
+
+model User {
+  id                String   @id @default(uuid())
+  email             String   @unique
+  password          String
+  name              String?
+  birthDate         String?
+  phone             String?
+  cpf               String?
+  gender            String?
+  aiLogs            AiLog[]
+  dailyCheckins     DailyCheckin[]
+  dietFeedbacks     DietFeedback[]
+  npsRequested      Boolean  @default(false) 
+  accountStatus     String  @default("ACTIVE") 
+  inviteCode        String? @unique
+  coachRequestInfo  Json?
+  studentModules      String?   @default("TREINO")
+  coachPlan           String?   @default("PERSONAL")
+  coachBillingPlan    String?
+  coachBillingStart   DateTime?
+  coachBillingEnd     DateTime?
+  coachAsaasId        String?
+  coachAsaasChargeId  String?
+  coachBillingStatus  String?   @default("PENDING")
+  isLaunchPromo       Boolean   @default(false)
+  onboardingCompleted Boolean   @default(false)
+  onboardingStep      Int       @default(0)
+  aiCheckinPrompt     String?   @db.Text
+  aiPromptMode        String?   @default("ADD")
+  
+  plan_tier         String   @default("standard")
+  role              String   @default("USER") 
+  plan              String   @default("PERFORMANCE") 
+  active            Boolean  @default(true)
+  
+  asaasCustomerId     String?
+  asaasSubscriptionId String?
+  coachAsaasApiKey    String?
+
+  subscriptions   Subscription[]
+  payments        Payment[]
+
+  brandLogoUrl        String?
+  brandColor          String?
+
+  isTestAccount       Boolean  @default(false) 
+  
+  contractType      String?   @default("Mensal") 
+  contractValue     Float?    @default(0.0)
+  paymentDueDate    DateTime? 
+  startDate         DateTime? 
+  nextWorkoutUpdate DateTime? 
+  financeCategory   String?   @default("Consultoria Online") 
+  isFinanceActive   Boolean   @default(true)
+
+  paymentClaimedAt         DateTime? 
+  paymentClaimStatus       String?   
+  paymentClaimCycleDueDate DateTime? 
+
+  currentWeight   Float? 
+  
+  currentXP       Int      @default(0)
+  pushToken       String?  
+  
+  photoUrl        String?
+  evaluationUrl   String?  
+  nextCheckInDate DateTime? 
+  disableCheckIn  Boolean  @default(false) 
+  dietGoal        String   @default("NONE") 
+  goal            String?
+  level           String?
+  isMenstruating  Boolean   @default(false)
+  menstruationStartDate DateTime?
+
+  strategyNotes   String?   @db.Text
+  lastContactDate DateTime?
+  weeklyChecks    Json?
+
+  dietModule       Boolean  @default(false)
+  anamnesePendente Boolean  @default(false) 
+
+  runningModule   Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+
+  coachId         String?
+  coach           User?    @relation("CoachStudents", fields: [coachId], references: [id], onDelete: SetNull)
+  students        User[]   @relation("CoachStudents")
+
+  nutritionistId  String?
+  nutritionist    User?    @relation("NutritionistStudents", fields: [nutritionistId], references: [id], onDelete: SetNull)
+  dietStudents    User[]   @relation("NutritionistStudents")
+
+  createdExercises  Exercise[]          @relation("CoachExercises")
+  createdTemplates  WorkoutTemplate[]   @relation("CoachTemplates")
+  createdNotices    Notice[]            @relation("CoachNotices")
+  createdContents   Content[]           @relation("CoachContents")
+  createdCollections TemplateCollection[] @relation("CoachCollections")
+  createdTechniques Technique[]         @relation("CoachTechniques") 
+
+  createdMotorTemplates MotorTemplate[] @relation("CoachMotorTemplates")
+
+  offlineClients    OfflineClient[]     @relation("CoachOfflineClients")
+
+  workouts        Workout[]
+  anamneses       Anamnese[]
+  history         WorkoutHistory[] 
+  assessments     Assessment[]       
+  checkIns        CheckIn[]
+  diets           Diet[]
+
+  runningAnamnese   RunningAnamnese?
+  runningProtocols  RunningProtocol[]
+  runningLogs       RunningLog[] 
+  
+  contentLikes      ContentLike[]
+  contentComments   ContentComment[]
+  contentCompletions ContentCompletion[] 
+  unlockedContents  ContentAccess[]     
+
+  surveys           SatisfactionSurvey[]
+
+  resetToken       String?
+  resetTokenExpiry DateTime?
+
+  alertsAsStudent   StudentAlert[] @relation("UserAlerts")
+  alertsAsCoach     StudentAlert[] @relation("CoachAlerts")
+
+  brandLogoSize  Int?     @default(220) 
+
+  salesPageConfig   SalesPageConfig?
+  coachPlans        CoachPlan[]         @relation("CoachPlans")
+}
+
+model OfflineClient {
+  id              String    @id
+  name            String
+  phone           String?
+  plan            String?
+  financeCategory String?   @default("Consultoria Online")
+  contractType    String?   @default("Mensal")
+  contractValue   Float?    @default(0.0)
+  startDate       DateTime?
+  paymentDueDate  DateTime?
+  photoUrl        String?
+  isFinanceActive Boolean   @default(true)
+  assignedCoach   String?   
+
+  coachId         String?
+  coach           User?     @relation("CoachOfflineClients", fields: [coachId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model AiLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  question  String
+  answer    String
+  createdAt DateTime @default(now())
+}
+
+model StudentAlert {
+  id           String   @id @default(uuid())
+  
+  userId       String
+  user         User     @relation("UserAlerts", fields: [userId], references: [id], onDelete: Cascade)
+  
+  coachId      String?
+  coach        User?    @relation("CoachAlerts", fields: [coachId], references: [id], onDelete: Cascade)
+
+  type         String   
+  title        String   
+  message      String   @db.Text 
+  exerciseName String?  
+  
+  isRead       Boolean  @default(false) 
+  createdAt    DateTime @default(now())
+}
