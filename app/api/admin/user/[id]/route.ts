@@ -1,4 +1,4 @@
-// app/api/admin/user/[id]/route.ts — v3 (Blindado)
+// app/api/admin/user/[id]/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -88,6 +88,11 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
                 onboardingCompleted: true,
                 onboardingStep:      true,
                 coachPlan:           true,
+                
+                // 🔥 AS DUAS LINHAS QUE FALTAVAM E QUE RESOLVEM TUDO 🔥
+                brandLogoUrl:        true,
+                brandLogoSize:       true,
+
                 // 🔥 "studentModules" foi removido daqui pois não existe na tabela e dava Erro 500!
                 anamneses: { orderBy: { createdAt: 'desc' }, take: 1 },
                 workouts:  { where: { archived: false }, orderBy: { createdAt: 'desc' }, take: 1 },

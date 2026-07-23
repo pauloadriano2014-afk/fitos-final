@@ -14,16 +14,20 @@ export async function GET(req: Request) {
             orderBy: { value: 'asc' }
         });
         
-        // 🔥 BUSCA A LOGO DO COACH NA TABELA USER
+        // 🔥 BUSCA A LOGO E O TAMANHO DO COACH NA TABELA USER
         const coachUser = await prisma.user.findUnique({ 
             where: { id: coachId }, 
-            select: { brandLogoUrl: true } 
+            select: { 
+                brandLogoUrl: true,
+                brandLogoSize: true // 🔥 Faltava buscar o tamanho aqui!
+            } 
         });
 
         return NextResponse.json({ 
             config, 
             plans, 
-            brandLogoUrl: coachUser?.brandLogoUrl // Envia a logo pro front!
+            brandLogoUrl: coachUser?.brandLogoUrl, // Envia a logo pro front!
+            brandLogoSize: coachUser?.brandLogoSize // Envia o tamanho pro front!
         });
     } catch (error) {
         console.error("Erro ao buscar SaaS meta:", error);

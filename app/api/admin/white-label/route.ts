@@ -1,8 +1,7 @@
 // app/api/admin/white-label/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+// 🔥 Puxa o prisma da sua lib central para não estourar a memória do banco!
+import prisma from '@/lib/prisma'; 
 
 export async function POST(request: Request) {
     try {
