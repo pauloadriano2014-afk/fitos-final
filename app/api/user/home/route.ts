@@ -31,6 +31,15 @@ export async function GET(req: Request) {
         paymentClaimedAt: true,
         paymentClaimStatus: true,
         paymentClaimCycleDueDate: true,
+
+        // 🔥 WHITE-LABEL DA LOGOMARCA DO COACH 🔥
+        coachId: true,
+        coach: {
+            select: {
+                brandLogoUrl: true,
+                brandLogoSize: true
+            }
+        }
       }
     });
 
