@@ -23,17 +23,16 @@ export async function GET(req: Request) {
         disableCheckIn: true,
         anamnesePendente: true,
 
-        // 🔥 FINANCEIRO — necessário pro useHomeData calcular isFinanceLocked
+        // 🔥 FINANCEIRO
         paymentDueDate: true,
         isFinanceActive: true,
-
-        // 🔥 SISTEMA DE "JÁ PAGUEI" (CLAIM DE PAGAMENTO)
         paymentClaimedAt: true,
         paymentClaimStatus: true,
         paymentClaimCycleDueDate: true,
 
-        // 🔥 WHITE-LABEL DA LOGOMARCA DO COACH 🔥
+        // 🔥 CAMPOS DE RELAÇÃO DO COACH
         coachId: true,
+        nutritionistId: true,
         coach: {
             select: {
                 brandLogoUrl: true,
@@ -44,6 +43,30 @@ export async function GET(req: Request) {
     });
 
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    // 🔥 GARANTIA ABSOLUTA DA LOGO 🔥
+    // Se o aluno não tiver logo (ex: cadastro antigo sem coachId), puxamos o ID Master na marra
+    let finalLogo = user.coach?.brandLogoUrl;
+    let finalSize = user.coach?.brandLogoSize;
+
+    if (!finalLogo) {
+        const masterId = user.coachId || user.nutritionistId || '3c82f763-66b4-48da-836e-16817d4f57c0';
+        const master = await prisma.user.findUnique({
+            where: { id: masterId },
+            select: { brandLogoUrl: true, brandLogoSize: true }
+        });
+        finalLogo = master?.brandLogoUrl || null;
+        finalSize = master?.brandLogoSize || 220;
+    }
+
+    // Coloca a logo exatamente onde o aplicativo Mobile já está procurando
+    const userWithLogo = {
+        ...user,
+        coach: { 
+            brandLogoUrl: finalLogo, 
+            brandLogoSize: finalSize 
+        }
+    };
 
     // 2. Busca Treino Ativo
     const activeWorkout = await prisma.workout.findFirst({
@@ -81,7 +104,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({
-      user,
+      user: userWithLogo,
       activeWorkout: activeWorkout ? {
           id: activeWorkout.id,
           name: activeWorkout.name,
