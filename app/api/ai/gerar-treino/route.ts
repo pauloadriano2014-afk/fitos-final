@@ -251,7 +251,7 @@ Responda APENAS com JSON válido.`.trim();
 
     // ─── ROTEAMENTO ───
     let selectedAI = cycleConfig?.selectedAI || 'GEMINI_FLASH';
-    if (!isMasterCoach && ['GEMINI', 'GPT', 'CLAUDE'].includes(selectedAI)) selectedAI = 'GEMINI_FLASH';
+    if (!isMasterCoach && ['GEMINI', 'GEMINI_PRO', 'GPT', 'CLAUDE'].includes(selectedAI)) selectedAI = 'GEMINI_FLASH';
 
     let rawText = '';
     console.log(`[gerar-treino] Modelo: ${selectedAI} | Ambiente: ${trainingEnv || 'UNIVERSAL'}`);
@@ -285,9 +285,17 @@ Responda APENAS com JSON válido.`.trim();
       rawText = result.response.text();
 
     } else if (selectedAI === 'GEMINI') {
-      // 🔥 CORRIGIDO: gemini-2.5-flash (era 2.5-pro, dava 403)
+      // Gemini Flash — modelo padrão do Master (rápido e barato)
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
       const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }] });
+      rawText = result.response.text();
+
+    } else if (selectedAI === 'GEMINI_PRO') {
+      // 🔥 NOVO: Gemini Pro — mais poderoso, opção alternativa pro Master
+      // ⚠️ Se der 403 Forbidden, é preciso habilitar o acesso ao gemini-2.5-pro no projeto do Google AI Studio/Cloud
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
       const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }] });
       rawText = result.response.text();
 
