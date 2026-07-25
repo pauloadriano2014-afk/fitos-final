@@ -112,3 +112,27 @@ model CoachPlan {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// PropostaOferta — conjuntos de preços/planos customizados para a página
+// de vendas PropostaScreen (high-ticket, padrão, testes de preço, etc.).
+// Acessada publicamente via ?oferta=slug na URL da proposta; gerenciada
+// pelos coaches master (Paulo/Adri) na tela AdminPropostaOfertasScreen.
+// ─────────────────────────────────────────────────────────────────────────
+model PropostaOferta {
+  id          String   @id @default(uuid())
+
+  slug        String   @unique
+  nome        String   
+  ativa       Boolean  @default(true)
+
+  // Array de "cards" de plano (nome, descrição, itens, preços por período,
+  // CTA etc.), guardado como JSON — ver estrutura documentada no código
+  // do AdminPropostaOfertasScreen.js / PropostaScreen.js
+  cards       Json
+
+  criadoPorId String?  
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
