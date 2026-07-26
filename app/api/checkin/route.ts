@@ -206,16 +206,15 @@ export async function GET(req: Request) {
             whereClause.userId = userId; 
         } 
         
-        // 🔥 MURALHA APLICADA: Filtra os check-ins pelo Dono do Aluno
+        // 🔥 MURALHA CORRIGIDA: Filtra os check-ins de forma válida para o Prisma
         if (adminId) {
             const isMaster = MASTER_IDS.includes(adminId);
             if (isMaster) {
                 // Paulo e Adri veem checkins dos seus alunos e alunos globais (null)
                 whereClause.user = {
-                    OR: [
-                        { coachId: null },
-                        { coachId: { in: MASTER_IDS } }
-                    ]
+                    coachId: {
+                        in: [...MASTER_IDS, null] as any
+                    }
                 };
             } else {
                 // Parceiro vê SÓ dos alunos DELE
