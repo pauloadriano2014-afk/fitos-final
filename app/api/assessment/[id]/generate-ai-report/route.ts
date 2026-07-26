@@ -40,18 +40,25 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mediaTyp
     }
 }
 
-// 🔥 PROMPT CORRIGIDO: sem ancoragem em "fisiculturismo/elite" — julga o nível pelo que vê de verdade 🔥
+// 🔥 PROMPT ATUALIZADO: sem ancoragem em "fisiculturismo/elite" + sem meta-comentário de classificação 🔥
 const SYSTEM_PROMPT = `Você é um especialista em avaliação física e composição corporal, prestando serviço para um personal trainer que atende alunos de perfis variados (desde iniciantes recreativos até, eventualmente, atletas avançados).
 
-Você recebe fotos reais (frente, lado, costas) de um aluno junto com dados biométricos (peso, % de gordura, dobras cutâneas, idade, gênero). Sua tarefa é escrever uma análise técnica ALTAMENTE ESPECÍFICA e HONESTA sobre o físico DESSA pessoa — nunca um texto genérico, e nunca assumindo um nível de treino que as fotos não sustentam.
+Você recebe fotos reais (frente, lado, costas) de um aluno junto com dados biométricos (peso, % de gordura, dobras cutâneas, idade, gênero). Sua tarefa é escrever uma análise técnica ALTAMENTE ESPECÍFICA e HONESTA sobre o físico DESSA pessoa.
 
-Regras obrigatórias:
-- Julgue o nível de desenvolvimento muscular e o contexto provável (iniciante, intermediário, avançado, competidor) SOMENTE pelo que você vê nas fotos e pelos números fornecidos. NÃO assuma que a pessoa é atleta, competidora ou fisiculturista a menos que o físico nas fotos deixe isso claramente evidente (volume muscular muito alto, definição muito baixa de gordura, simetria de padrão competitivo).
-- A maioria dos alunos de um personal trainer são praticantes comuns buscando saúde, estética ou hipertrofia moderada. Trate isso como o cenário padrão. Evite linguagem de preparação para competição, "expectativa de %BF de palco" ou "biótipo para fisiculturismo" a menos que os dados claramente indiquem esse contexto.
+⚠️ MUITO IMPORTANTE — QUEM VAI LER ESTE TEXTO: todo o conteúdo que você gerar será lido DIRETAMENTE PELO(A) PRÓPRIO(A) ALUNO(A) no laudo final, nunca por um coach ou terceiro. Escreva como um relatório profissional dirigido a essa pessoa — nunca como uma anotação interna explicando para um colega como/por que você classificou o físico dela.
+
+Isso significa, na prática:
+- NUNCA escreva frases que justifiquem ou expliquem sua classificação (ex.: "não há indicadores de preparação competitiva", "trata-se de aluno(a) com perfil X", "isso sugere um biótipo Y"). Fale sobre a pessoa e o caminho dela, não sobre a categoria em que você a encaixou.
+- NUNCA compare a pessoa a categorias, rótulos ou benchmarks de forma clínica ("nível recreativo", "nível competitivo", "iniciante estruturado" etc.) — descreva o físico e o momento dela em linguagem natural, sem rotular tecnicamente o "nível".
+- Escreva como se estivesse falando COM ela (ou SOBRE ela em tom de relatório pessoal), sempre no registro de quem está entregando um resultado a alguém que se importa com ele — acolhedor, honesto, tecnicamente sólido, motivador.
+
+Regras adicionais obrigatórias:
+- Julgue o desenvolvimento muscular e o contexto provável (iniciante, intermediário, avançado) SOMENTE pelo que você vê nas fotos e pelos números fornecidos, mas mantenha esse julgamento IMPLÍCITO na forma como você descreve o físico — nunca EXPLÍCITO como uma declaração de categoria.
+- NÃO assuma que a pessoa é atleta, competidora ou fisiculturista a menos que o físico nas fotos deixe isso claramente evidente (volume muscular muito alto, definição muito baixa de gordura, simetria de padrão competitivo). A maioria dos alunos de um personal trainer são praticantes comuns buscando saúde, estética ou hipertrofia moderada — trate isso como o cenário padrão.
 - Baseie-se no que você REALMENTE VÊ nas fotos (volume muscular por grupo, proporções, simetria, definição) cruzado com os números fornecidos.
-- Se o aluno já tem volume/massa considerável, isso deve aparecer explicitamente no texto. Se é magro, iniciante ou mediano, descreva como tal — sem inflar o nível.
-- Evite frases que serviriam para qualquer avaliação (ex: "excelente potencial estético" sem justificativa concreta baseada no que você vê).
-- Tom: profissional, técnico, direto, encorajador — adequado ao nível REAL da pessoa, sem discurso de palco quando não é o caso.
+- Se o aluno já tem volume/massa considerável, isso deve aparecer explicitamente no texto. Se é magro, iniciante ou mediano, descreva como tal — sem inflar nem diminuir o nível.
+- Evite frases genéricas que serviriam para qualquer avaliação (ex.: "excelente potencial estético" sem justificativa concreta baseada no que você vê).
+- Tom: profissional, técnico, direto, encorajador — como um laudo premium que a pessoa vai guardar e reler.
 - Responda em português do Brasil.
 - Responda APENAS com um JSON válido, sem markdown, sem texto antes ou depois, seguindo EXATAMENTE este schema:
 
@@ -107,9 +114,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
         const leanMass = assessment.bodyFat ? (assessment.weight * (1 - assessment.bodyFat / 100)).toFixed(1) : '--';
 
+        const nomeAluno = (assessment.user as any)?.name || 'Aluno';
+
         const dadosTexto = `
 Dados do aluno:
-- Nome: ${(assessment.user as any)?.name || 'Aluno'}
+- Nome: ${nomeAluno}
 - Gênero: ${isFemale ? 'Feminino' : 'Masculino'}
 - Idade: ${assessment.age || 'não informada'}
 - Peso: ${assessment.weight}kg
@@ -117,6 +126,8 @@ Dados do aluno:
 - Massa magra estimada: ${leanMass}kg
 - Dobras (mm): peitoral ${assessment.foldChest ?? '-'}, axilar ${assessment.foldAxillary ?? '-'}, tríceps ${assessment.foldTriceps ?? '-'}, subescapular ${assessment.foldSubscapular ?? '-'}, abdominal ${assessment.foldAbdominal ?? '-'}, supra-ilíaca ${assessment.foldSuprailiac ?? '-'}, coxa ${assessment.foldThigh ?? '-'}
 - Fotos anexadas: ${photos.length}
+
+Lembre-se: ${nomeAluno} vai ler este laudo diretamente. Escreva para ela(e), não sobre um "caso" que você está classificando para outro profissional.
 `.trim();
 
         const imageBlocks: any[] = [];
@@ -184,7 +195,7 @@ Dados do aluno:
     }
 }
 
-// 🔥 NOVO: edição manual dos campos gerados, sem chamar a IA de novo 🔥
+// 🔥 Edição manual dos campos gerados, sem chamar a IA de novo 🔥
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
     try {
         const assessmentId = params.id;
