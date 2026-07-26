@@ -136,3 +136,59 @@ model PropostaOferta {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// DesafioConfig — configuração reutilizável de um desafio/projeto por
+// WhatsApp (ex: "Desafio 90 Dias"). Pode criar quantos quiser no futuro
+// (30 dias, 60 dias, turmas diferentes), cada um com seu próprio slug,
+// valor e link de grupo — sem precisar de código novo por lançamento.
+// Gerenciado pelos coaches master na aba DESAFIOS do admin.
+// ─────────────────────────────────────────────────────────────────────────
+model DesafioConfig {
+  id             String   @id @default(uuid())
+
+  slug           String   @unique   // identificador na URL pública (?desafio=slug)
+  nome           String             // ex: "Desafio 90 Dias"
+  descricao      String?  @db.Text  // texto de apresentação exibido na página pública
+  valor          Float              // valor cobrado, pagamento único via PIX
+  linkGrupoWhats String             // link de convite do grupo — SÓ é revelado após pagamento confirmado
+  coachId        String             // dono do desafio (Paulo ou Adri) — usado pra achar a PaymentGatewayAccount certa
+  ativo          Boolean  @default(true)
+
+  inscricoes     DesafioInscricao[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// DesafioInscricao — cada cadastro individual feito na página pública do
+// Desafio. Fica numa lista própria, separada dos Alunos/CRM principal.
+model DesafioInscricao {
+  id               String    @id @default(uuid())
+
+  desafioId        String
+  desafio          DesafioConfig @relation(fields: [desafioId], references: [id], onDelete: Cascade)
+
+  nome             String
+  dataNascimento   DateTime
+  email            String
+  telefone         String
+  cpf              String    // exigido pela Asaas pra gerar cobrança/PIX
+
+  status           String    @default("PENDENTE") // PENDENTE | PAGO | CANCELADO | EXPIRADO
+  asaasCustomerId  String?
+  asaasPaymentId   String?   @unique
+  pixQrCode        String?   @db.Text // imagem base64 do QR Code retornada pela Asaas
+  pixCopyPaste     String?   @db.Text // código "copia e cola" do PIX
+  invoiceUrl       String?
+  paymentDate      DateTime?
+
+  isLeadFuturo     Boolean   @default(true)
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([desafioId])
+  @@index([status])
+  @@index([asaasPaymentId])
+}

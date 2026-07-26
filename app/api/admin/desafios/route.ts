@@ -1,0 +1,80 @@
+// fitos-api-nova/app/api/admin/desafios/route.ts
+//
+// GET  → lista todos os desafios (usado pela tela de admin)
+// POST → cria um novo desafio
+//
+// ⚠️ AJUSTE O IMPORT ABAIXO para o caminho real do seu singleton Prisma
+
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
+function slugify(input: string): string {
+    return input
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+}
+
+// GET /api/admin/desafios
+export async function GET() {
+    try {
+        const desafios = await prisma.desafioConfig.findMany({
+            orderBy: { createdAt: 'desc' },
+            include: {
+                _count: { select: { inscricoes: true } },
+            },
+        });
+        return NextResponse.json({ desafios });
+    } catch (error) {
+        console.error('[desafios][GET]', error);
+        return NextResponse.json({ error: 'Erro ao buscar desafios' }, { status: 500 });
+    }
+}
+
+// POST /api/admin/desafios
+export async function POST(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const { slug, nome, descricao, valor, linkGrupoWhats, coachId } = body;
+
+        if (!nome || !valor || !linkGrupoWhats || !coachId) {
+            return NextResponse.json(
+                { error: 'Campos obrigatórios: nome, valor, linkGrupoWhats e coachId' },
+                { status: 400 }
+            );
+        }
+
+        const slugFinal = slugify(slug || nome);
+        if (!slugFinal) {
+            return NextResponse.json({ error: 'Slug inválido' }, { status: 400 });
+        }
+
+        const existente = await prisma.desafioConfig.findUnique({ where: { slug: slugFinal } });
+        if (existente) {
+            return NextResponse.json(
+                { error: 'Já existe um desafio com esse slug. Escolha outro nome/slug.' },
+                { status: 409 }
+            );
+        }
+
+        const desafio = await prisma.desafioConfig.create({
+            data: {
+                slug: slugFinal,
+                nome,
+                descricao: descricao || null,
+                valor: parseFloat(valor),
+                linkGrupoWhats,
+                coachId,
+                ativo: true,
+            },
+        });
+
+        return NextResponse.json({ desafio }, { status: 201 });
+    } catch (error) {
+        console.error('[desafios][POST]', error);
+        return NextResponse.json({ error: 'Erro ao criar desafio' }, { status: 500 });
+    }
+}
