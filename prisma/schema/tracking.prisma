@@ -123,6 +123,23 @@ model Assessment {
   
   notes           String?   
   createdAt       DateTime @default(now())
+
+  aiPontosFortes          String[]   @default([])
+  aiPontosAtencao         String[]   @default([])
+  aiPrioridades           String[]   @default([])
+  aiMapaOmbros            Int?
+  aiMapaCostas            Int?
+  aiMapaBracos            Int?
+  aiMapaGluteos           Int?
+  aiMapaCoxas             Int?
+  aiMapaPanturrilhas      Int?
+  aiAnaliseFrontal        String?
+  aiAnaliseLateral        String?
+  aiAnalisePosterior      String?
+  aiObjetivoPrincipal     String?
+  aiObjetivosSecundarios  String[]   @default([])
+  aiConclusaoTecnica      String?
+  aiGeneratedAt           DateTime?
 }
 
 model CheckIn {
