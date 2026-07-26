@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
                 slug: true,
                 nome: true,
                 descricao: true,
+                beneficios: true,
                 valor: true,
                 // linkGrupoWhats propositalmente omitido
             },

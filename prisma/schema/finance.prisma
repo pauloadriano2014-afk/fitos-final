@@ -150,6 +150,7 @@ model DesafioConfig {
   slug           String   @unique   // identificador na URL pública (?desafio=slug)
   nome           String             // ex: "Desafio 90 Dias"
   descricao      String?  @db.Text  // texto de apresentação exibido na página pública
+  beneficios     String[] @default([]) // lista de "o que você vai receber" — editável por desafio
   valor          Float              // valor cobrado, pagamento único via PIX
   linkGrupoWhats String             // link de convite do grupo — SÓ é revelado após pagamento confirmado
   coachId        String             // dono do desafio (Paulo ou Adri) — usado pra achar a PaymentGatewayAccount certa

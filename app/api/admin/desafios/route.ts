@@ -38,7 +38,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { slug, nome, descricao, valor, linkGrupoWhats, coachId } = body;
+        const { slug, nome, descricao, beneficios, valor, linkGrupoWhats, coachId } = body;
 
         if (!nome || !valor || !linkGrupoWhats || !coachId) {
             return NextResponse.json(
@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
                 slug: slugFinal,
                 nome,
                 descricao: descricao || null,
+                beneficios: Array.isArray(beneficios) ? beneficios.filter(b => b && b.trim()) : [],
                 valor: parseFloat(valor),
                 linkGrupoWhats,
                 coachId,

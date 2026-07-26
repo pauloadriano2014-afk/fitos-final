@@ -16,11 +16,12 @@ export async function PATCH(
     try {
         const { id } = params;
         const body = await request.json();
-        const { nome, descricao, valor, linkGrupoWhats, ativo } = body;
+        const { nome, descricao, beneficios, valor, linkGrupoWhats, ativo } = body;
 
         const dataToUpdate: Record<string, any> = {};
         if (nome !== undefined) dataToUpdate.nome = nome;
         if (descricao !== undefined) dataToUpdate.descricao = descricao;
+        if (beneficios !== undefined) dataToUpdate.beneficios = Array.isArray(beneficios) ? beneficios.filter((b: string) => b && b.trim()) : [];
         if (valor !== undefined) dataToUpdate.valor = parseFloat(valor);
         if (linkGrupoWhats !== undefined) dataToUpdate.linkGrupoWhats = linkGrupoWhats;
         if (ativo !== undefined) dataToUpdate.ativo = ativo;
