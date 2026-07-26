@@ -16,7 +16,10 @@ export async function PATCH(
     try {
         const { id } = params;
         const body = await request.json();
-        const { nome, descricao, beneficios, valor, linkGrupoWhats, ativo } = body;
+        const {
+            nome, descricao, beneficios, valor, linkGrupoWhats, ativo, coachId,
+            mentorNome, mentorFotoUrl, mentorTexto, galleryPhotos, galleryTexts,
+        } = body;
 
         const dataToUpdate: Record<string, any> = {};
         if (nome !== undefined) dataToUpdate.nome = nome;
@@ -25,6 +28,14 @@ export async function PATCH(
         if (valor !== undefined) dataToUpdate.valor = parseFloat(valor);
         if (linkGrupoWhats !== undefined) dataToUpdate.linkGrupoWhats = linkGrupoWhats;
         if (ativo !== undefined) dataToUpdate.ativo = ativo;
+        // 🔑 coachId agora é editável também depois de criado — define de
+        // qual PaymentGatewayAccount (Paulo ou Adri) o PIX é gerado daqui pra frente.
+        if (coachId !== undefined) dataToUpdate.coachId = coachId;
+        if (mentorNome !== undefined) dataToUpdate.mentorNome = mentorNome || null;
+        if (mentorFotoUrl !== undefined) dataToUpdate.mentorFotoUrl = mentorFotoUrl || null;
+        if (mentorTexto !== undefined) dataToUpdate.mentorTexto = mentorTexto || null;
+        if (galleryPhotos !== undefined) dataToUpdate.galleryPhotos = Array.isArray(galleryPhotos) ? galleryPhotos : [];
+        if (galleryTexts !== undefined) dataToUpdate.galleryTexts = Array.isArray(galleryTexts) ? galleryTexts : [];
 
         const desafio = await prisma.desafioConfig.update({
             where: { id },

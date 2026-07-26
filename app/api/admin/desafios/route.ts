@@ -38,7 +38,10 @@ export async function GET() {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { slug, nome, descricao, beneficios, valor, linkGrupoWhats, coachId } = body;
+        const {
+            slug, nome, descricao, beneficios, valor, linkGrupoWhats, coachId,
+            mentorNome, mentorFotoUrl, mentorTexto, galleryPhotos, galleryTexts,
+        } = body;
 
         if (!nome || !valor || !linkGrupoWhats || !coachId) {
             return NextResponse.json(
@@ -68,6 +71,11 @@ export async function POST(request: NextRequest) {
                 beneficios: Array.isArray(beneficios) ? beneficios.filter(b => b && b.trim()) : [],
                 valor: parseFloat(valor),
                 linkGrupoWhats,
+                mentorNome: mentorNome || null,
+                mentorFotoUrl: mentorFotoUrl || null,
+                mentorTexto: mentorTexto || null,
+                galleryPhotos: Array.isArray(galleryPhotos) ? galleryPhotos : [],
+                galleryTexts: Array.isArray(galleryTexts) ? galleryTexts : [],
                 coachId,
                 ativo: true,
             },

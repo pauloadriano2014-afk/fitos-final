@@ -29,6 +29,11 @@ export async function GET(request: NextRequest) {
                 descricao: true,
                 beneficios: true,
                 valor: true,
+                mentorNome: true,
+                mentorFotoUrl: true,
+                mentorTexto: true,
+                galleryPhotos: true,
+                galleryTexts: true,
                 // linkGrupoWhats propositalmente omitido
             },
         });

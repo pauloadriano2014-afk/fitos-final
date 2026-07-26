@@ -156,6 +156,17 @@ model DesafioConfig {
   coachId        String             // dono do desafio (Paulo ou Adri) — usado pra achar a PaymentGatewayAccount certa
   ativo          Boolean  @default(true)
 
+  // Perfil de quem conduz o desafio (ex: Adri) — opcional; se mentorNome
+  // não for preenchido, essa seção simplesmente não aparece na página.
+  mentorNome     String?
+  mentorFotoUrl  String?
+  mentorTexto    String?  @db.Text
+
+  // Galeria de antes/depois — mesmo padrão de pares usado em SalesPageConfig
+  // (índices consecutivos: [0]=antes1, [1]=depois1, [2]=antes2, [3]=depois2...)
+  galleryPhotos  String[] @default([])
+  galleryTexts   String[] @default([])
+
   inscricoes     DesafioInscricao[]
 
   createdAt      DateTime @default(now())
