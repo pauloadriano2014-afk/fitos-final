@@ -1,3 +1,4 @@
+// app/api/assessment/[id]/generate-ai-report/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
@@ -7,6 +8,24 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export const dynamic = 'force-dynamic';
 
+// 🔥 DETECTA O FORMATO REAL DA IMAGEM PELOS BYTES — não confia no Content-Type do R2,
+// que hoje vem sempre "image/jpeg" mesmo quando o arquivo é PNG/WEBP/etc. 🔥
+function detectImageMediaType(buffer: Buffer): string {
+    if (buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+        return 'image/png';
+    }
+    if (buffer.length >= 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+        return 'image/jpeg';
+    }
+    if (buffer.length >= 6 && buffer.toString('ascii', 0, 3) === 'GIF') {
+        return 'image/gif';
+    }
+    if (buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
+        return 'image/webp';
+    }
+    return 'image/jpeg'; // fallback
+}
+
 async function fetchImageAsBase64(url: string): Promise<{ data: string; mediaType: string } | null> {
     if (!url) return null;
     try {
@@ -14,8 +33,8 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mediaTyp
         if (!res.ok) return null;
         const arrayBuffer = await res.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
-        const contentType = res.headers.get('content-type') || 'image/jpeg';
-        return { data: buffer.toString('base64'), mediaType: contentType };
+        const mediaType = detectImageMediaType(buffer);
+        return { data: buffer.toString('base64'), mediaType };
     } catch (e) {
         console.error('Erro ao baixar foto para análise IA:', e);
         return null;
