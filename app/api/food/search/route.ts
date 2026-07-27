@@ -25,25 +25,26 @@ export async function GET(req: Request) {
     const limit         = Math.min(parseInt(searchParams.get('limit') ?? '50'), 100);
     const skip          = (page - 1) * limit;
 
-    // Determina o teamId do coach
-    const teamId = MASTER_IDS.includes(coachId) ? MASTER_TEAM : (coachId || null);
+    // 🔥 BLINDAGEM: Garante que os Masters consigam ver os alimentos antigos salvos em seus próprios IDs
+    const validTeamIds = [coachId, MASTER_TEAM, ...MASTER_IDS].filter(Boolean);
 
     // Monta filtro de busca
     const where: any = {
-      isActive: true,
+      // ❌ REMOVIDO: isActive: true (Escondia a TACO inteira porque dados antigos são 'null')
       AND: [
-        // Alimentos visíveis: TACO (global) OU CUSTOM do team do coach
         {
           OR: [
-            { source: 'TACO', teamId: null },
-            { source: 'CUSTOM', teamId: teamId ?? MASTER_TEAM },
+            // ❌ REMOVIDO: teamId: null na TACO (Evita ocultar itens importados com strings vazias)
+            { source: 'TACO' },
+            // 🔥 Busca os CUSTOMs cobrindo todas as possibilidades de IDs dos Masters
+            { source: 'CUSTOM', teamId: { in: validTeamIds } },
           ]
         },
       ],
     };
 
-    // Filtro por texto
-    if (q.length >= 2) {
+    // Filtro por texto ignorando maiúsculas e minúsculas
+    if (q.length > 0) {
       where.AND.push({
         name: { contains: q, mode: 'insensitive' }
       });
@@ -117,6 +118,7 @@ export async function GET(req: Request) {
       total,
       page,
       pages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / limit), // 🔥 ADICIONADO: Garante que a paginação do React Native funcione
     });
 
   } catch (error: any) {
