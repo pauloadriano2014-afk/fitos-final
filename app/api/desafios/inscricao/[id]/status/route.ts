@@ -1,4 +1,4 @@
-// fitos-api-nova/app/api/desafios/inscricao/[id]/status/route.ts
+// app/api/desafios/inscricao/[id]/status/route.ts
 //
 // GET /api/desafios/inscricao/{id}/status
 //
@@ -7,11 +7,13 @@
 // Só quando status === 'PAGO' o linkGrupoWhats é incluído na resposta —
 // esse é o "gatilho" que libera o link automaticamente pro aluno,
 // sem precisar de nenhuma ação manual do coach.
-//
-// ⚠️ AJUSTE O IMPORT ABAIXO para o caminho real do seu singleton Prisma
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { PrismaClient } from '@prisma/client';
+
+export const dynamic = 'force-dynamic';
+
+const prisma = new PrismaClient();
 
 export async function GET(
     request: NextRequest,
@@ -34,6 +36,7 @@ export async function GET(
             nome: inscricao.nome,
         };
 
+        // 🔥 O GATILHO MÁGICO: Se pagou, libera o link do WhatsApp!
         if (inscricao.status === 'PAGO') {
             response.linkGrupoWhats = inscricao.desafio.linkGrupoWhats;
             response.desafioNome = inscricao.desafio.nome;
