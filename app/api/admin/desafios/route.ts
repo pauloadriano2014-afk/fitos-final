@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const {
-            slug, nome, descricao, beneficios, valor, duracaoDias, linkGrupoWhats, coachId,
+            slug, nome, descricao, logoUrl, beneficios, valor, duracaoDias, linkGrupoWhats, coachId,
             mentorNome, mentorFotoUrl, mentorTexto, galleryPhotos, galleryTexts,
             paraQuemE, importante, compromissoTexto, bonusTexto,
         } = body;
@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
                 slug: slugFinal,
                 nome,
                 descricao: descricao || null,
+                logoUrl: logoUrl || null,
                 beneficios: Array.isArray(beneficios) ? beneficios.filter(b => b && b.trim()) : [],
                 valor: parseFloat(valor),
                 duracaoDias: duracaoDias ? parseInt(duracaoDias) : 90,

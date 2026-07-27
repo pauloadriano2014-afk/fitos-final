@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
                 slug: true,
                 nome: true,
                 descricao: true,
+                logoUrl: true,
                 beneficios: true,
                 valor: true,
                 duracaoDias: true,

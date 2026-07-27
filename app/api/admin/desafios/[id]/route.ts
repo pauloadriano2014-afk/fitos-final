@@ -17,7 +17,7 @@ export async function PATCH(
         const { id } = params;
         const body = await request.json();
         const {
-            nome, descricao, beneficios, valor, duracaoDias, linkGrupoWhats, ativo, coachId,
+            nome, descricao, logoUrl, beneficios, valor, duracaoDias, linkGrupoWhats, ativo, coachId,
             mentorNome, mentorFotoUrl, mentorTexto, galleryPhotos, galleryTexts,
             paraQuemE, importante, compromissoTexto, bonusTexto,
         } = body;
@@ -25,6 +25,7 @@ export async function PATCH(
         const dataToUpdate: Record<string, any> = {};
         if (nome !== undefined) dataToUpdate.nome = nome;
         if (descricao !== undefined) dataToUpdate.descricao = descricao;
+        if (logoUrl !== undefined) dataToUpdate.logoUrl = logoUrl || null;
         if (beneficios !== undefined) dataToUpdate.beneficios = Array.isArray(beneficios) ? beneficios.filter((b: string) => b && b.trim()) : [];
         if (valor !== undefined) dataToUpdate.valor = parseFloat(valor);
         if (duracaoDias !== undefined) dataToUpdate.duracaoDias = parseInt(duracaoDias) || 90;
