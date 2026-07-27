@@ -2,34 +2,22 @@
 //
 // POST /api/desafios/inscrever
 // Body: { desafioId, nome, dataNascimento, email, telefone, cpf }
-//
-// Fluxo:
-// 1. Valida o desafio (existe e está ativo)
-// 2. Busca a PaymentGatewayAccount do coach dono do desafio (pra pegar a API key da Asaas)
-// 3. Cria (ou reaproveita) um Customer na Asaas
-// 4. Cria uma cobrança PIX avulsa (não assinatura)
-// 5. Busca o QR Code / copia-e-cola dessa cobrança
-// 6. Salva tudo em DesafioInscricao com status PENDENTE
-//
-// ⚠️ AJUSTE:
-// - O import do Prisma abaixo para o caminho real do seu singleton
-// - ASAAS_BASE_URL se você usa sandbox em vez de produção
-// - Se já existe uma função utilitária de "criar cobrança Asaas" no seu
-//   código, prefira reaproveitá-la em vez desta implementação isolada —
-//   esta aqui foi escrita para funcionar de forma independente, assumindo
-//   que vocês ainda não tinham cobrança avulsa (não-assinatura) pronta.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-const ASAAS_BASE_URL = 'https://api.asaas.com/v3'; // troque para sandbox se for testar antes
+const ASAAS_BASE_URL = 'https://api.asaas.com/v3'; 
 
 function onlyDigits(value: string): string {
     return (value || '').replace(/\D/g, '');
 }
 
-function formatDateYYYYMMDD(date: Date): string {
-    return date.toISOString().split('T')[0];
+// Converte DD/MM/AAAA para um objeto Date seguro para o Prisma
+function parseBrazilianDate(dateStr: string): Date | null {
+    if (!dateStr || dateStr.length !== 10) return null;
+    const [day, month, year] = dateStr.split('/');
+    const date = new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0);
+    return isNaN(date.getTime()) ? null : date;
 }
 
 export async function POST(request: NextRequest) {
@@ -42,6 +30,16 @@ export async function POST(request: NextRequest) {
                 { error: 'Preencha todos os campos: nome, data de nascimento, e-mail, telefone e CPF.' },
                 { status: 400 }
             );
+        }
+
+        const cleanCpf = onlyDigits(cpf);
+        if (cleanCpf.length !== 11) {
+            return NextResponse.json({ error: 'CPF digitado é inválido. Verifique os números.' }, { status: 400 });
+        }
+
+        const safeBirthDate = parseBrazilianDate(dataNascimento);
+        if (!safeBirthDate) {
+            return NextResponse.json({ error: 'Formato de data de nascimento inválido. Use DD/MM/AAAA.' }, { status: 400 });
         }
 
         // 1. Valida o desafio
@@ -74,7 +72,7 @@ export async function POST(request: NextRequest) {
                 name: nome,
                 email,
                 mobilePhone: onlyDigits(telefone),
-                cpfCnpj: onlyDigits(cpf),
+                cpfCnpj: cleanCpf,
             }),
         });
         const customerData = await customerRes.json();
@@ -88,7 +86,9 @@ export async function POST(request: NextRequest) {
         const asaasCustomerId = customerData.id;
 
         // 4. Cria a cobrança PIX avulsa
-        const dueDate = formatDateYYYYMMDD(new Date());
+        const today = new Date();
+        const dueDate = today.toISOString().split('T')[0];
+
         const paymentRes = await fetch(`${ASAAS_BASE_URL}/payments`, {
             method: 'POST',
             headers: asaasHeaders,
@@ -121,15 +121,15 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Erro ao gerar o QR Code do PIX.' }, { status: 400 });
         }
 
-        // 6. Salva a inscrição
+        // 6. Salva a inscrição com a data tratada de forma correta
         const inscricao = await prisma.desafioInscricao.create({
             data: {
                 desafioId: desafio.id,
                 nome,
-                dataNascimento: new Date(dataNascimento),
+                dataNascimento: safeBirthDate,
                 email,
-                telefone,
-                cpf: onlyDigits(cpf),
+                telefone: onlyDigits(telefone),
+                cpf: cleanCpf,
                 status: 'PENDENTE',
                 asaasCustomerId,
                 asaasPaymentId,
