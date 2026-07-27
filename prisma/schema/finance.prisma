@@ -152,6 +152,7 @@ model DesafioConfig {
   descricao      String?  @db.Text  // texto de apresentação exibido na página pública
   beneficios     String[] @default([]) // lista de "o que você vai receber" — editável por desafio
   valor          Float              // valor cobrado, pagamento único via PIX
+  duracaoDias    Int      @default(90) // usado pra calcular "R$ X por dia" na página
   linkGrupoWhats String             // link de convite do grupo — SÓ é revelado após pagamento confirmado
   coachId        String             // dono do desafio (Paulo ou Adri) — usado pra achar a PaymentGatewayAccount certa
   ativo          Boolean  @default(true)
@@ -161,6 +162,13 @@ model DesafioConfig {
   mentorNome     String?
   mentorFotoUrl  String?
   mentorTexto    String?  @db.Text
+
+  // Seções adicionais de copy — todas opcionais, cada uma some da página
+  // se não for preenchida.
+  paraQuemE      String[] @default([]) // "Esse projeto é para você que..."
+  importante     String?  @db.Text     // aviso — ex: não substitui a consultoria individual
+  compromissoTexto String? @db.Text    // "Meu compromisso" — parágrafo pessoal
+  bonusTexto     String?  @db.Text     // "Bônus Exclusivo" — teaser pra próxima oferta, no fim da página
 
   // Galeria de antes/depois — mesmo padrão de pares usado em SalesPageConfig
   // (índices consecutivos: [0]=antes1, [1]=depois1, [2]=antes2, [3]=depois2...)

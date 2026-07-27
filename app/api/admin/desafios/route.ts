@@ -39,8 +39,9 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const {
-            slug, nome, descricao, beneficios, valor, linkGrupoWhats, coachId,
+            slug, nome, descricao, beneficios, valor, duracaoDias, linkGrupoWhats, coachId,
             mentorNome, mentorFotoUrl, mentorTexto, galleryPhotos, galleryTexts,
+            paraQuemE, importante, compromissoTexto, bonusTexto,
         } = body;
 
         if (!nome || !valor || !linkGrupoWhats || !coachId) {
@@ -70,12 +71,17 @@ export async function POST(request: NextRequest) {
                 descricao: descricao || null,
                 beneficios: Array.isArray(beneficios) ? beneficios.filter(b => b && b.trim()) : [],
                 valor: parseFloat(valor),
+                duracaoDias: duracaoDias ? parseInt(duracaoDias) : 90,
                 linkGrupoWhats,
                 mentorNome: mentorNome || null,
                 mentorFotoUrl: mentorFotoUrl || null,
                 mentorTexto: mentorTexto || null,
                 galleryPhotos: Array.isArray(galleryPhotos) ? galleryPhotos : [],
                 galleryTexts: Array.isArray(galleryTexts) ? galleryTexts : [],
+                paraQuemE: Array.isArray(paraQuemE) ? paraQuemE.filter((p: string) => p && p.trim()) : [],
+                importante: importante || null,
+                compromissoTexto: compromissoTexto || null,
+                bonusTexto: bonusTexto || null,
                 coachId,
                 ativo: true,
             },

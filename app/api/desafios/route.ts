@@ -29,11 +29,16 @@ export async function GET(request: NextRequest) {
                 descricao: true,
                 beneficios: true,
                 valor: true,
+                duracaoDias: true,
                 mentorNome: true,
                 mentorFotoUrl: true,
                 mentorTexto: true,
                 galleryPhotos: true,
                 galleryTexts: true,
+                paraQuemE: true,
+                importante: true,
+                compromissoTexto: true,
+                bonusTexto: true,
                 // linkGrupoWhats propositalmente omitido
             },
         });
