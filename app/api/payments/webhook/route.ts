@@ -1,5 +1,7 @@
-// app/api/payments/webhook/route.ts — v2
-// v2: handler para cobranças de coaches (externalReference começa com "coach:")
+// app/api/payments/webhook/route.ts — v3
+// v3: adiciona handler para inscrições do Desafio (Projeto 90 Dias e futuros
+// desafios por WhatsApp), verificado ANTES do fluxo de aluno. Nada da lógica
+// de coach ou aluno foi alterado.
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
@@ -21,6 +23,16 @@ export async function POST(req: Request) {
             return await handleCoachPayment(event, payment, externalRef);
         }
 
+        // ── HANDLER DE DESAFIO (Projeto 90 Dias e futuros desafios) ───────────
+        // Checa se esse payment.id pertence a uma inscrição de Desafio ANTES
+        // de cair no fluxo de aluno (que espera um customer vinculado a User).
+        // Se não for um pagamento de Desafio, handleDesafioPayment devolve
+        // false e o fluxo segue normalmente pro handler de aluno de sempre.
+        const tratadoComoDesafio = await handleDesafioPayment(event, payment);
+        if (tratadoComoDesafio) {
+            return NextResponse.json({ received: true });
+        }
+
         // ── HANDLER DE ALUNO (fluxo original) ────────────────────────────────
         return await handleStudentPayment(event, payment);
 
@@ -28,6 +40,33 @@ export async function POST(req: Request) {
         console.error('[webhook]', error.message);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
+}
+
+// ─── DESAFIO ───────────────────────────────────────────────────────────────
+// Retorna true se o pagamento pertencia a uma inscrição de Desafio (e já foi
+// tratado aqui); retorna false se não for o caso, pra deixar o fluxo seguir.
+async function handleDesafioPayment(event: string, payment: any): Promise<boolean> {
+    if (!payment?.id) return false;
+
+    const inscricao = await prisma.desafioInscricao.findUnique({
+        where: { asaasPaymentId: payment.id },
+    });
+
+    if (!inscricao) return false; // não é um pagamento de Desafio
+
+    if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+        // Idempotência: só atualiza se ainda não estava marcada como paga
+        // (evita reprocessar caso a Asaas reenvie o mesmo webhook).
+        if (inscricao.status !== 'PAGO') {
+            await prisma.desafioInscricao.update({
+                where: { id: inscricao.id },
+                data: { status: 'PAGO', paymentDate: new Date() },
+            });
+            console.log(`✅ Desafio: inscrição ${inscricao.id} confirmada (${inscricao.nome})`);
+        }
+    }
+
+    return true;
 }
 
 // ─── COACH ───────────────────────────────────────────────────────────────────
