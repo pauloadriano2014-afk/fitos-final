@@ -1,5 +1,4 @@
 // app/api/food/search/route.ts
-// Busca alimentos: TACO (global) + CUSTOM do teamId do coach autenticado
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
@@ -9,8 +8,8 @@ const prisma = new PrismaClient();
 
 const MASTER_TEAM = 'MASTER_TEAM';
 const MASTER_IDS  = [
-  '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
-  'b7c0c181-41fd-4156-b8fe-963a267759a3', // Adri
+  '3c82f763-66b4-48da-836e-16817d4f57c0',
+  'b7c0c181-41fd-4156-b8fe-963a267759a3',
 ];
 
 export async function GET(req: Request) {
@@ -20,49 +19,39 @@ export async function GET(req: Request) {
     const coachId       = searchParams.get('coachId') ?? '';
     const category      = searchParams.get('category') ?? '';
     const favoritesOnly = searchParams.get('favorites') === 'true';
-    const sourceFilter  = searchParams.get('source') ?? ''; // 'TACO' | 'CUSTOM' | ''
+    const sourceFilter  = searchParams.get('source') ?? '';
     const page          = parseInt(searchParams.get('page') ?? '1');
-    const limit         = Math.min(parseInt(searchParams.get('limit') ?? '50'), 100);
+    const limit         = Math.min(parseInt(searchParams.get('limit') ?? '50'), 200);
     const skip          = (page - 1) * limit;
 
-    // 🔥 BLINDAGEM: Garante que os Masters consigam ver os alimentos antigos salvos em seus próprios IDs
-    const validTeamIds = [coachId, MASTER_TEAM, ...MASTER_IDS].filter(Boolean);
+    const teamId = MASTER_IDS.includes(coachId) ? MASTER_TEAM : (coachId || null);
 
-    // Monta filtro de busca
     const where: any = {
-      // ❌ REMOVIDO: isActive: true (Escondia a TACO inteira porque dados antigos são 'null')
+      isActive: true,
       AND: [
         {
           OR: [
-            // ❌ REMOVIDO: teamId: null na TACO (Evita ocultar itens importados com strings vazias)
-            { source: 'TACO' },
-            // 🔥 Busca os CUSTOMs cobrindo todas as possibilidades de IDs dos Masters
-            { source: 'CUSTOM', teamId: { in: validTeamIds } },
+            { source: 'TACO', teamId: null },
+            { source: 'CUSTOM', teamId: teamId ?? MASTER_TEAM },
           ]
         },
       ],
     };
 
-    // Filtro por texto ignorando maiúsculas e minúsculas
-    if (q.length > 0) {
-      where.AND.push({
-        name: { contains: q, mode: 'insensitive' }
-      });
+    if (q.length >= 2) {
+      where.AND.push({ name: { contains: q, mode: 'insensitive' } });
     }
 
-    // Filtro por categoria
     if (category && category !== 'Todas') {
       where.AND.push({ category });
     }
 
-    // Filtro por source (TACO ou CUSTOM)
     if (sourceFilter === 'TACO') {
       where.AND.push({ source: 'TACO' });
     } else if (sourceFilter === 'CUSTOM') {
       where.AND.push({ source: 'CUSTOM' });
     }
 
-    // Filtro favoritos
     if (favoritesOnly) {
       where.AND.push({ isFavorite: true });
     }
@@ -71,32 +60,31 @@ export async function GET(req: Request) {
       prisma.food.findMany({
         where,
         orderBy: [
-          // CUSTOM primeiro (alimentos do coach aparecem antes dos TACO)
           { source: 'desc' },
           { name: 'asc' },
         ],
         skip,
         take: limit,
         select: {
-          id:           true,
-          source:       true,
-          name:         true,
-          category:     true,
-          subcategory:  true,
-          baseUnit:     true,
-          kcal:         true,
-          protein:      true,
-          carbs:        true,
-          fat:          true,
-          fiber:        true,
-          isLactoseFree:true,
-          conversionFactor: true,
+          id:              true,
+          source:          true,
+          name:            true,
+          category:        true,
+          subcategory:     true,
+          baseUnit:        true,
+          kcal:            true,
+          protein:         true,
+          carbs:           true,
+          fat:             true,
+          fiber:           true,
+          isLactoseFree:   true,
+          conversionFactor:true,
+          isFavorite:      true,
         },
       }),
       prisma.food.count({ where }),
     ]);
 
-    // Formata para o mesmo formato que o foodDatabase.js usa no frontend
     const formatted = foods.map(f => ({
       id:               f.id,
       source:           f.source,
@@ -111,6 +99,7 @@ export async function GET(req: Request) {
       fiber:            f.fiber ?? 0,
       isLactoseFree:    f.isLactoseFree ?? false,
       conversionFactor: f.conversionFactor ?? 1,
+      isFavorite:       f.isFavorite ?? false,
     }));
 
     return NextResponse.json({
@@ -118,7 +107,6 @@ export async function GET(req: Request) {
       total,
       page,
       pages: Math.ceil(total / limit),
-      totalPages: Math.ceil(total / limit), // 🔥 ADICIONADO: Garante que a paginação do React Native funcione
     });
 
   } catch (error: any) {
