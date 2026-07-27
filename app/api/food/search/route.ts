@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     const favoritesOnly = searchParams.get('favorites') === 'true';
     const sourceFilter  = searchParams.get('source') ?? '';
     const page          = parseInt(searchParams.get('page') ?? '1');
-    const limit         = Math.min(parseInt(searchParams.get('limit') ?? '50'), 200);
+    const limit         = Math.min(parseInt(searchParams.get('limit') ?? '50'), 500);
     const skip          = (page - 1) * limit;
 
     const teamId = MASTER_IDS.includes(coachId) ? MASTER_TEAM : (coachId || null);
@@ -66,20 +66,20 @@ export async function GET(req: Request) {
         skip,
         take: limit,
         select: {
-          id:              true,
-          source:          true,
-          name:            true,
-          category:        true,
-          subcategory:     true,
-          baseUnit:        true,
-          kcal:            true,
-          protein:         true,
-          carbs:           true,
-          fat:             true,
-          fiber:           true,
-          isLactoseFree:   true,
-          conversionFactor:true,
-          isFavorite:      true,
+          id:               true,
+          source:           true,
+          name:             true,
+          category:         true,
+          subcategory:      true,
+          baseUnit:         true,
+          kcal:             true,
+          protein:          true,
+          carbs:            true,
+          fat:              true,
+          fiber:            true,
+          isLactoseFree:    true,
+          conversionFactor: true,
+          isFavorite:       true,
         },
       }),
       prisma.food.count({ where }),
