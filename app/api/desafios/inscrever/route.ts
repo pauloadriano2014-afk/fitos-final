@@ -29,8 +29,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'CPF digitado é inválido. Verifique os números.' }, { status: 400 });
         }
 
-        // 🔥 A CORREÇÃO: O frontend já envia no formato ISO "AAAA-MM-DD". 
-        // Só precisamos de converter diretamente para objeto Date para o Prisma gravar.
         const safeBirthDate = new Date(dataNascimento);
         if (isNaN(safeBirthDate.getTime())) {
             return NextResponse.json({ error: 'Data de nascimento inválida.' }, { status: 400 });
@@ -42,11 +40,21 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Desafio não encontrado ou inativo.' }, { status: 404 });
         }
 
-        // 2. Busca a conta de pagamento (API key) do coach dono do desafio
+        // 2. Busca a conta de pagamento (API key)
+        let asaasToken = '';
         const gatewayAccount = await prisma.paymentGatewayAccount.findUnique({
             where: { coachId: desafio.coachId },
         });
-        if (!gatewayAccount || !gatewayAccount.isActive) {
+
+        if (gatewayAccount && gatewayAccount.isActive) {
+            asaasToken = gatewayAccount.asaasApiKey;
+        } else {
+            // 🔥 A MÁGICA: Se não achou na tabela, assume que é o Paulo (Master)
+            // e puxa a chave da conta principal direto das variáveis de ambiente do Render!
+            asaasToken = process.env.ASAAS_API_KEY || process.env.ASAAS_ACCESS_TOKEN || '';
+        }
+
+        if (!asaasToken) {
             return NextResponse.json(
                 { error: 'Conta de pagamento do coach não configurada. Fale com o suporte.' },
                 { status: 500 }
@@ -55,7 +63,7 @@ export async function POST(request: NextRequest) {
 
         const asaasHeaders = {
             'Content-Type': 'application/json',
-            access_token: gatewayAccount.asaasApiKey,
+            access_token: asaasToken,
         };
 
         // 3. Cria o Customer na Asaas
@@ -115,7 +123,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Erro ao gerar o QR Code do PIX.' }, { status: 400 });
         }
 
-        // 6. Salva a inscrição
+        // 6. Salva a inscrição no Prisma
         const inscricao = await prisma.desafioInscricao.create({
             data: {
                 desafioId: desafio.id,
