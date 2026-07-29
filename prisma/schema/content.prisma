@@ -97,3 +97,55 @@ model ContentAccess {
 
   @@unique([userId, contentId]) 
 }
+
+// =============================================================================
+// 🔥 ADICIONADO: MÓDULO DE PRODUTOS DIGITAIS, E-BOOKS E ORDER BUMP
+// =============================================================================
+
+model ProdutoDigital {
+  id              String   @id @default(uuid())
+  slug            String   @unique
+  nome            String
+  descricao       String?  @db.Text
+  capaUrl         String?
+  valor           Float
+  ativo           Boolean  @default(true)
+  coachId         String   // Paulo ou Adri
+  linkEntrega     String?  // Link do Google Drive, PDF do e-book, etc.
+  
+  // Estrutura premium para o checkout com Order Bump nativo
+  orderBumpTitulo String?  // Ex: "Levar também o Guia Avançado de Glúteos"
+  orderBumpTexto  String?  @db.Text // Ex: "Acelere os resultados combinando com treinos de alta densidade."
+  orderBumpValor  Float?   // Preço adicional estrategicamente menor
+
+  vendas          ProdutoVenda[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ProdutoVenda {
+  id              String   @id @default(uuid())
+  produtoId       String
+  produto         ProdutoDigital @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  
+  nomeCliente     String
+  emailCliente    String
+  telefoneCliente String
+  cpfCliente      String
+  
+  status          String   @default("PENDENTE") // PENDENTE, PAGO
+  valorTotal      Float    // Armazena o valor consolidado final cobrado no Asaas
+  incluiuBump     Boolean  @default(false)
+  
+  asaasPaymentId  String?  @unique
+  asaasCustomerId String?
+  pixQrCode       String?  @db.Text
+  pixCopyPaste    String?  @db.Text
+  invoiceUrl      String?  @db.Text
+
+  paymentDate     DateTime?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
