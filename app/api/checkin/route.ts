@@ -196,28 +196,26 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
-    const adminId = searchParams.get('adminId'); // 🔥 PEGA QUEM ESTÁ PEDINDO A LISTA
+    const adminId = searchParams.get('adminId');
 
     try {
         const whereClause: any = {};
         
-        // Se a busca for por um aluno específico, mantemos
         if (userId) {
             whereClause.userId = userId; 
         } 
         
-        // 🔥 MURALHA CORRIGIDA: Filtra os check-ins de forma válida para o Prisma
         if (adminId) {
             const isMaster = MASTER_IDS.includes(adminId);
             if (isMaster) {
-                // Paulo e Adri veem checkins dos seus alunos e alunos globais (null)
+                // 🔥 MURALHA CORRIGIDA: Usa o OR nativo do Prisma para tratar o null corretamente no PostgreSQL
                 whereClause.user = {
-                    coachId: {
-                        in: [...MASTER_IDS, null] as any
-                    }
+                    OR: [
+                        { coachId: { in: MASTER_IDS } },
+                        { coachId: null }
+                    ]
                 };
             } else {
-                // Parceiro vê SÓ dos alunos DELE
                 whereClause.user = {
                     coachId: adminId
                 };
