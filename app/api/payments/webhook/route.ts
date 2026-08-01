@@ -1,7 +1,7 @@
-// app/api/payments/webhook/route.ts — v3
-// v3: adiciona handler para inscrições do Desafio (Projeto 90 Dias e futuros
-// desafios por WhatsApp), verificado ANTES do fluxo de aluno. Nada da lógica
-// de coach ou aluno foi alterado.
+// app/api/payments/webhook/route.ts — v4
+// v4: adiciona handler para vendas de Produtos Digitais/E-books (Order Bump),
+// preservando 100% da lógica original de Alunos, Painel Financeiro e Desafios.
+
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
@@ -23,11 +23,16 @@ export async function POST(req: Request) {
             return await handleCoachPayment(event, payment, externalRef);
         }
 
+        // ── HANDLER DE PRODUTO DIGITAL / E-BOOK (Order Bump) ─────────────────
+        // Checa se esse payment.id pertence a uma venda de produto avulso.
+        const tratadoComoProduto = await handleProdutoPayment(event, payment);
+        if (tratadoComoProduto) {
+            return NextResponse.json({ received: true });
+        }
+
         // ── HANDLER DE DESAFIO (Projeto 90 Dias e futuros desafios) ───────────
         // Checa se esse payment.id pertence a uma inscrição de Desafio ANTES
         // de cair no fluxo de aluno (que espera um customer vinculado a User).
-        // Se não for um pagamento de Desafio, handleDesafioPayment devolve
-        // false e o fluxo segue normalmente pro handler de aluno de sempre.
         const tratadoComoDesafio = await handleDesafioPayment(event, payment);
         if (tratadoComoDesafio) {
             return NextResponse.json({ received: true });
@@ -40,6 +45,31 @@ export async function POST(req: Request) {
         console.error('[webhook]', error.message);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
+}
+
+// ─── PRODUTO DIGITAL / E-BOOK ──────────────────────────────────────────────
+// Retorna true se o pagamento pertencia a uma venda de Produto e foi tratado
+async function handleProdutoPayment(event: string, payment: any): Promise<boolean> {
+    if (!payment?.id) return false;
+
+    const venda = await prisma.produtoVenda.findUnique({
+        where: { asaasPaymentId: payment.id },
+    });
+
+    if (!venda) return false; // não é um pagamento de Produto Digital
+
+    if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+        // Idempotência: só atualiza se ainda não estava marcada como paga
+        if (venda.status !== 'PAGO') {
+            await prisma.produtoVenda.update({
+                where: { id: venda.id },
+                data: { status: 'PAGO', paymentDate: new Date() },
+            });
+            console.log(`✅ Produto: venda ${venda.id} confirmada (${venda.nomeCliente})`);
+        }
+    }
+
+    return true;
 }
 
 // ─── DESAFIO ───────────────────────────────────────────────────────────────
