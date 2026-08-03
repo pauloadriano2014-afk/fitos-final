@@ -54,6 +54,7 @@ export async function POST(
       strategyStartDate,      // null = manual
       strategyEndDate,        // null = sem data de fim
       activateNow = false,    // se true, já ativa ao criar
+      strategyExclusive = false, // 🔥 se true, substitui totalmente a dieta base pro aluno; se false, aluno escolhe
       copyFromDietId,         // se informado, copia refeições da dieta base
       meals = [],             // refeições passadas diretamente (opcional)
     } = body;
@@ -116,6 +117,7 @@ export async function POST(
         isStrategy:       true,
         strategyName,
         strategyActive:   activateNow,
+        strategyExclusive: !!strategyExclusive,
         strategyStartDate: strategyStartDate ? new Date(strategyStartDate) : null,
         strategyEndDate:   strategyEndDate   ? new Date(strategyEndDate)   : null,
         meals: {

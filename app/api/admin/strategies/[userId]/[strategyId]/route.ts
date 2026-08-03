@@ -21,6 +21,7 @@ export async function PATCH(
       strategyName,
       strategyStartDate,
       strategyEndDate,
+      strategyExclusive,  // 🔥 se true, substitui totalmente a base; se false, aluno escolhe
       goal,
       waterIntake,
       generalNotes,
@@ -66,6 +67,7 @@ export async function PATCH(
           ...(strategyName      !== undefined && { strategyName, name: `Estratégia: ${strategyName}` }),
           ...(strategyStartDate !== undefined && { strategyStartDate: strategyStartDate ? new Date(strategyStartDate) : null }),
           ...(strategyEndDate   !== undefined && { strategyEndDate:   strategyEndDate   ? new Date(strategyEndDate)   : null }),
+          ...(strategyExclusive !== undefined && { strategyExclusive: !!strategyExclusive }),
           ...(goal              !== undefined && { goal }),
           ...(waterIntake       !== undefined && { waterIntake }),
           ...(generalNotes      !== undefined && { generalNotes }),

@@ -27,6 +27,9 @@ model Diet {
   strategyActive    Boolean   @default(false)
   strategyStartDate DateTime?
   strategyEndDate   DateTime?
+  // 🔥 NOVO: controla se essa estratégia substitui totalmente a dieta base (aluno só vê ela)
+  // ou fica como opção alternativa (aluno escolhe entre ela e a base). Default = aluno escolhe.
+  strategyExclusive Boolean   @default(false)
 
   meals         Meal[]    
   
