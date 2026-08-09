@@ -154,6 +154,11 @@ model DesafioConfig {
   beneficios     String[] @default([]) // lista de "o que você vai receber" — editável por desafio
   valor          Float              // valor cobrado, pagamento único via PIX
   duracaoDias    Int      @default(90) // usado pra calcular "R$ X por dia" na página
+  // Data oficial de início do desafio (Dia 1). Opcional — se não preenchida,
+  // a página de check-in não mostra "Dia X" nem bloqueia por data, funciona
+  // como sempre funcionou. Preenchida, junto com duracaoDias define a janela
+  // válida de check-in (dataInicio até dataInicio + duracaoDias).
+  dataInicio     DateTime?
   linkGrupoWhats String             // link de convite do grupo — SÓ é revelado após pagamento confirmado
   coachId        String             // dono do desafio (Paulo ou Adri) — usado pra achar a PaymentGatewayAccount certa
   ativo          Boolean  @default(true)
@@ -215,6 +220,11 @@ model DesafioInscricao {
   paymentDate      DateTime?
 
   isLeadFuturo     Boolean   @default(true)
+
+  // Inscrição criada pelo admin só pra testar o fluxo (check-in, fotos etc.)
+  // sem precisar pagar de verdade. Aparece na tela de check-ins do admin
+  // (pra você confirmar que funcionou), mas é EXCLUÍDA do ranking.
+  isTeste          Boolean   @default(false)
 
   checkins         DesafioCheckin[]
 
