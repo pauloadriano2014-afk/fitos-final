@@ -37,7 +37,7 @@ export async function GET(
         fimSemana.setUTCHours(23, 59, 59, 999);
 
         const inscricoes = await prisma.desafioInscricao.findMany({
-            where: { desafioId: id, status: 'PAGO' },
+            where: { desafioId: id, status: 'PAGO', isTeste: false },
             select: {
                 id: true,
                 nome: true,
