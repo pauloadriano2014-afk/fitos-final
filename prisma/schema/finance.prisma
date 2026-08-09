@@ -164,9 +164,14 @@ model DesafioConfig {
   ativo          Boolean  @default(true)
 
   // Pontuação do check-in — quantos pontos vale CADA item marcado/enviado.
-  // Fim de semana vale mais por padrão (mais difícil manter a rotina).
-  pontosPorItem             Int @default(1) // segunda a sexta
-  pontosPorItemFimDeSemana  Int @default(2) // sábado e domingo
+  // Multiplicador aplicado sobre a pontuação fixa de cada item (ver
+  // DesafioCheckin.pontos) — 1 = sem alteração, 2 = dobra tudo naquele dia.
+  // Aceita decimal (ex: 1.5) pra mais controle fino.
+  // Padrão é 1 em todos os dias (sem bônus automático) — se quiser que o
+  // fim de semana valha mais, é uma escolha explícita feita no admin, não
+  // um comportamento fixo do sistema.
+  pontosPorItem             Float @default(1) // segunda a sexta
+  pontosPorItemFimDeSemana  Float @default(1) // sábado e domingo
 
   // Exceções pontuais de pontuação (feriados, datas comemorativas etc.) —
   // sobrescreve o peso normal só naquele dia específico. Anunciado com
@@ -253,16 +258,19 @@ model DesafioCheckin {
   cardio           Boolean  @default(false)
   alimentacao      Boolean  @default(false)
   agua             Boolean  @default(false)
-  fotoAcademiaUrl  String?
+  missao           Boolean  @default(false) // "desafio semanal" proposto pela Adri no grupo
+  fotoAcademiaUrl  String?  // = "check-in" na tabela de pontos (comprova presença)
 
   // Só preenchido aos sábados
   fotoFrenteUrl    String?
   fotoLadoUrl      String?
   fotoCostasUrl    String?
+  pesoKg           Float?   // peso digitado junto com as fotos de sábado
 
-  // 1 ponto por item marcado/enviado (treino, cardio, alimentação, água,
-  // foto academia, +3 fotos de sábado quando aplicável) — calculado e
-  // salvo no momento do check-in, pra tornar o ranking uma soma simples.
+  // Pontuação fixa por item (treino=10, cardio=10, água=5, alimentação=10,
+  // missão=15, check-in/foto=5), multiplicada pelo peso do dia (normal,
+  // fim de semana ou data especial) — calculado e salvo no momento do
+  // check-in, pra tornar o ranking uma soma simples.
   pontos           Int      @default(0)
 
   createdAt        DateTime @default(now())
@@ -283,7 +291,7 @@ model DesafioDataEspecial {
   desafio       DesafioConfig @relation(fields: [desafioId], references: [id], onDelete: Cascade)
 
   data          DateTime // só a data (sem hora), mesmo padrão do DesafioCheckin
-  pontosPorItem Int      // peso nesse dia específico — substitui o peso normal
+  pontosPorItem Float    // multiplicador nesse dia específico — substitui o normal (1 = sem alteração)
   motivo        String   // ex: "Feriado de 7 de setembro" — aparece no aviso da página
 
   createdAt     DateTime @default(now())
