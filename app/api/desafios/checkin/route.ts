@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
         // Busca os pesos de pontuação configurados no desafio dessa inscrição
         const inscricao = await prisma.desafioInscricao.findUnique({
             where: { id: inscricaoId },
-            select: { desafioId: true, desafio: { select: { pontosPorItem: true, pontosPorItemFimDeSemana: true } } },
+            select: { desafioId: true, desafio: { select: { pontosPorItem: true, pontosPorItemFimDeSemana: true, dataInicio: true, duracaoDias: true } } },
         });
         if (!inscricao) {
             return NextResponse.json({ error: 'Inscrição não encontrada.' }, { status: 404 });
@@ -60,6 +60,23 @@ export async function POST(request: NextRequest) {
         // Normaliza pro início do dia em UTC — evita duplicar por causa de horário
         const dataDia = new Date(data);
         dataDia.setUTCHours(0, 0, 0, 0);
+
+        // 📅 Se o desafio tem data de início configurada, só aceita check-in
+        // dentro da janela válida (dataInicio até dataInicio + duracaoDias - 1).
+        // Sem dataInicio configurada, não valida nada — comportamento de sempre.
+        if (inscricao.desafio.dataInicio) {
+            const inicio = new Date(inscricao.desafio.dataInicio);
+            inicio.setUTCHours(0, 0, 0, 0);
+            const fim = new Date(inicio);
+            fim.setUTCDate(inicio.getUTCDate() + (inscricao.desafio.duracaoDias || 90) - 1);
+
+            if (dataDia < inicio || dataDia > fim) {
+                return NextResponse.json(
+                    { error: 'Essa data está fora do período do desafio.' },
+                    { status: 400 }
+                );
+            }
+        }
 
         // 🎉 Data especial (feriado etc.) sobrescreve o peso normal do dia,
         // se houver uma cadastrada exatamente nessa data.
