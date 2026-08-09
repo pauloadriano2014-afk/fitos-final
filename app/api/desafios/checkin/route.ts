@@ -14,24 +14,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-// Conta quantos itens foram marcados/enviados e multiplica pelo peso do
-// dia (peso maior aos fins de semana — configurado por desafio, já que é
-// mais difícil manter a rotina no sábado/domingo).
-function calcularPontos(itens: {
-    treino?: boolean; cardio?: boolean; alimentacao?: boolean; agua?: boolean;
+// 🏋️ Pontuação FIXA por item. "checkin" = a foto do treino do dia (comprova
+// presença). O multiplicador do dia (normal/fim de semana/data especial)
+// é aplicado DEPOIS, em cima dessa soma — ver mais abaixo.
+const PONTOS_FIXOS = {
+    treino: 10,
+    cardio: 10,
+    agua: 5,
+    alimentacao: 10,
+    missao: 15,
+    checkin: 5, // = fotoAcademiaUrl preenchida
+};
+
+function calcularPontosBase(itens: {
+    treino?: boolean; cardio?: boolean; alimentacao?: boolean; agua?: boolean; missao?: boolean;
     fotoAcademiaUrl?: string | null;
-    fotoFrenteUrl?: string | null; fotoLadoUrl?: string | null; fotoCostasUrl?: string | null;
-}, pesoPorItem: number): number {
-    let itensMarcados = 0;
-    if (itens.treino) itensMarcados += 1;
-    if (itens.cardio) itensMarcados += 1;
-    if (itens.alimentacao) itensMarcados += 1;
-    if (itens.agua) itensMarcados += 1;
-    if (itens.fotoAcademiaUrl) itensMarcados += 1;
-    if (itens.fotoFrenteUrl) itensMarcados += 1;
-    if (itens.fotoLadoUrl) itensMarcados += 1;
-    if (itens.fotoCostasUrl) itensMarcados += 1;
-    return itensMarcados * pesoPorItem;
+}): number {
+    let pontos = 0;
+    if (itens.treino) pontos += PONTOS_FIXOS.treino;
+    if (itens.cardio) pontos += PONTOS_FIXOS.cardio;
+    if (itens.agua) pontos += PONTOS_FIXOS.agua;
+    if (itens.alimentacao) pontos += PONTOS_FIXOS.alimentacao;
+    if (itens.missao) pontos += PONTOS_FIXOS.missao;
+    if (itens.fotoAcademiaUrl) pontos += PONTOS_FIXOS.checkin;
+    return pontos;
 }
 
 // POST /api/desafios/checkin
@@ -40,12 +46,22 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const {
             inscricaoId, data,
-            treino, cardio, alimentacao, agua, fotoAcademiaUrl,
-            fotoFrenteUrl, fotoLadoUrl, fotoCostasUrl,
+            treino, cardio, alimentacao, agua, missao, fotoAcademiaUrl,
+            fotoFrenteUrl, fotoLadoUrl, fotoCostasUrl, pesoKg,
         } = body;
 
         if (!inscricaoId || !data) {
             return NextResponse.json({ error: 'inscricaoId e data são obrigatórios.' }, { status: 400 });
+        }
+
+        // ⚖️ Se vier alguma foto de sábado (frente/lado/costas), o peso é
+        // obrigatório junto — sem isso a avaliação de evolução fica incompleta.
+        const temFotoSabado = !!(fotoFrenteUrl || fotoLadoUrl || fotoCostasUrl);
+        if (temFotoSabado && (pesoKg === undefined || pesoKg === null || pesoKg === '')) {
+            return NextResponse.json(
+                { error: 'Informe o peso junto com as fotos de frente/lado/costas.' },
+                { status: 400 }
+            );
         }
 
         // Busca os pesos de pontuação configurados no desafio dessa inscrição
@@ -78,27 +94,25 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // 🎉 Data especial (feriado etc.) sobrescreve o peso normal do dia,
-        // se houver uma cadastrada exatamente nessa data.
+        // 🎉 Data especial (feriado etc.) sobrescreve o multiplicador normal
+        // do dia, se houver uma cadastrada exatamente nessa data.
         const dataEspecial = await prisma.desafioDataEspecial.findUnique({
             where: { desafioId_data: { desafioId: inscricao.desafioId, data: dataDia } },
         });
 
-        let pesoPorItem: number;
+        let multiplicador: number;
         if (dataEspecial) {
-            pesoPorItem = dataEspecial.pontosPorItem;
+            multiplicador = dataEspecial.pontosPorItem;
         } else {
             const diaSemana = dataDia.getUTCDay(); // 0=domingo .. 6=sábado
             const ehFimDeSemana = diaSemana === 0 || diaSemana === 6;
-            pesoPorItem = ehFimDeSemana
+            multiplicador = ehFimDeSemana
                 ? inscricao.desafio.pontosPorItemFimDeSemana
                 : inscricao.desafio.pontosPorItem;
         }
 
-        const pontos = calcularPontos({
-            treino, cardio, alimentacao, agua, fotoAcademiaUrl,
-            fotoFrenteUrl, fotoLadoUrl, fotoCostasUrl,
-        }, pesoPorItem);
+        const pontosBase = calcularPontosBase({ treino, cardio, alimentacao, agua, missao, fotoAcademiaUrl });
+        const pontos = Math.round(pontosBase * multiplicador);
 
         const checkin = await prisma.desafioCheckin.upsert({
             where: {
@@ -111,10 +125,12 @@ export async function POST(request: NextRequest) {
                 cardio: !!cardio,
                 alimentacao: !!alimentacao,
                 agua: !!agua,
+                missao: !!missao,
                 fotoAcademiaUrl: fotoAcademiaUrl || null,
                 fotoFrenteUrl: fotoFrenteUrl || null,
                 fotoLadoUrl: fotoLadoUrl || null,
                 fotoCostasUrl: fotoCostasUrl || null,
+                pesoKg: pesoKg !== undefined && pesoKg !== null && pesoKg !== '' ? parseFloat(pesoKg) : null,
                 pontos,
             },
             update: {
@@ -122,10 +138,12 @@ export async function POST(request: NextRequest) {
                 cardio: !!cardio,
                 alimentacao: !!alimentacao,
                 agua: !!agua,
+                missao: !!missao,
                 fotoAcademiaUrl: fotoAcademiaUrl || null,
                 fotoFrenteUrl: fotoFrenteUrl || null,
                 fotoLadoUrl: fotoLadoUrl || null,
                 fotoCostasUrl: fotoCostasUrl || null,
+                pesoKg: pesoKg !== undefined && pesoKg !== null && pesoKg !== '' ? parseFloat(pesoKg) : null,
                 pontos,
             },
         });
