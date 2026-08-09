@@ -46,9 +46,13 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const {
             inscricaoId, data,
-            treino, cardio, alimentacao, agua, missao, fotoAcademiaUrl,
+            treino, cardio, alimentacao, agua, fotoAcademiaUrl,
             fotoFrenteUrl, fotoLadoUrl, fotoCostasUrl, pesoKg,
         } = body;
+        // ⚠️ "missao" NÃO vem mais do formulário da aluna — ela não controla
+        // mais esse campo. Só a Adri marca, por uma rota de admin separada.
+        // Por isso buscamos o valor já salvo (se existir) só pra manter a
+        // pontuação correta, sem nunca aceitar um valor vindo da aluna.
 
         if (!inscricaoId || !data) {
             return NextResponse.json({ error: 'inscricaoId e data são obrigatórios.' }, { status: 400 });
@@ -111,7 +115,15 @@ export async function POST(request: NextRequest) {
                 : inscricao.desafio.pontosPorItem;
         }
 
-        const pontosBase = calcularPontosBase({ treino, cardio, alimentacao, agua, missao, fotoAcademiaUrl });
+        // Busca o check-in já existente (se houver) só pra saber se a Adri já
+        // marcou a missão como cumprida — isso NUNCA é sobrescrito por aqui.
+        const checkinExistente = await prisma.desafioCheckin.findUnique({
+            where: { inscricaoId_data: { inscricaoId, data: dataDia } },
+            select: { missao: true },
+        });
+        const missaoAtual = checkinExistente?.missao || false;
+
+        const pontosBase = calcularPontosBase({ treino, cardio, alimentacao, agua, missao: missaoAtual, fotoAcademiaUrl });
         const pontos = Math.round(pontosBase * multiplicador);
 
         const checkin = await prisma.desafioCheckin.upsert({
@@ -125,7 +137,7 @@ export async function POST(request: NextRequest) {
                 cardio: !!cardio,
                 alimentacao: !!alimentacao,
                 agua: !!agua,
-                missao: !!missao,
+                missao: false, // dia novo — a Adri ainda não teve chance de marcar
                 fotoAcademiaUrl: fotoAcademiaUrl || null,
                 fotoFrenteUrl: fotoFrenteUrl || null,
                 fotoLadoUrl: fotoLadoUrl || null,
@@ -138,7 +150,8 @@ export async function POST(request: NextRequest) {
                 cardio: !!cardio,
                 alimentacao: !!alimentacao,
                 agua: !!agua,
-                missao: !!missao,
+                // 🔒 "missao" propositalmente OMITIDO aqui — preserva o que a
+                // Adri já marcou, mesmo que a aluna reenvie o check-in do dia.
                 fotoAcademiaUrl: fotoAcademiaUrl || null,
                 fotoFrenteUrl: fotoFrenteUrl || null,
                 fotoLadoUrl: fotoLadoUrl || null,
