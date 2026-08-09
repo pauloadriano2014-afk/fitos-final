@@ -32,7 +32,7 @@ export async function PATCH(
         if (duracaoDias !== undefined) dataToUpdate.duracaoDias = parseInt(duracaoDias) || 90;
         if (dataInicio !== undefined) dataToUpdate.dataInicio = dataInicio ? new Date(dataInicio) : null;
         if (pontosPorItem !== undefined) dataToUpdate.pontosPorItem = parseFloat(pontosPorItem) || 1;
-        if (pontosPorItemFimDeSemana !== undefined) dataToUpdate.pontosPorItemFimDeSemana = parseFloat(pontosPorItemFimDeSemana) || 2;
+        if (pontosPorItemFimDeSemana !== undefined) dataToUpdate.pontosPorItemFimDeSemana = parseFloat(pontosPorItemFimDeSemana) || 1;
         if (linkGrupoWhats !== undefined) dataToUpdate.linkGrupoWhats = linkGrupoWhats;
         if (ativo !== undefined) dataToUpdate.ativo = ativo;
         // 🔑 coachId agora é editável também depois de criado — define de
