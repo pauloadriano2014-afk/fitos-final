@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
         const checkins = await prisma.desafioCheckin.findMany({
             where: { inscricaoId },
             orderBy: { data: 'desc' },
-            take: 14,
+            take: 100, // cobre uma sequência longa (desafios de até ~100 dias)
         });
 
         return NextResponse.json({ checkins });
