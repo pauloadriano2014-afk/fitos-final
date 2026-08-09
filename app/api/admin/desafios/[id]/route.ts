@@ -17,7 +17,7 @@ export async function PATCH(
         const { id } = params;
         const body = await request.json();
         const {
-            nome, descricao, logoUrl, beneficios, valor, duracaoDias, linkGrupoWhats, ativo, coachId,
+            nome, descricao, logoUrl, beneficios, valor, duracaoDias, dataInicio, linkGrupoWhats, ativo, coachId,
             mentorNome, mentorFotoUrl, mentorTexto, galleryPhotos, galleryTexts,
             paraQuemE, importante, compromissoTexto, bonusTexto,
             pontosPorItem, pontosPorItemFimDeSemana,
@@ -30,6 +30,7 @@ export async function PATCH(
         if (beneficios !== undefined) dataToUpdate.beneficios = Array.isArray(beneficios) ? beneficios.filter((b: string) => b && b.trim()) : [];
         if (valor !== undefined) dataToUpdate.valor = parseFloat(valor);
         if (duracaoDias !== undefined) dataToUpdate.duracaoDias = parseInt(duracaoDias) || 90;
+        if (dataInicio !== undefined) dataToUpdate.dataInicio = dataInicio ? new Date(dataInicio) : null;
         if (pontosPorItem !== undefined) dataToUpdate.pontosPorItem = parseInt(pontosPorItem) || 1;
         if (pontosPorItemFimDeSemana !== undefined) dataToUpdate.pontosPorItemFimDeSemana = parseInt(pontosPorItemFimDeSemana) || 2;
         if (linkGrupoWhats !== undefined) dataToUpdate.linkGrupoWhats = linkGrupoWhats;
