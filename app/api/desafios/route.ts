@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
                 beneficios: true,
                 valor: true,
                 duracaoDias: true,
+                dataInicio: true,
                 mentorNome: true,
                 mentorFotoUrl: true,
                 mentorTexto: true,
