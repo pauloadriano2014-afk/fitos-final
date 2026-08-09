@@ -26,6 +26,7 @@ export async function GET(
                 status: true,
                 paymentDate: true,
                 isLeadFuturo: true,
+                isTeste: true,
                 createdAt: true,
                 // cpf, asaasCustomerId, asaasPaymentId, pixQrCode, pixCopyPaste
                 // não são retornados aqui — não precisam aparecer na listagem
