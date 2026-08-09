@@ -49,11 +49,11 @@ export async function POST(
             create: {
                 desafioId: id,
                 data: dataDia,
-                pontosPorItem: parseInt(pontosPorItem),
+                pontosPorItem: parseFloat(pontosPorItem),
                 motivo,
             },
             update: {
-                pontosPorItem: parseInt(pontosPorItem),
+                pontosPorItem: parseFloat(pontosPorItem),
                 motivo,
             },
         });
