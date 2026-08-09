@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const {
-            slug, nome, descricao, logoUrl, beneficios, valor, duracaoDias, linkGrupoWhats, coachId,
+            slug, nome, descricao, logoUrl, beneficios, valor, duracaoDias, dataInicio, linkGrupoWhats, coachId,
             mentorNome, mentorFotoUrl, mentorTexto, galleryPhotos, galleryTexts,
             paraQuemE, importante, compromissoTexto, bonusTexto,
             pontosPorItem, pontosPorItemFimDeSemana,
@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
                 beneficios: Array.isArray(beneficios) ? beneficios.filter(b => b && b.trim()) : [],
                 valor: parseFloat(valor),
                 duracaoDias: duracaoDias ? parseInt(duracaoDias) : 90,
+                dataInicio: dataInicio ? new Date(dataInicio) : null,
                 pontosPorItem: pontosPorItem ? parseInt(pontosPorItem) : 1,
                 pontosPorItemFimDeSemana: pontosPorItemFimDeSemana ? parseInt(pontosPorItemFimDeSemana) : 2,
                 linkGrupoWhats,
