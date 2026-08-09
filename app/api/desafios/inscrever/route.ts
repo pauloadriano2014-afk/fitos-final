@@ -2,6 +2,22 @@
 //
 // POST /api/desafios/inscrever
 // Body: { desafioId, nome, dataNascimento, email, telefone, cpf }
+//
+// Fluxo:
+// 1. Valida o desafio (existe e está ativo)
+// 2. Busca a PaymentGatewayAccount do coach dono do desafio (pra pegar a API key da Asaas)
+// 3. Cria (ou reaproveita) um Customer na Asaas
+// 4. Cria uma cobrança PIX avulsa (não assinatura)
+// 5. Busca o QR Code / copia-e-cola dessa cobrança
+// 6. Salva tudo em DesafioInscricao com status PENDENTE
+//
+// ⚠️ AJUSTE:
+// - O import do Prisma abaixo para o caminho real do seu singleton
+// - ASAAS_BASE_URL se você usa sandbox em vez de produção
+// - Se já existe uma função utilitária de "criar cobrança Asaas" no seu
+//   código, prefira reaproveitá-la em vez desta implementação isolada —
+//   esta aqui foi escrita para funcionar de forma independente, assumindo
+//   que vocês ainda não tinham cobrança avulsa (não-assinatura) pronta.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -10,6 +26,10 @@ const ASAAS_BASE_URL = 'https://api.asaas.com/v3'; // troque para sandbox se for
 
 function onlyDigits(value: string): string {
     return (value || '').replace(/\D/g, '');
+}
+
+function formatDateYYYYMMDD(date: Date): string {
+    return date.toISOString().split('T')[0];
 }
 
 export async function POST(request: NextRequest) {
@@ -24,37 +44,17 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const cleanCpf = onlyDigits(cpf);
-        if (cleanCpf.length !== 11) {
-            return NextResponse.json({ error: 'CPF digitado é inválido. Verifique os números.' }, { status: 400 });
-        }
-
-        const safeBirthDate = new Date(dataNascimento);
-        if (isNaN(safeBirthDate.getTime())) {
-            return NextResponse.json({ error: 'Data de nascimento inválida.' }, { status: 400 });
-        }
-
         // 1. Valida o desafio
         const desafio = await prisma.desafioConfig.findUnique({ where: { id: desafioId } });
         if (!desafio || !desafio.ativo) {
             return NextResponse.json({ error: 'Desafio não encontrado ou inativo.' }, { status: 404 });
         }
 
-        // 2. Busca a conta de pagamento (API key)
-        let asaasToken = '';
+        // 2. Busca a conta de pagamento (API key) do coach dono do desafio
         const gatewayAccount = await prisma.paymentGatewayAccount.findUnique({
             where: { coachId: desafio.coachId },
         });
-
-        if (gatewayAccount && gatewayAccount.isActive) {
-            asaasToken = gatewayAccount.asaasApiKey;
-        } else {
-            // 🔥 A MÁGICA: Se não achou na tabela, assume que é o Paulo (Master)
-            // e puxa a chave da conta principal direto das variáveis de ambiente do Render!
-            asaasToken = process.env.ASAAS_API_KEY || process.env.ASAAS_ACCESS_TOKEN || '';
-        }
-
-        if (!asaasToken) {
+        if (!gatewayAccount || !gatewayAccount.isActive) {
             return NextResponse.json(
                 { error: 'Conta de pagamento do coach não configurada. Fale com o suporte.' },
                 { status: 500 }
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
         const asaasHeaders = {
             'Content-Type': 'application/json',
-            access_token: asaasToken,
+            access_token: gatewayAccount.asaasApiKey,
         };
 
         // 3. Cria o Customer na Asaas
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
                 name: nome,
                 email,
                 mobilePhone: onlyDigits(telefone),
-                cpfCnpj: cleanCpf,
+                cpfCnpj: onlyDigits(cpf),
             }),
         });
         const customerData = await customerRes.json();
@@ -88,9 +88,7 @@ export async function POST(request: NextRequest) {
         const asaasCustomerId = customerData.id;
 
         // 4. Cria a cobrança PIX avulsa
-        const today = new Date();
-        const dueDate = today.toISOString().split('T')[0];
-
+        const dueDate = formatDateYYYYMMDD(new Date());
         const paymentRes = await fetch(`${ASAAS_BASE_URL}/payments`, {
             method: 'POST',
             headers: asaasHeaders,
@@ -123,15 +121,15 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Erro ao gerar o QR Code do PIX.' }, { status: 400 });
         }
 
-        // 6. Salva a inscrição no Prisma
+        // 6. Salva a inscrição
         const inscricao = await prisma.desafioInscricao.create({
             data: {
                 desafioId: desafio.id,
                 nome,
-                dataNascimento: safeBirthDate,
+                dataNascimento: new Date(dataNascimento),
                 email,
-                telefone: onlyDigits(telefone),
-                cpf: cleanCpf,
+                telefone,
+                cpf: onlyDigits(cpf),
                 status: 'PENDENTE',
                 asaasCustomerId,
                 asaasPaymentId,

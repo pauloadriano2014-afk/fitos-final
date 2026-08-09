@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
             slug, nome, descricao, logoUrl, beneficios, valor, duracaoDias, linkGrupoWhats, coachId,
             mentorNome, mentorFotoUrl, mentorTexto, galleryPhotos, galleryTexts,
             paraQuemE, importante, compromissoTexto, bonusTexto,
+            pontosPorItem, pontosPorItemFimDeSemana,
         } = body;
 
         if (!nome || !valor || !linkGrupoWhats || !coachId) {
@@ -73,6 +74,8 @@ export async function POST(request: NextRequest) {
                 beneficios: Array.isArray(beneficios) ? beneficios.filter(b => b && b.trim()) : [],
                 valor: parseFloat(valor),
                 duracaoDias: duracaoDias ? parseInt(duracaoDias) : 90,
+                pontosPorItem: pontosPorItem ? parseInt(pontosPorItem) : 1,
+                pontosPorItemFimDeSemana: pontosPorItemFimDeSemana ? parseInt(pontosPorItemFimDeSemana) : 2,
                 linkGrupoWhats,
                 mentorNome: mentorNome || null,
                 mentorFotoUrl: mentorFotoUrl || null,

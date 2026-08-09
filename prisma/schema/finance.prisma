@@ -158,6 +158,16 @@ model DesafioConfig {
   coachId        String             // dono do desafio (Paulo ou Adri) — usado pra achar a PaymentGatewayAccount certa
   ativo          Boolean  @default(true)
 
+  // Pontuação do check-in — quantos pontos vale CADA item marcado/enviado.
+  // Fim de semana vale mais por padrão (mais difícil manter a rotina).
+  pontosPorItem             Int @default(1) // segunda a sexta
+  pontosPorItemFimDeSemana  Int @default(2) // sábado e domingo
+
+  // Exceções pontuais de pontuação (feriados, datas comemorativas etc.) —
+  // sobrescreve o peso normal só naquele dia específico. Anunciado com
+  // antecedência na página pública assim que cadastrado.
+  datasEspeciais DesafioDataEspecial[]
+
   // Perfil de quem conduz o desafio (ex: Adri) — opcional; se mentorNome
   // não for preenchido, essa seção simplesmente não aparece na página.
   mentorNome     String?
@@ -206,10 +216,68 @@ model DesafioInscricao {
 
   isLeadFuturo     Boolean   @default(true)
 
+  checkins         DesafioCheckin[]
+
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@index([desafioId])
   @@index([status])
   @@index([asaasPaymentId])
+}
+
+// DesafioCheckin — check-in diário de uma participante (treino, cardio,
+// alimentação, água, foto na academia). Aos sábados, ganha 3 campos extras
+// de foto do shape (frente/lado/costas). Um check-in por pessoa por dia
+// (garantido pelo @@unique abaixo) — reabrir o link no mesmo dia atualiza
+// o registro em vez de duplicar.
+model DesafioCheckin {
+  id               String   @id @default(uuid())
+
+  inscricaoId      String
+  inscricao        DesafioInscricao @relation(fields: [inscricaoId], references: [id], onDelete: Cascade)
+
+  data             DateTime // só a data (sem hora) do dia do check-in
+
+  treino           Boolean  @default(false)
+  cardio           Boolean  @default(false)
+  alimentacao      Boolean  @default(false)
+  agua             Boolean  @default(false)
+  fotoAcademiaUrl  String?
+
+  // Só preenchido aos sábados
+  fotoFrenteUrl    String?
+  fotoLadoUrl      String?
+  fotoCostasUrl    String?
+
+  // 1 ponto por item marcado/enviado (treino, cardio, alimentação, água,
+  // foto academia, +3 fotos de sábado quando aplicável) — calculado e
+  // salvo no momento do check-in, pra tornar o ranking uma soma simples.
+  pontos           Int      @default(0)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([inscricaoId, data])
+  @@index([inscricaoId])
+}
+
+// DesafioDataEspecial — exceção pontual de pontuação (feriado, data
+// comemorativa etc.). Sobrescreve pontosPorItem/pontosPorItemFimDeSemana
+// só naquele dia específico. A página pública de check-in mostra essas
+// datas com antecedência (aviso prévio) e um banner especial no dia.
+model DesafioDataEspecial {
+  id            String   @id @default(uuid())
+
+  desafioId     String
+  desafio       DesafioConfig @relation(fields: [desafioId], references: [id], onDelete: Cascade)
+
+  data          DateTime // só a data (sem hora), mesmo padrão do DesafioCheckin
+  pontosPorItem Int      // peso nesse dia específico — substitui o peso normal
+  motivo        String   // ex: "Feriado de 7 de setembro" — aparece no aviso da página
+
+  createdAt     DateTime @default(now())
+
+  @@unique([desafioId, data])
+  @@index([desafioId])
 }

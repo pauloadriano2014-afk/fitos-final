@@ -20,6 +20,7 @@ export async function PATCH(
             nome, descricao, logoUrl, beneficios, valor, duracaoDias, linkGrupoWhats, ativo, coachId,
             mentorNome, mentorFotoUrl, mentorTexto, galleryPhotos, galleryTexts,
             paraQuemE, importante, compromissoTexto, bonusTexto,
+            pontosPorItem, pontosPorItemFimDeSemana,
         } = body;
 
         const dataToUpdate: Record<string, any> = {};
@@ -29,6 +30,8 @@ export async function PATCH(
         if (beneficios !== undefined) dataToUpdate.beneficios = Array.isArray(beneficios) ? beneficios.filter((b: string) => b && b.trim()) : [];
         if (valor !== undefined) dataToUpdate.valor = parseFloat(valor);
         if (duracaoDias !== undefined) dataToUpdate.duracaoDias = parseInt(duracaoDias) || 90;
+        if (pontosPorItem !== undefined) dataToUpdate.pontosPorItem = parseInt(pontosPorItem) || 1;
+        if (pontosPorItemFimDeSemana !== undefined) dataToUpdate.pontosPorItemFimDeSemana = parseInt(pontosPorItemFimDeSemana) || 2;
         if (linkGrupoWhats !== undefined) dataToUpdate.linkGrupoWhats = linkGrupoWhats;
         if (ativo !== undefined) dataToUpdate.ativo = ativo;
         // 🔑 coachId agora é editável também depois de criado — define de

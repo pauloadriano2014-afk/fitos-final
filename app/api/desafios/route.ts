@@ -20,6 +20,9 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'slug é obrigatório' }, { status: 400 });
         }
 
+        const hojeUTC = new Date();
+        hojeUTC.setUTCHours(0, 0, 0, 0);
+
         const desafio = await prisma.desafioConfig.findFirst({
             where: { slug, ativo: true },
             select: {
@@ -40,6 +43,13 @@ export async function GET(request: NextRequest) {
                 importante: true,
                 compromissoTexto: true,
                 bonusTexto: true,
+                // 🎉 Só datas de hoje em diante — aviso prévio pra quem abrir
+                // a página de check-in, sem mostrar exceções já passadas.
+                datasEspeciais: {
+                    where: { data: { gte: hojeUTC } },
+                    orderBy: { data: 'asc' },
+                    select: { data: true, pontosPorItem: true, motivo: true },
+                },
                 // linkGrupoWhats propositalmente omitido
             },
         });
