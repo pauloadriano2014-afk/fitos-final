@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
                 duracaoDias: duracaoDias ? parseInt(duracaoDias) : 90,
                 dataInicio: dataInicio ? new Date(dataInicio) : null,
                 pontosPorItem: pontosPorItem ? parseFloat(pontosPorItem) : 1,
-                pontosPorItemFimDeSemana: pontosPorItemFimDeSemana ? parseFloat(pontosPorItemFimDeSemana) : 2,
+                pontosPorItemFimDeSemana: pontosPorItemFimDeSemana ? parseFloat(pontosPorItemFimDeSemana) : 1,
                 linkGrupoWhats,
                 mentorNome: mentorNome || null,
                 mentorFotoUrl: mentorFotoUrl || null,
