@@ -22,6 +22,7 @@ export async function GET(
                 id: true,
                 nome: true,
                 telefone: true,
+                isTeste: true,
                 checkins: {
                     orderBy: { data: 'desc' },
                     take: 14,
