@@ -1,13 +1,11 @@
 // fitos-api-nova/app/api/admin/desafios/checkin/[checkinId]/route.ts
 //
-// PATCH /api/admin/desafios/checkin/{checkinId}
-// Body: { missao: boolean }
+// PATCH  /api/admin/desafios/checkin/{checkinId} — marca/desmarca a missão
+// DELETE /api/admin/desafios/checkin/{checkinId} — invalida/apaga um
+//        check-in específico (ex: registrado antes da data de início real
+//        ser corrigida, ou qualquer outro erro pontual de um dia)
 //
-// Rota MASTER-ONLY (Adri/Paulo) — a Missão semanal (15 pts) não é mais
-// autodeclarada pela aluna. É a Adri quem confirma, direto no admin,
-// geralmente olhando o check-in de domingo de cada participante.
-// Recalcula "pontos" do check-in inteiro, aplicando o mesmo multiplicador
-// do dia (normal/fim de semana/data especial) usado no check-in normal.
+// Rota MASTER-ONLY (Adri/Paulo).
 //
 // ⚠️ AJUSTE O IMPORT ABAIXO para o caminho real do seu singleton Prisma
 
@@ -85,5 +83,20 @@ export async function PATCH(
     } catch (error) {
         console.error('[admin/desafios/checkin/checkinId][PATCH]', error);
         return NextResponse.json({ error: 'Erro ao atualizar missão.' }, { status: 500 });
+    }
+}
+
+// DELETE /api/admin/desafios/checkin/[checkinId]
+export async function DELETE(
+    request: NextRequest,
+    { params }: { params: { checkinId: string } }
+) {
+    try {
+        const { checkinId } = params;
+        await prisma.desafioCheckin.delete({ where: { id: checkinId } });
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error('[admin/desafios/checkin/checkinId][DELETE]', error);
+        return NextResponse.json({ error: 'Erro ao excluir check-in.' }, { status: 500 });
     }
 }
