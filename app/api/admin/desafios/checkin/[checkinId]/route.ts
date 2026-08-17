@@ -1,6 +1,7 @@
 // fitos-api-nova/app/api/admin/desafios/checkin/[checkinId]/route.ts
 //
-// PATCH  /api/admin/desafios/checkin/{checkinId} — marca/desmarca a missão
+// PATCH  /api/admin/desafios/checkin/{checkinId} — define quanto da missão
+//        semanal foi cumprido (0, 25, 50, 75 ou 100%) — pontos proporcionais
 // DELETE /api/admin/desafios/checkin/{checkinId} — invalida/apaga um
 //        check-in específico (ex: registrado antes da data de início real
 //        ser corrigida, ou qualquer outro erro pontual de um dia)
@@ -28,11 +29,12 @@ export async function PATCH(
     try {
         const { checkinId } = params;
         const body = await request.json();
-        const { missao } = body;
+        const { missaoPercentual } = body;
 
-        if (missao === undefined) {
-            return NextResponse.json({ error: 'Informe missao (true ou false).' }, { status: 400 });
+        if (missaoPercentual === undefined || missaoPercentual === null) {
+            return NextResponse.json({ error: 'Informe missaoPercentual (0 a 100).' }, { status: 400 });
         }
+        const percentualNum = Math.max(0, Math.min(100, parseInt(missaoPercentual)));
 
         const checkin = await prisma.desafioCheckin.findUnique({
             where: { id: checkinId },
@@ -70,13 +72,13 @@ export async function PATCH(
         if (checkin.cardio) pontosBase += PONTOS_FIXOS.cardio;
         if (checkin.agua) pontosBase += PONTOS_FIXOS.agua;
         if (checkin.alimentacao) pontosBase += PONTOS_FIXOS.alimentacao;
-        if (missao) pontosBase += PONTOS_FIXOS.missao;
+        pontosBase += Math.round(PONTOS_FIXOS.missao * (percentualNum / 100));
         if (checkin.fotoAcademiaUrl) pontosBase += PONTOS_FIXOS.checkin;
         const pontos = Math.round(pontosBase * multiplicador);
 
         const atualizado = await prisma.desafioCheckin.update({
             where: { id: checkinId },
-            data: { missao: !!missao, pontos },
+            data: { missaoPercentual: percentualNum, pontos },
         });
 
         return NextResponse.json({ checkin: atualizado });

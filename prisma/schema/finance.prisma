@@ -258,7 +258,7 @@ model DesafioCheckin {
   cardio           Boolean  @default(false)
   alimentacao      Boolean  @default(false)
   agua             Boolean  @default(false)
-  missao           Boolean  @default(false) // "desafio semanal" proposto pela Adri no grupo
+  missaoPercentual Int      @default(0) // 0-100 — quanto da "missão semanal" (Adri) foi cumprido; pontos são proporcionais
   fotoAcademiaUrl  String?  // = "check-in" na tabela de pontos (comprova presença)
 
   // Só preenchido aos sábados

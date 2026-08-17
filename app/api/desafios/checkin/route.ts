@@ -27,7 +27,7 @@ const PONTOS_FIXOS = {
 };
 
 function calcularPontosBase(itens: {
-    treino?: boolean; cardio?: boolean; alimentacao?: boolean; agua?: boolean; missao?: boolean;
+    treino?: boolean; cardio?: boolean; alimentacao?: boolean; agua?: boolean; missaoPercentual?: number;
     fotoAcademiaUrl?: string | null;
 }): number {
     let pontos = 0;
@@ -35,7 +35,8 @@ function calcularPontosBase(itens: {
     if (itens.cardio) pontos += PONTOS_FIXOS.cardio;
     if (itens.agua) pontos += PONTOS_FIXOS.agua;
     if (itens.alimentacao) pontos += PONTOS_FIXOS.alimentacao;
-    if (itens.missao) pontos += PONTOS_FIXOS.missao;
+    // Missão é proporcional: 100% = 15 pts, 50% = 7.5 (arredondado), 0% = nada.
+    pontos += Math.round(PONTOS_FIXOS.missao * ((itens.missaoPercentual || 0) / 100));
     if (itens.fotoAcademiaUrl) pontos += PONTOS_FIXOS.checkin;
     return pontos;
 }
@@ -115,15 +116,15 @@ export async function POST(request: NextRequest) {
                 : inscricao.desafio.pontosPorItem;
         }
 
-        // Busca o check-in já existente (se houver) só pra saber se a Adri já
-        // marcou a missão como cumprida — isso NUNCA é sobrescrito por aqui.
+        // Busca o check-in já existente (se houver) só pra saber quanto a
+        // Adri já marcou da missão semanal — isso NUNCA é sobrescrito por aqui.
         const checkinExistente = await prisma.desafioCheckin.findUnique({
             where: { inscricaoId_data: { inscricaoId, data: dataDia } },
-            select: { missao: true },
+            select: { missaoPercentual: true },
         });
-        const missaoAtual = checkinExistente?.missao || false;
+        const missaoPercentualAtual = checkinExistente?.missaoPercentual || 0;
 
-        const pontosBase = calcularPontosBase({ treino, cardio, alimentacao, agua, missao: missaoAtual, fotoAcademiaUrl });
+        const pontosBase = calcularPontosBase({ treino, cardio, alimentacao, agua, missaoPercentual: missaoPercentualAtual, fotoAcademiaUrl });
         const pontos = Math.round(pontosBase * multiplicador);
 
         const checkin = await prisma.desafioCheckin.upsert({
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
                 cardio: !!cardio,
                 alimentacao: !!alimentacao,
                 agua: !!agua,
-                missao: false, // dia novo — a Adri ainda não teve chance de marcar
+                missaoPercentual: 0, // dia novo — a Adri ainda não teve chance de marcar
                 fotoAcademiaUrl: fotoAcademiaUrl || null,
                 fotoFrenteUrl: fotoFrenteUrl || null,
                 fotoLadoUrl: fotoLadoUrl || null,
@@ -150,8 +151,8 @@ export async function POST(request: NextRequest) {
                 cardio: !!cardio,
                 alimentacao: !!alimentacao,
                 agua: !!agua,
-                // 🔒 "missao" propositalmente OMITIDO aqui — preserva o que a
-                // Adri já marcou, mesmo que a aluna reenvie o check-in do dia.
+                // 🔒 "missaoPercentual" propositalmente OMITIDO aqui — preserva o
+                // que a Adri já marcou, mesmo que a aluna reenvie o check-in do dia.
                 fotoAcademiaUrl: fotoAcademiaUrl || null,
                 fotoFrenteUrl: fotoFrenteUrl || null,
                 fotoLadoUrl: fotoLadoUrl || null,
