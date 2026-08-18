@@ -26,9 +26,27 @@ export async function POST(req: Request) {
 
         const externalRef: string = payment.externalReference || '';
 
-        // ── HANDLER DE COACH ─────────────────────────────────────────────────
+        // ── HANDLER DE COACH (cobrança avulsa/assinatura antiga, não-Checkout) ─
         if (externalRef.startsWith('coach:')) {
             return await handleCoachPayment(event, payment, externalRef);
+        }
+
+        // ── HANDLER DE RENOVAÇÃO DE CICLO (recorrência via cartão/Checkout) ───
+        // Pode ser ciclo de ALUNO (consultoria) ou de COACH (mensalidade da
+        // plataforma) — a Asaas não manda um externalReference confiável nesse
+        // tipo de cobrança auto-gerada (gerada sozinha a cada ciclo, sem passar
+        // pelo Checkout de novo). A gente descobre pela Subscription local
+        // vinculada ao asaasSubscriptionId + role do dono dela.
+        if (payment.subscription) {
+            const localSub = await prisma.subscription.findFirst({
+                where: { asaasSubscriptionId: payment.subscription },
+            });
+            if (localSub) {
+                const owner = await prisma.user.findUnique({ where: { id: localSub.userId }, select: { role: true } });
+                if (owner?.role === 'COACH') {
+                    return await handleCoachSubscriptionRenewal(event, payment, localSub);
+                }
+            }
         }
 
         // ── HANDLER DE DESAFIO (Projeto 90 Dias e futuros desafios) ───────────
@@ -109,6 +127,10 @@ async function handleCheckoutEvent(event: string, body: any) {
         body?.payment?.externalReference ||
         '';
 
+    if (externalRef.startsWith('coach-recorrencia:')) {
+        return await handleCoachCheckoutEvent(event, externalRef, checkoutId);
+    }
+
     if (!externalRef.startsWith('recorrencia:')) {
         // Não é um checkout de recorrência nosso (ou não conseguimos identificar
         // — payload num formato inesperado). Não faz nada, só confirma recebido.
@@ -183,6 +205,171 @@ async function handleCheckoutEvent(event: string, body: any) {
 
     if (event === 'CHECKOUT_EXPIRED') {
         await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'EXPIRED' } });
+    }
+
+    return NextResponse.json({ received: true });
+}
+
+// ─── COACH: ativação de recorrência via Checkout (mensalidade da plataforma) ─
+async function handleCoachCheckoutEvent(event: string, externalRef: string, checkoutId: string | undefined) {
+    // externalRef formato: "coach-recorrencia:{coachId}:{billingPlan}"
+    const parts = externalRef.split(':');
+    const coachId = parts[1];
+    const billingPlan = parts[2];
+    if (!coachId) return NextResponse.json({ received: true });
+
+    let subscription = checkoutId
+        ? await prisma.subscription.findUnique({ where: { asaasCheckoutId: checkoutId } })
+        : null;
+
+    if (!subscription) {
+        subscription = await prisma.subscription.findFirst({
+            where: { userId: coachId, billingType: 'CREDIT_CARD', status: 'PENDING_CHECKOUT' },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
+
+    if (!subscription) return NextResponse.json({ received: true });
+
+    if (event === 'CHECKOUT_PAID') {
+        // Idempotência: já processado? não repete.
+        if (subscription.status === 'ACTIVE') return NextResponse.json({ received: true });
+
+        const plan = BILLING_PLANS[billingPlan] || BILLING_PLANS[subscription.planName];
+        const billingStart = new Date();
+        const billingEnd = plan
+            ? calcBillingEnd(billingStart, plan.months)
+            : (() => { const d = new Date(billingStart); d.setMonth(d.getMonth() + 1); return d; })();
+
+        await prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { status: 'ACTIVE', nextDueDate: billingEnd },
+        });
+
+        await prisma.user.update({
+            where: { id: coachId },
+            data: {
+                coachBillingStatus: 'ACTIVE',
+                coachBillingStart: billingStart,
+                coachBillingEnd: billingEnd,
+                coachBillingPlan: billingPlan || subscription.planName,
+                ...(plan ? { coachPlan: plan.coachType } : {}),
+                accountStatus: 'ACTIVE',
+            } as any,
+        });
+
+        const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true } });
+        if (coach?.pushToken) {
+            await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: coach.pushToken,
+                    sound: 'default',
+                    title: '✅ Pagamento automático ativado!',
+                    body: 'Sua mensalidade ELITE FIT agora é renovada automaticamente no cartão. 💪',
+                }),
+            }).catch(() => {});
+        }
+
+        console.log(`✅ Recorrência de coach ativada: coach ${coachId}, subscription ${subscription.id}`);
+    }
+
+    if (event === 'CHECKOUT_CANCELED') {
+        await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'CANCELLED' } });
+    }
+
+    if (event === 'CHECKOUT_EXPIRED') {
+        await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'EXPIRED' } });
+    }
+
+    return NextResponse.json({ received: true });
+}
+
+// ─── COACH: renovação automática de ciclo (assinatura recorrente via cartão) ─
+// Quando a Asaas cobra o cartão sozinha a cada ciclo (sem passar pelo Checkout
+// de novo), ela manda PAYMENT_CONFIRMED/RECEIVED com `payment.subscription`
+// preenchido, mas sem um externalReference confiável nele. O chamador (no topo
+// do arquivo) já identificou que essa Subscription local pertence a um coach
+// (role === 'COACH') antes de cair aqui.
+async function handleCoachSubscriptionRenewal(event: string, payment: any, localSub: any) {
+    // Registra a fatura local (mesmo padrão do fluxo de aluno) pra aparecer no histórico
+    if (payment?.id) {
+        const cobrancaExistente = await prisma.payment.findUnique({ where: { asaasPaymentId: payment.id } });
+        if (!cobrancaExistente) {
+            try {
+                await prisma.payment.create({
+                    data: {
+                        subscriptionId: localSub.id,
+                        userId: localSub.userId,
+                        coachId: localSub.coachId,
+                        gatewayAccountId: localSub.gatewayAccountId,
+                        asaasPaymentId: payment.id,
+                        value: payment.value,
+                        netValue: payment.netValue,
+                        billingType: payment.billingType || 'CREDIT_CARD',
+                        status: payment.status,
+                        dueDate: new Date(payment.dueDate),
+                        paymentDate: payment.clientPaymentDate ? new Date(payment.clientPaymentDate) : (['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'].includes(event) ? new Date() : null),
+                        invoiceUrl: payment.invoiceUrl || null,
+                    },
+                });
+                console.log(`✅ Fatura de ciclo recorrente (coach) criada no banco: ${payment.id}`);
+            } catch (err: any) {
+                console.warn('[webhook][coach-renewal] Falha ao criar fatura de ciclo:', err?.message || err);
+            }
+        } else {
+            await prisma.payment.update({
+                where: { id: cobrancaExistente.id },
+                data: { status: payment.status, netValue: payment.netValue, billingType: payment.billingType },
+            });
+        }
+    }
+
+    if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+        const plan = BILLING_PLANS[localSub.planName];
+        const billingStart = new Date();
+        const billingEnd = plan
+            ? calcBillingEnd(billingStart, plan.months)
+            : (() => { const d = new Date(billingStart); d.setMonth(d.getMonth() + 1); return d; })();
+
+        await prisma.user.update({
+            where: { id: localSub.userId },
+            data: {
+                coachBillingStatus: 'ACTIVE',
+                coachBillingStart: billingStart,
+                coachBillingEnd: billingEnd,
+                accountStatus: 'ACTIVE',
+            } as any,
+        });
+        await prisma.subscription.update({ where: { id: localSub.id }, data: { nextDueDate: billingEnd } });
+
+        const coach = await prisma.user.findUnique({ where: { id: localSub.userId }, select: { pushToken: true } });
+        if (coach?.pushToken) {
+            await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: coach.pushToken,
+                    sound: 'default',
+                    title: '✅ Mensalidade renovada!',
+                    body: 'Sua mensalidade ELITE FIT foi renovada automaticamente. Bora trabalhar! 💪',
+                }),
+            }).catch(() => {});
+        }
+
+        console.log(`✅ Ciclo recorrente de coach confirmado: coach ${localSub.userId}`);
+    }
+
+    if (event === 'PAYMENT_OVERDUE') {
+        await prisma.user.update({ where: { id: localSub.userId }, data: { coachBillingStatus: 'OVERDUE' } as any });
+    }
+
+    if (event === 'PAYMENT_DELETED' || event === 'PAYMENT_REFUNDED') {
+        await prisma.user.update({
+            where: { id: localSub.userId },
+            data: { coachBillingStatus: 'CANCELLED', accountStatus: 'REJECTED' } as any,
+        });
     }
 
     return NextResponse.json({ received: true });
