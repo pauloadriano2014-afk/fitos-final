@@ -141,7 +141,8 @@ export async function createCheckoutSession(
       phone?: string;
     };
     value: number;
-    description: string; // vira o "item" cobrado a cada ciclo
+    description: string; // vira o "item" cobrado a cada ciclo (o "name" do item é
+    // truncado automaticamente pra 30 caracteres — limite da API do Asaas)
     cycle: 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY';
     nextDueDate: string; // 'YYYY-MM-DD'
     externalReference: string; // "recorrencia:{userId}" — devolvido no webhook
@@ -162,7 +163,13 @@ export async function createCheckoutSession(
       customerData: params.customerData,
       items: [
         {
-          name: params.description,
+          // 🔥 FIX: o Asaas rejeita (400) se `items[].name` passar de 30
+          // caracteres — "Consultoria Trimestral - Consultoria (recorrência)"
+          // por exemplo estoura fácil. `description` pode ser mais longa.
+          name:
+            params.description.length > 30
+              ? `${params.description.slice(0, 27)}...`
+              : params.description,
           description: params.description,
           value: params.value,
           quantity: 1,

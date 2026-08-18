@@ -115,7 +115,18 @@ export async function POST(req: NextRequest) {
     const dueStr = toDateOnly(due);
 
     const cycle = cycleFromContractType(user.contractType);
-    const planLabel = user.contractType || 'Mensal';
+    // 🔥 FIX: usar `user.contractType` cru aqui já quebrou o Checkout (Asaas
+    // rejeita `items[].name` com mais de 30 caracteres — "PREMIUM_TRIMESTRAL
+    // - Consultoria (recorrência)" estoura fácil). Label curto e fixo por
+    // ciclo em vez do texto livre do contrato.
+    const CYCLE_LABEL: Record<string, string> = {
+      MONTHLY: 'Mensal',
+      QUARTERLY: 'Trimestral',
+      SEMIANNUALLY: 'Semestral',
+      YEARLY: 'Anual',
+    };
+    const planLabel = user.contractType || 'Mensal'; // guardado no registro local (Subscription.planName)
+    const itemLabel = `Consultoria ${CYCLE_LABEL[cycle] || 'Mensal'}`; // sempre curto — vai pro Checkout
 
     // ---- 5. Cria o Checkout (RECURRENT + CREDIT_CARD) ----
     const checkout = await createCheckoutSession({
@@ -126,7 +137,7 @@ export async function POST(req: NextRequest) {
         phone: user.phone || undefined,
       },
       value,
-      description: `${planLabel} - Consultoria (recorrência)`,
+      description: itemLabel,
       cycle,
       nextDueDate: dueStr,
       externalReference: `recorrencia:${user.id}`,
