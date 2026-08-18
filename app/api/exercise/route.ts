@@ -1,17 +1,10 @@
 // app/api/exercise/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { PAULO_ID, ADRI_ID, MASTER_IDS } from '@/lib/masterIds';
 
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
-
-const PAULO_ID = '3c82f763-66b4-48da-836e-16817d4f57c0';
-const ADRI_ID = 'b7c0c181-41fd-4156-b8fe-963a267759a3';
-
-const MASTER_IDS = [
-    PAULO_ID, // Paulo
-    ADRI_ID   // Adri
-];
 
 async function checkExerciseOwnership(exerciseId: string, adminId: string | null) {
     if (!adminId) return false;

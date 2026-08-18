@@ -2,11 +2,7 @@
 // v2: GET agora filtra por coachId (isolamento multi-tenant)
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-
-const MASTER_IDS = [
-    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
-    'b7c0c181-41fd-4156-b8fe-963a267759a3', // Adri
-];
+import { MASTER_IDS } from '@/lib/masterIds';
 
 export async function POST(req: Request) {
     try {

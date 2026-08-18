@@ -1,13 +1,8 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { MASTER_IDS } from '@/lib/masterIds';
 
 const prisma = new PrismaClient();
-
-// 🔥 IDs MASTER PARA BLINDAGEM DA TELA
-const MASTER_IDS = [
-    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
-    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
-];
 
 // 🔥 FUNÇÃO DE MURALHA: Verifica se o Coach é dono deste Aluno
 async function checkUserOwnership(userId: string, adminId: string | null) {

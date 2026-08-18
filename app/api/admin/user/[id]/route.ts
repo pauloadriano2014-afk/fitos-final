@@ -1,14 +1,10 @@
 // app/api/admin/user/[id]/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { MASTER_IDS } from '@/lib/masterIds';
 
 const prisma = (global as any).prisma || new PrismaClient();
 if (process.env.NODE_ENV === 'development') (global as any).prisma = prisma;
-
-const MASTER_IDS = [
-    '3c82f763-66b4-48da-836e-16817d4f57c0',
-    'b7c0c181-41fd-4156-b8fe-963a267759a3'
-];
 
 async function checkOwnership(userId: string, adminId: string | null) {
     if (!adminId) return false;

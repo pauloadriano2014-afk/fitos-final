@@ -5,14 +5,10 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { BILLING_PLANS, LAUNCH_PROMO_MAX, calcBillingEnd } from '@/config/coachBillingPlans';
+import { MASTER_IDS } from '@/lib/masterIds';
 
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
-
-const MASTER_IDS = [
-    '3c82f763-66b4-48da-836e-16817d4f57c0',
-    'b7c0c181-41fd-4156-b8fe-963a267759a3',
-];
 
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY!;
 const ASAAS_BASE    = process.env.ASAAS_BASE_URL || 'https://api.asaas.com/v3';

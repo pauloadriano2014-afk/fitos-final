@@ -6,12 +6,10 @@
 // defaultSubstitutes: traduz IDs do Paulo para IDs equivalentes da Adri (por nome)
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { PAULO_ID, ADRI_ID } from '@/lib/masterIds';
 
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
-
-const PAULO_ID = '3c82f763-66b4-48da-836e-16817d4f57c0';
-const ADRI_ID = 'b7c0c181-41fd-4156-b8fe-963a267759a3';
 
 export async function GET() {
   try {

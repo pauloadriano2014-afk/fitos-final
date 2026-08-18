@@ -1,16 +1,13 @@
 // app/api/admin/system-technique-videos/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { MASTER_IDS } from '@/lib/masterIds';
 
 const prisma = (global as any).prisma || new PrismaClient();
 if (process.env.NODE_ENV === 'development') (global as any).prisma = prisma;
 export const dynamic = 'force-dynamic';
 
 // 🔥 Time Master — Paulo e Adri compartilham os mesmos vídeos de técnica.
-const MASTER_IDS = [
-  '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
-  'b7c0c181-41fd-4156-b8fe-963a267759a3', // Adri
-];
 const MASTER_TEAM_ID = 'MASTER_TEAM';
 
 function getTeamId(coachId: string) {

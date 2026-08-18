@@ -6,17 +6,12 @@
 
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { MASTER_IDS } from '@/lib/masterIds';
 
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 const ADRI_EMAIL = 'adri.personal@hotmail.com';
-
-// 🔥 IDs MASTER PARA BLINDAGEM DO DASHBOARD
-const MASTER_IDS = [
-    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
-    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
-];
 
 export async function GET(req: Request) {
   try {
