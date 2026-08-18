@@ -95,9 +95,19 @@ function cycleToDays(cycle: string | null | undefined): number {
 async function handleCheckoutEvent(event: string, body: any) {
     console.log('[webhook][checkout]', event, JSON.stringify(body));
 
-    const checkoutId: string | undefined = body?.id || body?.checkout?.id;
+    // 🔥 A URL do Checkout hospedado é "asaas.com/checkoutSession/show/..." —
+    // o produto se chama "checkoutSession", não "checkout". É bem provável
+    // que o corpo do webhook aninhe os dados numa chave `checkoutSession` em
+    // vez de `checkout`. Checando os dois formatos por segurança (nenhum dos
+    // dois documentado publicamente de forma clara pela Asaas).
+    const checkoutId: string | undefined =
+        body?.id || body?.checkout?.id || body?.checkoutSession?.id;
     const externalRef: string =
-        body?.externalReference || body?.checkout?.externalReference || body?.payment?.externalReference || '';
+        body?.externalReference ||
+        body?.checkout?.externalReference ||
+        body?.checkoutSession?.externalReference ||
+        body?.payment?.externalReference ||
+        '';
 
     if (!externalRef.startsWith('recorrencia:')) {
         // Não é um checkout de recorrência nosso (ou não conseguimos identificar
@@ -129,7 +139,9 @@ async function handleCheckoutEvent(event: string, body: any) {
         if (subscription.status === 'ACTIVE') return NextResponse.json({ received: true });
 
         const asaasSubscriptionId: string | undefined =
-            body?.subscription?.id || body?.checkout?.subscription?.id;
+            body?.subscription?.id ||
+            body?.checkout?.subscription?.id ||
+            body?.checkoutSession?.subscription?.id;
 
         const newDueDate = new Date();
         newDueDate.setDate(newDueDate.getDate() + cycleToDays(subscription.cycle));
