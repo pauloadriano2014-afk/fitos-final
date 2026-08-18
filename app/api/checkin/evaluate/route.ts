@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const prisma = new PrismaClient();
 
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || '';
 const accessKey = process.env.R2_ACCESS_KEY_ID || '';

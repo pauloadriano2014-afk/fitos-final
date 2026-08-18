@@ -3,10 +3,9 @@
 //     (apaga e recria as refeições dela) em vez de criar um registro novo e
 //     desativar tudo, que é o que causava o bug de "salva mas não persiste"
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 
-const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
     try {

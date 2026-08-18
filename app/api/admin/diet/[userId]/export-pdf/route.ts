@@ -1,6 +1,6 @@
 // app/api/admin/diet/[userId]/export-pdf/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import { generateDietHtml } from '@/utils/dietPdfTemplate';
@@ -8,7 +8,6 @@ import { generateDietHtml } from '@/utils/dietPdfTemplate';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const prisma = new PrismaClient();
 
 export async function GET(
   req: Request,

@@ -1,10 +1,8 @@
 // app/api/admin/system-technique-videos/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 
-const prisma = (global as any).prisma || new PrismaClient();
-if (process.env.NODE_ENV === 'development') (global as any).prisma = prisma;
 export const dynamic = 'force-dynamic';
 
 // 🔥 Time Master — Paulo e Adri compartilham os mesmos vídeos de técnica.

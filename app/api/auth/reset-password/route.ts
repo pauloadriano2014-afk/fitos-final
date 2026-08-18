@@ -5,11 +5,10 @@
 // salva a nova senha JÁ COM HASH BCRYPT e invalida o token (uso único).
 
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {

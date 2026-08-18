@@ -1,10 +1,9 @@
 // app/api/assessment/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 // 🔥 CONFIGURAÇÃO DO CLOUDFLARE R2 🔥

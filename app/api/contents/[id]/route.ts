@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 
 // 🔥 PATCH: Atualiza um conteúdo existente (Editar)
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {

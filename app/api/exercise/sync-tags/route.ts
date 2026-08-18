@@ -1,8 +1,7 @@
 // app/api/exercise/sync-tags/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 function guessSubCategory(name: string, category: string): string {

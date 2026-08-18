@@ -2,12 +2,11 @@
 // Retorna alunos com aniversário nos próximos N dias (padrão: 7)
 
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 export const dynamic   = 'force-dynamic';
 export const revalidate = 0;
 
-const prisma = new PrismaClient();
 
 // Faz parse resiliente de birthDate em vários formatos possíveis:
 // "DD/MM/YYYY", "DD/MM", "YYYY-MM-DD" (ISO), ou data ISO completa

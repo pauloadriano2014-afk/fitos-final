@@ -3,10 +3,9 @@
 // desafios por WhatsApp), verificado ANTES do fluxo de aluno. Nada da lógica
 // de coach ou aluno foi alterado.
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {

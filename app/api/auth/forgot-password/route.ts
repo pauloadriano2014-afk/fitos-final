@@ -9,10 +9,9 @@
 // Isso impede que alguém use esta rota para descobrir e-mails cadastrados.
 
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 const APP_URL = process.env.APP_URL || 'https://www.pauloadrianoteam.com.br';

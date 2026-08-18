@@ -1,8 +1,7 @@
 // app/api/admin/bulk-update-exercise-content/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 // Recebe uma lista de conteúdo por NOME de exercício (não por id), porque o

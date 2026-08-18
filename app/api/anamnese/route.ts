@@ -1,9 +1,8 @@
 // app/api/anamnese/route.ts — VERSÃO 2.0
 // Suporta todos os campos da AnamneseScreen v4 (11 etapas) e destranca o User
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
   try {

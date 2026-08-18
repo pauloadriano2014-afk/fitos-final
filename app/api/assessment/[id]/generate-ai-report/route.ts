@@ -1,9 +1,8 @@
 // app/api/assessment/[id]/generate-ai-report/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 
-const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export const dynamic = 'force-dynamic';

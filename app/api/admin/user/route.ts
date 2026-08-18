@@ -1,12 +1,11 @@
 // app/api/admin/user/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0; // 🔥 Força o Next.js a NUNCA usar cache nesta rota
 
-const prisma = new PrismaClient();
 
 // Cabeçalhos agressivos anti-cache para garantir que o F5 traga os dados reais
 const noCacheHeaders = {

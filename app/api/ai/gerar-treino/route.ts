@@ -1,11 +1,10 @@
 // app/api/ai/gerar-treino/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
-const prisma = new PrismaClient();
 
 const MASTER_IDS = [
   '3c82f763-66b4-48da-836e-16817d4f57c0',

@@ -4,7 +4,7 @@
 //     seletor restrito a masters, retry mantido no Gemini
 
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
@@ -12,7 +12,6 @@ import OpenAI from 'openai';
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-const prisma = new PrismaClient();
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const MASTER_IDS = [

@@ -1,12 +1,11 @@
 // app/api/workout/finish/route.ts
 
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 // 🔥 IMPORTAMOS O CÉREBRO DA NOSSA IA 🔥
 import { analyzeWorkoutEvolution } from '@/app/utils/analyzeEvolution'; 
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {

@@ -1,12 +1,11 @@
 // app/api/admin/coach-settings/route.ts
 // Salva configurações do coach parceiro: prompt de IA e modo
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 
 export const dynamic = 'force-dynamic';
 
-const prisma = new PrismaClient();
 
 export async function PATCH(req: Request) {
     try {

@@ -3,11 +3,10 @@
 // Cria cliente no Asaas se não existir, gera cobrança Híbrida (PIX/Boleto/Cartão)
 // COM LOGS EXPLÍCITOS DE ERRO DO ASAAS
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { BILLING_PLANS, LAUNCH_PROMO_MAX, calcBillingEnd } from '@/config/coachBillingPlans';
 import { MASTER_IDS } from '@/lib/masterIds';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY!;

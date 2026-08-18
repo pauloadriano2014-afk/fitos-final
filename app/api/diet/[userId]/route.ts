@@ -1,12 +1,11 @@
 // app/api/diet/[userId]/route.ts — VERSÃO 3.0
 // Novidade: retorna estratégia ativa se houver, senão retorna dieta base
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
 
-const prisma = new PrismaClient();
 
 // ─── HELPER: checa se uma estratégia está ativa agora ────────────────────────
 function isStrategyActiveNow(diet: any): boolean {

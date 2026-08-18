@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 
 // 🔥 GET: Busca a lista de IDs de alunos que têm acesso a este conteúdo
 export async function GET(req: Request, { params }: { params: { id: string } }) {

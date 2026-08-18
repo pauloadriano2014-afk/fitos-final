@@ -1,11 +1,10 @@
 // app/api/admin/strategies/[userId]/route.ts
 // CRUD de estratégias de dieta para um aluno específico
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
-const prisma = new PrismaClient();
 
 // ─── GET — lista todas as estratégias + dieta base do aluno ──────────────────
 export async function GET(

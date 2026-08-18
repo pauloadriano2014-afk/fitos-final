@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 // 👇 BUSCA AS PASTAS DO COACH

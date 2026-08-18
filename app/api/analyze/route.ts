@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -10,7 +10,6 @@ import os from 'os';
 const apiKey = process.env.GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 const fileManager = new GoogleAIFileManager(apiKey);
-const prisma = new PrismaClient();
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';

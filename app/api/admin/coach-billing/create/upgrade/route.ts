@@ -1,11 +1,10 @@
 // app/api/admin/coach-billing/upgrade/route.ts
 // Calcula crédito proporcional e gera cobrança da diferença para upgrade de plano
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcProportionalCredit, calcBillingEnd } from '@/config/coachBillingPlans';
 import { MASTER_IDS } from '@/lib/masterIds';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY!;

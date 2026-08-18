@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 // 🔥 DETONADOR DE CACHE: Sem isso, o celular do aluno não atualiza a data!
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const prisma = new PrismaClient();
 
 // Máximo de check-ins para planos de ciclo
 const PLAN_MAX_CHECKINS: Record<string, number> = {

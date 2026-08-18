@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 
 // Função para dividir o array em lotes (A Expo aceita max 100 por vez)
 function chunkArray(myArray: any[], chunk_size: number){

@@ -2,9 +2,8 @@
 // GET  → lista todos os coaches com contagem de alunos e dados financeiros
 // PATCH → { coachId, action: 'BLOCK'|'UNBLOCK'|'SET_PLAN'|'UPDATE_PROFILE', coachPlan?, contractValue?, coachBillingEnd?, name?, email?, cpf?, phone? ... }
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 export async function GET() {

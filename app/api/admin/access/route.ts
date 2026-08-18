@@ -1,10 +1,9 @@
 // app/api/admin/access/route.ts — v2
 // v2: POST valida que o coach tem acesso ao aluno antes de alterar permissões VIP
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 
-const prisma = new PrismaClient();
 
 // GET: Busca quais conteúdos VIP este aluno tem acesso (sem mudança)
 export async function GET(req: Request) {

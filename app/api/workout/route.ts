@@ -1,9 +1,8 @@
 // app/api/workout/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { Expo } from 'expo-server-sdk';
 
-const prisma = new PrismaClient();
 const expo = new Expo();
 export const dynamic = 'force-dynamic';
 

@@ -1,10 +1,9 @@
 // app/api/admin/coach-onboarding/route.ts
 // Marca steps de onboarding concluídos e finaliza quando todos prontos
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
-const prisma = new PrismaClient();
 
 // Total de steps do onboarding
 const TOTAL_STEPS = 5;

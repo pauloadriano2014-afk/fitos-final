@@ -1,8 +1,7 @@
 // app/api/admin/user/mass-nps/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 
 export async function PATCH(req: Request) {
     try {

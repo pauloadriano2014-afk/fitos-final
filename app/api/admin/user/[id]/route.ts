@@ -1,10 +1,8 @@
 // app/api/admin/user/[id]/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 
-const prisma = (global as any).prisma || new PrismaClient();
-if (process.env.NODE_ENV === 'development') (global as any).prisma = prisma;
 
 async function checkOwnership(userId: string, adminId: string | null) {
     if (!adminId) return false;
@@ -44,61 +42,70 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             if (!isOwner) return corsResponse({ error: 'Acesso não autorizado a este aluno.' }, 403);
         }
 
+        // 🔥 PERFORMANCE: caller pode pedir pra omitir relações pesadas que não vai usar
+        // (ex: tela só quer a logo white-label, ou já descarta diets/workouts/anamneses
+        // localmente logo após o fetch). Sem ?omit=, comportamento é 100% igual a antes.
+        const omit = new Set((searchParams.get('omit') || '').split(',').map(s => s.trim()).filter(Boolean));
+
+        const select: any = {
+            id: true,
+            name: true,
+            email: true,
+            gender: true,
+            strategyNotes: true,
+            lastContactDate: true,
+            weeklyChecks: true,
+            phone: true,
+            photoUrl: true,
+            role: true,
+            plan: true,
+            active: true,
+            currentWeight: true,
+            currentXP: true,
+            nextCheckInDate: true,
+            evaluationUrl: true,
+            disableCheckIn: true,
+            dietGoal: true,
+            dietModule: true,
+            runningModule: true,
+            goal: true,
+            level: true,
+            inviteCode: true,
+            accountStatus: true,
+            contractType: true,
+            contractValue: true,
+            paymentDueDate: true,
+            isFinanceActive: true,
+            nextWorkoutUpdate: true,
+            paymentClaimedAt: true,
+            paymentClaimStatus: true,
+            paymentClaimCycleDueDate: true,
+            isMenstruating: true,
+            menstruationStartDate: true,
+            onboardingCompleted: true,
+            onboardingStep:      true,
+            coachPlan:           true,
+
+            // 🔥 AS DUAS LINHAS QUE FALTAVAM E QUE RESOLVEM TUDO 🔥
+            brandLogoUrl:        true,
+            brandLogoSize:       true,
+        };
+
+        // 🔥 "studentModules" foi removido daqui pois não existe na tabela e dava Erro 500!
+        if (!omit.has('anamneses')) select.anamneses = { orderBy: { createdAt: 'desc' }, take: 1 };
+        if (!omit.has('workouts'))  select.workouts  = { where: { archived: false }, orderBy: { createdAt: 'desc' }, take: 1 };
+        if (!omit.has('diets')) {
+            select.diets = {
+                where: { isActive: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                include: { meals: { orderBy: { order: 'asc' }, include: { items: true } } }
+            };
+        }
+
         const user = await prisma.user.findUnique({
             where: { id: userId },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                gender: true,
-                strategyNotes: true,
-                lastContactDate: true,
-                weeklyChecks: true,
-                phone: true,
-                photoUrl: true,
-                role: true,
-                plan: true,
-                active: true,
-                currentWeight: true,
-                currentXP: true,
-                nextCheckInDate: true,
-                evaluationUrl: true,
-                disableCheckIn: true,
-                dietGoal: true,
-                dietModule: true,
-                runningModule: true,
-                goal: true,
-                level: true,
-                inviteCode: true,
-                accountStatus: true,
-                contractType: true,
-                contractValue: true,
-                paymentDueDate: true,
-                isFinanceActive: true,
-                nextWorkoutUpdate: true,
-                paymentClaimedAt: true,
-                paymentClaimStatus: true,
-                paymentClaimCycleDueDate: true,
-                isMenstruating: true,
-                menstruationStartDate: true,
-                onboardingCompleted: true,
-                onboardingStep:      true,
-                coachPlan:           true,
-                
-                // 🔥 AS DUAS LINHAS QUE FALTAVAM E QUE RESOLVEM TUDO 🔥
-                brandLogoUrl:        true,
-                brandLogoSize:       true,
-
-                // 🔥 "studentModules" foi removido daqui pois não existe na tabela e dava Erro 500!
-                anamneses: { orderBy: { createdAt: 'desc' }, take: 1 },
-                workouts:  { where: { archived: false }, orderBy: { createdAt: 'desc' }, take: 1 },
-                diets: {
-                    where: { isActive: true },
-                    orderBy: { createdAt: 'desc' },
-                    take: 1,
-                    include: { meals: { orderBy: { order: 'asc' }, include: { items: true } } }
-                }
-            }
+            select
         });
 
         if (!user) return corsResponse({ error: 'Usuário não encontrado' }, 404);

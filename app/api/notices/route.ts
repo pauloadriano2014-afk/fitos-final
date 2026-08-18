@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { Expo } from 'expo-server-sdk';
 
-const prisma = new PrismaClient();
 const expo = new Expo();
 
 // 🔥 POST: Criar um novo aviso e disparar Push Notifications

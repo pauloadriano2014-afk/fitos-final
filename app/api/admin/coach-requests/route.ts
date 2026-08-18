@@ -1,9 +1,8 @@
 // app/api/admin/coach-requests/route.ts — v2
 // v2: salva coachPlan na aprovação
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 
 async function generateInviteCode(name: string): Promise<string> {
     const base = (name || 'COACH')

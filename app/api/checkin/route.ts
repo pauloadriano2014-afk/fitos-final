@@ -1,13 +1,12 @@
 // app/api/checkin/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const prisma = new PrismaClient();
 
 const s3 = new S3Client({
     region: 'auto',

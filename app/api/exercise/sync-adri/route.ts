@@ -5,10 +5,9 @@
 //    casando por nome (preserva nome/vídeo/instruções que a Adri já tiver customizado)
 // defaultSubstitutes: traduz IDs do Paulo para IDs equivalentes da Adri (por nome)
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { PAULO_ID, ADRI_ID } from '@/lib/masterIds';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 export async function GET() {

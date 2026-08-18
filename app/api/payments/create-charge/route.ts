@@ -13,7 +13,7 @@
 // }
 
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import {
   findOrCreateCustomer,
   createPayment,
@@ -22,7 +22,6 @@ import {
   getPixQrCode,
 } from '@/lib/asaas';
 
-const prisma = new PrismaClient();
 
 const DEFAULT_COACH_ID = 'paulo'; // fase 1: coach único
 

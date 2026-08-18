@@ -1,9 +1,7 @@
 // app/api/admin/techniques/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = (global as any).prisma || new PrismaClient();
-if (process.env.NODE_ENV === 'development') (global as any).prisma = prisma;
 
 // 🔥 Helper para anexar CORS limpos em todas as respostas (evita bloqueio no PWA/Web)
 function corsResponse(body: any, status = 200) {

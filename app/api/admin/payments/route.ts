@@ -5,9 +5,8 @@
 //   - COACH parceiro: vê só os pagamentos com coachId dele
 
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 const PAID_STATUSES = ['CONFIRMED', 'RECEIVED'];

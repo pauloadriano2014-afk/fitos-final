@@ -1,10 +1,9 @@
 // app/api/admin/update-contract/route.ts — v2
 // v2: valida que o coach tem acesso ao aluno antes de atualizar contrato
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 
-const prisma = new PrismaClient();
 
 async function checkAccess(userId: string, adminId: string): Promise<boolean> {
     if (MASTER_IDS.includes(adminId)) return true;

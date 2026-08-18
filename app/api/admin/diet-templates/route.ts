@@ -1,8 +1,7 @@
 // app/api/admin/diet-templates/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 
 // 🔥 ROTA PARA BUSCAR TODOS OS TEMPLATES SALVOS
 export async function GET() {

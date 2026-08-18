@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 
 // 🔥 ATUALIZA O COMENTÁRIO (EDITAR) 🔥
 export async function PUT(request: Request, { params }: { params: { commentId: string } }) {

@@ -1,11 +1,10 @@
 // app/api/admin/strategies/[userId]/[strategyId]/route.ts
 // Ações em uma estratégia específica: ativar, desativar, editar datas, deletar
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
-const prisma = new PrismaClient();
 
 // ─── PATCH — ativar/desativar/editar estratégia ──────────────────────────────
 export async function PATCH(

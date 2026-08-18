@@ -5,10 +5,9 @@
 //   - BIBLIOTECA DE EXERCÍCIOS: Parceiros herdam a base do Master para não recadastrar exercícios do zero.
 
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 
-const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
 const ADRI_EMAIL = 'adri.personal@hotmail.com';

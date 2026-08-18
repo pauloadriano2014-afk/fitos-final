@@ -1,10 +1,9 @@
 // app/api/auth/register/route.ts — v2
 // v2: campo coachPlan no fluxo COACH (PERSONAL | NUTRICIONISTA | ELITE)
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
 
 const PAULO_EMAIL = 'paulo_adriano2014@live.com';
 const ADRI_EMAIL  = 'adri.personal@hotmail.com';

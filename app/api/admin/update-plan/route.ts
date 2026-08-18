@@ -1,10 +1,9 @@
 // app/api/admin/update-plan/route.ts — v2
 // v2: valida que o coach tem acesso ao aluno antes de alterar o plano
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 
-const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
     try {
