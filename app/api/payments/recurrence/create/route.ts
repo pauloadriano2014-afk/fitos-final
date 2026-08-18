@@ -8,7 +8,7 @@
 // a Asaas cobra o cartão sozinha a cada ciclo, sem o aluno precisar voltar
 // no app pra pagar.
 //
-// Body: { userId: string, cpf?: string }
+// Body: { userId: string, cpf?: string, postalCode?, address?, addressNumber?, province?, complement? }
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
@@ -32,7 +32,7 @@ function cycleFromContractType(contractType: string | null | undefined): 'MONTHL
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId, cpf } = body;
+    const { userId, cpf, postalCode, address, addressNumber, province, complement } = body;
 
     if (!userId) {
       return NextResponse.json({ error: 'userId é obrigatório' }, { status: 400 });
@@ -55,6 +55,43 @@ export async function POST(req: NextRequest) {
     }
     if (!userCpf) {
       return NextResponse.json({ needsCpf: true });
+    }
+
+    // ---- 1b. Endereço: a Asaas exige pra Checkout de cartão recorrente
+    // (erro visto na prática: "O campo address deve ser informado.") ----
+    let userAddress = user.address || null;
+    let userAddressNumber = user.addressNumber || null;
+    let userProvince = user.province || null;
+    let userPostalCode = user.postalCode || null;
+    let userComplement = user.complement || null;
+
+    const gotNewAddress = address || addressNumber || province || postalCode;
+    if (gotNewAddress) {
+      const cepDigits = String(postalCode || '').replace(/\D/g, '');
+      if (!address || !addressNumber || !province || cepDigits.length !== 8) {
+        return NextResponse.json(
+          { error: 'Endereço incompleto. Preencha CEP, rua, número e bairro.' },
+          { status: 400 }
+        );
+      }
+      userAddress = String(address).trim();
+      userAddressNumber = String(addressNumber).trim();
+      userProvince = String(province).trim();
+      userPostalCode = cepDigits;
+      userComplement = complement ? String(complement).trim() : null;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          address: userAddress,
+          addressNumber: userAddressNumber,
+          province: userProvince,
+          postalCode: userPostalCode,
+          complement: userComplement,
+        },
+      });
+    }
+    if (!userAddress || !userAddressNumber || !userProvince || !userPostalCode) {
+      return NextResponse.json({ needsAddress: true });
     }
 
     const value = user.contractValue || 0;
@@ -135,6 +172,11 @@ export async function POST(req: NextRequest) {
         cpfCnpj: userCpf,
         email: user.email || undefined,
         phone: user.phone || undefined,
+        address: userAddress,
+        addressNumber: userAddressNumber,
+        complement: userComplement || undefined,
+        province: userProvince,
+        postalCode: userPostalCode,
       },
       value,
       description: itemLabel,

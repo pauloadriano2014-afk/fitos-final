@@ -8,6 +8,13 @@ model User {
   birthDate         String?
   phone             String?
   cpf               String?
+  // 🔥 Endereço de cobrança — exigido pelo Asaas Checkout pra ativar
+  // recorrência com cartão (ver app/api/payments/recurrence/create/route.ts)
+  address           String?
+  addressNumber     String?
+  complement        String?
+  province          String?   // bairro
+  postalCode        String?   // CEP (só dígitos)
   gender            String?
   aiLogs            AiLog[]
   dailyCheckins     DailyCheckin[]

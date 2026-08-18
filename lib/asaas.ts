@@ -139,6 +139,12 @@ export async function createCheckoutSession(
       cpfCnpj: string;
       email?: string;
       phone?: string;
+      // 🔥 A Asaas exige endereço pra cobrança recorrente com cartão salvo
+      address?: string;
+      addressNumber?: string;
+      complement?: string;
+      province?: string; // bairro
+      postalCode?: string; // CEP
     };
     value: number;
     description: string; // vira o "item" cobrado a cada ciclo (o "name" do item é
