@@ -13,6 +13,15 @@ export async function POST(req: Request) {
         const body = await req.json();
         const { event, payment } = body;
 
+        // ── HANDLER DE CHECKOUT (recorrência com cartão) ───────────────────────
+        // Eventos de Checkout (CHECKOUT_CREATED/PAID/CANCELED/EXPIRED) NÃO têm
+        // um objeto `payment` no corpo — por isso esse check precisa vir ANTES
+        // do `if (!payment) return` abaixo, senão esses eventos são descartados
+        // silenciosamente e a recorrência nunca ativa.
+        if (typeof event === 'string' && event.startsWith('CHECKOUT_')) {
+            return await handleCheckoutEvent(event, body);
+        }
+
         if (!payment) return NextResponse.json({ received: true });
 
         const externalRef: string = payment.externalReference || '';
@@ -66,6 +75,105 @@ async function handleDesafioPayment(event: string, payment: any): Promise<boolea
     }
 
     return true;
+}
+
+// ─── CHECKOUT (recorrência com cartão) ─────────────────────────────────────
+// ⚠️ O formato exato do corpo desses eventos (CHECKOUT_CREATED/PAID/CANCELED/
+// EXPIRED) não está 100% documentado publicamente pela Asaas — por isso o
+// console.log abaixo fica de propósito, pra dar pra ver o payload real na
+// primeira vez que rodar no sandbox (Render → Logs) e ajustar os campos se
+// precisar. A lógica tenta vários caminhos possíveis pros campos por segurança.
+function cycleToDays(cycle: string | null | undefined): number {
+    switch (cycle) {
+        case 'QUARTERLY': return 90;
+        case 'SEMIANNUALLY': return 180;
+        case 'YEARLY': return 365;
+        default: return 30; // MONTHLY (mesma aproximação já usada no fluxo de aluno original)
+    }
+}
+
+async function handleCheckoutEvent(event: string, body: any) {
+    console.log('[webhook][checkout]', event, JSON.stringify(body));
+
+    const checkoutId: string | undefined = body?.id || body?.checkout?.id;
+    const externalRef: string =
+        body?.externalReference || body?.checkout?.externalReference || body?.payment?.externalReference || '';
+
+    if (!externalRef.startsWith('recorrencia:')) {
+        // Não é um checkout de recorrência nosso (ou não conseguimos identificar
+        // — payload num formato inesperado). Não faz nada, só confirma recebido.
+        return NextResponse.json({ received: true });
+    }
+
+    const userId = externalRef.split(':')[1];
+    if (!userId) return NextResponse.json({ received: true });
+
+    // Acha a Subscription local — primeiro pelo asaasCheckoutId (mais preciso),
+    // com fallback pra "pendente mais recente desse aluno" se o id não bateu
+    // por algum motivo de formato de payload.
+    let subscription = checkoutId
+        ? await prisma.subscription.findUnique({ where: { asaasCheckoutId: checkoutId } })
+        : null;
+
+    if (!subscription) {
+        subscription = await prisma.subscription.findFirst({
+            where: { userId, billingType: 'CREDIT_CARD', status: 'PENDING_CHECKOUT' },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
+
+    if (!subscription) return NextResponse.json({ received: true });
+
+    if (event === 'CHECKOUT_PAID') {
+        // Idempotência: já processado? não repete.
+        if (subscription.status === 'ACTIVE') return NextResponse.json({ received: true });
+
+        const asaasSubscriptionId: string | undefined =
+            body?.subscription?.id || body?.checkout?.subscription?.id;
+
+        const newDueDate = new Date();
+        newDueDate.setDate(newDueDate.getDate() + cycleToDays(subscription.cycle));
+
+        await prisma.subscription.update({
+            where: { id: subscription.id },
+            data: {
+                status: 'ACTIVE',
+                ...(asaasSubscriptionId ? { asaasSubscriptionId } : {}),
+                nextDueDate: newDueDate,
+            },
+        });
+
+        await prisma.user.update({
+            where: { id: userId },
+            data: { isFinanceActive: true, paymentDueDate: newDueDate },
+        });
+
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true } });
+        if (user?.pushToken) {
+            await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: user.pushToken,
+                    sound: 'default',
+                    title: '✅ Pagamento automático ativado!',
+                    body: 'Sua mensalidade agora é cobrada automaticamente no cartão. Sem mais preocupação! 💪',
+                }),
+            }).catch(() => {});
+        }
+
+        console.log(`✅ Recorrência ativada: aluno ${userId}, subscription ${subscription.id}`);
+    }
+
+    if (event === 'CHECKOUT_CANCELED') {
+        await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'CANCELLED' } });
+    }
+
+    if (event === 'CHECKOUT_EXPIRED') {
+        await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'EXPIRED' } });
+    }
+
+    return NextResponse.json({ received: true });
 }
 
 // ─── COACH ───────────────────────────────────────────────────────────────────
@@ -154,6 +262,37 @@ async function handleStudentPayment(event: string, payment: any) {
                 }
             });
             console.log(`✅ Fatura atualizada no banco: ${payment.id} -> ${payment.status}`);
+        } else if (payment.subscription) {
+            // 🔥 COBRANÇA DE CICLO DE RECORRÊNCIA (gerada sozinha pela Asaas, a
+            // gente nunca chamou /payments/checkout pra ela) — cria a fatura
+            // local agora, senão esse pagamento nunca aparece no painel financeiro.
+            try {
+                const localSub = await prisma.subscription.findFirst({
+                    where: { asaasSubscriptionId: payment.subscription },
+                });
+                const user = await prisma.user.findFirst({ where: { asaasCustomerId: payment.customer || '' } });
+                if (localSub && user) {
+                    await prisma.payment.create({
+                        data: {
+                            subscriptionId: localSub.id,
+                            userId: user.id,
+                            coachId: localSub.coachId,
+                            gatewayAccountId: localSub.gatewayAccountId,
+                            asaasPaymentId: payment.id,
+                            value: payment.value,
+                            netValue: payment.netValue,
+                            billingType: payment.billingType || 'CREDIT_CARD',
+                            status: payment.status,
+                            dueDate: new Date(payment.dueDate),
+                            paymentDate: payment.clientPaymentDate ? new Date(payment.clientPaymentDate) : (['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'].includes(event) ? new Date() : null),
+                            invoiceUrl: payment.invoiceUrl || null,
+                        },
+                    });
+                    console.log(`✅ Fatura de ciclo recorrente criada no banco: ${payment.id}`);
+                }
+            } catch (err: any) {
+                console.warn('[webhook] Falha ao criar fatura de ciclo recorrente:', err?.message || err);
+            }
         }
     }
 

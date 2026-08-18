@@ -14,18 +14,22 @@ model PaymentGatewayAccount {
   payments      Payment[]
 }
 
+// status: PENDING_CHECKOUT (aguardando o aluno terminar o Asaas Checkout) |
+// ACTIVE (recorrência confirmada, cobrando sozinha a cada ciclo) |
+// CANCELLED | EXPIRED (checkout expirou sem o aluno completar)
 model Subscription {
   id                  String    @id @default(uuid())
   userId              String
-  coachId             String    
+  coachId             String
   gatewayAccountId    String
-  asaasCustomerId     String    
-  asaasSubscriptionId String?   
-  planName            String    
+  asaasCustomerId     String
+  asaasSubscriptionId String?
+  asaasCheckoutId     String?   @unique // id do Asaas Checkout que originou essa assinatura (recorrência via cartão)
+  planName            String
   value               Float
-  cycle               String    @default("MONTHLY") 
-  billingType         String    @default("UNDEFINED") 
-  status              String    @default("ACTIVE") 
+  cycle               String    @default("MONTHLY")
+  billingType         String    @default("UNDEFINED")
+  status              String    @default("ACTIVE")
   nextDueDate         DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt

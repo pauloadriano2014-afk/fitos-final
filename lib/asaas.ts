@@ -124,3 +124,64 @@ export async function getSubscriptionPayments(subscriptionId: string, apiKey?: s
 export async function getPayment(paymentId: string, apiKey?: string) {
   return asaasRequest(`/payments/${paymentId}`, { apiKey });
 }
+
+// ============ CHECKOUT (recorrência com cartão salvo) ============
+// O Asaas Checkout é uma página HOSPEDADA PELA PRÓPRIA ASAAS: o aluno digita
+// os dados do cartão lá, nunca no nosso backend. Isso é proposital — evita
+// que a gente precise lidar com dado de cartão bruto (escopo de PCI-DSS
+// muito mais pesado do que um dev solo consegue sustentar). Ver conversa/
+// memória do projeto pra contexto completo dessa decisão.
+
+export async function createCheckoutSession(
+  params: {
+    customerData: {
+      name: string;
+      cpfCnpj: string;
+      email?: string;
+      phone?: string;
+    };
+    value: number;
+    description: string; // vira o "item" cobrado a cada ciclo
+    cycle: 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY';
+    nextDueDate: string; // 'YYYY-MM-DD'
+    externalReference: string; // "recorrencia:{userId}" — devolvido no webhook
+    successUrl: string;
+    cancelUrl: string;
+    expiredUrl: string;
+    minutesToExpire?: number; // default 60 se omitido
+  },
+  apiKey?: string
+) {
+  return asaasRequest('/checkouts', {
+    method: 'POST',
+    body: {
+      billingTypes: ['CREDIT_CARD'],
+      chargeTypes: ['RECURRENT'],
+      minutesToExpire: params.minutesToExpire ?? 60,
+      externalReference: params.externalReference,
+      customerData: params.customerData,
+      items: [
+        {
+          name: params.description,
+          description: params.description,
+          value: params.value,
+          quantity: 1,
+        },
+      ],
+      subscription: {
+        cycle: params.cycle,
+        nextDueDate: params.nextDueDate,
+      },
+      callback: {
+        successUrl: params.successUrl,
+        cancelUrl: params.cancelUrl,
+        expiredUrl: params.expiredUrl,
+      },
+    },
+    apiKey,
+  });
+}
+
+export async function cancelCheckout(checkoutId: string, apiKey?: string) {
+  return asaasRequest(`/checkouts/${checkoutId}/cancel`, { method: 'POST', apiKey });
+}
