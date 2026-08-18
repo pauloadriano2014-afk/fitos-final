@@ -5,9 +5,12 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const dynamic = 'force-dynamic';
 
+const PAULO_ID = '3c82f763-66b4-48da-836e-16817d4f57c0';
+const ADRI_ID = 'b7c0c181-41fd-4156-b8fe-963a267759a3';
+
 const MASTER_IDS = [
-    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
-    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
+    PAULO_ID, // Paulo
+    ADRI_ID   // Adri
 ];
 
 async function checkExerciseOwnership(exerciseId: string, adminId: string | null) {
@@ -16,6 +19,69 @@ async function checkExerciseOwnership(exerciseId: string, adminId: string | null
     const exercise = await prisma.exercise.findUnique({ where: { id: exerciseId }, select: { coachId: true } });
     if (!exercise) return false;
     return exercise.coachId === adminId;
+}
+
+// 👇 Espelha automaticamente um exercício novo do Paulo para a Adri
+// Cria uma cópia independente (coachId = Adri) — ela pode trocar vídeo,
+// editar ou até apagar a cópia dela sem afetar o exercício original do Paulo.
+// Só roda quando quem criou é o Paulo (fonte única da biblioteca base).
+async function mirrorExerciseForAdri(data: {
+  name: string;
+  category: string;
+  subCategory: string;
+  environments: string[];
+  tags: object;
+  videoUrl: string;
+  instructions: string;
+  howToExecute: string | null;
+  commonMistakes: string | null;
+  maleFocus: string | null;
+  femaleFocus: string | null;
+  defaultSubstitutes: string[];
+}) {
+  try {
+    // Traduz os IDs de substitutos (que apontam pra exercícios do Paulo)
+    // para os IDs equivalentes da Adri, casando por nome.
+    let translatedSubstitutes: string[] = [];
+    if (data.defaultSubstitutes && data.defaultSubstitutes.length > 0) {
+      const masterSubs = await prisma.exercise.findMany({
+        where: { id: { in: data.defaultSubstitutes } },
+        select: { id: true, name: true }
+      });
+      const adriMatches = await prisma.exercise.findMany({
+        where: { coachId: ADRI_ID },
+        select: { id: true, name: true }
+      });
+      const adriByName = new Map(adriMatches.map(a => [a.name.toLowerCase().trim(), a.id]));
+      translatedSubstitutes = masterSubs
+        .map(s => adriByName.get(s.name.toLowerCase().trim()))
+        .filter((id): id is string => Boolean(id));
+    }
+
+    await prisma.exercise.create({
+      data: {
+        name: data.name,
+        category: data.category,
+        subCategory: data.subCategory,
+        environments: data.environments,
+        tags: data.tags,
+        videoUrl: data.videoUrl,
+        instructions: data.instructions,
+        howToExecute: data.howToExecute,
+        commonMistakes: data.commonMistakes,
+        maleFocus: data.maleFocus,
+        femaleFocus: data.femaleFocus,
+        coachId: ADRI_ID,
+        defaultSubstitutes: translatedSubstitutes
+      }
+    });
+  } catch (error: any) {
+    // Se a Adri já tem um exercício com esse nome (P2002), não é erro —
+    // só significa que ela já tem a própria versão dele.
+    if (error.code !== 'P2002') {
+      console.error('Erro ao espelhar exercício para Adri:', error);
+    }
+  }
 }
 
 function guessSubCategory(name: string, category: string): string {
@@ -122,7 +188,7 @@ export async function GET(req: Request) {
       whereClause = {
         OR: [
           { coachId: adminId },
-          { coachId: '3c82f763-66b4-48da-836e-16817d4f57c0' }, // Paulo — fonte única de herança
+          { coachId: PAULO_ID }, // Paulo — fonte única de herança
           { coachId: null }
         ]
       };
@@ -152,23 +218,35 @@ export async function POST(req: Request) {
 
     if (!adminId) return NextResponse.json({ error: "Acesso Negado: Faltando Admin ID" }, { status: 403 });
 
+    const exerciseData = {
+      name: body.name,
+      category: cat,
+      subCategory: subCat,
+      environments: envs,
+      tags: tags,
+      videoUrl: body.videoUrl || "",
+      instructions: body.instructions || "Execução padrão FIT OS.",
+      howToExecute: body.howToExecute || null,
+      commonMistakes: body.commonMistakes || null,
+      maleFocus: body.maleFocus || null,
+      femaleFocus: body.femaleFocus || null,
+      defaultSubstitutes: body.defaultSubstitutes || []
+    };
+
     const exercise = await prisma.exercise.create({
       data: {
-        name: body.name,
-        category: cat,
-        subCategory: subCat,
-        environments: envs,
-        tags: tags,
-        videoUrl: body.videoUrl || "",
-        instructions: body.instructions || "Execução padrão FIT OS.",
-        howToExecute: body.howToExecute || null,
-        commonMistakes: body.commonMistakes || null,
-        maleFocus: body.maleFocus || null,
-        femaleFocus: body.femaleFocus || null,
-        coachId: adminId,
-        defaultSubstitutes: body.defaultSubstitutes || []
+        ...exerciseData,
+        coachId: adminId
       }
     });
+
+    // 🔥 Herança automática: exercício novo criado pelo Paulo é espelhado
+    // pra Adri na hora — ela já vê ele no admin dela, mas numa cópia
+    // independente (pode trocar vídeo/editar sem afetar o original do Paulo).
+    if (adminId === PAULO_ID) {
+      await mirrorExerciseForAdri(exerciseData);
+    }
+
     return NextResponse.json(exercise);
   } catch (error: any) {
     console.error("Erro POST Exercise:", error);
