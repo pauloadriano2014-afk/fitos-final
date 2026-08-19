@@ -140,6 +140,14 @@ model ProdutoDigital {
   antesDepois     String?  @db.Text // JSON.stringify({antesUrl, depoisUrl, legenda?}[])
   faq             String?  @db.Text // JSON.stringify({pergunta, resposta}[])
 
+  // 🔥 TREINO INTERATIVO: opcional — se preenchido, quem compra ganha acesso a
+  // uma página web (sem login, via link mágico) com os treinos estruturados,
+  // check-in de sessão e registro de carga, em vez de só um PDF/link estático.
+  // JSON.stringify({ duracaoSemanas, treinos: [{ nome, foco, descanso,
+  //   exercicios: [{ ordem, nome, seriesRepeticoes, muscPrincipal, muscSecundario, orientacao, videoUrl }] }] })
+  treinoPrograma  String?  @db.Text
+  treinoAcessos   ProdutoTreinoAcesso[]
+
   vendas          ProdutoVenda[]
 
   createdAt       DateTime @default(now())
@@ -150,12 +158,12 @@ model ProdutoVenda {
   id              String   @id @default(uuid())
   produtoId       String
   produto         ProdutoDigital @relation(fields: [produtoId], references: [id], onDelete: Cascade)
-  
+
   nomeCliente     String
   emailCliente    String
   telefoneCliente String
   cpfCliente      String
-  
+
   status          String   @default("PENDENTE") // PENDENTE, PAGO
   valorTotal      Float    // Armazena o valor consolidado final cobrado no Asaas (produto principal + bumps)
   itensBumpIds    String?  @db.Text // JSON.stringify(string[]) — ids dos ProdutoDigital extras comprados junto
@@ -171,8 +179,40 @@ model ProdutoVenda {
   // de checagem rodar de novo.
   lembreteAbandonoEnviado Boolean @default(false)
 
+  // 🔥 TREINO INTERATIVO: um acesso por item comprado (principal ou bump) que
+  // tiver treinoPrograma configurado.
+  treinoAcessos   ProdutoTreinoAcesso[]
+
   paymentDate     DateTime?
-  
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// 🔥 TREINO INTERATIVO — acesso por link mágico (sem senha, sem conta) a um
+// programa de treino estruturado, gerado automaticamente quando a venda de um
+// ProdutoDigital com treinoPrograma configurado é confirmada. O token é a
+// única credencial (mesmo padrão do FormResponse.publicToken já usado em
+// outro módulo) — suficiente pra esse caso de uso de baixo risco.
+model ProdutoTreinoAcesso {
+  id            String   @id @default(uuid())
+  token         String   @unique
+
+  vendaId       String
+  venda         ProdutoVenda   @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+
+  produtoId     String
+  produto       ProdutoDigital @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  nomeCliente   String
+
+  // JSON.stringify({ sessoes: [{ treinoIndex, data, cargas: { [exercicioIndex]: peso } }] })
+  // Sempre um APPEND — nunca sobrescreve — porque a mesma ficha é repetida
+  // semanalmente ao longo das 8 semanas do protocolo.
+  progresso     String?  @db.Text
+
+  ultimoAcesso  DateTime?
+  createdAt     DateTime @default(now())
+
+  @@unique([vendaId, produtoId])
 }

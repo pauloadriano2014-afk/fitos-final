@@ -6,15 +6,20 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
     try {
+        // 🔥 Conta só vendas PAGO — vendas TESTE (geradas pela pré-visualização
+        // do treino) e PENDENTE (carrinho ainda não confirmado) não devem
+        // aparecer como "venda efetuada" na lista do admin.
         const produtos = await prisma.produtoDigital.findMany({
             orderBy: { createdAt: 'desc' },
             include: {
-                _count: {
-                    select: { vendas: true }
-                }
+                vendas: { where: { status: 'PAGO' }, select: { id: true } },
             }
         });
-        return NextResponse.json({ produtos });
+        const produtosComContagem = produtos.map(({ vendas, ...produto }) => ({
+            ...produto,
+            _count: { vendas: vendas.length },
+        }));
+        return NextResponse.json({ produtos: produtosComContagem });
     } catch (error) {
         console.error('[admin/produtos][GET]', error);
         return NextResponse.json({ error: 'Erro ao buscar produtos' }, { status: 500 });
@@ -27,7 +32,7 @@ export async function POST(request: NextRequest) {
         const {
             nome, slug, descricao, capaUrl, valor, precoDe, coachId, linkEntrega,
             beneficios, imagensExtra, orderBumpProdutoIds,
-            depoimentos, antesDepois, faq, ativo
+            depoimentos, antesDepois, faq, ativo, treinoPrograma
         } = body;
 
         if (!nome || !slug || !valor || !coachId) {
@@ -50,6 +55,7 @@ export async function POST(request: NextRequest) {
                 depoimentos: depoimentos || null,
                 antesDepois: antesDepois || null,
                 faq: faq || null,
+                treinoPrograma: treinoPrograma || null,
                 ativo: ativo ?? true
             }
         });

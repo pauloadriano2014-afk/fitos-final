@@ -3,6 +3,7 @@
 // desafios por WhatsApp), verificado ANTES do fluxo de aluno. Nada da lógica
 // de coach ou aluno foi alterado.
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
 
@@ -525,7 +526,7 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
 
     const venda = await prisma.produtoVenda.findUnique({
         where: { id: vendaId },
-        include: { produto: { select: { nome: true, slug: true, linkEntrega: true } } },
+        include: { produto: { select: { id: true, nome: true, slug: true, linkEntrega: true, treinoPrograma: true } } },
     });
     if (!venda) return NextResponse.json({ received: true });
 
@@ -552,21 +553,42 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
                 const itens: { nome: string; linkEntrega: string | null }[] = [
                     { nome: venda.produto.nome, linkEntrega: venda.produto.linkEntrega },
                 ];
+                // 🔥 Todos os itens (principal + bumps) que tiverem treinoPrograma
+                // configurado ganham um acesso de treino interativo por link mágico.
+                const itensComTreino: { id: string; nome: string; treinoPrograma: string | null }[] = [
+                    { id: venda.produto.id, nome: venda.produto.nome, treinoPrograma: venda.produto.treinoPrograma },
+                ];
+
                 let bumpIds: string[] = [];
                 try { bumpIds = venda.itensBumpIds ? JSON.parse(venda.itensBumpIds) : []; } catch { /* ignora */ }
                 if (bumpIds.length > 0) {
                     const bumpProdutos = await prisma.produtoDigital.findMany({
                         where: { id: { in: bumpIds } },
-                        select: { nome: true, linkEntrega: true },
+                        select: { id: true, nome: true, linkEntrega: true, treinoPrograma: true },
                     });
                     itens.push(...bumpProdutos.map((p) => ({ nome: p.nome, linkEntrega: p.linkEntrega })));
+                    itensComTreino.push(...bumpProdutos.map((p) => ({ id: p.id, nome: p.nome, treinoPrograma: p.treinoPrograma })));
                 }
+
+                const treinoLinks: { nome: string; url: string }[] = [];
+                for (const item of itensComTreino) {
+                    if (!item.treinoPrograma) continue;
+                    const token = crypto.randomBytes(24).toString('hex');
+                    const acesso = await prisma.produtoTreinoAcesso.upsert({
+                        where: { vendaId_produtoId: { vendaId, produtoId: item.id } },
+                        update: {},
+                        create: { token, vendaId, produtoId: item.id, nomeCliente: venda.nomeCliente },
+                    });
+                    treinoLinks.push({ nome: item.nome, url: `${APP_URL}/ProdutoTreino?token=${acesso.token}` });
+                }
+
                 await sendProdutoDeliveryEmail({
                     nomeCliente: venda.nomeCliente,
                     emailCliente: venda.emailCliente,
                     vendaId,
                     produtoSlug: venda.produto.slug,
                     itens,
+                    treinoLinks,
                 });
             } catch (emailError) {
                 console.error('[produtos][email] Falhou ao enviar, mas a venda já foi marcada PAGO:', emailError);
@@ -582,7 +604,12 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
 // caso o link não funcione ou o cliente tenha alguma dúvida sobre o material.
 const SUPORTE_WHATSAPP = '5541997991346';
 
-function buildProdutoEmailHtml(nomeCliente: string, itens: { nome: string; linkEntrega: string | null }[], acompanharLink: string): string {
+function buildProdutoEmailHtml(
+    nomeCliente: string,
+    itens: { nome: string; linkEntrega: string | null }[],
+    acompanharLink: string,
+    treinoLinks: { nome: string; url: string }[] = []
+): string {
     const firstName = (nomeCliente || 'Atleta').split(' ')[0];
     const itensComLink = itens.filter((i) => i.linkEntrega);
 
@@ -603,6 +630,25 @@ function buildProdutoEmailHtml(nomeCliente: string, itens: { nome: string; linkE
         )
         .join('');
 
+    // 🔥 TREINO INTERATIVO: destacado num tom diferente (verde) pra se separar
+    // visualmente do "baixar material" — é uma experiência à parte (sem
+    // senha, direto no navegador).
+    const treinoSecao = treinoLinks.length
+        ? `
+      <p style="color:#AAAAAA;font-size:14px;line-height:22px;margin:25px 0 10px 0;">
+        Seu treino interativo já está liberado — dá pra acompanhar cada sessão, marcar como concluída e registrar sua carga direto pelo navegador, sem precisar criar conta:
+      </p>
+      ${treinoLinks
+          .map(
+              (t) => `
+      <a href="${t.url}"
+         style="display:block;background-color:#4DE38F;color:#0a0a0a;text-decoration:none;text-align:center;padding:16px;border-radius:12px;font-weight:bold;font-size:14px;letter-spacing:0.5px;margin-bottom:12px;">
+        COMEÇAR MEU TREINO: ${t.nome.toUpperCase()}
+      </a>`
+          )
+          .join('')}`
+        : '';
+
     const whatsappLink = `https://wa.me/${SUPORTE_WHATSAPP}?text=${encodeURIComponent(`Oi! Comprei "${itensComLink[0]?.nome || 'um material'}" e preciso de ajuda com o acesso.`)}`;
 
     return `
@@ -617,6 +663,7 @@ function buildProdutoEmailHtml(nomeCliente: string, itens: { nome: string; linkE
       </p>
       <ul style="margin:0 0 25px 0;padding-left:20px;">${listaItens}</ul>
       ${botoes}
+      ${treinoSecao}
       <p style="color:#AAAAAA;font-size:14px;line-height:22px;margin:25px 0 0 0;">
         Esperamos que esse material faça toda a diferença nos seus resultados! Qualquer dúvida sobre o acesso, chama a gente no
         <a href="${whatsappLink}" style="color:#C4B5FD;font-weight:bold;">WhatsApp</a> que vamos adorar ajudar. 💜
@@ -639,12 +686,13 @@ async function sendProdutoDeliveryEmail(params: {
     vendaId: string;
     produtoSlug: string;
     itens: { nome: string; linkEntrega: string | null }[];
+    treinoLinks?: { nome: string; url: string }[];
 }) {
     if (!RESEND_API_KEY || !params.emailCliente) return;
 
     const firstName = (params.nomeCliente || 'Atleta').split(' ')[0];
     const acompanharLink = `${APP_URL}/Produto?id=${encodeURIComponent(params.produtoSlug)}&venda=${encodeURIComponent(params.vendaId)}`;
-    const html = buildProdutoEmailHtml(params.nomeCliente, params.itens, acompanharLink);
+    const html = buildProdutoEmailHtml(params.nomeCliente, params.itens, acompanharLink, params.treinoLinks || []);
 
     const emailRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',

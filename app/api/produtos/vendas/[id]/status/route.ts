@@ -14,7 +14,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
         const venda = await prisma.produtoVenda.findUnique({
             where: { id },
-            include: { produto: { select: { nome: true, linkEntrega: true } } },
+            include: {
+                produto: { select: { id: true, nome: true, linkEntrega: true } },
+                // 🔥 Se esse item tiver treino interativo, o acesso já foi criado
+                // pelo webhook — reaproveita o mesmo token aqui em vez de gerar outro.
+                treinoAcessos: { select: { produtoId: true, token: true } },
+            },
         });
 
         if (!venda) {
@@ -25,7 +30,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             return NextResponse.json({ status: venda.status, itens: null });
         }
 
-        const itens = [{ nome: venda.produto.nome, linkEntrega: venda.produto.linkEntrega }];
+        const tokenPorProduto = new Map(venda.treinoAcessos.map((a) => [a.produtoId, a.token]));
+
+        const itens = [{
+            nome: venda.produto.nome,
+            linkEntrega: venda.produto.linkEntrega,
+            treinoToken: tokenPorProduto.get(venda.produto.id) || null,
+        }];
 
         let bumpIds: string[] = [];
         try {
@@ -35,9 +46,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         if (bumpIds.length > 0) {
             const bumpProdutos = await prisma.produtoDigital.findMany({
                 where: { id: { in: bumpIds } },
-                select: { nome: true, linkEntrega: true },
+                select: { id: true, nome: true, linkEntrega: true },
             });
-            itens.push(...bumpProdutos.map((p) => ({ nome: p.nome, linkEntrega: p.linkEntrega })));
+            itens.push(...bumpProdutos.map((p) => ({
+                nome: p.nome,
+                linkEntrega: p.linkEntrega,
+                treinoToken: tokenPorProduto.get(p.id) || null,
+            })));
         }
 
         return NextResponse.json({ status: venda.status, itens });
