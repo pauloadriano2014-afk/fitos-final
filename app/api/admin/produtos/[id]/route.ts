@@ -13,7 +13,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
             data: {
                 ...body,
                 valor: body.valor !== undefined ? Number(body.valor) : undefined,
-                orderBumpValor: body.orderBumpValor !== undefined ? Number(body.orderBumpValor) : undefined,
+                precoDe: body.precoDe !== undefined ? (body.precoDe ? Number(body.precoDe) : null) : undefined,
             }
         });
 

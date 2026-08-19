@@ -24,9 +24,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { 
-            nome, slug, descricao, capaUrl, valor, coachId, linkEntrega, 
-            orderBumpTitulo, orderBumpTexto, orderBumpValor, ativo 
+        const {
+            nome, slug, descricao, capaUrl, valor, precoDe, coachId, linkEntrega,
+            beneficios, imagensExtra, orderBumpProdutoIds,
+            depoimentos, antesDepois, faq, ativo
         } = body;
 
         if (!nome || !slug || !valor || !coachId) {
@@ -35,16 +36,20 @@ export async function POST(request: NextRequest) {
 
         const produto = await prisma.produtoDigital.create({
             data: {
-                nome, 
-                slug, 
-                descricao, 
-                capaUrl, 
-                valor: Number(valor), 
-                coachId, 
+                nome,
+                slug,
+                descricao,
+                capaUrl,
+                valor: Number(valor),
+                precoDe: precoDe ? Number(precoDe) : null,
+                coachId,
                 linkEntrega,
-                orderBumpTitulo, 
-                orderBumpTexto, 
-                orderBumpValor: orderBumpValor ? Number(orderBumpValor) : null,
+                beneficios: beneficios || null,
+                imagensExtra: imagensExtra || null,
+                orderBumpProdutoIds: orderBumpProdutoIds || null,
+                depoimentos: depoimentos || null,
+                antesDepois: antesDepois || null,
+                faq: faq || null,
                 ativo: ativo ?? true
             }
         });

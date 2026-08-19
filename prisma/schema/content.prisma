@@ -115,14 +115,30 @@ model ProdutoDigital {
   descricao       String?  @db.Text
   capaUrl         String?
   valor           Float
+  precoDe         Float?   // Preço "de" riscado, exibido acima do valor final (âncora de valor)
   ativo           Boolean  @default(true)
   coachId         String   // Paulo ou Adri
   linkEntrega     String?  // Link do Google Drive, PDF do e-book, etc.
-  
-  // Estrutura premium para o checkout com Order Bump nativo
-  orderBumpTitulo String?  // Ex: "Levar também o Guia Avançado de Glúteos"
-  orderBumpTexto  String?  @db.Text // Ex: "Acelere os resultados combinando com treinos de alta densidade."
-  orderBumpValor  Float?   // Preço adicional estrategicamente menor
+
+  // 🔥 PÁGINA DE VENDAS: benefícios em bullets ("O que você vai receber") —
+  // um item por linha, texto livre; e prévia visual do conteúdo — array JSON
+  // de URLs de imagem (prints/páginas do material), além da capa principal.
+  beneficios      String?  @db.Text
+  imagensExtra    String?  @db.Text // JSON.stringify(string[])
+
+  // 🔥 ORDER BUMP MULTI-ITEM: em vez de um único bump de texto livre, o admin
+  // escolhe outros ProdutoDigital já cadastrados (outros ebooks/audiobooks)
+  // pra oferecer como upsell no checkout — array JSON de ids. O cliente pode
+  // marcar quantos quiser; cada um vira sua própria linha em ProdutoVenda e
+  // libera seu próprio linkEntrega quando o pagamento é confirmado.
+  orderBumpProdutoIds String? @db.Text // JSON.stringify(string[]) — ids de outros ProdutoDigital
+
+  // 🔥 PROVA SOCIAL E OBJEÇÕES: cada campo é opcional e independente — se o
+  // admin deixar vazio, a seção correspondente simplesmente não aparece na
+  // página (autonomia total sobre o que mostrar por produto).
+  depoimentos     String?  @db.Text // JSON.stringify({nome, texto, fotoUrl?, estrelas?}[])
+  antesDepois     String?  @db.Text // JSON.stringify({antesUrl, depoisUrl, legenda?}[])
+  faq             String?  @db.Text // JSON.stringify({pergunta, resposta}[])
 
   vendas          ProdutoVenda[]
 
@@ -141,14 +157,19 @@ model ProdutoVenda {
   cpfCliente      String
   
   status          String   @default("PENDENTE") // PENDENTE, PAGO
-  valorTotal      Float    // Armazena o valor consolidado final cobrado no Asaas
-  incluiuBump     Boolean  @default(false)
-  
+  valorTotal      Float    // Armazena o valor consolidado final cobrado no Asaas (produto principal + bumps)
+  itensBumpIds    String?  @db.Text // JSON.stringify(string[]) — ids dos ProdutoDigital extras comprados junto
+
   asaasPaymentId  String?  @unique
   asaasCustomerId String?
   pixQrCode       String?  @db.Text
   pixCopyPaste    String?  @db.Text
   invoiceUrl      String?  @db.Text
+
+  // 🔥 RECUPERAÇÃO DE CARRINHO ABANDONADO: marca se já mandamos o e-mail de
+  // lembrete pra essa venda PENDENTE — evita reenviar toda vez que a rotina
+  // de checagem rodar de novo.
+  lembreteAbandonoEnviado Boolean @default(false)
 
   paymentDate     DateTime?
   

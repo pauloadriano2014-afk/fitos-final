@@ -8,6 +8,12 @@ import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
 
 export const dynamic = 'force-dynamic';
 
+// 🔥 Usado pelo e-mail de entrega de Produto Digital (mesmo padrão do
+// forgot-password/route.ts — fetch direto na API REST do Resend, sem SDK).
+const APP_URL = process.env.APP_URL || 'https://www.pauloadrianoteam.com.br';
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const FROM_EMAIL = process.env.RESEND_FROM || 'PA TEAM ELITE <onboarding@resend.dev>';
+
 export async function POST(req: Request) {
     try {
         const body = await req.json();
@@ -34,6 +40,11 @@ export async function POST(req: Request) {
         // ── HANDLER DE COMPRA AVULSA DE CONTEÚDO (ebook/audiobook — Biblioteca) ─
         if (externalRef.startsWith('conteudo:')) {
             return await handleContentPurchase(event, payment, externalRef);
+        }
+
+        // ── HANDLER DE VENDA DE PRODUTO DIGITAL (página de vendas pública) ────
+        if (externalRef.startsWith('produto:')) {
+            return await handleProdutoPayment(event, payment, externalRef);
         }
 
         // ── HANDLER DE RENOVAÇÃO DE CICLO (recorrência via cartão/Checkout) ───
@@ -501,6 +512,158 @@ async function handleContentPurchase(event: string, payment: any, externalRef: s
     }
 
     return NextResponse.json({ received: true });
+}
+
+// ─── PRODUTO DIGITAL: venda via página de vendas pública ─────────────────────
+// externalRef formato: "produto:{vendaId}" — gerado em
+// /api/produtos/comprar. Diferente da compra de Conteúdo, aqui não existe
+// User/ContentAccess: a confirmação só marca a ProdutoVenda como PAGO, e o
+// linkEntrega passa a ser liberado pela rota de status (polling do checkout).
+async function handleProdutoPayment(event: string, payment: any, externalRef: string) {
+    const vendaId = externalRef.split(':')[1];
+    if (!vendaId) return NextResponse.json({ received: true });
+
+    const venda = await prisma.produtoVenda.findUnique({
+        where: { id: vendaId },
+        include: { produto: { select: { nome: true, slug: true, linkEntrega: true } } },
+    });
+    if (!venda) return NextResponse.json({ received: true });
+
+    if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+        // Idempotência: não repete o processamento (nem reenvia o e-mail) se a
+        // Asaas reenviar o mesmo webhook.
+        if (venda.status !== 'PAGO') {
+            await prisma.produtoVenda.update({
+                where: { id: vendaId },
+                data: {
+                    status: 'PAGO',
+                    paymentDate: payment.clientPaymentDate ? new Date(payment.clientPaymentDate) : new Date(),
+                },
+            });
+            console.log(`✅ Produto: venda ${vendaId} confirmada (${venda.nomeCliente})`);
+
+            // 🔥 Entrega por e-mail — essencial pro boleto (compensa em até
+            // alguns dias úteis, o cliente não vai ficar com a aba aberta
+            // esperando), mas enviado também pra PIX/cartão como comprovante e
+            // backup do link (não depende só de o cliente ficar na página).
+            // Erro aqui NUNCA deve derrubar o webhook — a venda já foi marcada
+            // PAGO e liberada normalmente pela rota de status/polling.
+            try {
+                const itens: { nome: string; linkEntrega: string | null }[] = [
+                    { nome: venda.produto.nome, linkEntrega: venda.produto.linkEntrega },
+                ];
+                let bumpIds: string[] = [];
+                try { bumpIds = venda.itensBumpIds ? JSON.parse(venda.itensBumpIds) : []; } catch { /* ignora */ }
+                if (bumpIds.length > 0) {
+                    const bumpProdutos = await prisma.produtoDigital.findMany({
+                        where: { id: { in: bumpIds } },
+                        select: { nome: true, linkEntrega: true },
+                    });
+                    itens.push(...bumpProdutos.map((p) => ({ nome: p.nome, linkEntrega: p.linkEntrega })));
+                }
+                await sendProdutoDeliveryEmail({
+                    nomeCliente: venda.nomeCliente,
+                    emailCliente: venda.emailCliente,
+                    vendaId,
+                    produtoSlug: venda.produto.slug,
+                    itens,
+                });
+            } catch (emailError) {
+                console.error('[produtos][email] Falhou ao enviar, mas a venda já foi marcada PAGO:', emailError);
+            }
+        }
+    }
+
+    return NextResponse.json({ received: true });
+}
+
+// 🔥 Mesmo número usado como contato de suporte em outras telas do app
+// (ex: BibliotecaScreen.js) — reaproveitado aqui pra dar um canal de ajuda
+// caso o link não funcione ou o cliente tenha alguma dúvida sobre o material.
+const SUPORTE_WHATSAPP = '5541997991346';
+
+function buildProdutoEmailHtml(nomeCliente: string, itens: { nome: string; linkEntrega: string | null }[], acompanharLink: string): string {
+    const firstName = (nomeCliente || 'Atleta').split(' ')[0];
+    const itensComLink = itens.filter((i) => i.linkEntrega);
+
+    // Lista os itens comprados (recibo) ANTES dos botões de acesso — assim o
+    // e-mail deixa claro exatamente o que foi liberado, mesmo pra quem
+    // comprou o produto principal + vários itens do order bump juntos.
+    const listaItens = itensComLink
+        .map((i) => `<li style="color:#DDDDDD;font-size:14px;line-height:24px;">${i.nome}</li>`)
+        .join('');
+
+    const botoes = itensComLink
+        .map(
+            (i) => `
+      <a href="${i.linkEntrega}"
+         style="display:block;background-color:#8B5CF6;color:#FFFFFF;text-decoration:none;text-align:center;padding:16px;border-radius:12px;font-weight:bold;font-size:14px;letter-spacing:0.5px;margin-bottom:12px;">
+        ACESSAR: ${i.nome.toUpperCase()}
+      </a>`
+        )
+        .join('');
+
+    const whatsappLink = `https://wa.me/${SUPORTE_WHATSAPP}?text=${encodeURIComponent(`Oi! Comprei "${itensComLink[0]?.nome || 'um material'}" e preciso de ajuda com o acesso.`)}`;
+
+    return `
+  <div style="background-color:#0a0a0a;padding:40px 20px;font-family:Arial,Helvetica,sans-serif;">
+    <div style="max-width:480px;margin:0 auto;background-color:#1E1E1E;border-radius:16px;padding:35px 30px;border:1px solid #333;">
+      <h1 style="color:#8B5CF6;font-size:20px;letter-spacing:1px;margin:0 0 8px 0;">🎉 COMPRA CONFIRMADA!</h1>
+      <p style="color:#FFFFFF;font-size:15px;line-height:24px;margin:20px 0 8px 0;">
+        Fala, <strong>${firstName}</strong>! Recebemos a confirmação do seu pagamento — muito obrigado pela confiança! 🙌
+      </p>
+      <p style="color:#AAAAAA;font-size:14px;line-height:22px;margin:0 0 10px 0;">
+        Você garantiu:
+      </p>
+      <ul style="margin:0 0 25px 0;padding-left:20px;">${listaItens}</ul>
+      ${botoes}
+      <p style="color:#AAAAAA;font-size:14px;line-height:22px;margin:25px 0 0 0;">
+        Esperamos que esse material faça toda a diferença nos seus resultados! Qualquer dúvida sobre o acesso, chama a gente no
+        <a href="${whatsappLink}" style="color:#C4B5FD;font-weight:bold;">WhatsApp</a> que vamos adorar ajudar. 💜
+      </p>
+      <p style="color:#777777;font-size:12px;line-height:19px;margin:25px 0 0 0;">
+        Guarde este e-mail — você pode voltar aqui sempre que quiser baixar seu material de novo.
+        Se preferir, também dá pra acessar pelo site: <a href="${acompanharLink}" style="color:#C4B5FD;">${acompanharLink}</a>
+      </p>
+      <hr style="border:none;border-top:1px solid #333;margin:25px 0;" />
+      <p style="color:#555555;font-size:11px;text-align:center;margin:0;">
+        PA TEAM ELITE — pauloadrianoteam.com.br
+      </p>
+    </div>
+  </div>`;
+}
+
+async function sendProdutoDeliveryEmail(params: {
+    nomeCliente: string;
+    emailCliente: string;
+    vendaId: string;
+    produtoSlug: string;
+    itens: { nome: string; linkEntrega: string | null }[];
+}) {
+    if (!RESEND_API_KEY || !params.emailCliente) return;
+
+    const firstName = (params.nomeCliente || 'Atleta').split(' ')[0];
+    const acompanharLink = `${APP_URL}/Produto?id=${encodeURIComponent(params.produtoSlug)}&venda=${encodeURIComponent(params.vendaId)}`;
+    const html = buildProdutoEmailHtml(params.nomeCliente, params.itens, acompanharLink);
+
+    const emailRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            from: FROM_EMAIL,
+            to: [params.emailCliente],
+            subject: `🎉 ${firstName}, seu material já está liberado!`,
+            html,
+        }),
+    });
+
+    if (!emailRes.ok) {
+        const errBody = await emailRes.json().catch(() => ({}));
+        console.error('[produtos][email] Erro do Resend:', emailRes.status, errBody);
+    }
 }
 
 // ─── ALUNO (lógica original preservada e expandida para o painel) ────────────
