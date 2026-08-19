@@ -46,20 +46,26 @@ model Payment {
   id               String    @id @default(uuid())
   subscriptionId   String?
   userId           String
-  coachId          String    
+  coachId          String
   gatewayAccountId String
-  asaasPaymentId   String    @unique 
+  asaasPaymentId   String    @unique
   value            Float
-  netValue         Float?    
-  billingType      String    
-  status           String    @default("PENDING") 
+  netValue         Float?
+  billingType      String
+  status           String    @default("PENDING")
   dueDate          DateTime
   paymentDate      DateTime?
-  invoiceUrl       String?   
-  pixQrCode        String?   @db.Text 
-  pixCopyPaste     String?   @db.Text 
+  invoiceUrl       String?
+  pixQrCode        String?   @db.Text
+  pixCopyPaste     String?   @db.Text
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  // 🔥 Preenchido só nas compras avulsas de conteúdo (ebook/audiobook) via
+  // Biblioteca — ver app/api/payments/content/create. Null pros pagamentos
+  // de mensalidade/recorrência (fluxo original, sem mudanças).
+  contentId        String?
+  content          Content?              @relation(fields: [contentId], references: [id], onDelete: SetNull)
 
   subscription   Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -68,6 +74,7 @@ model Payment {
   @@index([userId])
   @@index([coachId])
   @@index([asaasPaymentId])
+  @@index([contentId])
 }
 
 model SalesPageConfig {

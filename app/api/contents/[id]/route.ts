@@ -16,6 +16,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         category: body.category,
         type: body.type,
         isVIP: body.isVIP,
+        valor: (body.isVIP && body.valor) ? parseFloat(body.valor) : null,
         videoUrl: body.videoUrl,
         pdfUrl: body.pdfUrl,
         audioUrl: body.audioUrl,

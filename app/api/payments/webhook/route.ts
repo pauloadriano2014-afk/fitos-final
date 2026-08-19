@@ -31,6 +31,11 @@ export async function POST(req: Request) {
             return await handleCoachPayment(event, payment, externalRef);
         }
 
+        // ── HANDLER DE COMPRA AVULSA DE CONTEÚDO (ebook/audiobook — Biblioteca) ─
+        if (externalRef.startsWith('conteudo:')) {
+            return await handleContentPurchase(event, payment, externalRef);
+        }
+
         // ── HANDLER DE RENOVAÇÃO DE CICLO (recorrência via cartão/Checkout) ───
         // Pode ser ciclo de ALUNO (consultoria) ou de COACH (mensalidade da
         // plataforma) — a Asaas não manda um externalReference confiável nesse
@@ -437,6 +442,62 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
             data:  { coachBillingStatus: 'CANCELLED', accountStatus: 'REJECTED' } as any,
         });
         console.log(`❌ Coach ${coachId} billing cancelado`);
+    }
+
+    return NextResponse.json({ received: true });
+}
+
+// ─── CONTEÚDO: compra avulsa de ebook/audiobook (Biblioteca) ─────────────────
+// externalRef formato: "conteudo:{userId}:{contentId}" — gerado em
+// /api/payments/content/create. Ao confirmar, libera o ContentAccess (mesmo
+// registro usado pra liberar conteúdo VIP manualmente pelo admin).
+async function handleContentPurchase(event: string, payment: any, externalRef: string) {
+    const parts = externalRef.split(':');
+    const userId = parts[1];
+    const contentId = parts[2];
+    if (!userId || !contentId) return NextResponse.json({ received: true });
+
+    // Atualiza a fatura local (mesmo padrão dos outros fluxos)
+    if (payment?.id) {
+        const cobrancaExistente = await prisma.payment.findUnique({ where: { asaasPaymentId: payment.id } });
+        if (cobrancaExistente) {
+            await prisma.payment.update({
+                where: { id: cobrancaExistente.id },
+                data: {
+                    status: payment.status,
+                    netValue: payment.netValue,
+                    paymentDate: payment.clientPaymentDate ? new Date(payment.clientPaymentDate) : (['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'].includes(event) ? new Date() : null),
+                    billingType: payment.billingType,
+                },
+            });
+        }
+    }
+
+    if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+        // Idempotência: @@unique([userId, contentId]) — upsert não duplica se o
+        // webhook for reenviado pela Asaas.
+        await prisma.contentAccess.upsert({
+            where: { userId_contentId: { userId, contentId } },
+            update: {},
+            create: { userId, contentId },
+        });
+
+        const content = await prisma.content.findUnique({ where: { id: contentId }, select: { title: true } });
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true } });
+        if (user?.pushToken) {
+            await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: user.pushToken,
+                    sound: 'default',
+                    title: '✅ Compra confirmada!',
+                    body: `"${content?.title || 'Seu conteúdo'}" já está liberado na sua Biblioteca.`,
+                }),
+            }).catch(() => {});
+        }
+
+        console.log(`✅ Compra de conteúdo confirmada: user ${userId}, content ${contentId}`);
     }
 
     return NextResponse.json({ received: true });

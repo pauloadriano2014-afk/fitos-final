@@ -19,24 +19,30 @@ model Content {
   
   category    String   
   
-  type        String   @default("video") 
-  isVIP       Boolean  @default(false)   
-  
-  videoUrl    String?  
-  pdfUrl      String?  
-  audioUrl    String?  
-  thumbUrl    String?  
-  duration    String?  
-  
+  type        String   @default("video")
+  isVIP       Boolean  @default(false)
+
+  // 🔥 Preço de venda avulsa (PIX/cartão) via Biblioteca — só relevante quando
+  // isVIP=true e o aluno não tem ContentAccess. Null/0 = não é vendável (só
+  // libera manualmente pelo admin, ex: aula VIP de brinde).
+  valor       Float?
+
+  videoUrl    String?
+  pdfUrl      String?
+  audioUrl    String?
+  thumbUrl    String?
+  duration    String?
+
   createdAt   DateTime @default(now())
 
   coachId     String?
   coach       User?    @relation("CoachContents", fields: [coachId], references: [id], onDelete: Cascade)
-  
+
   likes       ContentLike[]
   comments    ContentComment[]
-  completions ContentCompletion[] 
+  completions ContentCompletion[]
   unlockedFor ContentAccess[]
+  purchases   Payment[]
 }
 
 model ContentLike {

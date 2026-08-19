@@ -106,9 +106,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { 
-      title, subtitle, category, videoUrl, thumbUrl, duration, description, 
-      type, isVIP, pdfUrl, audioUrl, adminId 
+    const {
+      title, subtitle, category, videoUrl, thumbUrl, duration, description,
+      type, isVIP, pdfUrl, audioUrl, adminId, valor
     } = body;
 
     if (!title || !category) {
@@ -122,6 +122,7 @@ export async function POST(request: Request) {
         category, 
         type: type || 'video',
         isVIP: isVIP || false,
+        valor: (isVIP && valor) ? parseFloat(valor) : null,
         videoUrl: videoUrl || null,
         pdfUrl: pdfUrl || null,
         audioUrl: audioUrl || null,
