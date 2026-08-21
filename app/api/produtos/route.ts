@@ -48,6 +48,8 @@ export async function GET(request: NextRequest) {
                 nome: produto.nome,
                 descricao: produto.descricao,
                 capaUrl: produto.capaUrl,
+                videoUrl: produto.videoUrl,
+                videoOrientacao: produto.videoOrientacao,
                 valor: produto.valor,
                 precoDe: produto.precoDe,
                 beneficios: produto.beneficios,

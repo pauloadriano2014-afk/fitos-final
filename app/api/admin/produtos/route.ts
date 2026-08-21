@@ -31,8 +31,9 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const {
             nome, slug, descricao, capaUrl, valor, precoDe, coachId, linkEntrega,
+            videoUrl, videoOrientacao,
             beneficios, imagensExtra, orderBumpProdutoIds,
-            depoimentos, antesDepois, faq, ativo, treinoPrograma
+            depoimentos, antesDepois, faq, ativo, treinoPrograma, cursoPrograma
         } = body;
 
         if (!nome || !slug || !valor || !coachId) {
@@ -49,6 +50,8 @@ export async function POST(request: NextRequest) {
                 precoDe: precoDe ? Number(precoDe) : null,
                 coachId,
                 linkEntrega,
+                videoUrl: videoUrl || null,
+                videoOrientacao: videoOrientacao || null,
                 beneficios: beneficios || null,
                 imagensExtra: imagensExtra || null,
                 orderBumpProdutoIds: orderBumpProdutoIds || null,
@@ -56,6 +59,7 @@ export async function POST(request: NextRequest) {
                 antesDepois: antesDepois || null,
                 faq: faq || null,
                 treinoPrograma: treinoPrograma || null,
+                cursoPrograma: cursoPrograma || null,
                 ativo: ativo ?? true
             }
         });

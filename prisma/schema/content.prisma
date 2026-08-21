@@ -120,6 +120,14 @@ model ProdutoDigital {
   coachId         String   // Paulo ou Adri
   linkEntrega     String?  // Link do Google Drive, PDF do e-book, etc.
 
+  // 🔥 VÍDEO DE APRESENTAÇÃO: opcional — link do YouTube ou de embed do
+  // Cloudflare Stream, mostrado na página de vendas logo abaixo da descrição.
+  // videoOrientacao controla a proporção do player ('vertical' 9:16 — a mais
+  // usada — ou 'horizontal' 16:9), já que o mesmo link pode vir em qualquer
+  // formato dependendo de como a gravação foi feita.
+  videoUrl        String?
+  videoOrientacao String?
+
   // 🔥 PÁGINA DE VENDAS: benefícios em bullets ("O que você vai receber") —
   // um item por linha, texto livre; e prévia visual do conteúdo — array JSON
   // de URLs de imagem (prints/páginas do material), além da capa principal.
@@ -147,6 +155,17 @@ model ProdutoDigital {
   //   exercicios: [{ ordem, nome, seriesRepeticoes, muscPrincipal, muscSecundario, orientacao, videoUrl }] }] })
   treinoPrograma  String?  @db.Text
   treinoAcessos   ProdutoTreinoAcesso[]
+
+  // 🔥 CURSO / ÁREA DE MEMBROS: opcional — se preenchido, quem compra ganha
+  // acesso a uma área de membros (sem login, via link mágico) com módulos e
+  // aulas em vídeo. Cada módulo tem `liberacaoDias` — quantos dias após a
+  // compra ele libera — em vez de tudo liberado de uma vez, pra proteger
+  // contra reembolso abusivo durante os 7 dias de garantia (o aluno não
+  // consome o curso inteiro de uma vez só pra depois pedir o dinheiro de
+  // volta). JSON.stringify({ modulos: [{ nome, liberacaoDias,
+  //   aulas: [{ nome, descricao, videoUrl, videoOrientacao, anexoUrl }] }] })
+  cursoPrograma   String?  @db.Text
+  cursoAcessos    ProdutoCursoAcesso[]
 
   vendas          ProdutoVenda[]
 
@@ -183,6 +202,10 @@ model ProdutoVenda {
   // tiver treinoPrograma configurado.
   treinoAcessos   ProdutoTreinoAcesso[]
 
+  // 🔥 CURSO / ÁREA DE MEMBROS: um acesso por item comprado (principal ou
+  // bump) que tiver cursoPrograma configurado.
+  cursoAcessos    ProdutoCursoAcesso[]
+
   paymentDate     DateTime?
 
   createdAt       DateTime @default(now())
@@ -210,6 +233,41 @@ model ProdutoTreinoAcesso {
   // Sempre um APPEND — nunca sobrescreve — porque a mesma ficha é repetida
   // semanalmente ao longo das 8 semanas do protocolo.
   progresso     String?  @db.Text
+
+  ultimoAcesso  DateTime?
+  createdAt     DateTime @default(now())
+
+  @@unique([vendaId, produtoId])
+}
+
+// 🔥 CURSO / ÁREA DE MEMBROS — acesso por link mágico (sem senha, sem conta) a
+// um curso estruturado em módulos e aulas, gerado automaticamente quando a
+// venda de um ProdutoDigital com cursoPrograma configurado é confirmada. O
+// desbloqueio dos módulos é calculado on-the-fly a partir de `createdAt` +
+// `liberacaoDias` de cada módulo — não existe um campo de "data liberada"
+// aqui, é sempre recalculado na hora de servir a resposta (assim nunca fica
+// desatualizado se o admin editar o programa depois da venda).
+model ProdutoCursoAcesso {
+  id            String   @id @default(uuid())
+  token         String   @unique
+
+  vendaId       String
+  venda         ProdutoVenda   @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+
+  produtoId     String
+  produto       ProdutoDigital @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  nomeCliente   String
+
+  // JSON.stringify({ aulasConcluidas: ["moduloIdx-aulaIdx", ...] }) — ao
+  // contrário do progresso de treino (que é um log semanal), aqui é só um
+  // conjunto de aulas já assistidas, marcadas uma vez.
+  progresso     String?  @db.Text
+
+  // Preenchido na primeira vez que o aluno baixa o certificado de conclusão
+  // (só liberado no app quando todo módulo já está desbloqueado E toda aula
+  // está marcada como concluída). Null = ainda não emitido.
+  certificadoEmitidoEm DateTime?
 
   ultimoAcesso  DateTime?
   createdAt     DateTime @default(now())

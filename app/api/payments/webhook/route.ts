@@ -526,7 +526,7 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
 
     const venda = await prisma.produtoVenda.findUnique({
         where: { id: vendaId },
-        include: { produto: { select: { id: true, nome: true, slug: true, linkEntrega: true, treinoPrograma: true } } },
+        include: { produto: { select: { id: true, nome: true, slug: true, linkEntrega: true, treinoPrograma: true, cursoPrograma: true } } },
     });
     if (!venda) return NextResponse.json({ received: true });
 
@@ -554,9 +554,12 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
                     { nome: venda.produto.nome, linkEntrega: venda.produto.linkEntrega },
                 ];
                 // 🔥 Todos os itens (principal + bumps) que tiverem treinoPrograma
-                // configurado ganham um acesso de treino interativo por link mágico.
+                // ou cursoPrograma configurado ganham um acesso por link mágico.
                 const itensComTreino: { id: string; nome: string; treinoPrograma: string | null }[] = [
                     { id: venda.produto.id, nome: venda.produto.nome, treinoPrograma: venda.produto.treinoPrograma },
+                ];
+                const itensComCurso: { id: string; nome: string; cursoPrograma: string | null }[] = [
+                    { id: venda.produto.id, nome: venda.produto.nome, cursoPrograma: venda.produto.cursoPrograma },
                 ];
 
                 let bumpIds: string[] = [];
@@ -564,10 +567,11 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
                 if (bumpIds.length > 0) {
                     const bumpProdutos = await prisma.produtoDigital.findMany({
                         where: { id: { in: bumpIds } },
-                        select: { id: true, nome: true, linkEntrega: true, treinoPrograma: true },
+                        select: { id: true, nome: true, linkEntrega: true, treinoPrograma: true, cursoPrograma: true },
                     });
                     itens.push(...bumpProdutos.map((p) => ({ nome: p.nome, linkEntrega: p.linkEntrega })));
                     itensComTreino.push(...bumpProdutos.map((p) => ({ id: p.id, nome: p.nome, treinoPrograma: p.treinoPrograma })));
+                    itensComCurso.push(...bumpProdutos.map((p) => ({ id: p.id, nome: p.nome, cursoPrograma: p.cursoPrograma })));
                 }
 
                 const treinoLinks: { nome: string; url: string }[] = [];
@@ -582,6 +586,18 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
                     treinoLinks.push({ nome: item.nome, url: `${APP_URL}/ProdutoTreino?token=${acesso.token}` });
                 }
 
+                const cursoLinks: { nome: string; url: string }[] = [];
+                for (const item of itensComCurso) {
+                    if (!item.cursoPrograma) continue;
+                    const token = crypto.randomBytes(24).toString('hex');
+                    const acesso = await prisma.produtoCursoAcesso.upsert({
+                        where: { vendaId_produtoId: { vendaId, produtoId: item.id } },
+                        update: {},
+                        create: { token, vendaId, produtoId: item.id, nomeCliente: venda.nomeCliente },
+                    });
+                    cursoLinks.push({ nome: item.nome, url: `${APP_URL}/ProdutoCurso?token=${acesso.token}` });
+                }
+
                 await sendProdutoDeliveryEmail({
                     nomeCliente: venda.nomeCliente,
                     emailCliente: venda.emailCliente,
@@ -589,6 +605,7 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
                     produtoSlug: venda.produto.slug,
                     itens,
                     treinoLinks,
+                    cursoLinks,
                 });
             } catch (emailError) {
                 console.error('[produtos][email] Falhou ao enviar, mas a venda já foi marcada PAGO:', emailError);
@@ -608,7 +625,8 @@ function buildProdutoEmailHtml(
     nomeCliente: string,
     itens: { nome: string; linkEntrega: string | null }[],
     acompanharLink: string,
-    treinoLinks: { nome: string; url: string }[] = []
+    treinoLinks: { nome: string; url: string }[] = [],
+    cursoLinks: { nome: string; url: string }[] = []
 ): string {
     const firstName = (nomeCliente || 'Atleta').split(' ')[0];
     const itensComLink = itens.filter((i) => i.linkEntrega);
@@ -649,6 +667,26 @@ function buildProdutoEmailHtml(
           .join('')}`
         : '';
 
+    // 🔥 CURSO / ÁREA DE MEMBROS: tom roxo-claro pra diferenciar do treino
+    // (verde) e do material estático (roxo escuro dos botões principais).
+    // Explica de cara que o conteúdo libera aos poucos, pra ninguém achar
+    // que "sumiu" material que na verdade ainda vai desbloquear.
+    const cursoSecao = cursoLinks.length
+        ? `
+      <p style="color:#AAAAAA;font-size:14px;line-height:22px;margin:25px 0 10px 0;">
+        Sua área de membros já está liberada — o conteúdo desbloqueia aos poucos, módulo por módulo, então não estranhe se algum módulo ainda aparecer bloqueado (é só acompanhar o prazo mostrado na tela):
+      </p>
+      ${cursoLinks
+          .map(
+              (c) => `
+      <a href="${c.url}"
+         style="display:block;background-color:#C4B5FD;color:#1E1030;text-decoration:none;text-align:center;padding:16px;border-radius:12px;font-weight:bold;font-size:14px;letter-spacing:0.5px;margin-bottom:12px;">
+        ACESSAR MEU CURSO: ${c.nome.toUpperCase()}
+      </a>`
+          )
+          .join('')}`
+        : '';
+
     const whatsappLink = `https://wa.me/${SUPORTE_WHATSAPP}?text=${encodeURIComponent(`Oi! Comprei "${itensComLink[0]?.nome || 'um material'}" e preciso de ajuda com o acesso.`)}`;
 
     return `
@@ -664,6 +702,7 @@ function buildProdutoEmailHtml(
       <ul style="margin:0 0 25px 0;padding-left:20px;">${listaItens}</ul>
       ${botoes}
       ${treinoSecao}
+      ${cursoSecao}
       <p style="color:#AAAAAA;font-size:14px;line-height:22px;margin:25px 0 0 0;">
         Esperamos que esse material faça toda a diferença nos seus resultados! Qualquer dúvida sobre o acesso, chama a gente no
         <a href="${whatsappLink}" style="color:#C4B5FD;font-weight:bold;">WhatsApp</a> que vamos adorar ajudar. 💜
@@ -687,12 +726,13 @@ async function sendProdutoDeliveryEmail(params: {
     produtoSlug: string;
     itens: { nome: string; linkEntrega: string | null }[];
     treinoLinks?: { nome: string; url: string }[];
+    cursoLinks?: { nome: string; url: string }[];
 }) {
     if (!RESEND_API_KEY || !params.emailCliente) return;
 
     const firstName = (params.nomeCliente || 'Atleta').split(' ')[0];
     const acompanharLink = `${APP_URL}/Produto?id=${encodeURIComponent(params.produtoSlug)}&venda=${encodeURIComponent(params.vendaId)}`;
-    const html = buildProdutoEmailHtml(params.nomeCliente, params.itens, acompanharLink, params.treinoLinks || []);
+    const html = buildProdutoEmailHtml(params.nomeCliente, params.itens, acompanharLink, params.treinoLinks || [], params.cursoLinks || []);
 
     const emailRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',

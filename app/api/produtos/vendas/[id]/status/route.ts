@@ -16,9 +16,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
             where: { id },
             include: {
                 produto: { select: { id: true, nome: true, linkEntrega: true } },
-                // 🔥 Se esse item tiver treino interativo, o acesso já foi criado
-                // pelo webhook — reaproveita o mesmo token aqui em vez de gerar outro.
+                // 🔥 Se esse item tiver treino interativo/curso, o acesso já foi
+                // criado pelo webhook — reaproveita o mesmo token aqui em vez de
+                // gerar outro.
                 treinoAcessos: { select: { produtoId: true, token: true } },
+                cursoAcessos: { select: { produtoId: true, token: true } },
             },
         });
 
@@ -31,11 +33,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         }
 
         const tokenPorProduto = new Map(venda.treinoAcessos.map((a) => [a.produtoId, a.token]));
+        const cursoTokenPorProduto = new Map(venda.cursoAcessos.map((a) => [a.produtoId, a.token]));
 
         const itens = [{
             nome: venda.produto.nome,
             linkEntrega: venda.produto.linkEntrega,
             treinoToken: tokenPorProduto.get(venda.produto.id) || null,
+            cursoToken: cursoTokenPorProduto.get(venda.produto.id) || null,
         }];
 
         let bumpIds: string[] = [];
@@ -52,6 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
                 nome: p.nome,
                 linkEntrega: p.linkEntrega,
                 treinoToken: tokenPorProduto.get(p.id) || null,
+                cursoToken: cursoTokenPorProduto.get(p.id) || null,
             })));
         }
 
