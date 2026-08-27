@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { signAuthToken } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,9 +50,17 @@ export async function POST(req: Request) {
 
     if (passwordOk) {
       const { password: _, ...userWithoutPassword } = user;
-      
+
+      // 🔐 Token assinado — a partir de agora é ele que prova quem está
+      // chamando cada rota, em vez do app mandar coachId/userId no corpo.
+      const token = signAuthToken({
+        id: user.id,
+        role: (user as any).role,
+        coachId: (user as any).coachId ?? null,
+      });
+
       // 🔥 O Servidor agora devolve o usuário com a role ('ADMIN' ou 'USER')
-      return NextResponse.json({ user: userWithoutPassword });
+      return NextResponse.json({ user: userWithoutPassword, token });
     }
 
     return NextResponse.json({ error: 'E-mail ou senha incorretos' }, { status: 401 });

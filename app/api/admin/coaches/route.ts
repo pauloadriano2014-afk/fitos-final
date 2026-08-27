@@ -3,11 +3,17 @@
 // PATCH → { coachId, action: 'BLOCK'|'UNBLOCK'|'SET_PLAN'|'UPDATE_PROFILE', coachPlan?, contractValue?, coachBillingEnd?, name?, email?, cpf?, phone? ... }
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
     try {
+        // 🔒 Lista todos os coaches da plataforma (CPF, telefone, billing) —
+        // só o time master pode ver isso.
+        const auth = requireMaster(req);
+        if ('response' in auth) return auth.response;
+
         const coaches = await prisma.user.findMany({
             where: { role: 'COACH' } as any,
             select: {
@@ -48,8 +54,13 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
     try {
-        const { 
-            coachId, action, coachPlan, 
+        // 🔒 Bloquear/desbloquear/mudar plano/editar perfil de um coach —
+        // só o time master pode fazer isso sobre QUALQUER coach.
+        const auth = requireMaster(req);
+        if ('response' in auth) return auth.response;
+
+        const {
+            coachId, action, coachPlan,
             contractValue, coachBillingEnd, paymentDueDate, contractType, isFinanceActive,
             coachBillingStart, startDate, 
             name, email, cpf, phone // Removido o instagram aqui também

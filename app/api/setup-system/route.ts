@@ -5,11 +5,20 @@ import prisma from '@/lib/prisma';
 export async function GET(req: Request) {
     try {
         const url = new URL(req.url);
+
+        // 🔒 Rota de setup único (promove conta a ADMIN) — bloqueada por padrão.
+        // Configure SETUP_SECRET no Render e passe ?secret=... pra usar, ou
+        // apague esta rota depois de rodar o setup uma vez.
+        const secret = url.searchParams.get('secret');
+        if (!process.env.SETUP_SECRET || secret !== process.env.SETUP_SECRET) {
+            return NextResponse.json({ error: 'Não autorizado.' }, { status: 403 });
+        }
+
         const pauloEmail = url.searchParams.get('paulo');
         const adriEmail = url.searchParams.get('adri');
 
         if (!pauloEmail || !adriEmail) {
-            return NextResponse.json({ error: "Faltam os emails. Use a URL: ?paulo=SEU_EMAIL&adri=EMAIL_DELA" }, { status: 400 });
+            return NextResponse.json({ error: "Faltam os emails. Use a URL: ?paulo=SEU_EMAIL&adri=EMAIL_DELA&secret=SEU_SETUP_SECRET" }, { status: 400 });
         }
 
         // 1. Busca os dois usuários

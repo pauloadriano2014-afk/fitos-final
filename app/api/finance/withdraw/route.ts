@@ -1,21 +1,22 @@
 // app/api/finance/withdraw/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { getAuthUser } from '@/lib/auth';
 
 const ASAAS_BASE_URL = process.env.ASAAS_BASE_URL || 'https://api.asaas.com/v3';
 
-// Função auxiliar para buscar o ID do coach logado
-async function getUserIdFromSession(req: NextRequest) {
-    // ⚠️ TODO: Substituir pela sua função real de pegar o ID do token JWT do App
-    const coachIdHeader = req.headers.get('x-user-id'); 
-    return coachIdHeader || null;
+// 🔐 Identidade vem SEMPRE do token verificado — antes vinha de um header
+// `x-user-id` que qualquer requisição podia forjar, o que permitia pedir
+// transferência PIX da subconta Asaas de QUALQUER coach só sabendo o id.
+function getUserIdFromSession(req: NextRequest): string | null {
+    return getAuthUser(req)?.id ?? null;
 }
 
 export async function GET(req: NextRequest) {
     try {
-        const coachId = await getUserIdFromSession(req);
+        const coachId = getUserIdFromSession(req);
         if (!coachId) {
-            return NextResponse.json({ balance: 0, pendingBalance: 0 });
+            return NextResponse.json({ error: 'Não autenticado. Faça login novamente.' }, { status: 401 });
         }
 
         // 🔥 CORREÇÃO: "as any" adicionado ao objeto inteiro da busca para silenciar o erro
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
     try {
         const { pixKey, value } = await req.json();
-        const coachId = await getUserIdFromSession(req);
+        const coachId = getUserIdFromSession(req);
 
         if (!coachId) return NextResponse.json({ error: 'Usuário não autenticado.' }, { status: 401 });
         if (!pixKey || !value || value < 5) return NextResponse.json({ error: 'Dados de saque inválidos.' }, { status: 400 });

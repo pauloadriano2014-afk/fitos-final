@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,15 @@ export async function GET(request: Request) {
 
         if (!coachId) {
             return NextResponse.json({ error: 'ID do Coach é obrigatório.' }, { status: 400 });
+        }
+
+        // 🔒 Um coach só pode gerar/ver o PRÓPRIO aluno-teste (uso normal:
+        // "visualizar como aluno teste"), ou master pode gerar pra qualquer
+        // coach — antes qualquer chamador conseguia isso pra QUALQUER coachId.
+        const auth = requireAuth(request);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         // 1. Verifica se o Coach realmente existe

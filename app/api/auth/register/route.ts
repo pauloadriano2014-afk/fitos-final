@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { signAuthToken } from '@/lib/auth';
 
 
 const PAULO_EMAIL = 'paulo_adriano2014@live.com';
@@ -156,7 +157,8 @@ export async function POST(req: Request) {
         } catch (e) { console.error('Push novo aluno:', e); }
 
         const { password: _, ...userWithoutPassword } = user;
-        return NextResponse.json({ message: 'Usuário criado com sucesso!', user: userWithoutPassword }, { status: 201 });
+        const token = signAuthToken({ id: user.id, role: (user as any).role, coachId: (user as any).coachId ?? null });
+        return NextResponse.json({ message: 'Usuário criado com sucesso!', user: userWithoutPassword, token }, { status: 201 });
 
     } catch (error) {
         console.error('ERRO NO REGISTRO:', error);

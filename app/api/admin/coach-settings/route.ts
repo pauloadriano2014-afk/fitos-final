@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,13 @@ export async function PATCH(req: Request) {
 
         if (!coachId) {
             return NextResponse.json({ error: 'coachId obrigatório' }, { status: 400 });
+        }
+
+        // 🔒 Um coach só pode editar o PRÓPRIO prompt de IA (ou master, qualquer um).
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         // Master não precisa dessa rota — mas não bloqueia, só ignora
@@ -52,6 +60,12 @@ export async function GET(req: Request) {
 
         if (!coachId) {
             return NextResponse.json({ error: 'coachId obrigatório' }, { status: 400 });
+        }
+
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         const coach = await prisma.user.findUnique({

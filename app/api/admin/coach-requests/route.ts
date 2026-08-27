@@ -2,6 +2,7 @@
 // v2: salva coachPlan na aprovação
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 
 async function generateInviteCode(name: string): Promise<string> {
@@ -17,8 +18,12 @@ async function generateInviteCode(name: string): Promise<string> {
     return `${base}${Date.now().toString().slice(-5)}`;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
     try {
+        // 🔒 Lista pedidos de cadastro de coach pendentes/rejeitados — só master.
+        const auth = requireMaster(req);
+        if ('response' in auth) return auth.response;
+
         const pending = await prisma.user.findMany({
             where: { role: 'COACH', accountStatus: { in: ['PENDING_APPROVAL', 'REJECTED'] } } as any,
             select: {
@@ -37,6 +42,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
     try {
+        // 🔒 Aprovar/rejeitar cadastro de coach — só master.
+        const auth = requireMaster(req);
+        if ('response' in auth) return auth.response;
+
         const body = await req.json();
         const { coachId, action, inviteCode, coachPlan } = body; // ← v2: coachPlan
 

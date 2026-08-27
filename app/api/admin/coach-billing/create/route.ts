@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { BILLING_PLANS, LAUNCH_PROMO_MAX, calcBillingEnd } from '@/config/coachBillingPlans';
-import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,10 +66,13 @@ async function getOrCreateAsaasCustomer(coach: any): Promise<string> {
 export async function POST(req: Request) {
     try {
         // Recebe UNDEFINED por padrão para abrir o checkout completo no Asaas
-        const { adminId, coachId, billingPlan, paymentMethod = 'UNDEFINED', customValue } = await req.json();
+        const { coachId, billingPlan, paymentMethod = 'UNDEFINED', customValue } = await req.json();
 
-        // Só masters podem gerar cobranças de terceiros, mas o coach pode gerar a própria (adminId === coachId)
-        if (!MASTER_IDS.includes(adminId) && adminId !== coachId) {
+        // 🔒 Identidade vem do token — só masters podem gerar cobrança de
+        // terceiros, mas o coach pode gerar a própria.
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, coachId)) {
             return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import bcrypt from 'bcryptjs';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { getAuthUser } from '@/lib/auth';
 
 
 // 🔥 FUNÇÃO DE MURALHA: Verifica se o Coach é dono deste Aluno
@@ -26,9 +28,18 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "ID do usuário obrigatório" }, { status: 400 });
     }
 
-    // 🔥 BLOQUEIO DE SEGURANÇA NA ATUALIZAÇÃO (Se for um Admin/Coach tentando editar)
-    if (adminId) {
-        const isOwner = await checkUserOwnership(userId, adminId);
+    // 🔐 Se a chamada veio com um token válido (app atualizado), ele manda —
+    // nunca confiamos no `adminId` do corpo quando há token, porque esse
+    // campo é forjável por qualquer cliente. Enquanto o app antigo (sem
+    // token) ainda estiver em uso, caímos de volta pro `adminId` do corpo
+    // (comportamento antigo) só pra não quebrar quem ainda não atualizou.
+    const authUser = getAuthUser(req);
+    const callerId = authUser?.id ?? adminId ?? null;
+
+    // 🔥 BLOQUEIO DE SEGURANÇA NA ATUALIZAÇÃO — só verifica ownership quando
+    // o chamador não é o próprio dono do perfil sendo editado.
+    if (callerId && callerId !== userId) {
+        const isOwner = await checkUserOwnership(userId, callerId);
         if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Você não pode alterar os dados deste aluno." }, { status: 403 });
     }
 
@@ -36,8 +47,8 @@ export async function PUT(req: Request) {
     const updateData: any = {};
     if (name) updateData.name = name;
     if (phone) updateData.phone = phone;
-    // Se quiser permitir troca de senha simples (sem hash por enquanto, ou adicione bcrypt aqui se já usar)
-    if (password) updateData.password = password;
+    // 🔒 Senha SEMPRE em hash — antes ia em texto puro pro banco.
+    if (password) updateData.password = await bcrypt.hash(password, 10);
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },

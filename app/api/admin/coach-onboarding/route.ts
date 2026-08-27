@@ -2,6 +2,7 @@
 // Marca steps de onboarding concluídos e finaliza quando todos prontos
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,13 @@ export async function PATCH(req: Request) {
 
         if (!coachId) {
             return NextResponse.json({ error: 'coachId obrigatório.' }, { status: 400 });
+        }
+
+        // 🔒 Um coach só pode avançar o PRÓPRIO onboarding (ou master, por qualquer um).
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         // dismiss = coach fechou sem completar tudo — marca como concluído mesmo assim

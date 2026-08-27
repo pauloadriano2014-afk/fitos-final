@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma'; 
+import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
         const coachId = searchParams.get('coachId');
-        
+
         if (!coachId) return NextResponse.json({ error: "coachId obrigatório" }, { status: 400 });
+
+        // 🔒 Config de página de vendas inclui a chave PIX do coach — só o
+        // próprio coach (ou master) pode ler.
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
 
         const config = await prisma.salesPageConfig.findUnique({ where: { coachId } });
         const plans = await prisma.coachPlan.findMany({ 

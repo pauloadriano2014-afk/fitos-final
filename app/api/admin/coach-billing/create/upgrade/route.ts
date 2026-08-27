@@ -3,7 +3,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcProportionalCredit, calcBillingEnd } from '@/config/coachBillingPlans';
-import { MASTER_IDS } from '@/lib/masterIds';
+import { requireMaster } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,11 +24,12 @@ async function asaasFetch(path: string, options: RequestInit = {}) {
 
 export async function POST(req: Request) {
     try {
-        const { adminId, coachId, newBillingPlan, paymentMethod = 'PIX' } = await req.json();
+        const { coachId, newBillingPlan, paymentMethod = 'PIX' } = await req.json();
 
-        if (!MASTER_IDS.includes(adminId)) {
-            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
-        }
+        // 🔒 Upgrade de plano é uma ação de master (igual já era, mas agora
+        // a identidade vem do token, não de um adminId forjável no corpo).
+        const auth = requireMaster(req);
+        if ('response' in auth) return auth.response;
 
         const newPlan = BILLING_PLANS[newBillingPlan];
         if (!newPlan) {

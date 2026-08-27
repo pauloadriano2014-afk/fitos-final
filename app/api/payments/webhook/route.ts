@@ -17,6 +17,21 @@ const FROM_EMAIL = process.env.RESEND_FROM || 'PA TEAM ELITE <onboarding@resend.
 
 export async function POST(req: Request) {
     try {
+        // 🔒 Verificação do token de autenticação do webhook — só é aplicada
+        // se ASAAS_WEBHOOK_TOKEN estiver configurado no Render, pra não
+        // quebrar pagamentos em produção antes de você configurar o mesmo
+        // valor em Asaas > Integrações > Webhooks > Token de autenticação.
+        // Configure isso o quanto antes: sem token, qualquer requisição
+        // forjada pode simular "pagamento confirmado".
+        const expectedWebhookToken = process.env.ASAAS_WEBHOOK_TOKEN;
+        if (expectedWebhookToken) {
+            const receivedWebhookToken = req.headers.get('asaas-access-token');
+            if (receivedWebhookToken !== expectedWebhookToken) {
+                console.warn('[payments/webhook] Token de autenticação ausente ou inválido.');
+                return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+            }
+        }
+
         const body = await req.json();
         const { event, payment } = body;
 
