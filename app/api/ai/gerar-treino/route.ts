@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import prisma from '@/lib/prisma';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
+import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
 
 
 const MASTER_IDS = [
@@ -13,11 +14,18 @@ const MASTER_IDS = [
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const body = await req.json();
     const { userId, adminId, cycleConfig } = body;
 
     if (!userId || !adminId) {
       return NextResponse.json({ error: 'userId e adminId obrigatórios' }, { status: 400 });
+    }
+
+    if (!canActAsCoach(auth.user, adminId)) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }
 
     const isMasterCoach = MASTER_IDS.includes(adminId);
@@ -75,6 +83,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (!user) return NextResponse.json({ error: 'Aluno não encontrado' }, { status: 404 });
+
+    if (!canAccessStudent(auth.user, userId, user.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    }
 
     const history = await prisma.workoutHistory.findMany({ where: { userId }, orderBy: { date: 'desc' }, take: 20, include: { details: true } });
     const weightMap: Record<string, Record<number, string>> = {};

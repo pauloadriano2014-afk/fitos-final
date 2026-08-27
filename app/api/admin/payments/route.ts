@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, isMasterId, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,6 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
-    const adminId = searchParams.get('adminId');
     const limitParam = parseInt(searchParams.get('limit') || '100', 10);
     const limit = Math.min(Math.max(limitParam, 1), 300);
 
@@ -24,12 +24,18 @@ export async function GET(req: NextRequest) {
     const monthParam = searchParams.get('month');
     const yearParam = searchParams.get('year');
 
-    // 🔒 SEU ISOLAMENTO MULTI-TENANT (Intocável)
+    // 🔒 SEU ISOLAMENTO MULTI-TENANT (Intocável) — agora a identidade vem do
+    // token verificado, não mais de um `adminId` de query que qualquer um
+    // podia omitir (sem adminId, a rota devolvia TODOS os pagamentos) ou
+    // forjar (mandando o id de outro coach) pra ver dado financeiro alheio.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     let tenantWhere: any = {};
 
-    if (adminId) {
+    if (!isMasterId(auth.user.id)) {
       const requester = await prisma.user.findUnique({
-        where: { id: adminId },
+        where: { id: auth.user.id },
         select: { id: true, role: true, accountStatus: true },
       });
 
@@ -41,7 +47,7 @@ export async function GET(req: NextRequest) {
         if (requester.accountStatus !== 'ACTIVE') {
           return NextResponse.json({ error: 'Conta aguardando aprovação' }, { status: 403 });
         }
-        tenantWhere = { coachId: adminId };
+        tenantWhere = { coachId: auth.user.id };
       }
     }
 
@@ -173,6 +179,16 @@ export async function DELETE(req: NextRequest) {
 
     if (!payment || !payment.asaasPaymentId) {
       return NextResponse.json({ error: 'Cobrança não encontrada ou sem ID do Asaas.' }, { status: 404 });
+    }
+
+    // 🔒 Só o coach dono dessa cobrança (ou o time master) pode excluí-la —
+    // antes qualquer requisição com um paymentId podia cancelar a fatura de
+    // QUALQUER coach/aluno na Asaas.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const allowed = payment.coachId ? canActAsCoach(auth.user, payment.coachId) : isMasterId(auth.user.id);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     let apiKey = process.env.ASAAS_API_KEY!;

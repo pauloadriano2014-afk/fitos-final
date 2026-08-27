@@ -1,6 +1,7 @@
 // app/api/running/log/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,6 +11,14 @@ export async function POST(req: NextRequest) {
     // 🔥 BLINDAGEM: Removemos a obrigatoriedade do protocolId
     if (!userId || !sessionDay) {
       return NextResponse.json({ error: 'userId e sessionDay são obrigatórios' }, { status: 400 });
+    }
+
+    // 🔒 Só o próprio aluno pode logar a corrida dele (ou o coach/master).
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     const log = await prisma.runningLog.create({

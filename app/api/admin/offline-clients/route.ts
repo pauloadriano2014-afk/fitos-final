@@ -3,10 +3,17 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
 
 export async function POST(req: Request) {
     try {
         const data = await req.json();
+
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        if (!isMasterId(auth.user.id) && !canActAsCoach(auth.user, data.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
 
         const newClient = await prisma.offlineClient.upsert({
             where: { id: data.id },
@@ -58,6 +65,12 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'coachId obrigatório.' }, { status: 400 });
         }
 
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
+
         const isMaster = MASTER_IDS.includes(coachId);
 
         const where = isMaster
@@ -86,14 +99,17 @@ export async function DELETE(req: Request) {
             return NextResponse.json({ error: 'ID não fornecido.' }, { status: 400 });
         }
 
-        // ← v2: valida dono antes de deletar
-        if (coachId) {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
+        // 🔒 valida dono antes de deletar usando o usuário REAL do token — o
+        // `coachId` do body não é mais confiável pra essa decisão.
+        if (!isMasterId(auth.user.id)) {
             const client = await prisma.offlineClient.findUnique({
                 where: { id },
                 select: { coachId: true },
             });
-            const isMaster = MASTER_IDS.includes(coachId);
-            if (!isMaster && client?.coachId !== coachId) {
+            if (client?.coachId !== auth.user.id) {
                 return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
             }
         }

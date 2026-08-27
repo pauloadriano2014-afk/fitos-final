@@ -1,13 +1,27 @@
 // app/api/admin/produtos/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
     try {
         const { id } = params;
         const body = await request.json();
-        
+
+        // 🔒 Só o coach dono do produto (ou o time master) pode editá-lo —
+        // antes essa rota fazia mass-assignment com QUALQUER body, sem
+        // checar quem estava chamando nem se o produto era dele.
+        const existing = await prisma.produtoDigital.findUnique({ where: { id }, select: { coachId: true } });
+        if (!existing) {
+            return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 });
+        }
+        const auth = requireAuth(request);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, existing.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
+
         const produto = await prisma.produtoDigital.update({
             where: { id },
             data: {
@@ -27,6 +41,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
     try {
         const { id } = params;
+
+        // 🔒 Só o coach dono do produto (ou o time master) pode apagá-lo.
+        const existing = await prisma.produtoDigital.findUnique({ where: { id }, select: { coachId: true } });
+        if (!existing) {
+            return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 });
+        }
+        const auth = requireAuth(request);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, existing.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
+
         await prisma.produtoDigital.delete({ where: { id } });
         return NextResponse.json({ success: true });
     } catch (error) {

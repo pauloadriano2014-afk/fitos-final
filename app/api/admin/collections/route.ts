@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,12 @@ export async function GET(req: Request) {
     const adminId = searchParams.get('adminId');
 
     if (!adminId) return NextResponse.json({ error: "Admin ID obrigatório" }, { status: 400 });
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, adminId)) {
+      return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+    }
 
     // 🔥 ISOLAMENTO TOTAL DA MURALHA (COLEÇÕES):
     const isMaster = MASTER_IDS.includes(adminId);
@@ -50,6 +57,12 @@ export async function POST(req: Request) {
 
     if (!name || !adminId) return NextResponse.json({ error: "Nome e Admin ID são obrigatórios" }, { status: 400 });
 
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, adminId)) {
+      return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+    }
+
     const collection = await prisma.templateCollection.create({
       data: {
         name,
@@ -73,6 +86,14 @@ export async function PUT(req: Request) {
 
     if (!id) return NextResponse.json({ error: "ID da coleção obrigatório" }, { status: 400 });
 
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const existing = await prisma.templateCollection.findUnique({ where: { id }, select: { coachId: true } });
+    if (!existing) return NextResponse.json({ error: "Coleção não encontrada" }, { status: 404 });
+    if (!isMasterId(auth.user.id) && !canActAsCoach(auth.user, existing.coachId)) {
+      return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+    }
+
     const collection = await prisma.templateCollection.update({
       where: { id },
       data: { 
@@ -95,6 +116,14 @@ export async function DELETE(req: Request) {
     const id = searchParams.get('id');
 
     if (!id) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 });
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const existing = await prisma.templateCollection.findUnique({ where: { id }, select: { coachId: true } });
+    if (!existing) return NextResponse.json({ error: "Coleção não encontrada" }, { status: 404 });
+    if (!isMasterId(auth.user.id) && !canActAsCoach(auth.user, existing.coachId)) {
+      return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+    }
 
     await prisma.templateCollection.delete({
       where: { id }

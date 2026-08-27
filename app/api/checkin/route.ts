@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
+import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -92,10 +93,18 @@ async function uploadToR2(base64String: string, userId: string, prefix: string) 
 
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const body = await req.json();
     const { userId, weight, feedback, photoFront, photoBack, photoSide, extraPhotos, allowMarketing } = body;
 
     if (!userId) return NextResponse.json({ error: "User ID required" }, { status: 400 });
+
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     const [frontUrl, backUrl, sideUrl] = await Promise.all([
         uploadToR2(photoFront, userId, 'front'),
@@ -197,13 +206,27 @@ export async function GET(req: Request) {
     const userId = searchParams.get('userId');
     const adminId = searchParams.get('adminId');
 
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     try {
-        const whereClause: any = {};
-        
         if (userId) {
-            whereClause.userId = userId; 
-        } 
-        
+            const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+            if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+                return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+            }
+        }
+
+        if (adminId && !canActAsCoach(auth.user, adminId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
+
+        const whereClause: any = {};
+
+        if (userId) {
+            whereClause.userId = userId;
+        }
+
         if (adminId) {
             const isMaster = MASTER_IDS.includes(adminId);
             if (isMaster) {
@@ -251,9 +274,21 @@ export async function GET(req: Request) {
 
 export async function DELETE(req: Request) {
     try {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
         const { searchParams } = new URL(req.url);
         const id = searchParams.get('id');
         if (!id) return NextResponse.json({ error: "ID não fornecido" }, { status: 400 });
+
+        const existing = await prisma.checkIn.findUnique({
+            where: { id },
+            select: { userId: true, user: { select: { coachId: true } } }
+        });
+        if (!existing) return NextResponse.json({ error: "Check-in não encontrado" }, { status: 404 });
+        if (!canAccessStudent(auth.user, existing.userId, existing.user?.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
 
         await prisma.checkIn.delete({ where: { id } });
         return NextResponse.json({ success: true });

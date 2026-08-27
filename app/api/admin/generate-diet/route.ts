@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
 import Anthropic    from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic     = 'force-dynamic';
 export const maxDuration = 90;
@@ -647,6 +648,9 @@ async function callGoogle(prompt: string): Promise<string> {
 // ─── HANDLER ──────────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
     try {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
         const { anamnese, dayType = 'TREINO', provider = 'anthropic', birthDate, gender, macrosOverride } = await req.json();
 
         if (!anamnese) return NextResponse.json({ error:'Anamnese não encontrada.' }, { status:400 });

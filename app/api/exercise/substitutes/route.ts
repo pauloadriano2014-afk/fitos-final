@@ -1,6 +1,7 @@
 // app/api/exercise/substitutes/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 
 export async function GET(req: Request) {
@@ -15,6 +16,14 @@ export async function GET(req: Request) {
     if (!category) return NextResponse.json({ error: "Categoria necessária" }, { status: 400 });
 
     const validAdminId = (adminId && adminId !== 'null' && adminId !== 'undefined') ? adminId : null;
+
+    // 🔒 Exige login; se um adminId específico foi passado pra puxar a
+    // biblioteca de um coach, só aceita se for o próprio chamador (ou master).
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (validAdminId && !canActAsCoach(auth.user, validAdminId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     // ─── 1. VERIFICAR SE TEM SUBSTITUTOS PREFERIDOS DEFINIDOS ───
     if (exerciseId) {

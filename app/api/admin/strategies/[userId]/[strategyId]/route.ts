@@ -2,6 +2,7 @@
 // Ações em uma estratégia específica: ativar, desativar, editar datas, deletar
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,15 @@ export async function PATCH(
 ) {
   try {
     const { userId, strategyId } = params;
+
+    // 🔒 Só o próprio aluno, o coach dono dele, ou o time master.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
+
     const body = await req.json();
 
     const {
@@ -91,6 +101,14 @@ export async function DELETE(
 ) {
   try {
     const { userId, strategyId } = params;
+
+    // 🔒 Só o próprio aluno, o coach dono dele, ou o time master.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     const strategy = await prisma.diet.findFirst({
       where: { id: strategyId, userId, isStrategy: true },

@@ -1,6 +1,7 @@
 // app/api/admin/techniques/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 
 // 🔥 Helper para anexar CORS limpos em todas as respostas (evita bloqueio no PWA/Web)
@@ -26,6 +27,12 @@ export async function GET(req: Request) {
 
     if (!coachId) {
       return corsResponse({ error: 'O ID do Treinador é obrigatório.' }, 400);
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, coachId)) {
+      return corsResponse({ error: 'Acesso negado.' }, 403);
     }
 
     const techniques = await prisma.technique.findMany({
@@ -54,6 +61,12 @@ export async function POST(req: Request) {
       return corsResponse({ error: 'Nome, steps e coachId são obrigatórios.' }, 400);
     }
 
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, coachId)) {
+      return corsResponse({ error: 'Acesso negado.' }, 403);
+    }
+
     const newTechnique = await prisma.technique.create({
       data: {
         name,
@@ -79,6 +92,12 @@ export async function PUT(req: Request) {
 
     if (!id || !coachId) {
       return corsResponse({ error: 'ID da técnica e coachId são obrigatórios.' }, 400);
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, coachId)) {
+      return corsResponse({ error: 'Acesso negado.' }, 403);
     }
 
     const existing = await prisma.technique.findUnique({ where: { id } });
@@ -117,6 +136,12 @@ export async function DELETE(req: Request) {
 
     if (!id || !coachId) {
       return corsResponse({ error: 'ID da técnica e coachId são obrigatórios.' }, 400);
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, coachId)) {
+      return corsResponse({ error: 'Acesso negado.' }, 403);
     }
 
     const existing = await prisma.technique.findUnique({ where: { id } });

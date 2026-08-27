@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { requireAuth } from '@/lib/auth';
 
 // Configurações
 const apiKey = process.env.GEMINI_API_KEY || '';
@@ -65,6 +66,9 @@ export async function POST(req: Request) {
   const tempFilesToClean: string[] = [];
 
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const formData = await req.formData();
     const file = formData.get('video') as File;
     const rawExercise = formData.get('exerciseName') as string || 'Exercício';

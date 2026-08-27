@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 // 🔥 DETONADOR DE CACHE: Sem isso, o celular do aluno não atualiza a data!
 export const dynamic = 'force-dynamic';
@@ -22,17 +23,25 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: "userId obrigatório" }, { status: 400 });
         }
 
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
         const user = await prisma.user.findUnique({
             where: { id: userId },
             select: {
                 plan: true,
                 disableCheckIn: true,
                 nextCheckInDate: true,
+                coachId: true,
             }
         });
 
         if (!user) {
             return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+        }
+
+        if (!canAccessStudent(auth.user, userId, user.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         const plan = user.plan || 'PERFORMANCE';

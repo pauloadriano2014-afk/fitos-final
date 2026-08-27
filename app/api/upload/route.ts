@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const formData = await req.formData();
     const file = formData.get('file') as File;
 

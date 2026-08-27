@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from 'crypto';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export const dynamic   = 'force-dynamic';
 export const revalidate = 0;
@@ -52,6 +53,20 @@ export async function POST(req: Request) {
 
         if (!checkinId) {
             return NextResponse.json({ error: 'checkinId obrigatório.' }, { status: 400 });
+        }
+
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
+        const targetCheckin = await prisma.checkIn.findUnique({
+            where: { id: checkinId },
+            select: { userId: true, user: { select: { coachId: true } } }
+        });
+        if (!targetCheckin) {
+            return NextResponse.json({ error: 'Check-in não encontrado.' }, { status: 404 });
+        }
+        if (!canAccessStudent(auth.user, targetCheckin.userId, targetCheckin.user?.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         // ── Modo restaurar: remove marcações voltando para a foto original ────

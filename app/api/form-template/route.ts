@@ -1,6 +1,7 @@
 // app/api/form-template/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 // Método para CRIAR um novo template customizado
 export async function POST(request: Request) {
@@ -10,6 +11,12 @@ export async function POST(request: Request) {
 
     if (!coachId || !type || !name || !schema) {
       return NextResponse.json({ error: 'Dados incompletos para criação' }, { status: 400 });
+    }
+
+    const auth = requireAuth(request);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     // Se o coach estiver a ativar este template, desativa temporariamente os outros do mesmo tipo
@@ -45,6 +52,12 @@ export async function PUT(request: Request) {
 
     if (!id || !coachId) {
       return NextResponse.json({ error: 'Falta o ID do template ou do Coach' }, { status: 400 });
+    }
+
+    const auth = requireAuth(request);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     // Se estiver a reativar este, garante isolamento desativando os outros do mesmo tipo

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 // Configuração atualizada para o Prisma 7 aceitar a URL da Render no build
 const prisma = new PrismaClient({
@@ -12,7 +13,15 @@ const prisma = new PrismaClient({
 
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { userId, nivel } = await req.json();
+
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!targetUser || !canAccessStudent(auth.user, userId, targetUser.coachId)) {
+      return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+    }
 
     let exerciciosParaSalvar: any[] = [];
 

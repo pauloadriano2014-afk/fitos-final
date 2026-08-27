@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 
 export async function POST(req: Request) {
@@ -8,6 +9,13 @@ export async function POST(req: Request) {
 
     if (!userId || !amount) {
       return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetForAuth = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetForAuth?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     // Atualiza o XP do usuário (Incrementa o valor atual)

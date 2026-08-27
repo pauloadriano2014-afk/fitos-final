@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 
 
@@ -8,6 +9,15 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
+
+    const auth = requireAuth(request);
+    if ('response' in auth) return auth.response;
+    if (userId) {
+      const targetForAuth = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+      if (!canAccessStudent(auth.user, userId, targetForAuth?.coachId)) {
+        return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+      }
+    }
 
     const contents = await prisma.content.findMany({
       orderBy: { createdAt: 'desc' },

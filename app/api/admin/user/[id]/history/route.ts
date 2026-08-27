@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const userId = params.id;
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetForAuth = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetForAuth?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     // 1. Busca Check-ins (Fotos e Peso)
     const checkIns = await prisma.checkIn.findMany({

@@ -1,6 +1,7 @@
 // app/api/admin/bulk-update-exercise-content/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,11 @@ export const dynamic = 'force-dynamic';
 // em uma chamada anterior.
 export async function POST(req: Request) {
   try {
+    // 🔒 Aplica conteúdo em massa em exercícios de TODOS os coaches (bate por
+    // nome, sem checar dono) — restrito ao time master.
+    const auth = requireMaster(req);
+    if ('response' in auth) return auth.response;
+
     const body = await req.json();
     const items = body.items;
 

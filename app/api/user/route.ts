@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, requireMaster, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,18 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const adminId = searchParams.get('adminId');
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (adminId) {
+        if (!canActAsCoach(auth.user, adminId)) {
+            return NextResponse.json({ error: "Acesso Negado." }, { status: 403 });
+        }
+    } else {
+        // Sem adminId, a listagem seria irrestrita — só o time master pode pedir isso.
+        const masterAuth = requireMaster(req);
+        if ('response' in masterAuth) return masterAuth.response;
+    }
 
     // 🔥 BLOQUEIO TOTAL DA LISTA GLOBAL
     let whereClause: any = {};
@@ -53,6 +66,12 @@ export async function PATCH(req: Request) {
 
     if (!userId) {
       return NextResponse.json({ error: "ID do usuário não fornecido" }, { status: 400 });
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (auth.user.id !== userId && !MASTER_IDS.includes(auth.user.id)) {
+      return NextResponse.json({ error: "Acesso Negado." }, { status: 403 });
     }
 
     const updatedUser = await prisma.user.update({

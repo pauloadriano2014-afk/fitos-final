@@ -3,12 +3,13 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth } from '@/lib/auth';
 
 
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { userId, action, adminId } = body; // ← v2: adminId
+        const { userId, action } = body;
 
         if (!userId || !action) {
             return NextResponse.json({ error: 'userId e action são obrigatórios.' }, { status: 400 });
@@ -17,8 +18,15 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "action deve ser 'confirm' ou 'reject'." }, { status: 400 });
         }
 
-        // ← v2: validação de acesso
-        if (adminId && !MASTER_IDS.includes(adminId)) {
+        // 🔒 v3: a identidade de quem resolve o claim vem do token verificado,
+        // não mais de um `adminId` no body — antes, um `adminId` ausente
+        // pulava a checagem inteira, e um `adminId` forjado (de um coach
+        // master) driblava a validação de dono do aluno.
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        const adminId = auth.user.id;
+
+        if (!MASTER_IDS.includes(adminId)) {
             const target = await prisma.user.findUnique({
                 where:  { id: userId },
                 select: { coachId: true, nutritionistId: true },

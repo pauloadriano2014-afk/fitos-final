@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { findOrCreateCustomer, createPayment, getPixQrCode } from '@/lib/asaas';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 
 const DEFAULT_COACH_ID = 'paulo'; // fase 1: coach único
@@ -34,6 +35,14 @@ export async function POST(req: NextRequest) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    }
+
+    // 🔒 Só o próprio aluno, o coach dono dele, ou o time master pode gerar
+    // essa cobrança — antes bastava mandar qualquer userId no body.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canAccessStudent(auth.user, user.id, user.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     // ---- 1. CPF: salva se veio no body; exige se não existe ----

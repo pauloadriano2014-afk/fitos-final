@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,6 +78,14 @@ export async function GET(req: Request) {
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
 
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
+
     if (latest === 'true') {
         const last = await prisma.assessment.findFirst({
             where: { userId },
@@ -112,6 +121,14 @@ export async function POST(req: Request) {
 
     if (!userId || !weight) {
         return NextResponse.json({ error: "Peso e ID são obrigatórios" }, { status: 400 });
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     const f = folds || {};
@@ -186,6 +203,18 @@ export async function DELETE(req: Request) {
 
         if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
+        const existing = await prisma.assessment.findUnique({
+            where: { id },
+            select: { userId: true, user: { select: { coachId: true } } }
+        });
+        if (!existing) return NextResponse.json({ error: "Avaliação não encontrada" }, { status: 404 });
+        if (!canAccessStudent(auth.user, existing.userId, existing.user?.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
+
         await prisma.assessment.delete({
             where: { id }
         });
@@ -210,14 +239,21 @@ export async function PUT(req: Request) {
 
     if (!id) return NextResponse.json({ error: "ID obrigatório para edição" }, { status: 400 });
 
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     // 🔥 BUSCA A AVALIAÇÃO PARA PEGAR O userId E AS FOTOS ANTIGAS 🔥
     const existingAssessment = await prisma.assessment.findUnique({
         where: { id },
-        select: { userId: true, photos: true }
+        select: { userId: true, photos: true, user: { select: { coachId: true } } }
     });
 
     if (!existingAssessment) {
         return NextResponse.json({ error: "Avaliação não encontrada" }, { status: 404 });
+    }
+
+    if (!canAccessStudent(auth.user, existingAssessment.userId, existingAssessment.user?.coachId)) {
+        return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     const userId = existingAssessment.userId;

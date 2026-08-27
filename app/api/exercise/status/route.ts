@@ -1,8 +1,14 @@
 // app/api/exercise/status/route.ts
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export async function GET(req: Request) {
   try {
+    // 🔒 Não há um "dono" específico pra checar (é só status de upload de
+    // vídeo na Cloudflare) — exige apenas que o chamador esteja autenticado.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { searchParams } = new URL(req.url);
     const guid = searchParams.get('guid');
 

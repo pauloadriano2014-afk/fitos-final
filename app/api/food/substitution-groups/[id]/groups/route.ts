@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +19,14 @@ function getTeamId(coachId: string) {
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { searchParams } = new URL(req.url);
     const coachId = searchParams.get('coachId') ?? '';
+    if (coachId && !canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
     const teamId  = getTeamId(coachId);
 
     // Busca todos os grupos que contêm esse alimento e pertencem ao coach

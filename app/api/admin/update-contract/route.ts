@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth } from '@/lib/auth';
 
 
 async function checkAccess(userId: string, adminId: string): Promise<boolean> {
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
         const {
-            userId, adminId, 
+            userId,
             contractType, contractValue, paymentDueDate,
             startDate, financeCategory, isFinanceActive,
         } = body;
@@ -38,11 +39,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'ID do aluno é obrigatório.' }, { status: 400 });
         }
 
-        if (adminId) {
-            const allowed = await checkAccess(userId, adminId);
-            if (!allowed) {
-                return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
-            }
+        // 🔒 v3: identidade vem do token verificado, não mais de um `adminId`
+        // no body — antes, omitir `adminId` pulava a checagem inteira e
+        // qualquer coach podia editar o contrato/financeiro de aluno alheio.
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        const allowed = await checkAccess(userId, auth.user.id);
+        if (!allowed) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         const parsedValue = parseFloat(String(contractValue).replace(',', '.')) || 0;

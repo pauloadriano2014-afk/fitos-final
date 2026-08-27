@@ -1,11 +1,15 @@
 // app/api/admin/diet-templates/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth';
 
 
 // 🔥 ROTA PARA BUSCAR TODOS OS TEMPLATES SALVOS
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const templates = await prisma.dietTemplate.findMany({
       orderBy: {
         createdAt: 'desc' // Traz os mais recentes primeiro
@@ -22,6 +26,9 @@ export async function GET() {
 // 🔥 ROTA PARA SALVAR UM NOVO TEMPLATE
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const body = await req.json();
     const { name, goal, totalKcal, meals } = body;
 
@@ -55,6 +62,9 @@ export async function POST(req: Request) {
 // 🔥 ROTA PARA DELETAR UM TEMPLATE
 export async function DELETE(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 

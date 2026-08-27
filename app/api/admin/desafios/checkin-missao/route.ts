@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 const PONTOS_FIXOS = {
     treino: 10,
@@ -26,6 +27,9 @@ const PONTOS_FIXOS = {
 };
 
 export async function POST(request: NextRequest) {
+    const auth = requireMaster(request);
+    if ('response' in auth) return auth.response;
+
     try {
         const body = await request.json();
         const { inscricaoId, data, missaoPercentual } = body;

@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,11 +20,17 @@ function getTeamId(coachId: string): string {
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { id } = params;
     const body   = await req.json();
     const { coachId, isFavorite, name, category, subcategory, baseUnit, kcal, protein, carbs, fat, fiber, isActive } = body;
 
     if (!coachId) return NextResponse.json({ error: 'coachId obrigatório' }, { status: 400 });
+    if (!canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     const food = await (prisma as any).food.findUnique({ where: { id } });
     if (!food) return NextResponse.json({ error: 'Alimento não encontrado' }, { status: 404 });
@@ -67,9 +74,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { id }    = params;
     const { searchParams } = new URL(req.url);
     const coachId   = searchParams.get('coachId') ?? '';
+    if (!canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
     const teamId    = getTeamId(coachId);
 
     const food = await (prisma as any).food.findUnique({ where: { id } });

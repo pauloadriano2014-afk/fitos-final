@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 
 export const dynamic = 'force-dynamic';
@@ -158,6 +159,9 @@ function filtrarLesoes(treino: any[], limitacoes: string[], cirurgias: string[])
 
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { userId } = await req.json();
     if (!userId) return NextResponse.json({ error: "UserId obrigatório" }, { status: 400 });
 
@@ -167,6 +171,10 @@ export async function POST(req: Request) {
     });
 
     if (!user || user.anamneses.length === 0) return NextResponse.json({ error: "Anamnese 404" }, { status: 404 });
+
+    if (!canAccessStudent(auth.user, userId, user.coachId)) {
+      return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+    }
 
     const anamnese = user.anamneses[0];
     const dias = anamnese.frequencia || 3;

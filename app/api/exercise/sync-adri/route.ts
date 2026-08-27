@@ -7,11 +7,17 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { PAULO_ID, ADRI_ID } from '@/lib/masterIds';
+import { requireMaster } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    // 🔒 Job interno de sincronização entre as bibliotecas do time master —
+    // só Paulo/Adri podem disparar isso.
+    const auth = requireMaster(req);
+    if ('response' in auth) return auth.response;
+
     // 1. Buscar todos os exercícios do Paulo (fonte da biblioteca base)
     const masterExercises = await prisma.exercise.findMany({
       where: { coachId: PAULO_ID }

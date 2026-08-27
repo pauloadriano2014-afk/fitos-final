@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 const PONTOS_FIXOS = {
     treino: 10,
@@ -26,6 +27,9 @@ export async function PATCH(
     request: NextRequest,
     { params }: { params: { checkinId: string } }
 ) {
+    const auth = requireMaster(request);
+    if ('response' in auth) return auth.response;
+
     try {
         const { checkinId } = params;
         const body = await request.json();
@@ -93,6 +97,9 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: { checkinId: string } }
 ) {
+    const auth = requireMaster(request);
+    if ('response' in auth) return auth.response;
+
     try {
         const { checkinId } = params;
         await prisma.desafioCheckin.delete({ where: { id: checkinId } });

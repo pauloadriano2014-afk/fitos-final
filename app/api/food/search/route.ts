@@ -1,6 +1,7 @@
 // app/api/food/search/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +14,15 @@ const MASTER_IDS  = [
 
 export async function GET(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { searchParams } = new URL(req.url);
     const q             = (searchParams.get('q') ?? '').trim();
     const coachId       = searchParams.get('coachId') ?? '';
+    if (coachId && !canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
     const category      = searchParams.get('category') ?? '';
     const favoritesOnly = searchParams.get('favorites') === 'true';
     const sourceFilter  = searchParams.get('source') ?? '';

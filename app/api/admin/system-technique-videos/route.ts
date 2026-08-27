@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,12 @@ export async function GET(req: Request) {
     const coachId = searchParams.get('coachId');
 
     if (!coachId) return corsResponse({ error: 'coachId é obrigatório.' }, 400);
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, coachId)) {
+      return corsResponse({ error: 'Acesso negado.' }, 403);
+    }
 
     const teamId = getTeamId(coachId);
 
@@ -77,6 +84,12 @@ export async function POST(req: Request) {
 
     if (!key || !videoUrl || !coachId) return corsResponse({ error: "Dados inválidos" }, 400);
 
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, coachId)) {
+      return corsResponse({ error: 'Acesso negado.' }, 403);
+    }
+
     const teamId = getTeamId(coachId);
     const cleanUrl = videoUrl.trim();
 
@@ -110,6 +123,12 @@ export async function DELETE(req: Request) {
     const coachId = searchParams.get('coachId');
 
     if (!key || !coachId) return corsResponse({ error: "Dados inválidos" }, 400);
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, coachId)) {
+      return corsResponse({ error: 'Acesso negado.' }, 403);
+    }
 
     const teamId = getTeamId(coachId);
 

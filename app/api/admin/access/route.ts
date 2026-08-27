@@ -3,14 +3,22 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, canAccessStudent, isMasterId } from '@/lib/auth';
 
 
-// GET: Busca quais conteúdos VIP este aluno tem acesso (sem mudança)
+// GET: Busca quais conteúdos VIP este aluno tem acesso
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
         const userId = searchParams.get('userId');
         if (!userId) return NextResponse.json({ error: 'UserId necessário.' }, { status: 400 });
+
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        const target = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true, nutritionistId: true } });
+        if (!canAccessStudent(auth.user, userId, target?.coachId) && auth.user.id !== target?.nutritionistId) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
 
         const accesses = await prisma.contentAccess.findMany({
             where:  { userId },
@@ -23,22 +31,25 @@ export async function GET(req: Request) {
     }
 }
 
-// POST: Liga ou desliga acesso VIP — v2: valida ownership
+// POST: Liga ou desliga acesso VIP — validação de ownership pelo usuário REAL do token
 export async function POST(req: Request) {
     try {
-        const { userId, contentId, grant, adminId } = await req.json(); // ← v2: adminId
+        const { userId, contentId, grant } = await req.json();
 
         if (!userId || !contentId) {
             return NextResponse.json({ error: 'Dados incompletos.' }, { status: 400 });
         }
 
-        // ← v2: validação de acesso
-        if (adminId && !MASTER_IDS.includes(adminId)) {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
+        // 🔒 a decisão usa auth.user (do token), não o `adminId` do body — que era forjável.
+        if (!isMasterId(auth.user.id)) {
             const target = await prisma.user.findUnique({
                 where:  { id: userId },
                 select: { coachId: true, nutritionistId: true },
             });
-            const isOwner = target?.coachId === adminId || target?.nutritionistId === adminId;
+            const isOwner = target?.coachId === auth.user.id || target?.nutritionistId === auth.user.id;
             if (!isOwner) {
                 return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
             }

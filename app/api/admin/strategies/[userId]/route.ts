@@ -2,6 +2,7 @@
 // CRUD de estratégias de dieta para um aluno específico
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,14 @@ export async function GET(
 ) {
   try {
     const { userId } = params;
+
+    // 🔒 Só o próprio aluno, o coach dono dele, ou o time master.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     const diets = await prisma.diet.findMany({
       where: { userId },
@@ -62,6 +71,15 @@ export async function POST(
       return NextResponse.json({ error: 'Nome da estratégia é obrigatório' }, { status: 400 });
     }
 
+    // 🔒 Só o próprio aluno, o coach dono dele, ou o time master pode criar
+    // uma estratégia para esse aluno.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
+
     // Se ativar agora, desativa outras estratégias do aluno
     if (activateNow) {
       await prisma.diet.updateMany({
@@ -79,6 +97,13 @@ export async function POST(
         where: { id: copyFromDietId },
         include: { meals: { include: { items: true } } },
       });
+
+      // 🔒 A dieta-fonte precisa pertencer a ESTE MESMO aluno — sem isso, um
+      // coach poderia copiar refeições da dieta de um aluno de OUTRO coach
+      // (copyFromDietId é um id arbitrário vindo do corpo da requisição).
+      if (sourceDiet && sourceDiet.userId !== userId) {
+        return NextResponse.json({ error: 'Acesso negado: dieta de origem não pertence a este aluno.' }, { status: 403 });
+      }
 
       if (sourceDiet) {
         baseMeals = sourceDiet.meals.map(meal => ({

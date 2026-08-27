@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 function inicioDaSemana(referencia: Date): Date {
     const d = new Date(referencia);
@@ -25,6 +26,9 @@ export async function GET(
     request: NextRequest,
     { params }: { params: { id: string } }
 ) {
+    const auth = requireMaster(request);
+    if ('response' in auth) return auth.response;
+
     try {
         const { id } = params;
         const { searchParams } = new URL(request.url);

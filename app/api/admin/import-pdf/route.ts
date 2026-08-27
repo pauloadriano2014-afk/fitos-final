@@ -1,6 +1,7 @@
 // app/api/admin/import-pdf/route.ts
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,9 @@ const openai = new OpenAI({
 
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const formData = await req.formData();
     const file = formData.get('file') as File;
     const mode = formData.get('mode') as string || 'FULL'; 

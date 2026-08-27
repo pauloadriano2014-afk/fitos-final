@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,10 +16,16 @@ const MASTER_TEAM = 'MASTER_TEAM';
 
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const body = await req.json();
     const { coachId, name, category, subcategory, baseUnit, kcal, protein, carbs, fat, fiber } = body;
 
     if (!coachId) return NextResponse.json({ error: 'coachId obrigatório' }, { status: 400 });
+    if (!canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
     if (!name || kcal === undefined || protein === undefined || carbs === undefined || fat === undefined)
       return NextResponse.json({ error: 'Campos obrigatórios: name, kcal, protein, carbs, fat' }, { status: 400 });
 

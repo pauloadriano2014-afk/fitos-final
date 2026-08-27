@@ -1,7 +1,8 @@
 // app/api/contents/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { sendNotificationToAll } from '../../utils/sendNotification'; 
+import { sendNotificationToAll } from '../../utils/sendNotification';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +15,21 @@ const MASTER_IDS = [
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId'); 
-    const adminId = searchParams.get('adminId'); 
-    const format = searchParams.get('format'); 
+    const userId = searchParams.get('userId');
+    const adminId = searchParams.get('adminId');
+    const format = searchParams.get('format');
+
+    // 🔒 Biblioteca é lida por alunos (userId=próprio) e coaches (adminId=próprio,
+    // ou master vendo qualquer coach). Exige login sempre; se vier userId ou
+    // adminId, tem que ser realmente quem está logado (ou master).
+    const auth = requireAuth(request);
+    if ('response' in auth) return auth.response;
+    if (userId && userId !== 'null' && userId !== 'undefined' && auth.user.id !== userId && !MASTER_IDS.includes(auth.user.id)) {
+        return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+    }
+    if (adminId && adminId !== 'null' && adminId !== 'undefined' && !canActAsCoach(auth.user, adminId)) {
+        return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+    }
 
     let targetCoachId = null;
 
@@ -113,6 +126,12 @@ export async function POST(request: Request) {
 
     if (!title || !category) {
         return NextResponse.json({ error: "Campos obrigatórios faltando" }, { status: 400 });
+    }
+
+    const auth = requireAuth(request);
+    if ('response' in auth) return auth.response;
+    if (adminId && !canActAsCoach(auth.user, adminId)) {
+        return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
     }
 
     const newContent = await prisma.content.create({

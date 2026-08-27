@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +20,15 @@ function getTeamId(coachId: string) {
 
 export async function GET(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { searchParams } = new URL(req.url);
     const coachId = searchParams.get('coachId') ?? '';
     if (!coachId) return NextResponse.json({ error: 'coachId obrigatório' }, { status: 400 });
+    if (!canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     const teamId = getTeamId(coachId);
 
@@ -66,9 +73,15 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { coachId, name, description } = await req.json();
     if (!coachId || !name?.trim())
       return NextResponse.json({ error: 'coachId e name obrigatórios' }, { status: 400 });
+    if (!canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     const teamId = getTeamId(coachId);
 

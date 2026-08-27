@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { requireAuth } from '@/lib/auth';
 
 // Cria a conexão direta com o Cloudflare R2
 const s3Client = new S3Client({
@@ -13,6 +14,9 @@ const s3Client = new S3Client({
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
 

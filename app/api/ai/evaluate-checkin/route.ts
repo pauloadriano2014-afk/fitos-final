@@ -8,6 +8,7 @@ import prisma from '@/lib/prisma';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -147,6 +148,9 @@ async function callGPT(prompt: string, rawImages: Array<{ data: string; mimeType
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
     try {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
         const {
             checkInId,
             oldCheckInId,
@@ -170,16 +174,25 @@ export async function POST(req: Request) {
         console.log(`🤖 Modelo: ${MODEL_LABELS[selectedModel]} | master: ${isMasterRequest}`);
 
         // ── 1. ISOLAMENTO ────────────────────────────────────────────────────
-        if (checkInId && coachId) {
+        // coachId vem do corpo da requisição (forjável) — antes de confiar nele
+        // pra qualquer coisa (seleção de modelo, identidade, ownership), garante
+        // que quem chamou de verdade É esse coach (ou é master).
+        if (coachId && !canActAsCoach(auth.user, coachId)) {
+            return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+        }
+
+        if (checkInId) {
             const checkinOwner = await prisma.checkIn.findUnique({
                 where:  { id: checkInId },
-                select: { user: { select: { coachId: true } } },
+                select: { userId: true, user: { select: { coachId: true } } },
             });
             if (!checkinOwner) return NextResponse.json({ error: 'Check-in não encontrado' }, { status: 404 });
-            const studentCoachId  = checkinOwner.user?.coachId;
-            const isOwner         = studentCoachId === coachId;
-            const isMasterStudent = isMasterRequest && (studentCoachId === null || MASTER_IDS.includes(studentCoachId ?? ''));
-            if (!isMasterRequest && !isOwner && !isMasterStudent) {
+            if (!canAccessStudent(auth.user, checkinOwner.userId, checkinOwner.user?.coachId)) {
+                return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+            }
+        } else if (isFromLab && labUserId) {
+            const labStudent = await prisma.user.findUnique({ where: { id: labUserId }, select: { coachId: true } });
+            if (!labStudent || !canAccessStudent(auth.user, labUserId, labStudent.coachId)) {
                 return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
             }
         }

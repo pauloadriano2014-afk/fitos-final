@@ -2,6 +2,7 @@
 // Endpoint simples de análise — recebe prompt pronto e retorna resultado da IA
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic     = 'force-dynamic';
 export const maxDuration = 60;
@@ -10,6 +11,9 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: Request) {
     try {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
         const { prompt } = await req.json();
         if (!prompt) return NextResponse.json({ error: 'Prompt ausente.' }, { status: 400 });
 

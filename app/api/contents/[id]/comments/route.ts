@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const { id } = params; 
-    
+    const { id } = params;
+
+    const auth = requireAuth(request);
+    if ('response' in auth) return auth.response;
+
     // 🔥 Puxa APENAS os comentários principais e aninha as respostas (replies) dentro deles
     const comments = await prisma.contentComment.findMany({
       where: { contentId: id, parentId: null },

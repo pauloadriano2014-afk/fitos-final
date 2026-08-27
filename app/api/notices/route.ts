@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { Expo } from 'expo-server-sdk';
+import { requireAuth, canActAsCoach, canAccessStudent } from '@/lib/auth';
 
 const expo = new Expo();
 
@@ -12,6 +13,12 @@ export async function POST(req: Request) {
 
     if (!title || !content || !adminId) {
         return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, adminId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     // 1. Desativa os avisos anteriores DESSA CONSULTORIA para não encavalar na tela do aluno
@@ -76,11 +83,18 @@ export async function GET(req: Request) {
 
     if (!userId) return NextResponse.json([]); // Retorna array vazio se não achar
 
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     // Descobre de qual coach é este aluno
-    const user = await prisma.user.findUnique({ 
-        where: { id: userId }, 
-        select: { coachId: true } 
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { coachId: true }
     });
+
+    if (!canAccessStudent(auth.user, userId, user?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     if (!user || !user.coachId) return NextResponse.json([]);
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAuth, isMasterId } from '@/lib/auth';
 
 // POST /api/running/anamnese/generate-token
 // Body: { userId: string }
@@ -16,6 +17,15 @@ export async function POST(req: NextRequest) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       return NextResponse.json({ error: 'Aluno não encontrado' }, { status: 404 });
+    }
+
+    // 🔒 Gerar o link é uma ação de coach: só o coach dono desse aluno (ou o
+    // time master) pode disparar — o próprio aluno não gera o link dele.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const isOwnerCoach = !!user.coachId && auth.user.id === user.coachId;
+    if (!isOwnerCoach && !isMasterId(auth.user.id)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     // Upsert — se já existe uma anamnese de corrida, retorna o token existente

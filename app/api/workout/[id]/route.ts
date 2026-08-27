@@ -1,13 +1,27 @@
 // app/api/workout/[id]/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const { id } = params;
+
+    // 🔒 Só o próprio aluno dono do treino, o coach dele, ou o time master.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const existingWorkout = await prisma.workout.findUnique({ where: { id }, select: { userId: true } });
+    if (!existingWorkout) {
+      return NextResponse.json({ error: "Treino não encontrado" }, { status: 404 });
+    }
+    const ownerUser = await prisma.user.findUnique({ where: { id: existingWorkout.userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, existingWorkout.userId, ownerUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
+
     const body = await req.json();
-    
+
     // 🔥 RECEBENDO A CHAVE DA CARGA E DO MOTOR DE PERIODIZAÇÃO AQUI
     const { name, startDate, endDate, exercises, workoutModel, intensityMultiplier, intensityEndDate, archiveCurrent } = body;
 
@@ -93,7 +107,19 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
     const { id } = params;
-    
+
+    // 🔒 Só o próprio aluno dono do treino, o coach dele, ou o time master.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const existingWorkout = await prisma.workout.findUnique({ where: { id }, select: { userId: true } });
+    if (!existingWorkout) {
+      return NextResponse.json({ error: "Treino não encontrado" }, { status: 404 });
+    }
+    const ownerUser = await prisma.user.findUnique({ where: { id: existingWorkout.userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, existingWorkout.userId, ownerUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
+
     // 1. Primeiro apagamos os exercícios vinculados a ele para não dar conflito
     await prisma.workoutExercise.deleteMany({
       where: { workoutId: id },

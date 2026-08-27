@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth';
 
 
 // BUSCAR TODAS AS REFEIÇÕES GUARDADAS
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const templates = await prisma.mealTemplate.findMany({
       orderBy: { createdAt: 'desc' }
     });
@@ -17,6 +21,9 @@ export async function GET() {
 // SALVAR UMA NOVA REFEIÇÃO COMO MODELO
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const body = await req.json();
     const { name, category, items } = body;
 
@@ -41,6 +48,9 @@ export async function POST(req: Request) {
 // APAGAR UM MODELO DE REFEIÇÃO
 export async function DELETE(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 

@@ -2,43 +2,25 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { Expo } from 'expo-server-sdk';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 const expo = new Expo();
 export const dynamic = 'force-dynamic';
-
-// 🔥 IDs MASTER PARA BLINDAGEM DA TELA DE TREINOS
-const MASTER_IDS = [
-    '3c82f763-66b4-48da-836e-16817d4f57c0', // Paulo
-    'b7c0c181-41fd-4156-b8fe-963a267759a3'  // Adri
-];
-
-// 🔥 FUNÇÃO DE MURALHA: Verifica se o Coach é dono deste Aluno
-async function checkUserOwnership(userId: string, adminId: string | null) {
-    if (!adminId) return false; 
-    if (MASTER_IDS.includes(adminId)) return true; // Master tem passe livre
-    
-    const targetUser = await prisma.user.findUnique({ 
-        where: { id: userId }, 
-        select: { coachId: true, nutritionistId: true } 
-    });
-    
-    if (!targetUser) return false;
-    return targetUser.coachId === adminId || targetUser.nutritionistId === adminId;
-}
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
-    const workoutId = searchParams.get('workoutId'); 
-    const adminId = searchParams.get('adminId'); // 🔥 Pega quem está pedindo (Painel Admin)
+    const workoutId = searchParams.get('workoutId');
 
     if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
 
-    // 🔥 BLOQUEIO DE SEGURANÇA (MURALHA): Se a requisição vier do painel admin, checa a posse
-    if (adminId) {
-        const isOwner = await checkUserOwnership(userId, adminId);
-        if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Aluno não pertence a você." }, { status: 403 });
+    // 🔒 Só o próprio aluno, o coach dono dele, ou o time master.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+        return NextResponse.json({ error: "Acesso Negado: Aluno não pertence a você." }, { status: 403 });
     }
 
     // 🔥 O SEGREDO ESTÁ AQUI: Buscamos o dicionário de exercícios para traduzir as IDs em Nomes 🔥
@@ -146,10 +128,19 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    
+
+    // 🔒 Só o próprio aluno, o coach dono dele, ou o time master.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     // Se a requisição vier do Setup Automático (App do Aluno)
     if (body.gender && body.goal && body.focus) {
         const { userId, gender, goal, focus, level } = body;
+
+        const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+        if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+            return NextResponse.json({ error: "Acesso Negado: Aluno não pertence a você." }, { status: 403 });
+        }
 
         // 1. Cria a Anamnese básica para o aluno não ficar vazio
         await prisma.anamnese.create({
@@ -181,12 +172,12 @@ export async function POST(req: Request) {
     }
 
     // Lógica original de criação manual do Admin
-    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel, intensityMultiplier, intensityEndDate, adminId } = body;
+    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel, intensityMultiplier, intensityEndDate } = body;
 
     // 🔥 BLOQUEIO DE SEGURANÇA NA CRIAÇÃO (Painel Admin)
-    if (adminId) {
-        const isOwner = await checkUserOwnership(userId, adminId);
-        if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Aluno não pertence a você." }, { status: 403 });
+    const targetUser2 = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser2?.coachId)) {
+        return NextResponse.json({ error: "Acesso Negado: Aluno não pertence a você." }, { status: 403 });
     }
 
     if (archiveCurrent) {
@@ -265,15 +256,17 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const body = await req.json();
-    const { id, archived, adminId } = body;
+    const { id, archived } = body;
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    // 🔥 BLOQUEIO DE SEGURANÇA NO ARQUIVAMENTO
-    if (adminId) {
-        const workoutTarget = await prisma.workout.findUnique({ where: { id }, select: { userId: true } });
-        if (workoutTarget) {
-            const isOwner = await checkUserOwnership(workoutTarget.userId, adminId);
-            if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Treino não pertence ao seu aluno." }, { status: 403 });
+    // 🔒 Só o próprio aluno dono do treino, o coach dele, ou o time master.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const workoutTarget = await prisma.workout.findUnique({ where: { id }, select: { userId: true } });
+    if (workoutTarget) {
+        const targetUser = await prisma.user.findUnique({ where: { id: workoutTarget.userId }, select: { coachId: true } });
+        if (!canAccessStudent(auth.user, workoutTarget.userId, targetUser?.coachId)) {
+            return NextResponse.json({ error: "Acesso Negado: Treino não pertence ao seu aluno." }, { status: 403 });
         }
     }
 
@@ -287,15 +280,17 @@ export async function PATCH(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { id, archived, adminId } = body;
+    const { id, archived } = body;
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-    // 🔥 BLOQUEIO DE SEGURANÇA NA ATUALIZAÇÃO
-    if (adminId) {
-        const workoutTarget = await prisma.workout.findUnique({ where: { id }, select: { userId: true } });
-        if (workoutTarget) {
-            const isOwner = await checkUserOwnership(workoutTarget.userId, adminId);
-            if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Treino não pertence ao seu aluno." }, { status: 403 });
+    // 🔒 Só o próprio aluno dono do treino, o coach dele, ou o time master.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const workoutTarget = await prisma.workout.findUnique({ where: { id }, select: { userId: true } });
+    if (workoutTarget) {
+        const targetUser = await prisma.user.findUnique({ where: { id: workoutTarget.userId }, select: { coachId: true } });
+        if (!canAccessStudent(auth.user, workoutTarget.userId, targetUser?.coachId)) {
+            return NextResponse.json({ error: "Acesso Negado: Treino não pertence ao seu aluno." }, { status: 403 });
         }
     }
 

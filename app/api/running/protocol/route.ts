@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 // POST — Admin confirma e salva o protocolo (após revisar sugestão da IA)
 export async function POST(req: NextRequest) {
@@ -9,6 +10,14 @@ export async function POST(req: NextRequest) {
 
     if (!userId) {
       return NextResponse.json({ error: 'userId obrigatório' }, { status: 400 });
+    }
+
+    // 🔒 Só o coach dono do aluno (ou o time master) pode salvar o protocolo dele.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     // Desativa protocolos anteriores do aluno

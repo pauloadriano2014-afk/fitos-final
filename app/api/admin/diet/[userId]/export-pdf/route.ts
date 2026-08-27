@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import { generateDietHtml } from '@/utils/dietPdfTemplate';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -14,6 +15,9 @@ export async function GET(
   { params }: { params: { userId: string } }
 ) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { userId } = params;
 
     // ── 1. Busca dados do aluno ──────────────────────────────────────────────
@@ -26,11 +30,16 @@ export async function GET(
         gender: true,
         goal: true,
         currentWeight: true,
+        coachId: true,
       },
     });
 
     if (!user) {
       return NextResponse.json({ error: 'Aluno não encontrado' }, { status: 404 });
+    }
+
+    if (!canAccessStudent(auth.user, userId, user.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     // ── 2. Busca a dieta ativa ───────────────────────────────────────────────

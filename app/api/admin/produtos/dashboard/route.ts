@@ -2,13 +2,20 @@
 // Painel de vendas dos Produtos Digitais — receita total, vendas confirmadas,
 // carrinhos pendentes/abandonados, taxa de conversão e ranking de produtos
 // mais vendidos. Consumido pela seção de métricas no topo da TabProdutos.js.
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        // 🔒 Esse painel agrega vendas/produtos de TODOS os coaches sem
+        // filtrar por dono — restrito ao time master até existir uma versão
+        // com isolamento por coachId.
+        const auth = requireMaster(request);
+        if ('response' in auth) return auth.response;
+
         const [vendasPagas, vendasPendentes, produtos] = await Promise.all([
             prisma.produtoVenda.findMany({
                 where: { status: 'PAGO' },

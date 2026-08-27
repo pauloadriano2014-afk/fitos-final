@@ -1,6 +1,7 @@
 // app/api/form-response/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 // Método para LER a anamnese preenchida
 export async function GET(request: Request) {
@@ -11,6 +12,14 @@ export async function GET(request: Request) {
 
     if (!userId || !templateId) {
       return NextResponse.json({ error: 'Falta userId ou templateId' }, { status: 400 });
+    }
+
+    const auth = requireAuth(request);
+    if ('response' in auth) return auth.response;
+
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     const response = await prisma.formResponse.findFirst({
@@ -39,6 +48,14 @@ export async function POST(request: Request) {
 
     if (!templateId || !userId || !answers) {
       return NextResponse.json({ error: 'Dados incompletos' }, { status: 400 });
+    }
+
+    const auth = requireAuth(request);
+    if ('response' in auth) return auth.response;
+
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     // Verifica se o aluno já tinha respondido a este template antes

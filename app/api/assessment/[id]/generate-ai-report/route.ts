@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -86,6 +87,9 @@ Regras adicionais obrigatórias:
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
     try {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
         const assessmentId = params.id;
 
         const assessment = await prisma.assessment.findUnique({
@@ -95,6 +99,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
         if (!assessment) {
             return NextResponse.json({ error: 'Avaliação não encontrada' }, { status: 404 });
+        }
+
+        if (!canAccessStudent(auth.user, assessment.userId, (assessment.user as any)?.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         const photos = Array.isArray(assessment.photos) ? assessment.photos.filter(p => p && p.trim() !== '') : [];
@@ -197,8 +205,22 @@ Lembre-se: ${nomeAluno} vai ler este laudo diretamente. Escreva para ela(e), nã
 // 🔥 Edição manual dos campos gerados, sem chamar a IA de novo 🔥
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
     try {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
         const assessmentId = params.id;
         const body = await req.json();
+
+        const existingAssessment = await prisma.assessment.findUnique({
+            where: { id: assessmentId },
+            select: { userId: true, user: { select: { coachId: true } } }
+        });
+        if (!existingAssessment) {
+            return NextResponse.json({ error: 'Avaliação não encontrada' }, { status: 404 });
+        }
+        if (!canAccessStudent(auth.user, existingAssessment.userId, existingAssessment.user?.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
 
         const toArray = (v: any) => Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim() !== '') : [];
         const toIntOrNull = (v: any) => {

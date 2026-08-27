@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../../../../lib/prisma';
+import { requireAuth, canAccessStudent } from '../../../../lib/auth';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -14,11 +15,21 @@ const MASTER_TEAM = [
 
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const body = await req.json();
     const { message, userName, userGender, userGoal, userLevel, userId, userPlan, coachId } = body;
 
     if (!message?.trim()) {
       return NextResponse.json({ reply: "Mensagem vazia." }, { status: 400 });
+    }
+
+    if (userId) {
+      const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+      if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+        return NextResponse.json({ reply: "Acesso negado." }, { status: 403 });
+      }
     }
 
     const isMasterCoach    = MASTER_TEAM.includes(coachId);

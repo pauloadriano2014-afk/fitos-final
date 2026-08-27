@@ -2,6 +2,7 @@
 // Novidade: retorna estratégia ativa se houver, senão retorna dieta base
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
@@ -107,7 +108,18 @@ function formatDiet(diet: any, isFromStrategy = false) {
 // ─── GET ──────────────────────────────────────────────────────────────────────
 export async function GET(req: Request, { params }: { params: { userId: string } }) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { userId } = params;
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId.trim() },
+      select: { coachId: true },
+    });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     // 1. Busca TODAS as dietas do aluno (base + estratégias)
     const allDiets = await prisma.diet.findMany({

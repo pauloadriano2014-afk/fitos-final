@@ -2,6 +2,7 @@
 // Suporta todos os campos da AnamneseScreen v4 (11 etapas) e destranca o User
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 
 export async function POST(req: Request) {
@@ -49,6 +50,14 @@ export async function POST(req: Request) {
     // Validação mínima
     if (!userId || !peso || !altura) {
       return NextResponse.json({ error: "Dados obrigatórios faltando (userId, peso, altura)." }, { status: 400 });
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     const novaAnamnese = await prisma.anamnese.create({
@@ -149,6 +158,14 @@ export async function GET(req: Request) {
   const userId = searchParams.get('userId');
 
   if (!userId) return NextResponse.json({ error: 'UserId necessário' }, { status: 400 });
+
+  const auth = requireAuth(req);
+  if ('response' in auth) return auth.response;
+
+  const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+  if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+    return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+  }
 
   try {
     const anamnese = await prisma.anamnese.findFirst({

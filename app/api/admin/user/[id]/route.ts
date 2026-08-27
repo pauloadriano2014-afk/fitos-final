@@ -2,17 +2,21 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, isMasterId, type AuthUser } from '@/lib/auth';
 
-
-async function checkOwnership(userId: string, adminId: string | null) {
-    if (!adminId) return false;
-    if (MASTER_IDS.includes(adminId)) return true;
+// 🔒 A ownership agora é decidida pelo usuário REAL do token (authUser), nunca
+// pelo `adminId` que o cliente manda no body/query — esse `adminId` é
+// completamente forjável e por isso não é mais usado na decisão de acesso.
+async function checkOwnership(userId: string, authUser: AuthUser | null) {
+    if (!authUser) return false;
+    if (isMasterId(authUser.id)) return true;
+    if (authUser.id === userId) return true;
     const targetUser = await prisma.user.findUnique({
         where: { id: userId },
         select: { coachId: true, nutritionistId: true }
     });
     if (!targetUser) return false;
-    return targetUser.coachId === adminId || targetUser.nutritionistId === adminId;
+    return targetUser.coachId === authUser.id || targetUser.nutritionistId === authUser.id;
 }
 
 // 🔥 Tratamento de CORS GLOBAL para evitar bloqueios na PWA
@@ -35,12 +39,11 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     try {
         const userId = params.id;
         const { searchParams } = new URL(req.url);
-        const adminId = searchParams.get('adminId');
 
-        if (adminId) {
-            const isOwner = await checkOwnership(userId, adminId);
-            if (!isOwner) return corsResponse({ error: 'Acesso não autorizado a este aluno.' }, 403);
-        }
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        const isOwner = await checkOwnership(userId, auth.user);
+        if (!isOwner) return corsResponse({ error: 'Acesso não autorizado a este aluno.' }, 403);
 
         // 🔥 PERFORMANCE: caller pode pedir pra omitir relações pesadas que não vai usar
         // (ex: tela só quer a logo white-label, ou já descarta diets/workouts/anamneses
@@ -122,12 +125,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     try {
         const body = await req.json();
         const userId = params.id;
-        const { adminId } = body;
 
-        if (adminId) {
-            const isOwner = await checkOwnership(userId, adminId);
-            if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
-        }
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        const isOwner = await checkOwnership(userId, auth.user);
+        if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
 
         const dataToUpdate = { ...body };
         delete dataToUpdate.adminId;
@@ -144,12 +146,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     try {
         const body = await req.json();
         const userId = params.id;
-        const { adminId } = body;
 
-        if (adminId) {
-            const isOwner = await checkOwnership(userId, adminId);
-            if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
-        }
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        const isOwner = await checkOwnership(userId, auth.user);
+        if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
 
         const dataToUpdate = { ...body };
         delete dataToUpdate.adminId;
@@ -180,15 +181,13 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
     try {
         const id = params.id;
-        const { searchParams } = new URL(req.url);
-        const adminId = searchParams.get('adminId');
 
         if (!id) return corsResponse({ error: 'User ID is required' }, 400);
 
-        if (adminId) {
-            const isOwner = await checkOwnership(id, adminId);
-            if (!isOwner) return corsResponse({ error: 'Apenas o Coach responsável pode apagar este aluno.' }, 403);
-        }
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        const isOwner = await checkOwnership(id, auth.user);
+        if (!isOwner) return corsResponse({ error: 'Apenas o Coach responsável pode apagar este aluno.' }, 403);
 
         await prisma.user.delete({ where: { id } });
         return corsResponse({ success: true });

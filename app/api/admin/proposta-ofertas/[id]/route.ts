@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 // PATCH /api/admin/proposta-ofertas/[id]
 export async function PATCH(
@@ -14,6 +15,10 @@ export async function PATCH(
     { params }: { params: { id: string } }
 ) {
     try {
+        // 🔒 Feature master-only (gestão de ofertas de proposta).
+        const auth = requireMaster(request);
+        if ('response' in auth) return auth.response;
+
         const { id } = params;
         const body = await request.json();
         const { nome, cards, ativa } = body;
@@ -41,6 +46,10 @@ export async function DELETE(
     { params }: { params: { id: string } }
 ) {
     try {
+        // 🔒 Feature master-only (gestão de ofertas de proposta).
+        const auth = requireMaster(request);
+        if ('response' in auth) return auth.response;
+
         const { id } = params;
         await prisma.propostaOferta.delete({ where: { id } });
         return NextResponse.json({ success: true });

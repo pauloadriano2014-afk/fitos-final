@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,6 +13,18 @@ export async function GET(req: NextRequest) {
 
     if (!userId) {
       return NextResponse.json({ error: 'userId é obrigatório' }, { status: 400 });
+    }
+
+    // 🔒 Só o próprio aluno, o coach dono dele, ou o time master pode
+    // consultar essa recorrência — antes bastava mandar qualquer userId.
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, coachId: true } });
+    if (!targetUser) {
+      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    }
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canAccessStudent(auth.user, targetUser.id, targetUser.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     const subscription = await prisma.subscription.findFirst({

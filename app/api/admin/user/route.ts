@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, requireMaster, canAccessStudent, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0; // 🔥 Força o Next.js a NUNCA usar cache nesta rota
@@ -20,15 +21,19 @@ export async function GET(req: Request) {
     const userId = searchParams.get('userId');
     const adminId = searchParams.get('adminId');
 
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     // Se vier um ID de aluno na URL, retorna apenas ele
     if (userId) {
-        if (adminId && !MASTER_IDS.includes(adminId)) {
-             const checkOwner = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
-             if (checkOwner?.coachId !== adminId) {
-                 return NextResponse.json({ error: "Acesso Negado" }, { status: 403, headers: noCacheHeaders });
-             }
+        const checkOwner = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+        if (!canAccessStudent(auth.user, userId, checkOwner?.coachId)) {
+             return NextResponse.json({ error: "Acesso Negado" }, { status: 403, headers: noCacheHeaders });
         }
-        
+        if (adminId && !canActAsCoach(auth.user, adminId)) {
+             return NextResponse.json({ error: "Acesso Negado" }, { status: 403, headers: noCacheHeaders });
+        }
+
         const user = await prisma.user.findUnique({
             where: { id: userId }
         });
@@ -37,6 +42,16 @@ export async function GET(req: Request) {
     }
 
     // BLOQUEIO TOTAL DA LISTA GLOBAL: Só Master vê tudo, parceiro vê os seus.
+    if (adminId) {
+        if (!canActAsCoach(auth.user, adminId)) {
+            return NextResponse.json({ error: "Acesso Negado" }, { status: 403, headers: noCacheHeaders });
+        }
+    } else {
+        // Sem adminId a lista seria irrestrita — só o time master pode pedir isso.
+        const masterAuth = requireMaster(req);
+        if ('response' in masterAuth) return masterAuth.response;
+    }
+
     let whereClause: any = {};
     if (adminId) {
         if (MASTER_IDS.includes(adminId)) {
@@ -74,12 +89,16 @@ export async function PUT(req: Request) {
             return NextResponse.json({ error: "UserId não fornecido para edição" }, { status: 400 });
         }
 
-        // TRAVA: Se for um Coach parceiro tentando alterar dados do aluno
-        if (adminId && !MASTER_IDS.includes(adminId)) {
-            const checkOwner = await prisma.user.findUnique({ where: { id }, select: { coachId: true } });
-            if (checkOwner?.coachId !== adminId) {
-                return NextResponse.json({ error: "Apenas o Coach do aluno pode alterar estes dados." }, { status: 403 });
-            }
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
+        // TRAVA: só o próprio aluno, o Coach dono dele, ou o time master pode alterar.
+        const checkOwner = await prisma.user.findUnique({ where: { id }, select: { coachId: true } });
+        if (!canAccessStudent(auth.user, id, checkOwner?.coachId)) {
+            return NextResponse.json({ error: "Apenas o Coach do aluno pode alterar estes dados." }, { status: 403 });
+        }
+        if (adminId && !canActAsCoach(auth.user, adminId)) {
+            return NextResponse.json({ error: "Apenas o Coach do aluno pode alterar estes dados." }, { status: 403 });
         }
 
         const updateData: any = {};

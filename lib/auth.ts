@@ -63,6 +63,23 @@ export function canActAsCoach(authUser: AuthUser | null, targetCoachId: string |
   return authUser.id === targetCoachId || isMasterId(authUser.id);
 }
 
+// true se quem chamou pode ver/mexer nos dados de um ALUNO específico:
+// é o próprio aluno, é o coach dono desse aluno, ou é do time master.
+// Use quando a rota lida com dado de um userId específico (dieta, treino,
+// check-in, corrida, anamnese, etc.) — targetCoachId é o coachId do aluno
+// alvo (não o coachId de quem está chamando).
+export function canAccessStudent(
+  authUser: AuthUser | null,
+  targetUserId: string | null | undefined,
+  targetCoachId?: string | null
+): boolean {
+  if (!authUser || !targetUserId) return false;
+  if (authUser.id === targetUserId) return true;
+  if (isMasterId(authUser.id)) return true;
+  if (targetCoachId && authUser.id === targetCoachId) return true;
+  return false;
+}
+
 // Exige um token válido. Uso:
 //   const auth = requireAuth(req);
 //   if ('response' in auth) return auth.response;

@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 function slugify(input: string): string {
     return input
@@ -20,8 +21,12 @@ function slugify(input: string): string {
 }
 
 // GET /api/admin/proposta-ofertas
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        // 🔒 Feature master-only (gestão de ofertas de proposta).
+        const auth = requireMaster(request);
+        if ('response' in auth) return auth.response;
+
         const ofertas = await prisma.propostaOferta.findMany({
             orderBy: { createdAt: 'desc' },
         });
@@ -35,6 +40,10 @@ export async function GET() {
 // POST /api/admin/proposta-ofertas
 export async function POST(request: NextRequest) {
     try {
+        // 🔒 Feature master-only (gestão de ofertas de proposta).
+        const auth = requireMaster(request);
+        if ('response' in auth) return auth.response;
+
         const body = await request.json();
         const { slug, nome, cards, criadoPorId } = body;
 

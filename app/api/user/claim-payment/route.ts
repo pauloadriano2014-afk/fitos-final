@@ -1,6 +1,7 @@
 // app/api/user/claim-payment/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 
 // 🔥 ALUNO CLICA EM "JÁ PAGUEI" NO MODAL DE BLOQUEIO FINANCEIRO 🔥
@@ -18,6 +19,13 @@ export async function POST(req: Request) {
 
     if (!userId) {
       return NextResponse.json({ error: "userId é obrigatório" }, { status: 400 });
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetForAuth = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetForAuth?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     const user = await prisma.user.findUnique({

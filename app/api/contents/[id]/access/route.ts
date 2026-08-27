@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
 
 
 // 🔥 GET: Busca a lista de IDs de alunos que têm acesso a este conteúdo
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const content = await prisma.content.findUnique({ where: { id: params.id }, select: { coachId: true } });
+    if (!content) {
+      return NextResponse.json({ error: "Conteúdo não encontrado" }, { status: 404 });
+    }
+    if (!isMasterId(auth.user.id) && !canActAsCoach(auth.user, content.coachId)) {
+      return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+    }
+
     const accessList = await prisma.contentAccess.findMany({
       where: { contentId: params.id },
       select: { userId: true }
@@ -27,6 +38,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     if (!userId) {
         return NextResponse.json({ error: "ID do usuário obrigatório" }, { status: 400 });
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const content = await prisma.content.findUnique({ where: { id: contentId }, select: { coachId: true } });
+    if (!content) {
+      return NextResponse.json({ error: "Conteúdo não encontrado" }, { status: 404 });
+    }
+    if (!isMasterId(auth.user.id) && !canActAsCoach(auth.user, content.coachId)) {
+      return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
     }
 
     const existingAccess = await prisma.contentAccess.findFirst({

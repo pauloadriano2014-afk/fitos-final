@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 function slugify(input: string): string {
     return input
@@ -19,7 +20,10 @@ function slugify(input: string): string {
 }
 
 // GET /api/admin/desafios
-export async function GET() {
+export async function GET(request: NextRequest) {
+    const auth = requireMaster(request);
+    if ('response' in auth) return auth.response;
+
     try {
         const desafios = await prisma.desafioConfig.findMany({
             orderBy: { createdAt: 'desc' },
@@ -36,6 +40,9 @@ export async function GET() {
 
 // POST /api/admin/desafios
 export async function POST(request: NextRequest) {
+    const auth = requireMaster(request);
+    if ('response' in auth) return auth.response;
+
     try {
         const body = await request.json();
         const {

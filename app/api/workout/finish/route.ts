@@ -2,9 +2,10 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 // 🔥 IMPORTAMOS O CÉREBRO DA NOSSA IA 🔥
-import { analyzeWorkoutEvolution } from '@/app/utils/analyzeEvolution'; 
+import { analyzeWorkoutEvolution } from '@/app/utils/analyzeEvolution';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,14 @@ export async function POST(req: Request) {
     const { userId, workoutName, exercisesData, duration, rpe, feedback } = body;
 
     if (!userId) return NextResponse.json({ error: "User ID missing" }, { status: 400 });
+
+    // 🔒 Só o próprio aluno pode finalizar o treino dele (ou coach/master).
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     // Função auxiliar para limpar peso (troca virgula por ponto e garante numero)
     const cleanWeight = (val: any) => {

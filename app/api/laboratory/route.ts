@@ -1,6 +1,7 @@
 // app/api/laboratory/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,12 @@ export async function GET(req: Request) {
 
     if (!adminId || adminId === 'null' || adminId === 'undefined') {
       return NextResponse.json({ error: "Admin ID é obrigatório" }, { status: 400 });
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, adminId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     const templates = await prisma.motorTemplate.findMany({
@@ -34,6 +41,12 @@ export async function POST(req: Request) {
 
     if (!name || !structure || !adminId) {
         return NextResponse.json({ error: "Nome, estrutura e Admin ID são obrigatórios." }, { status: 400 });
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, adminId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     const newTemplate = await prisma.motorTemplate.create({
@@ -62,8 +75,17 @@ export async function DELETE(req: Request) {
     const id = searchParams.get('id');
 
     if (!id) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 });
-    
-    await prisma.motorTemplate.delete({ where: { id: id } }); 
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
+    const existing = await prisma.motorTemplate.findUnique({ where: { id }, select: { coachId: true } });
+    if (!existing) return NextResponse.json({ error: "Matriz não encontrada" }, { status: 404 });
+    if (!canActAsCoach(auth.user, existing.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
+
+    await prisma.motorTemplate.delete({ where: { id: id } });
     
     return NextResponse.json({ success: true });
   } catch (error) {

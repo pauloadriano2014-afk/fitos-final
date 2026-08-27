@@ -12,11 +12,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 export async function DELETE(
     request: NextRequest,
     { params }: { params: { id: string; inscricaoId: string } }
 ) {
+    const auth = requireMaster(request);
+    if ('response' in auth) return auth.response;
+
     try {
         const { inscricaoId } = params;
         await prisma.desafioInscricao.delete({ where: { id: inscricaoId } });

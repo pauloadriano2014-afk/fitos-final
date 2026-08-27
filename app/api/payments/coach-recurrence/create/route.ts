@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { findOrCreateCustomer, createCheckoutSession } from '@/lib/asaas';
 import { BILLING_PLANS } from '@/config/coachBillingPlans';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 const DEFAULT_COACH_ID = 'paulo'; // fase 1: coach único (dono da plataforma)
 const APP_PUBLIC_URL = process.env.APP_PUBLIC_URL || 'https://fitos-final.onrender.com';
@@ -52,6 +53,14 @@ export async function POST(req: NextRequest) {
     const coach = await prisma.user.findUnique({ where: { id: coachId } });
     if (!coach) {
       return NextResponse.json({ error: 'Coach não encontrado' }, { status: 404 });
+    }
+
+    // 🔒 Só o próprio coach ou o time master pode ativar essa recorrência —
+    // antes bastava mandar qualquer coachId no body.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     if (!billingPlan || !BILLING_PLANS[billingPlan]) {

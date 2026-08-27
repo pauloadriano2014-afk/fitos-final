@@ -1,6 +1,7 @@
 // app/api/running/[userId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 // GET — App do aluno busca protocolo ativo + logs + anamnese
 export async function GET(
@@ -9,6 +10,14 @@ export async function GET(
 ) {
   try {
     const userId = params.userId;
+
+    // 🔒 Só o próprio aluno, o coach dono dele, ou o time master.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     // Busca anamnese de corrida
     const anamnese = await prisma.runningAnamnese.findUnique({

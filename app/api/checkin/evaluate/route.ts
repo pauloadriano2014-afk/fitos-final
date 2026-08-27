@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from 'crypto';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -25,10 +26,32 @@ const s3Client = (accountId && accessKey && secretKey) ? new S3Client({
 
 export async function POST(req: Request) {
     try {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
         const { checkinId, coachFeedback, userId, images, customOldPhotos, silent } = await req.json();
 
         if (!coachFeedback && !silent) {
             return NextResponse.json({ error: "O texto do laudo é obrigatório." }, { status: 400 });
+        }
+
+        // 🔐 Descobre de qual aluno é esse check-in/avaliação antes de mexer em qualquer coisa
+        if (checkinId) {
+            const targetCheckin = await prisma.checkIn.findUnique({
+                where: { id: checkinId },
+                select: { userId: true, user: { select: { coachId: true } } }
+            });
+            if (!targetCheckin) {
+                return NextResponse.json({ error: "Check-in não encontrado." }, { status: 404 });
+            }
+            if (!canAccessStudent(auth.user, targetCheckin.userId, targetCheckin.user?.coachId)) {
+                return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+            }
+        } else if (userId) {
+            const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+            if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+                return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+            }
         }
 
         let finalFeedback = coachFeedback || "";

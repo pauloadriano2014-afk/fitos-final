@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,9 +18,16 @@ const MASTER_IDS  = [
 
 export async function POST(req: Request) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const body     = await req.json();
     const foodIds: string[] = body.foodIds ?? [];
     const coachId: string  = body.coachId  ?? '';
+
+    if (coachId && !canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     if (!foodIds.length) {
       return NextResponse.json({ groups: [] });

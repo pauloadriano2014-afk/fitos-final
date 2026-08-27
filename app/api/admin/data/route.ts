@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,12 @@ export async function GET(req: Request) {
 
     if (!adminId) {
         return NextResponse.json({ error: "ID do admin não fornecido" }, { status: 400 });
+    }
+
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, adminId)) {
+        return NextResponse.json({ error: "Acesso não autorizado" }, { status: 403 });
     }
 
     // 🔒 1. IDENTIFICA QUEM ESTÁ PEDINDO (papel define o que pode ver)

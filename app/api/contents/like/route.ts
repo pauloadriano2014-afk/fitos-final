@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 
 export async function POST(request: Request) {
@@ -9,6 +10,13 @@ export async function POST(request: Request) {
 
     if (!userId || !contentId) {
         return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
+    }
+
+    const auth = requireAuth(request);
+    if ('response' in auth) return auth.response;
+    const targetForAuth = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    if (!canAccessStudent(auth.user, userId, targetForAuth?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
     // Verifica se já existe o like

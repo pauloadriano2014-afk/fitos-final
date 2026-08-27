@@ -1,6 +1,7 @@
 // app/api/exercise/sync-tags/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,8 +82,13 @@ function generateTags(name: string, category: string): object {
   return { target, mechanic, equipment, jointRisk };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    // 🔒 Job interno de manutenção que reescreve tags/subCategoria de TODOS
+    // os exercícios da plataforma — só o time master pode disparar isso.
+    const auth = requireMaster(req);
+    if ('response' in auth) return auth.response;
+
     const exercises = await prisma.exercise.findMany();
     let updatedCount = 0;
 

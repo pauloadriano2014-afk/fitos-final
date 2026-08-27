@@ -4,14 +4,17 @@
 //     desativar tudo, que é o que causava o bug de "salva mas não persiste"
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, isMasterId } from '@/lib/auth';
 
 
 export async function POST(req: Request) {
     try {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
         const body = await req.json();
         const {
-            userId, adminId, strategyId, // 🔥 strategyId agora é tratado de verdade
+            userId, strategyId, // 🔥 strategyId agora é tratado de verdade
             name, goal,
             totalKcal, totalProtein, totalCarbs, totalFats,
             waterIntake, generalNotes, meals,
@@ -21,13 +24,14 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'ID do usuário inválido.' }, { status: 400 });
         }
 
-        // validação de ownership (inalterado)
-        if (adminId && !MASTER_IDS.includes(adminId)) {
+        // validação de ownership — agora baseada no usuário autenticado pelo
+        // token, nunca no que o cliente alega no body (adminId era forjável)
+        if (!isMasterId(auth.user.id)) {
             const target = await prisma.user.findUnique({
                 where:  { id: userId },
                 select: { coachId: true, nutritionistId: true },
             });
-            const isOwner = target?.coachId === adminId || target?.nutritionistId === adminId;
+            const isOwner = target?.coachId === auth.user.id || target?.nutritionistId === auth.user.id;
             if (!isOwner) {
                 return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
             }

@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { PAULO_ID, ADRI_ID, MASTER_IDS } from '@/lib/masterIds';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -162,6 +163,13 @@ export async function GET(req: Request) {
       return NextResponse.json([]);
     }
 
+    // 🔒 Só o próprio coach pode listar a própria biblioteca (ou o time master).
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, adminId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
+
     const isMaster = MASTER_IDS.includes(adminId);
     let whereClause: any = {};
 
@@ -210,6 +218,13 @@ export async function POST(req: Request) {
 
     if (!adminId) return NextResponse.json({ error: "Acesso Negado: Faltando Admin ID" }, { status: 403 });
 
+    // 🔒 Só o próprio coach pode criar na própria biblioteca (ou o time master).
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, adminId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
+
     const exerciseData = {
       name: body.name,
       category: cat,
@@ -253,6 +268,15 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { id, adminId } = body;
 
+    // 🔒 Confirma que quem chamou é realmente esse coach (ou master) antes
+    // de checar se ele é o dono do exercício — adminId vem do corpo e não
+    // pode ser confiado sem verificar contra o token.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, adminId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
+
     const isOwner = await checkExerciseOwnership(id, adminId);
     if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Apenas o criador pode editar este exercício." }, { status: 403 });
 
@@ -293,6 +317,14 @@ export async function DELETE(req: Request) {
     const adminId = searchParams.get('adminId');
 
     if (!id) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 });
+
+    // 🔒 Confirma que quem chamou é realmente esse coach (ou master) antes
+    // de checar se ele é o dono do exercício.
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    if (!canActAsCoach(auth.user, adminId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     const isOwner = await checkExerciseOwnership(id, adminId);
     if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Apenas o criador pode excluir este exercício." }, { status: 403 });

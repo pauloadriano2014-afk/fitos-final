@@ -1,6 +1,7 @@
 // app/api/survey/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 
 export async function POST(req: Request) {
@@ -15,6 +16,14 @@ export async function POST(req: Request) {
 
         if (!userId) {
             return NextResponse.json({ error: 'Usuário não identificado.' }, { status: 400 });
+        }
+
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
+        const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+        if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         const newSurvey = await prisma.satisfactionSurvey.create({

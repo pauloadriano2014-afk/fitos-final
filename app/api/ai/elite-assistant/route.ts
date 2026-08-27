@@ -3,6 +3,7 @@
 // Responde apenas sobre funcionalidades da plataforma ELITE FIT
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic    = 'force-dynamic';
 export const maxDuration = 30;
@@ -190,6 +191,9 @@ NÃO mencione funcionalidades de treino (montagem de treino, templates de treino
 // ─── HANDLER ─────────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
     try {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
         const { message, history = [], coachPlan = 'ELITE' } = await req.json();
 
         if (!message?.trim()) {

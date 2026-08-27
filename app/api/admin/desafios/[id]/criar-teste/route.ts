@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireMaster } from '@/lib/auth';
 
 function onlyDigits(v: string): string {
     return (v || '').replace(/\D/g, '');
@@ -20,6 +21,9 @@ export async function POST(
     request: NextRequest,
     { params }: { params: { id: string } }
 ) {
+    const auth = requireMaster(request);
+    if ('response' in auth) return auth.response;
+
     try {
         const { id } = params;
         const body = await request.json();

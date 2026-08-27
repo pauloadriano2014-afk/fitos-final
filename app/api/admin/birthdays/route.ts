@@ -3,6 +3,7 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic   = 'force-dynamic';
 export const revalidate = 0;
@@ -72,6 +73,12 @@ export async function GET(req: Request) {
 
         if (!adminId) {
             return NextResponse.json({ error: 'adminId obrigatório.' }, { status: 400 });
+        }
+
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, adminId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
         const users = await prisma.user.findMany({

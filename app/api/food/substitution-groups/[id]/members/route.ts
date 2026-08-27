@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,13 @@ function getTeamId(coachId: string) {
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { coachId, foodId } = await req.json();
+    if (!canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
     const teamId = getTeamId(coachId);
     const group  = await (prisma as any).substitutionGroup.findUnique({ where: { id: params.id } });
     if (!group || group.teamId !== teamId)
@@ -46,9 +53,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { searchParams } = new URL(req.url);
     const coachId = searchParams.get('coachId') ?? '';
     const foodId  = searchParams.get('foodId')  ?? '';
+    if (!canActAsCoach(auth.user, coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
     const teamId  = getTeamId(coachId);
 
     const group = await (prisma as any).substitutionGroup.findUnique({ where: { id: params.id } });

@@ -2,6 +2,7 @@
 // Novidade: agrupa refeições por alternativeGroupId e retorna versões alternativas
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
@@ -9,7 +10,18 @@ export const revalidate = 0;
 
 export async function GET(req: Request, { params }: { params: { userId: string } }) {
   try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+
     const { userId } = params;
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId.trim() },
+      select: { coachId: true },
+    });
+    if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+      return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    }
 
     const diet = await prisma.diet.findFirst({
       where: { userId: userId.trim() },

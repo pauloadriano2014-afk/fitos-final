@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import prisma from '@/lib/prisma';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,11 +21,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
         const produto = await prisma.produtoDigital.findUnique({
             where: { id },
-            select: { id: true, treinoPrograma: true },
+            select: { id: true, treinoPrograma: true, coachId: true },
         });
         if (!produto) {
             return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 });
         }
+
+        // 🔒 Só o coach dono do produto (ou o time master) pode gerar essa
+        // pré-visualização.
+        const auth = requireAuth(request);
+        if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, produto.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
+
         if (!produto.treinoPrograma) {
             return NextResponse.json({ error: 'Configure e salve o programa de treino antes de pré-visualizar.' }, { status: 400 });
         }
