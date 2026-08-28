@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { requireAuth } from '@/lib/auth';
 
 // Cria a conexão direta com o Cloudflare R2
 const s3Client = new S3Client({
@@ -14,9 +13,11 @@ const s3Client = new S3Client({
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = requireAuth(req);
-    if ('response' in auth) return auth.response;
-
+    // 🔓 Proposital: sem requireAuth aqui. Esse endpoint é genérico (só sobe
+    // um arquivo pro R2 e devolve a URL — não grava nada em nenhuma tabela
+    // nem associa a um usuário), e é usado também pelo check-in diário do
+    // Desafio, que por decisão do Paulo continua acessível por link, sem
+    // conta/login. Adicionar requireAuth aqui quebrava esse fluxo público.
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
 
