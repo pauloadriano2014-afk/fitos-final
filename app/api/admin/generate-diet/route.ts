@@ -482,7 +482,7 @@ function buildPrompt(
     // 🔴 FIX: Cálculo da média para engessar a IA matematicamente
     const avgProtPerMeal = Math.round(macros.prot / numMeals);
 
-    return `Você é o Nutricionista Especialista do Coach Paulo Adriano (PA TEAM ELITE).
+    return `Você é o Nutricionista Especialista do Coach Paulo Adriano (ELITE FIT).
 Sua função é montar um plano alimentar diário COMPLETO, PRÁTICO e CULTURALMENTE ADEQUADO para o contexto brasileiro.
 
 ━━━ REGRAS ABSOLUTAS — VIOLAÇÃO = RESPOSTA INVÁLIDA ━━━

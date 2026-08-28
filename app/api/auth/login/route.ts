@@ -21,6 +21,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'E-mail ou senha incorretos' }, { status: 401 });
     }
 
+    // 🗑️ Conta excluída pelo próprio usuário (ver app/api/user/delete-account)
+    // — email já foi trocado nesse fluxo, então isso normalmente nem chega
+    // aqui, mas fica como segunda trava.
+    if ((user as any).accountStatus === 'DELETED') {
+      return NextResponse.json({ error: 'E-mail ou senha incorretos' }, { status: 401 });
+    }
+
     // 🔐 VERIFICAÇÃO COM UPGRADE-ON-LOGIN
     // Senhas novas são hash bcrypt (começam com "$2").
     // Senhas antigas estão em texto puro: se baterem, fazemos o upgrade

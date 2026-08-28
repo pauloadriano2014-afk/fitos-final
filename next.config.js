@@ -11,10 +11,12 @@ const nextConfig = {
     serverComponentsExternalPackages: ['pdf-parse'],
     serverActions: {
       allowedOrigins: [
-        'pauloadrianoteam.com.br', 
-        '*.pauloadrianoteam.com.br', 
+        'elitefitapp.com.br',
+        '*.elitefitapp.com.br',
+        'pauloadrianoteam.com.br',
+        '*.pauloadrianoteam.com.br',
         'fitos-final.onrender.com',
-        'localhost:8081', 
+        'localhost:8081',
         'localhost:3000'
       ],
     },

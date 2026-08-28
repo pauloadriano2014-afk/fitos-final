@@ -43,7 +43,7 @@ export async function POST(
                 desafioId: id,
                 nome: `[TESTE] ${nome}`,
                 dataNascimento: new Date('2000-01-01'),
-                email: `teste+${Date.now()}@pauloadrianoteam.com.br`,
+                email: `teste+${Date.now()}@elitefitapp.com.br`,
                 telefone: onlyDigits(telefone),
                 cpf: '00000000000',
                 status: 'PAGO',

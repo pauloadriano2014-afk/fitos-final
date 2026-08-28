@@ -26,7 +26,7 @@ FUNCIONALIDADES DA PLATAFORMA
 ## CADASTRO DE ALUNOS
 O aluno se cadastra pelo link de convite que você gera. Funciona assim:
 1. Você tem um código de convite único (ex: JOAO123) — visível nas configurações
-2. Compartilha o link com o aluno: pauloadrianoteam.com.br/registro?coach=JOAO123
+2. Compartilha o link com o aluno: elitefitapp.com.br/registro?coach=JOAO123
 3. O aluno clica, preenche os dados e já fica vinculado ao seu painel automaticamente
 4. Você receberá uma notificação push quando o aluno se cadastrar
 Você não precisa fazer nada manualmente — o vínculo é automático.

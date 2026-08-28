@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
         value,
         nextDueDate: due,
         cycle,
-        description: `${planName} - Consultoria PA TEAM ELITE`,
+        description: `${planName} - Consultoria ELITE FIT`,
         externalReference: user.id,
       });
 
@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
         billingType,
         value,
         dueDate: due,
-        description: `${planName} - Consultoria PA TEAM ELITE`,
+        description: `${planName} - Consultoria ELITE FIT`,
         externalReference: user.id,
       });
     }

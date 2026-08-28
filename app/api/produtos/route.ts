@@ -1,7 +1,7 @@
 // app/api/produtos/route.ts
 // 🌐 ROTA PÚBLICA — sem login. Usada pela página de vendas
 // (ProdutoCheckoutScreen) pra buscar os dados do produto pelo slug da URL
-// (pauloadrianoteam.com.br/Produto?id=slug). Só devolve produtos ativos e só
+// (elitefitapp.com.br/Produto?id=slug). Só devolve produtos ativos e só
 // os campos necessários pra montar a vitrine — nada de dados internos
 // (linkEntrega, coachId, etc.) vaza aqui antes do pagamento confirmado.
 import { NextRequest, NextResponse } from 'next/server';

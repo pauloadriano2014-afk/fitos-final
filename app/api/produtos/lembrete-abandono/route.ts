@@ -17,9 +17,9 @@ import prisma from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 const CRON_SECRET = process.env.CRON_SECRET || '';
-const APP_URL = process.env.APP_URL || 'https://www.pauloadrianoteam.com.br';
+const APP_URL = process.env.APP_URL || 'https://www.elitefitapp.com.br';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const FROM_EMAIL = process.env.RESEND_FROM || 'PA TEAM ELITE <onboarding@resend.dev>';
+const FROM_EMAIL = process.env.RESEND_FROM || 'ELITE FIT <onboarding@resend.dev>';
 
 function buildLembreteEmailHtml(
     nomeCliente: string,
@@ -66,7 +66,7 @@ function buildLembreteEmailHtml(
       </p>
       <hr style="border:none;border-top:1px solid #333;margin:25px 0;" />
       <p style="color:#555555;font-size:11px;text-align:center;margin:0;">
-        PA TEAM ELITE — pauloadrianoteam.com.br
+        ELITE FIT — elitefitapp.com.br
       </p>
     </div>
   </div>`;

@@ -218,13 +218,13 @@ export default function RunningAnamnesePage() {
   if (done) return (
     <div style={s.successWrap}>
       <div style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: ACCENT + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, marginBottom: 24 }}>🏃</div>
-      <p style={{ ...s.logo, marginBottom: 8 }}>PAULO ADRIANO TEAM</p>
+      <p style={{ ...s.logo, marginBottom: 8 }}>ELITE FIT</p>
       <h2 style={{ ...s.title, fontSize: 26, marginBottom: 12 }}>ANAMNESE<br /><span style={s.accent}>CONCLUÍDA!</span></h2>
       <p style={{ color: TEXT_SEC, fontSize: 14, lineHeight: 1.7, maxWidth: 320, margin: '0 auto' }}>
         Recebi suas informações{userName ? `, ${userName}` : ''}! 🙌<br /><br />
         Vou analisar tudo e montar o seu protocolo personalizado. Em breve você receberá acesso ao plano de corrida no app.
       </p>
-      <p style={{ color: ACCENT, fontWeight: 900, fontSize: 12, letterSpacing: 2, marginTop: 32 }}>PAULO ADRIANO TEAM</p>
+      <p style={{ color: ACCENT, fontWeight: 900, fontSize: 12, letterSpacing: 2, marginTop: 32 }}>ELITE FIT</p>
     </div>
   );
 
@@ -235,7 +235,7 @@ export default function RunningAnamnesePage() {
       <div style={s.inner}>
 
         {/* Header */}
-        <p style={s.logo}>PAULO ADRIANO TEAM</p>
+        <p style={s.logo}>ELITE FIT</p>
         <h1 style={s.title}>ANAMNESE DE <span style={s.accent}>CORRIDA</span></h1>
         <p style={s.subtitle}>
           {userName ? `Olá, ${userName}! ` : ''}Responda com sinceridade — cada detalhe monta o protocolo certo pra você.

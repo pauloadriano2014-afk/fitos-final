@@ -14,10 +14,10 @@ import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
-const APP_URL = process.env.APP_URL || 'https://www.pauloadrianoteam.com.br';
+const APP_URL = process.env.APP_URL || 'https://www.elitefitapp.com.br';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 // Enquanto o domínio não estiver verificado no Resend, use 'onboarding@resend.dev'
-const FROM_EMAIL = process.env.RESEND_FROM || 'PA TEAM ELITE <onboarding@resend.dev>';
+const FROM_EMAIL = process.env.RESEND_FROM || 'ELITE FIT <onboarding@resend.dev>';
 
 const GENERIC_RESPONSE = {
   message: 'Se este e-mail estiver cadastrado, você receberá as instruções de redefinição em instantes.',
@@ -45,7 +45,7 @@ function buildEmailHtml(name: string, resetLink: string): string {
       </p>
       <hr style="border:none;border-top:1px solid #333;margin:25px 0;" />
       <p style="color:#555555;font-size:11px;text-align:center;margin:0;">
-        PA TEAM ELITE — pauloadrianoteam.com.br
+        ELITE FIT — elitefitapp.com.br
       </p>
     </div>
   </div>`;
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         from: FROM_EMAIL,
         to: [user.email],
-        subject: '🔑 Redefinição de senha — PA TEAM ELITE',
+        subject: '🔑 Redefinição de senha — ELITE FIT',
         html: buildEmailHtml(user.name || 'Atleta', resetLink),
       }),
     });
