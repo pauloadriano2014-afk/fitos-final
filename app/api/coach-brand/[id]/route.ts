@@ -46,7 +46,13 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     const coach = await prisma.user.findUnique({
       where: { id: coachId },
-      select: { name: true, brandLogoUrl: true, brandLogoSize: true },
+      // 🔥 phone/coachBillingStatus adicionados pra também cobrir o check de
+      // "coach parceiro inadimplente" que o LoginScreen.js fazia batendo em
+      // /api/admin/user/[id] — rota errada pra um ALUNO chamar (ownership
+      // exige o INVERSO: coach dono do aluno, não aluno lendo o próprio
+      // coach), e que por isso sempre voltava 403 desde a migração JWT,
+      // desativando silenciosamente o bloqueio de aluno de coach inadimplente.
+      select: { name: true, brandLogoUrl: true, brandLogoSize: true, phone: true, coachBillingStatus: true },
     });
 
     if (!coach) return corsResponse({ error: 'Coach não encontrado.' }, 404);
