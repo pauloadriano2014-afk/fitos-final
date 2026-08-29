@@ -228,9 +228,9 @@ export async function DELETE(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { 
-        id, date, weight, method, 
-        bodyFat, 
+    const {
+        id, date, weight, method,
+        bodyFat, notes,
         chest, chestMeasure, shoulders, hips, arms, armLeft, forearms, forearmLeft, waist, abdomen, thighs, thighLeft, calves, calfLeft,
         foldTriceps, foldSubscapular, foldChest, foldAxillary, foldSuprailiac, foldAbdominal, foldThigh,
         photoFront, photoSide, photoBack,
@@ -305,6 +305,9 @@ export async function PUT(req: Request) {
             foldAbdominal: safeFloat(foldAbdominal),
             foldThigh: safeFloat(foldThigh),
             bodyFat: safeFloat(bodyFat),
+            // 🔥 NOVO: sem isso, editar uma avaliação existente (fluxo mais comum) nunca
+            // salvava o campo "notes" — ele só existia no POST de criação.
+            notes: notes !== undefined ? (notes || "") : undefined,
         }
     });
 

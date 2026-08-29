@@ -58,6 +58,9 @@ Regras adicionais obrigatórias:
 - Baseie-se no que você REALMENTE VÊ nas fotos (volume muscular por grupo, proporções, simetria, definição) cruzado com os números fornecidos.
 - Se o aluno já tem volume/massa considerável, isso deve aparecer explicitamente no texto. Se é magro, iniciante ou mediano, descreva como tal — sem inflar nem diminuir o nível.
 - Evite frases genéricas que serviriam para qualquer avaliação (ex.: "excelente potencial estético" sem justificativa concreta baseada no que você vê).
+- As fotos são poses estáticas e relaxadas (não flexionadas/"dobradas"), tiradas em pé, sem contração voluntária do músculo. Braços e ombros SEMPRE parecem visualmente menores numa pose relaxada do que apareceriam contraídos — não classifique um grupo muscular como "pouco desenvolvido"/"volume discreto" só por parecer modesto numa pose de descanso; procure outros sinais (proporção óssea, definição, formato) antes de apontar isso como ponto de atenção.
+- Se um "Objetivo definido pelo coach" for informado nos dados do aluno, ele é a referência PRINCIPAL para decidir o que entra em "pontosAtencao" e em "prioridadesTreino" — NÃO liste como ponto de atenção ou prioridade de treino um grupo muscular que o objetivo do coach explicitamente não busca desenvolver (ex.: se o objetivo é foco em definição e membros inferiores, não sugira ganho de volume em ombros/costas/braços mesmo que o desenvolvimento superior pareça modesto nas fotos). Nesse caso, "objetivoPrincipal" e "objetivosSecundarios" devem refletir e detalhar esse objetivo informado, não um objetivo genérico de hipertrofia inventado por você.
+- Na ausência de um objetivo informado pelo coach, para público feminino em geral NÃO trate hipertrofia de ombros/costas/braços como prioridade padrão — a meta estética mais comum é definição abdominal e desenvolvimento de pernas/glúteos; só aponte volume superior como prioridade se as fotos mostrarem claramente uma assimetria relevante (ex.: superior visivelmente maior que o restante do físico) que justifique atenção.
 - Tom: profissional, técnico, direto, encorajador — como um laudo premium que a pessoa vai guardar e reler.
 - Responda em português do Brasil.
 - Responda APENAS com um JSON válido, sem markdown, sem texto antes ou depois, seguindo EXATAMENTE este schema:
@@ -122,6 +125,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         const leanMass = assessment.bodyFat ? (assessment.weight * (1 - assessment.bodyFat / 100)).toFixed(1) : '--';
 
         const nomeAluno = (assessment.user as any)?.name || 'Aluno';
+        const coachGoal = (assessment.notes || '').trim();
 
         const dadosTexto = `
 Dados do aluno:
@@ -133,6 +137,7 @@ Dados do aluno:
 - Massa magra estimada: ${leanMass}kg
 - Dobras (mm): peitoral ${assessment.foldChest ?? '-'}, axilar ${assessment.foldAxillary ?? '-'}, tríceps ${assessment.foldTriceps ?? '-'}, subescapular ${assessment.foldSubscapular ?? '-'}, abdominal ${assessment.foldAbdominal ?? '-'}, supra-ilíaca ${assessment.foldSuprailiac ?? '-'}, coxa ${assessment.foldThigh ?? '-'}
 - Fotos anexadas: ${photos.length}
+${coachGoal ? `- Objetivo definido pelo coach para este aluno (use como referência principal para o que apontar como ponto de atenção/prioridade, conforme instruído no system prompt): "${coachGoal}"` : ''}
 
 Lembre-se: ${nomeAluno} vai ler este laudo diretamente. Escreva para ela(e), não sobre um "caso" que você está classificando para outro profissional.
 `.trim();
