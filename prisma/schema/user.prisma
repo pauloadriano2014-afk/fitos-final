@@ -139,6 +139,8 @@ model User {
 
   salesPageConfig   SalesPageConfig?
   coachPlans        CoachPlan[]         @relation("CoachPlans")
+
+  manualReceipts    ManualReceipt[]     @relation("CoachManualReceipts")
 }
 
 model OfflineClient {
