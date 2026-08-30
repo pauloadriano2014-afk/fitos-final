@@ -23,18 +23,21 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const body = await req.json();
 
     // 🔥 RECEBENDO A CHAVE DA CARGA E DO MOTOR DE PERIODIZAÇÃO AQUI
-    const { name, startDate, endDate, exercises, workoutModel, intensityMultiplier, intensityEndDate, archiveCurrent } = body;
+    const { name, startDate, endDate, exercises, workoutModel, intensityMultiplier, intensityEndDate, archiveCurrent, alternateSlot } = body;
 
     const workout = await prisma.workout.update({
       where: { id },
       data: {
         name,
         workoutModel: workoutModel || "CARGA", // 🔥 INJETANDO NO BANCO DE DADOS
-        
+
         // 🔥 MOTOR DE PERIODIZAÇÃO (DELOAD/CHOQUE) INJETADO AQUI 🔥
         intensityMultiplier: intensityMultiplier !== undefined ? parseFloat(intensityMultiplier) : 1.0,
         intensityEndDate: intensityEndDate ? new Date(intensityEndDate) : null,
         archived: archiveCurrent !== undefined ? archiveCurrent : undefined,
+
+        // 🔥 ALTERNÂNCIA SEMANAL (ver comentário no schema): null = sempre visível.
+        alternateSlot: (alternateSlot === undefined || alternateSlot === null || alternateSlot === '') ? null : parseInt(alternateSlot),
 
         startDate: new Date(startDate),
         endDate: new Date(endDate),

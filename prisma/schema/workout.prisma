@@ -36,9 +36,17 @@ model Workout {
   level     String?   
   isVisible Boolean   @default(true)
   
-  startDate DateTime? @default(now()) 
-  endDate   DateTime? 
-  archived  Boolean   @default(false) 
+  startDate DateTime? @default(now())
+  endDate   DateTime?
+  archived  Boolean   @default(false)
+
+  // 🔥 ALTERNÂNCIA SEMANAL: null = sempre visível pro aluno (padrão, não muda
+  // nada pra quem não usa). 1, 2... = só aparece nas semanas cujo índice bate
+  // com esse slot, contando em blocos de 7 dias a partir do startDate mais
+  // antigo entre os treinos ativos do aluno que tiverem esse campo setado.
+  // Calculado em tempo real no app do aluno (TrainingScreen.js) — não é um
+  // campo que muda sozinho no banco.
+  alternateSlot Int?
 
   workoutModel String @default("CARGA")
 

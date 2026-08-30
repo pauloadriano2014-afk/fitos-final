@@ -172,7 +172,7 @@ export async function POST(req: Request) {
     }
 
     // Lógica original de criação manual do Admin
-    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel, intensityMultiplier, intensityEndDate } = body;
+    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel, intensityMultiplier, intensityEndDate, alternateSlot } = body;
 
     // 🔥 BLOQUEIO DE SEGURANÇA NA CRIAÇÃO (Painel Admin)
     const targetUser2 = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
@@ -196,7 +196,8 @@ export async function POST(req: Request) {
           intensityEndDate: intensityEndDate ? new Date(intensityEndDate) : null,
           level: "Personalizado",
           startDate: startDate ? new Date(startDate) : new Date(),
-          endDate: endDate ? new Date(endDate) : null
+          endDate: endDate ? new Date(endDate) : null,
+          alternateSlot: (alternateSlot === undefined || alternateSlot === null || alternateSlot === '') ? null : parseInt(alternateSlot)
       }
     });
 
