@@ -2,11 +2,25 @@
 
 model PaymentGatewayAccount {
   id            String   @id @default(uuid())
-  coachId       String   @unique 
+  coachId       String   @unique
   provider      String   @default("ASAAS")
-  asaasApiKey   String   
-  asaasWalletId String?  
+  asaasApiKey   String
+  asaasWalletId String?
   isActive      Boolean  @default(true)
+
+  // 🧾 Configuração padrão de nota fiscal (NFS-e via Asaas), usada toda vez
+  // que o coach clica em "Emitir Nota" num pagamento/recebimento — evita
+  // preencher serviço/alíquota de novo a cada emissão (ver
+  // app/api/finance/fiscal-config e app/api/finance/invoice). O status de
+  // "conta fiscal configurada ou não" em si NÃO fica salvo aqui — é sempre
+  // consultado ao vivo na Asaas (GET /v3/fiscalInfo/), pra nunca mostrar uma
+  // informação desatualizada.
+  defaultMunicipalServiceId   String?
+  defaultMunicipalServiceCode String?
+  defaultMunicipalServiceName String?
+  defaultServiceDescription   String? @db.Text
+  defaultIssRate               Float?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -42,6 +56,40 @@ model Subscription {
   @@index([coachId])
 }
 
+// 💵 RECEBIMENTO MANUAL (fora da Asaas) -- PIX direto na conta do coach,
+// dinheiro, transferência etc. Não é um pagamento processado pela
+// plataforma (por isso não tem gatewayAccountId/asaasPaymentId, ao
+// contrário do Payment); é só o registro que o próprio coach faz na hora
+// de marcar um aluno como "pago" pra esse valor entrar no relatório de
+// Imposto de Renda dele (ver app/api/finance/report). Criado a partir de
+// AGORA em diante -- não existe backfill automático de recebimentos
+// antigos que nunca foram registrados.
+model ManualReceipt {
+  id          String   @id @default(uuid())
+
+  coachId     String
+  coach       User     @relation("CoachManualReceipts", fields: [coachId], references: [id], onDelete: Cascade)
+
+  // Snapshot do nome do aluno no momento do registro -- funciona tanto pra
+  // aluno com conta no app (studentId preenchido) quanto pra aluno offline
+  // (studentId null, já que OfflineClient não é um User e não vale a pena
+  // criar uma segunda FK opcional só pra isso).
+  studentId   String?
+  studentName String
+
+  value       Float
+  method      String   @default("PIX") // PIX | CARTAO | DINHEIRO | TRANSFERENCIA | OUTRO
+  receivedAt  DateTime
+  note        String?
+
+  createdAt   DateTime @default(now())
+
+  invoices    Invoice[]
+
+  @@index([coachId])
+  @@index([receivedAt])
+}
+
 model Payment {
   id               String    @id @default(uuid())
   subscriptionId   String?
@@ -70,11 +118,49 @@ model Payment {
   subscription   Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   gatewayAccount PaymentGatewayAccount @relation(fields: [gatewayAccountId], references: [id])
+  invoices       Invoice[]
 
   @@index([userId])
   @@index([coachId])
   @@index([asaasPaymentId])
   @@index([contentId])
+}
+
+// 🧾 NOTA FISCAL (NFS-e) emitida via Asaas para um Payment (processado pela
+// Asaas) OU um ManualReceipt (recebimento fora da Asaas, lançado à mão) —
+// sempre por botão manual, nunca automático (decisão do Paulo). A nota vale
+// pro CNPJ configurado na PaymentGatewayAccount do coachId abaixo — fase 1:
+// só o coachId 'paulo' (PA ELITE TEAM LTDA) tem conta fiscal configurada,
+// então essa emissão ainda não está disponível pra coachs parceiros (ver
+// discussão sobre DEFAULT_COACH_ID hardcoded nas rotas de cobrança).
+model Invoice {
+  id              String   @id @default(uuid())
+  coachId         String
+
+  asaasInvoiceId  String   @unique
+
+  paymentId       String?
+  payment         Payment?       @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  manualReceiptId String?
+  manualReceipt   ManualReceipt? @relation(fields: [manualReceiptId], references: [id], onDelete: SetNull)
+
+  studentName     String
+  value           Float
+
+  // Espelha o status da Asaas, atualizado pelo webhook INVOICE_* (ver
+  // app/api/payments/webhook): SCHEDULED | SYNCHRONIZED | AUTHORIZED |
+  // ERROR | CANCELED | PROCESSING_CANCELLATION | CANCELLATION_DENIED
+  status          String   @default("SCHEDULED")
+  pdfUrl          String?
+  xmlUrl          String?
+  errorMessage    String?  @db.Text
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([coachId])
+  @@index([paymentId])
+  @@index([manualReceiptId])
 }
 
 model SalesPageConfig {

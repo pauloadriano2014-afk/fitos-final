@@ -29,7 +29,9 @@ async function asaasRequest(endpoint: string, options: AsaasRequestOptions = {})
   if (!response.ok) {
     const errorMsg =
       data?.errors?.[0]?.description || `Asaas API error: ${response.status}`;
-    throw new Error(errorMsg);
+    const error: any = new Error(errorMsg);
+    error.status = response.status; // 🔥 usado por getFiscalInfo pra distinguir 404 (não configurado) de erro de verdade
+    throw error;
   }
 
   return data;
@@ -197,4 +199,60 @@ export async function createCheckoutSession(
 
 export async function cancelCheckout(checkoutId: string, apiKey?: string) {
   return asaasRequest(`/checkouts/${checkoutId}/cancel`, { method: 'POST', apiKey });
+}
+
+// ============ NOTA FISCAL (NFS-e) ============
+// Ver app/api/finance/fiscal-config e app/api/finance/invoice pro fluxo
+// completo. Documentação: https://docs.asaas.com/reference/nota-fiscal
+
+// Verifica se a conta já tem os dados fiscais configurados na Asaas
+// (prefeitura, inscrição municipal, certificado/usuário etc.) -- devolve
+// null quando NÃO está configurado (404 da Asaas não é um erro de verdade
+// aqui, é a resposta esperada pra conta que nunca configurou nota fiscal).
+export async function getFiscalInfo(apiKey?: string) {
+  try {
+    return await asaasRequest('/fiscalInfo/', { apiKey });
+  } catch (err: any) {
+    if (err?.status === 404) return null;
+    throw err;
+  }
+}
+
+// Lista os serviços municipais cadastrados na prefeitura da conta -- usado
+// pra montar o seletor de "serviço padrão" na configuração fiscal.
+export async function getMunicipalServices(search?: string, apiKey?: string) {
+  const query = search ? `?description=${encodeURIComponent(search)}` : '';
+  return asaasRequest(`/invoices/municipalServices${query}`, { apiKey });
+}
+
+// Cria (agenda) uma nota fiscal. `payment` vincula a uma cobrança já
+// processada pela Asaas; `customer` (sem `payment`) emite uma nota AVULSA,
+// usada pros recebimentos manuais (PIX direto, dinheiro etc.) que nunca
+// passaram pela Asaas.
+export async function createInvoice(
+  params: {
+    payment?: string; // asaasPaymentId
+    customer?: string; // asaasCustomerId -- obrigatório se `payment` não vier
+    serviceDescription: string;
+    value: number;
+    deductions?: number;
+    effectiveDate: string; // 'YYYY-MM-DD'
+    municipalServiceId?: string;
+    municipalServiceCode?: string;
+    municipalServiceName?: string;
+    taxes?: { issRate?: number; [key: string]: any };
+    observations?: string;
+  },
+  apiKey?: string
+) {
+  return asaasRequest('/invoices', { method: 'POST', body: params, apiKey });
+}
+
+export async function getInvoice(asaasInvoiceId: string, apiKey?: string) {
+  return asaasRequest(`/invoices/${asaasInvoiceId}`, { apiKey });
+}
+
+// Força o envio de uma nota agendada pra prefeitura antes da data prevista.
+export async function authorizeInvoice(asaasInvoiceId: string, apiKey?: string) {
+  return asaasRequest(`/invoices/${asaasInvoiceId}/authorize`, { method: 'POST', apiKey });
 }

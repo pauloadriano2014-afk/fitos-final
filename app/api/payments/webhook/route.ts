@@ -44,6 +44,14 @@ export async function POST(req: Request) {
             return await handleCheckoutEvent(event, body);
         }
 
+        // ── HANDLER DE NOTA FISCAL (NFS-e) ─────────────────────────────────────
+        // Eventos INVOICE_* também não têm `payment` no corpo (vem um objeto
+        // `invoice` em vez disso) — mesmo motivo do CHECKOUT_ acima, precisa
+        // vir antes do `if (!payment) return`.
+        if (typeof event === 'string' && event.startsWith('INVOICE_')) {
+            return await handleInvoiceEvent(event, body);
+        }
+
         if (!payment) return NextResponse.json({ received: true });
 
         const externalRef: string = payment.externalReference || '';
@@ -98,6 +106,47 @@ export async function POST(req: Request) {
         console.error('[webhook]', error.message);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
+}
+
+// ─── NOTA FISCAL (NFS-e) ────────────────────────────────────────────────────
+// Mantém o status/PDF do Invoice local em dia conforme a Asaas processa a
+// emissão na prefeitura (SCHEDULED → SYNCHRONIZED → AUTHORIZED, ou ERROR/
+// CANCELED no meio do caminho). Ver app/api/finance/invoice pra emissão.
+const INVOICE_STATUS_MAP: Record<string, string> = {
+    INVOICE_CREATED: 'SCHEDULED',
+    INVOICE_SYNCHRONIZED: 'SYNCHRONIZED',
+    INVOICE_AUTHORIZED: 'AUTHORIZED',
+    INVOICE_PROCESSING_CANCELLATION: 'PROCESSING_CANCELLATION',
+    INVOICE_CANCELED: 'CANCELED',
+    INVOICE_CANCELLATION_DENIED: 'CANCELLATION_DENIED',
+    INVOICE_ERROR: 'ERROR',
+};
+
+async function handleInvoiceEvent(event: string, body: any) {
+    const invoice = body.invoice;
+    if (!invoice?.id) return NextResponse.json({ received: true });
+
+    // Nota emitida fora desse fluxo (ex: direto no painel da Asaas) — não tem
+    // registro local pra atualizar, só ignora.
+    const local = await prisma.invoice.findUnique({ where: { asaasInvoiceId: invoice.id } });
+    if (!local) return NextResponse.json({ received: true });
+
+    const newStatus = INVOICE_STATUS_MAP[event] || invoice.status || local.status;
+    const errorMessage = event === 'INVOICE_ERROR'
+        ? (invoice.observations || invoice.errors?.[0]?.description || 'Erro ao emitir nota fiscal.')
+        : null;
+
+    await prisma.invoice.update({
+        where: { id: local.id },
+        data: {
+            status: newStatus,
+            pdfUrl: invoice.pdfUrl || local.pdfUrl,
+            xmlUrl: invoice.xmlUrl || local.xmlUrl,
+            errorMessage,
+        },
+    });
+
+    return NextResponse.json({ received: true });
 }
 
 // ─── DESAFIO ───────────────────────────────────────────────────────────────
