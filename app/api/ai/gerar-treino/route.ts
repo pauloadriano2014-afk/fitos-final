@@ -214,6 +214,7 @@ REGRAS:
 4. TÉCNICAS (1 por dia mínimo, diferentes):
    DROPSET: -20-30% carga sem pausa | RESTPAUSE: 20s pausa mesma carga
    BISET: EXATAMENTE 2 exercícios consecutivos, um logo após o outro, ambos marcados BISET. NUNCA 3 ou mais exercícios seguidos com BISET — sempre pares fechados
+   TRISET: EXATAMENTE 3 exercícios consecutivos, um logo após o outro, todos marcados TRISET. NUNCA 2 ou 4+ exercícios seguidos com TRISET — sempre trincas fechadas
    21: reps="21" SEMPRE | CLUSTERSET: reps="3" blocos 15s | 1_5_REPS: reps 8-12
    TUT: cadência 3s descida | GVT: SEMPRE gere EXATAMENTE 10 blocos separados, cada um com sets="1", reps="10", restTime="60". NUNCA 1 bloco só
 5. SUBSTITUTOS (CRÍTICA): cada exercício tem "suggestedSubstitutes" no banco — já filtrados pelo ambiente ${trainingEnv || 'UNIVERSAL'}.
@@ -360,6 +361,43 @@ Responda APENAS com JSON válido.`.trim();
       }));
     };
 
+    // 🔥 Corrige cadeias de técnicas que agrupam exercícios (BI-SET, TRI-SET,
+    // ...): só podem existir em grupos FECHADOS de tamanho exato, consecutivos.
+    // Generalizado a partir da correção original que só tratava o BISET (que
+    // só cobria o caso de sobra no FINAL do dia — uma sobra no MEIO do dia,
+    // entre dois exercícios normais, passava batido). Aqui qualquer sobra
+    // incompleta (no meio ou no fim) é revertida pra NORMAL, e qualquer
+    // excedente (4º exercício de uma "TRISET" de 4, por exemplo) também.
+    const repairChainedTechnique = (exs: any[], techniqueKey: string, groupSize: number): any[] => {
+      const revertRange = (fromIdx: number, toIdxExclusive: number) => {
+        for (let i = fromIdx; i < toIdxExclusive; i++) {
+          exs[i].blocks = exs[i].blocks.map((b: any) => ({ ...b, technique: '' }));
+        }
+      };
+      let chainCount = 0;
+      let chainStartIdx = -1;
+      exs.forEach((ex, idx) => {
+        const firstBlockTech = (ex.blocks[0]?.technique || '').toUpperCase();
+        const isMatch = firstBlockTech === techniqueKey;
+        if (isMatch) {
+          if (chainCount === 0) chainStartIdx = idx;
+          chainCount++;
+          if (chainCount > groupSize) {
+            // excedente (grupo já fechado) -- reverte só este item e recomeça a contagem a partir dele
+            revertRange(idx, idx + 1);
+            chainCount = 0;
+            chainStartIdx = -1;
+          }
+        } else if (chainCount > 0) {
+          if (chainCount < groupSize) revertRange(chainStartIdx, chainStartIdx + chainCount);
+          chainCount = 0;
+          chainStartIdx = -1;
+        }
+      });
+      if (chainCount > 0 && chainCount < groupSize) revertRange(chainStartIdx, chainStartIdx + chainCount);
+      return exs;
+    };
+
     for (const [day, exercises] of Object.entries(parsed.exercisesByDay || {})) {
       let dayExercises = (exercises as any[])
         .filter((ex) => { const ok = exerciseMap.has(ex.exerciseId); if (!ok) { ghostCount++; console.warn(`fantasma: ${ex.exerciseId}`); } return ok; })
@@ -387,35 +425,14 @@ Responda APENAS com JSON válido.`.trim();
           };
         });
 
-      // 🔥 Corrige cadeias de BISET: só pode existir em PARES consecutivos.
-      // Se vier 3+ exercícios seguidos marcados como BISET, quebra o excedente para NORMAL.
-      let biSetChainCount = 0;
-      dayExercises = dayExercises.map((ex, idx) => {
-        const firstBlockTech = (ex.blocks[0]?.technique || '').toUpperCase();
-        const isBiSet = firstBlockTech === 'BISET';
-
-        if (isBiSet) {
-          biSetChainCount++;
-          // Se já temos 2 no par atual, este é excedente — reverte para NORMAL
-          if (biSetChainCount > 2) {
-            ex.blocks = ex.blocks.map((b: any) => ({ ...b, technique: '' }));
-            // Reinicia a contagem: este exercício vira o início de um possível novo par
-            biSetChainCount = 0;
-          }
-        } else {
-          biSetChainCount = 0;
-        }
-        return ex;
-      });
-
-      // Se sobrou um BISET sozinho no final do dia (par incompleto), reverte para NORMAL
-      if (biSetChainCount === 1) {
-        const lastBiSetIdx = [...dayExercises].reverse().findIndex(ex => (ex.blocks[0]?.technique || '').toUpperCase() === 'BISET');
-        if (lastBiSetIdx !== -1) {
-          const realIdx = dayExercises.length - 1 - lastBiSetIdx;
-          dayExercises[realIdx].blocks = dayExercises[realIdx].blocks.map((b: any) => ({ ...b, technique: '' }));
-        }
-      }
+      // 🔥 Corrige cadeias de técnicas que agrupam exercícios (BI-SET=2,
+      // TRI-SET=3, ...): só podem existir em grupos FECHADOS do tamanho
+      // certo, consecutivos. Generalizado a partir da correção original que
+      // só existia pro BISET — repairChainedTechnique(tecnica, tamanho) é
+      // chamada uma vez por técnica de agrupamento (GROUP_SIZES no app
+      // mobile é o espelho client-side dessa mesma tabela).
+      dayExercises = repairChainedTechnique(dayExercises, 'BISET', 2);
+      dayExercises = repairChainedTechnique(dayExercises, 'TRISET', 3);
 
       validatedDays[day] = dayExercises;
     }
