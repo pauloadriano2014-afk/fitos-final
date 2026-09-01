@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic';
 
 // 🔥 Usado pelo e-mail de entrega de Produto Digital (mesmo padrão do
 // forgot-password/route.ts — fetch direto na API REST do Resend, sem SDK).
-const APP_URL = process.env.APP_URL || 'https://www.elitefitapp.com.br';
+// 🔥 TEMPORÁRIO: revertido pra pauloadrianoteam.com.br -- ver forgot-password/route.ts
+const APP_URL = process.env.APP_URL || 'https://www.pauloadrianoteam.com.br';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const FROM_EMAIL = process.env.RESEND_FROM || 'ELITE FIT <onboarding@resend.dev>';
 

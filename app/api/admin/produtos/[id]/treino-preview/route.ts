@@ -13,7 +13,8 @@ import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-const APP_URL = process.env.APP_URL || 'https://www.elitefitapp.com.br';
+// 🔥 TEMPORÁRIO: revertido pra pauloadrianoteam.com.br -- ver forgot-password/route.ts
+const APP_URL = process.env.APP_URL || 'https://www.pauloadrianoteam.com.br';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
     try {

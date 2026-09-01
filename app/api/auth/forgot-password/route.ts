@@ -14,7 +14,11 @@ import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
-const APP_URL = process.env.APP_URL || 'https://www.elitefitapp.com.br';
+// 🔥 TEMPORÁRIO: revertido pra pauloadrianoteam.com.br -- elitefitapp.com.br
+// ainda não tem DNS configurado (dominio não resolve, ver commit da troca de
+// dominio), então links gerados com ele davam "site não encontrado" pro
+// cliente. Volte pra elitefitapp.com.br assim que o DNS estiver propagado.
+const APP_URL = process.env.APP_URL || 'https://www.pauloadrianoteam.com.br';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 // Enquanto o domínio não estiver verificado no Resend, use 'onboarding@resend.dev'
 const FROM_EMAIL = process.env.RESEND_FROM || 'ELITE FIT <onboarding@resend.dev>';
