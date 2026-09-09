@@ -20,14 +20,22 @@ function slugify(input: string): string {
         .replace(/(^-|-$)/g, '');
 }
 
-// GET /api/admin/proposta-ofertas
+// GET /api/admin/proposta-ofertas?pagina=start
+//
+// 🔥 `pagina` é opcional só por compatibilidade (chamadas antigas sem o
+// parâmetro, ex: AdminInviteModal) — quando omitido, cai no padrão
+// "proposta" pra não quebrar quem ainda não manda esse filtro.
 export async function GET(request: NextRequest) {
     try {
         // 🔒 Feature master-only (gestão de ofertas de proposta).
         const auth = requireMaster(request);
         if ('response' in auth) return auth.response;
 
+        const { searchParams } = new URL(request.url);
+        const pagina = searchParams.get('pagina') || 'proposta';
+
         const ofertas = await prisma.propostaOferta.findMany({
+            where: { pagina },
             orderBy: { createdAt: 'desc' },
         });
         return NextResponse.json({ ofertas });
@@ -45,7 +53,8 @@ export async function POST(request: NextRequest) {
         if ('response' in auth) return auth.response;
 
         const body = await request.json();
-        const { slug, nome, cards, criadoPorId } = body;
+        const { slug, nome, cards, criadoPorId, pagina } = body;
+        const paginaFinal = pagina || 'proposta';
 
         if (!nome || !Array.isArray(cards) || cards.length === 0) {
             return NextResponse.json(
@@ -59,18 +68,21 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Slug inválido' }, { status: 400 });
         }
 
+        // Unicidade é por (pagina, slug) — a mesma "padrao" pode existir em
+        // telas diferentes sem conflitar.
         const existente = await prisma.propostaOferta.findUnique({
-            where: { slug: slugFinal },
+            where: { pagina_slug: { pagina: paginaFinal, slug: slugFinal } },
         });
         if (existente) {
             return NextResponse.json(
-                { error: 'Já existe uma oferta com esse slug. Escolha outro nome/slug.' },
+                { error: 'Já existe uma oferta com esse slug nessa tela. Escolha outro nome/slug.' },
                 { status: 409 }
             );
         }
 
         const oferta = await prisma.propostaOferta.create({
             data: {
+                pagina: paginaFinal,
                 slug: slugFinal,
                 nome,
                 cards,

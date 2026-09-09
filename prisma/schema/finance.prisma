@@ -219,19 +219,28 @@ model CoachPlan {
 model PropostaOferta {
   id          String   @id @default(uuid())
 
-  slug        String   @unique
-  nome        String   
+  // 🔥 Qual tela de proposta essa oferta pertence (ex: "proposta" ==
+  // PropostaScreen/Elite-Performance, "start" == PropostaStartScreen).
+  // Default "proposta" preserva as ofertas antigas, criadas antes desse
+  // campo existir. O slug só precisa ser único DENTRO da mesma pagina —
+  // duas telas podem ter uma oferta "padrao" cada uma sem conflito.
+  pagina      String   @default("proposta")
+
+  slug        String
+  nome        String
   ativa       Boolean  @default(true)
 
   // Array de "cards" de plano (nome, descrição, itens, preços por período,
   // CTA etc.), guardado como JSON — ver estrutura documentada no código
-  // do AdminPropostaOfertasScreen.js / PropostaScreen.js
+  // do TabPropostaOfertas.js / PropostaScreen.js / PropostaStartScreen.js
   cards       Json
 
-  criadoPorId String?  
+  criadoPorId String?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@unique([pagina, slug])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
