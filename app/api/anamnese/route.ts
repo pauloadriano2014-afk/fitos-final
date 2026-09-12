@@ -4,6 +4,21 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 
+// 🔥 FIX (12/set/2026): corrige o erro comum de digitar a altura em metros
+// (ex.: "1.74") em vez de centímetros (ex.: "174") no campo ALTURA (CM) da
+// anamnese. Sem essa correção, a fórmula de TMB/TDEE (Mifflin-St Jeor) usa a
+// altura errada e a meta de dieta do aluno sai completamente furada (TDEE e
+// kcal muito abaixo do real). Ninguém tem menos de 10cm de altura, então um
+// valor nessa faixa quase certamente foi digitado em metros — nesse caso,
+// convertemos automaticamente pra centímetros. Ponto único de gravação: cobre
+// qualquer tela que salve anamnese (admin, aluno, VIP), sem precisar mexer em
+// cada uma. Não apaga nem sobrescreve nenhum registro antigo — só corrige o
+// valor ANTES de gravar a nova anamnese.
+function normalizeAlturaCm(raw: unknown): number {
+  const parsed = parseFloat(String(raw).replace(',', '.'));
+  if (!Number.isFinite(parsed) || parsed <= 0) return parsed;
+  return parsed < 10 ? Math.round(parsed * 100 * 10) / 10 : parsed;
+}
 
 export async function POST(req: Request) {
   try {
@@ -60,13 +75,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
+    const pesoNum   = parseFloat(peso);
+    const alturaCm  = normalizeAlturaCm(altura);
+    const alturaM   = alturaCm > 0 ? alturaCm / 100 : 0;
+    // Recalcula o IMC a partir da altura já corrigida — não confia no valor
+    // que o cliente mandou, pois ele pode ter sido calculado ainda com a
+    // altura errada (em metros) antes da correção acima.
+    const imcCalc   = (pesoNum > 0 && alturaM > 0)
+      ? parseFloat((pesoNum / (alturaM * alturaM)).toFixed(2))
+      : (imc ? parseFloat(imc) : null);
+
     const novaAnamnese = await prisma.anamnese.create({
       data: {
         // ── OBRIGATÓRIOS ────────────────────────────────────────────────────
         userId,
-        peso:           parseFloat(peso),
-        altura:         parseFloat(altura),
-        imc:            imc            ? parseFloat(imc)     : null,
+        peso:           pesoNum,
+        altura:         alturaCm,
+        imc:            imcCalc,
         aguaIdeal:      aguaIdeal      ? parseFloat(aguaIdeal): null,
         objetivo:       objetivo       || 'Não informado',
         nivel:          nivel          || 'Iniciante',
