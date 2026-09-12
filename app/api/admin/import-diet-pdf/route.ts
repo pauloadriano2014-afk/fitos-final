@@ -51,9 +51,17 @@ export async function POST(req: Request) {
 
     REGRAS DE EXTRAÇÃO:
     1. AGRUPAMENTO ("ou" / "SUBSTITUIÇÃO"): Se o PDF diz "100g de Frango OU 3 Ovos", eles são substitutos e pertencem ao MESMO "groupId".
-    2. UNIDADES: Traduza para as unidades padrão. "gramas" vira "g", "unidades" vira "unid", "fatias" vira "fatia".
-    3. QUANTIDADES (NUTRIUM): Se disser "1 unidade pequena de filé de frango grelhado (100 g)", extraia a gramatura: amount: "100", unit: "g". Ignore o "1 unidade pequena".
-    4. HORÁRIOS: Procure horários como "08:00", "12:00" que antecedem as refeições.
+    2. GRUPOS DIFERENTES POR PADRÃO (MUITO IMPORTANTE): Alimentos de uma mesma refeição que NÃO estão ligados pela palavra "ou" são itens DIFERENTES que se somam na refeição (o aluno come os dois, não escolhe um OU outro) — cada um precisa de um "groupId" ÚNICO E DIFERENTE dos outros, mesmo estando um logo depois do outro na lista. NUNCA reutilize o mesmo "groupId" para itens de categorias diferentes (ex: arroz e feijão e frango são 3 grupos DIFERENTES) só porque estão na mesma refeição. Exemplo de uma refeição com "Arroz Branco 100g, Feijão 80g, Frango Grelhado 120g ou 3 Ovos":
+       [
+         { "name": "Arroz Branco", "amount": "100", "unit": "g", "groupId": "grp1" },
+         { "name": "Feijão", "amount": "80", "unit": "g", "groupId": "grp2" },
+         { "name": "Frango Grelhado", "amount": "120", "unit": "g", "groupId": "grp3" },
+         { "name": "Ovos", "amount": "3", "unit": "unid", "groupId": "grp3" }
+       ]
+       Repare que só "Frango Grelhado" e "Ovos" dividem o "grp3" (por causa do "ou" explícito) — Arroz e Feijão têm cada um o seu próprio groupId, mesmo sem nenhuma palavra de ligação entre eles.
+    3. UNIDADES: Traduza para as unidades padrão. "gramas" vira "g", "unidades" vira "unid", "fatias" vira "fatia".
+    4. QUANTIDADES (NUTRIUM): Se disser "1 unidade pequena de filé de frango grelhado (100 g)", extraia a gramatura: amount: "100", unit: "g". Ignore o "1 unidade pequena".
+    5. HORÁRIOS: Procure horários como "08:00", "12:00" que antecedem as refeições.
     `;
 
     const result = await model.generateContent([

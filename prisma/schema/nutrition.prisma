@@ -134,9 +134,17 @@ model DietTemplate {
 
 model MealTemplate {
   id        String   @id @default(uuid())
-  name      String   
-  category  String?  
-  items     Json     
+  name      String
+  category  String?
+  items     Json
+  createdAt DateTime @default(now())
+}
+
+// 🔥 NOVO: atalhos de observação de refeição salvos pelo coach, pra reusar
+// em qualquer dieta depois (além dos 6 sugeridos fixos no app).
+model NoteSnippet {
+  id        String   @id @default(uuid())
+  text      String   @db.Text
   createdAt DateTime @default(now())
 }
 
