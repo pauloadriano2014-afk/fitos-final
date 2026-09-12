@@ -159,10 +159,12 @@ model ExerciseHistory {
   
   exerciseId       String
   exerciseName     String
-  
+
   setNumber        Int
-  weight           Float  
-  reps             String 
+  weight           Float
+  reps             String
+
+  note             String?  @db.Text
 }
 
 model Technique {

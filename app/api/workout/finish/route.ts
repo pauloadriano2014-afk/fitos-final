@@ -55,12 +55,19 @@ export async function POST(req: Request) {
                     // Pega a última série válida para registrar a carga final
                     const lastSet = ex.sets && ex.sets.length > 0 ? ex.sets[ex.sets.length - 1] : null;
                     
+                    // 🔥 Observação do aluno por exercício (opcional). Salva
+                    // repetida em cada série do mesmo jeito que exerciseName já
+                    // é -- na leitura (WorkoutLogCard.js) só olhamos a primeira
+                    // ocorrência não-vazia por exercício.
+                    const noteClean = ex.note ? String(ex.note).trim().slice(0, 500) : '';
+
                     return ex.sets.map((s: any) => ({
                         exerciseId: ex.exerciseId,
                         exerciseName: ex.name,
                         setNumber: s.index,
                         weight: cleanWeight(s.weight), // <--- USO DA FUNÇÃO DE LIMPEZA
-                        reps: String(s.reps || "0")
+                        reps: String(s.reps || "0"),
+                        note: noteClean || null,
                     }));
                 })
             }
