@@ -116,6 +116,14 @@ model WorkoutTemplate {
   collection   TemplateCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
 }
 
+// 🔥 NOVO: estruturas de pirâmide criadas pelo coach (ex: "20-15-12-10"),
+// pra reusar com um toque, além das 8 fixas que já vêm no app.
+model PyramidPreset {
+  id        String   @id @default(uuid())
+  structure String
+  createdAt DateTime @default(now())
+}
+
 model MotorTemplate {
   id          String   @id @default(uuid())
   name        String   
