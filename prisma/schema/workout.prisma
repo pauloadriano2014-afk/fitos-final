@@ -124,6 +124,14 @@ model PyramidPreset {
   createdAt DateTime @default(now())
 }
 
+// 🔥 NOVO: observações rápidas criadas pelo coach pra inserir com um toque
+// na observação do exercício, além das fixas que já vêm no app (QUICK_OBS).
+model ObservationPreset {
+  id        String   @id @default(uuid())
+  text      String   @db.Text
+  createdAt DateTime @default(now())
+}
+
 model MotorTemplate {
   id          String   @id @default(uuid())
   name        String   
