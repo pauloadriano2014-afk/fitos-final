@@ -131,6 +131,30 @@ const CUSTOM_FOODS = [
   { name:'Gelatina Zero',                    cat:'Bebidas',               sub:'Bebidas Zero',           unit:'g',  kcal:5,   p:1,  c:0,  f:0 },
   { name:'Refrigerante Zero',                cat:'Bebidas',               sub:'Bebidas Zero',           unit:'ml', kcal:0,   p:0,  c:0,  f:0 },
   { name:'Água de Coco',                     cat:'Bebidas',               sub:'Bebidas Zero',           unit:'ml', kcal:22,  p:0,  c:5,  f:0 },
+
+  // 🔥 NOVO (13/set/2026): pedido do coach — itens conferidos um a um contra
+  // taco_mapeada.json pra NÃO duplicar nada que a TACO (589 itens) já cobre.
+  // Só entrou aqui o que realmente falta (queijos, embutidos, carboidratos e
+  // suplementos que a TACO não tem, por ser tabela de alimentos naturais).
+  { name:'Queijo Mussarela Tradicional',     cat:'Frios e Laticínios',    sub:'Queijos e Pastas',      unit:'g',  kcal:330, p:22, c:3,  f:25, lactose:false, conv:0.25 },
+  { name:'Queijo Minas Padrão',              cat:'Frios e Laticínios',    sub:'Queijos e Pastas',      unit:'g',  kcal:264, p:17, c:3,  f:20, lactose:false, conv:0.20 },
+  { name:'Iogurte Proteico',                 cat:'Frios e Laticínios',    sub:'Leites e Iogurtes',     unit:'g',  kcal:60,  p:10, c:4,  f:0,  lactose:false, conv:0.10 },
+  { name:'Bacon Frito',                      cat:'Frios e Laticínios',    sub:'Frios e Embutidos',     unit:'g',  kcal:540, p:37, c:1,  f:42, lactose:false, conv:0.42 },
+  { name:'Salsicha Cozida',                  cat:'Frios e Laticínios',    sub:'Frios e Embutidos',     unit:'g',  kcal:260, p:12, c:3,  f:22, lactose:false, conv:0.22 },
+  { name:'Linguado Grelhado',                cat:'Carnes e Proteínas',    sub:'Proteínas Gerais',      unit:'g',  kcal:85,  p:17, c:0,  f:2,  lactose:true,  conv:0.17 },
+  { name:'Bacalhau Dessalgado (Cozido)',     cat:'Carnes e Proteínas',    sub:'Proteínas Gerais',      unit:'g',  kcal:105, p:23, c:0,  f:1,  lactose:true,  conv:0.23 },
+  { name:'Arroz Parboilizado',               cat:'Carboidratos',          sub:'Carbos Base',           unit:'g',  kcal:123, p:3,  c:26, f:0,  conv:0.26 },
+  { name:'Batata Doce Assada',               cat:'Carboidratos',          sub:'Carbos Base',           unit:'g',  kcal:118, p:1,  c:28, f:0,  conv:0.28 },
+  { name:'Pão Sírio',                        cat:'Carboidratos',          sub:'Pães e Massas',         unit:'g',  kcal:275, p:9,  c:56, f:1,  conv:0.56 },
+  { name:'Wrap Integral',                    cat:'Carboidratos',          sub:'Pães e Massas',         unit:'g',  kcal:290, p:9,  c:50, f:6,  conv:0.50 },
+  { name:'Óleo de Coco',                     cat:'Gorduras e Oleaginosas', sub:'Gorduras e Oleaginosas', unit:'ml', kcal:862, p:0,  c:0,  f:100, conv:1.00 },
+  { name:'Manteiga Ghee',                    cat:'Gorduras e Oleaginosas', sub:'Gorduras e Oleaginosas', unit:'g',  kcal:900, p:0,  c:0,  f:100, conv:1.00 },
+  { name:'Hipercalórico (Genérico)',         cat:'Suplementos',           sub:'Hipercalóricos',         unit:'g',  kcal:380, p:10, c:82, f:1,  conv:0.82 },
+  { name:'Whey Protein Hidrolisado',         cat:'Suplementos',           sub:'Suplementos em Pó',      unit:'g',  kcal:380, p:90, c:2,  f:2,  lactose:true, conv:0.90 },
+  { name:'Maltodextrina',                    cat:'Suplementos',           sub:'Suplementos em Pó',      unit:'g',  kcal:380, p:0,  c:95, f:0,  lactose:true, conv:0.95 },
+  { name:'Dextrose',                         cat:'Suplementos',           sub:'Suplementos em Pó',      unit:'g',  kcal:380, p:0,  c:99, f:0,  lactose:true, conv:0.99 },
+  { name:'BCAA em Pó',                       cat:'Suplementos',           sub:'Suplementos em Pó',      unit:'g',  kcal:390, p:90, c:1,  f:0,  lactose:true, conv:0.90 },
+  { name:'Glutamina em Pó',                  cat:'Suplementos',           sub:'Suplementos em Pó',      unit:'g',  kcal:380, p:95, c:0,  f:0,  lactose:true, conv:0.95 },
 ];
 
 const CAT_MAP: Record<string, [string, string]> = {
