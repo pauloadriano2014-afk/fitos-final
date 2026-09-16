@@ -11,6 +11,22 @@ model Notice {
   coach     User?    @relation("CoachNotices", fields: [coachId], references: [id], onDelete: Cascade)
 }
 
+// 🔥 CATEGORIAS DO PA FLIX / ELITE FLIX — POR COACH: antes a lista de
+// categorias era só um array salvo no AsyncStorage do celular/navegador de
+// quem estava logado (não sincronizava entre aparelhos nem existia no banco).
+// Agora vira uma tabela de verdade, escopada por coachId com o MESMO padrão
+// de "pool" já usado em Content: Paulo e Adri (MASTER_IDS) compartilham as
+// categorias do "PA FLIX" (coachId null), e cada coach parceiro tem as suas
+// próprias categorias do "ELITE FLIX" dele.
+model ContentCategory {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  coachId   String?
+  coach     User?    @relation("CoachContentCategories", fields: [coachId], references: [id], onDelete: Cascade)
+}
+
 model Content {
   id          String   @id @default(uuid())
   title       String

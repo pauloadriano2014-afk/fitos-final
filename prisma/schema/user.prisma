@@ -104,6 +104,7 @@ model User {
   createdTemplates  WorkoutTemplate[]   @relation("CoachTemplates")
   createdNotices    Notice[]            @relation("CoachNotices")
   createdContents   Content[]           @relation("CoachContents")
+  createdContentCategories ContentCategory[] @relation("CoachContentCategories")
   createdCollections TemplateCollection[] @relation("CoachCollections")
   createdTechniques Technique[]         @relation("CoachTechniques") 
 
