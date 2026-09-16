@@ -18,7 +18,7 @@ const prisma = new PrismaClient();
 
 // 🔑 Credenciais que vão pro formulário de revisão da App Store / Play
 // Console. Troque a senha aqui se quiser outra antes de rodar.
-const REVIEW_EMAIL = 'revisor.elitefit@review.com';
+const REVIEW_EMAIL = 'revisor@elitefitapp.com.br';
 const REVIEW_PASSWORD = 'RevisorEliteFit2026!';
 
 // ⚠️ Troque pelo seu próprio id de coach (o mesmo que aparece em

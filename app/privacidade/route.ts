@@ -22,15 +22,15 @@ export async function GET() {
   <body>
     <div class="container">
       <h1>Política de Privacidade - Aplicativo ELITE FIT</h1>
-      <p class="date"><strong>Última atualização:</strong> Agosto de 2026</p>
+      <p class="date"><strong>Última atualização:</strong> Setembro de 2026</p>
 
-      <p>Bem-vindo ao aplicativo <strong>ELITE FIT</strong> (nome fantasia de <strong>PÁ ELITE TEAM</strong>, empresa responsável pelo aplicativo). A sua privacidade e a segurança dos seus dados pessoais e físicos são nossas maiores prioridades. Esta Política de Privacidade explica como coletamos, usamos, armazenamos e protegemos as suas informações ao utilizar o nosso aplicativo e os nossos serviços.</p>
-      <p>Ao utilizar o aplicativo, você concorda com a coleta e o uso de informações de acordo com esta política.</p>
+      <p>Bem-vindo ao aplicativo <strong>ELITE FIT</strong> (nome fantasia de <strong>PA ELITE TEAM LTDA</strong>, empresa responsável pelo aplicativo, sediada em Curitiba-PR). A sua privacidade e a segurança dos seus dados pessoais e físicos são nossas maiores prioridades. Esta Política de Privacidade explica como coletamos, usamos, armazenamos e protegemos as suas informações ao utilizar o nosso aplicativo e os nossos serviços.</p>
+      <p>Ao utilizar o aplicativo, você concorda com a coleta e o uso de informações de acordo com esta política. Consulte também os nossos <a href="https://fitos-final.onrender.com/termos">Termos de Uso</a>.</p>
 
       <h2>1. Informações que Coletamos</h2>
       <ul>
         <li><strong>Dados Cadastrais:</strong> Nome completo, endereço de e-mail, telefone e senha (criptografada).</li>
-        <li><strong>Dados de Saúde e Bem-Estar (Health Data):</strong> Idade, peso atual, histórico de lesões, nível de experiência com musculação e informações preenchidas na Anamnese inicial.</li>
+        <li><strong>Dados de Saúde e Bem-Estar (Health Data):</strong> Idade, peso atual, histórico de lesões, nível de experiência com musculação, informações preenchidas na Anamnese inicial e, quando informado voluntariamente pela aluna, dados do ciclo menstrual — usados exclusivamente para ajustar a intensidade do treino (deload) nos dias indicados por ela.</li>
         <li><strong>Dados de Acompanhamento (Check-in):</strong> Evolução de cargas, histórico de treinos concluídos, dieta e feedback de performance.</li>
         <li><strong>Mídia (Fotos e Vídeos):</strong> Imagens do seu corpo (frente, costas, lado e poses extras) enviadas voluntariamente durante o processo de Check-in, e vídeos curtos de execução de exercício enviados voluntariamente ao Scanner de Movimento (análise de técnica por IA).</li>
         <li><strong>Dados Financeiros:</strong> Para alunos com cobrança recorrente via cartão ou PIX, coletamos CPF e endereço de cobrança, necessários para emissão de cobrança junto ao nosso processador de pagamentos (Asaas). Não armazenamos número completo de cartão de crédito — isso é feito diretamente pelo processador de pagamentos.</li>
@@ -59,7 +59,7 @@ export async function GET() {
       </ul>
 
       <h2>5. Compartilhamento de Dados</h2>
-      <p>A <strong>PÁ ELITE TEAM</strong> jamais vende, aluga ou compartilha seus dados pessoais, de saúde ou fotos com terceiros para fins de marketing ou publicidade. O compartilhamento só ocorre com prestadores de serviço essenciais para o funcionamento do app — servidores em nuvem e, para dados financeiros, o processador de pagamentos Asaas — ou se exigido por lei ou ordem judicial. Esses prestadores possuem suas próprias políticas de segurança e são contratualmente obrigados a proteger seus dados.</p>
+      <p>A <strong>PA ELITE TEAM LTDA</strong> jamais vende, aluga ou compartilha seus dados pessoais, de saúde ou fotos com terceiros para fins de marketing ou publicidade. O compartilhamento só ocorre com prestadores de serviço essenciais para o funcionamento do app: servidores em nuvem (armazenamento de fotos e vídeos), o processador de pagamentos Asaas (para dados financeiros) e o Google Gemini (Inteligência Artificial), usado para analisar o vídeo de execução do exercício enviado voluntariamente ao Scanner de Movimento e para apoiar a geração de treinos/dietas — ou ainda se exigido por lei ou ordem judicial. Esses prestadores possuem suas próprias políticas de segurança e são contratualmente obrigados a proteger seus dados.</p>
 
       <h2>6. Retenção e Exclusão de Dados</h2>
       <p>Você tem o controle total sobre as suas informações. Retemos seus dados pessoais e de saúde apenas pelo tempo necessário para fornecer o serviço de consultoria.</p>
@@ -71,7 +71,7 @@ export async function GET() {
       <h2>8. Contato e Suporte</h2>
       <p>Se você tiver qualquer dúvida sobre esta Política de Privacidade, sobre como seus dados são manipulados ou desejar solicitar a exclusão da sua conta, entre em contato:</p>
       <ul style="list-style-type: none; padding-left: 0;">
-        <li>📧 <strong>E-mail:</strong> paulo_adriano2014@live.com</li>
+        <li>📧 <strong>E-mail:</strong> elitefit_app@outlook.com</li>
         <li>📱 <strong>WhatsApp / Suporte:</strong> (41) 99799-1346</li>
       </ul>
     </div>
