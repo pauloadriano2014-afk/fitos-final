@@ -170,11 +170,19 @@ model DailyCheckin {
   id        String   @id @default(uuid())
   studentId String
   student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  date      String   
+  date      String
   water_ml  Int      @default(0)
   fome      String?
   digestao  String?
   energia   String?
+
+  // 🔥 Diário alimentar (16 set 2026) — resposta rápida de fim de dia, sem
+  // obrigar nada: "Seguiu o plano hoje?" (SIM/PARCIAL/NAO) + observação livre
+  // opcional. Some com o diário de refeição por refeição (ver DietMealLog em
+  // nutrition.prisma) pra dar visão de aderência pro nutricionista.
+  dietAdherence String?
+  dietNote      String?  @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

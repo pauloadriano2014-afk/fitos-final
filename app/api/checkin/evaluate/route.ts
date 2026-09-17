@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from 'crypto';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { sendPushToUser } from '@/app/utils/sendNotification';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -99,9 +100,9 @@ export async function POST(req: Request) {
             checkIn = await prisma.checkIn.update({
                 where: { id: checkinId },
                 data: { coachFeedback: finalFeedback },
-                include: { user: { select: { name: true, pushToken: true } } }
+                include: { user: { select: { name: true, pushToken: true, webPushSubscription: true } } }
             });
-        } 
+        }
         // 🔥 CRIA NOVO CHECK-IN (Vindo da tela de Laboratório IA) 🔥
         else if (userId) {
             let uploadedUrls: string[] = [];
@@ -144,7 +145,7 @@ export async function POST(req: Request) {
                     weight: 0, 
                     feedback: "Relatório Técnico gerado via Laboratório IA."
                 },
-                include: { user: { select: { name: true, pushToken: true } } }
+                include: { user: { select: { name: true, pushToken: true, webPushSubscription: true } } }
             });
         } 
         else {
@@ -152,17 +153,9 @@ export async function POST(req: Request) {
         }
 
         // 🔥 PUSH NOTIFICATION (Não envia se for Baixa Silenciosa) 🔥
-        if (checkIn.user?.pushToken && !silent) {
-            fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: { Accept: 'application/json', 'Accept-encoding': 'application/json', 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: checkIn.user.pushToken,
-                    sound: 'default',
-                    title: '📋 Relatório Técnico Disponível!',
-                    body: 'O Coach analisou seu shape e enviou um novo laudo. Toque para ver!',
-                }),
-            }).catch(err => console.log("Erro ao enviar push:", err));
+        if (checkIn.user && !silent) {
+            sendPushToUser(checkIn.user, '📋 Relatório Técnico Disponível!', 'O Coach analisou seu shape e enviou um novo laudo. Toque para ver!')
+                .catch(err => console.log("Erro ao enviar push:", err));
         }
 
         return NextResponse.json({ 

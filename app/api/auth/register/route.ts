@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { signAuthToken } from '@/lib/auth';
+import { sendPushToUser } from '@/app/utils/sendNotification';
 
 
 const PAULO_EMAIL = 'paulo_adriano2014@live.com';
@@ -13,14 +14,10 @@ async function notifyMaster(title: string, bodyText: string) {
     try {
         const master = await prisma.user.findUnique({
             where: { email: PAULO_EMAIL },
-            select: { pushToken: true },
+            select: { pushToken: true, webPushSubscription: true },
         });
-        if (master?.pushToken) {
-            await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: { Accept: 'application/json', 'Accept-encoding': 'application/json', 'Content-Type': 'application/json' },
-                body: JSON.stringify({ to: master.pushToken, sound: 'default', title, body: bodyText }),
-            });
+        if (master) {
+            await sendPushToUser(master, title, bodyText);
         }
     } catch (e) { console.error('Erro push master:', e); }
 }
@@ -146,13 +143,9 @@ export async function POST(req: Request) {
         });
 
         try {
-            const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true } });
-            if (coach?.pushToken) {
-                await fetch('https://exp.host/--/api/v2/push/send', {
-                    method: 'POST',
-                    headers: { Accept: 'application/json', 'Accept-encoding': 'application/json', 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ to: coach.pushToken, sound: 'default', title: '🚀 Novo Aluno na Área!', body: `${name} acabou de se cadastrar no seu time.` }),
-                });
+            const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true, webPushSubscription: true } });
+            if (coach) {
+                await sendPushToUser(coach, '🚀 Novo Aluno na Área!', `${name} acabou de se cadastrar no seu time.`);
             }
         } catch (e) { console.error('Push novo aluno:', e); }
 

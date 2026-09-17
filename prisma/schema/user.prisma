@@ -19,6 +19,7 @@ model User {
   aiLogs            AiLog[]
   dailyCheckins     DailyCheckin[]
   dietFeedbacks     DietFeedback[]
+  dietMealLogs      DietMealLog[]
   npsRequested      Boolean  @default(false) 
   accountStatus     String  @default("ACTIVE") 
   inviteCode        String? @unique
@@ -31,6 +32,10 @@ model User {
   coachAsaasId        String?
   coachAsaasChargeId  String?
   coachBillingStatus  String?   @default("PENDING")
+  // 🔥 Fim do teste grátis de 7 dias (setado na aprovação do coach em
+  // coach-requests) — usado pra bloquear o acesso quando coachBillingStatus
+  // ainda está em "TRIAL" e essa data já passou sem nenhum plano pago criado.
+  trialEndsAt         DateTime?
   isLaunchPromo       Boolean   @default(false)
   onboardingCompleted Boolean   @default(false)
   onboardingStep      Int       @default(0)
@@ -69,8 +74,13 @@ model User {
   currentWeight   Float? 
   
   currentXP       Int      @default(0)
-  pushToken       String?  
-  
+  pushToken       String?
+  // 🔥 Web Push (17 set 2026) — pra quem usa o PWA (navegador/"tela inicial"),
+  // onde o token da Expo não existe (expo-notifications não roda em web).
+  // Guarda o objeto de assinatura {endpoint, keys:{p256dh,auth}} devolvido
+  // pelo pushManager.subscribe() do navegador. Ver lib/webPush.ts.
+  webPushSubscription Json?
+
   photoUrl        String?
   evaluationUrl   String?  
   nextCheckInDate DateTime? 

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireMaster } from '@/lib/auth';
+import { sendPushToUser } from '@/app/utils/sendNotification';
 
 
 async function generateInviteCode(name: string): Promise<string> {
@@ -80,33 +81,33 @@ export async function POST(req: NextRequest) {
         const validPlans = ['PERSONAL', 'NUTRICIONISTA', 'ELITE'];
         const safePlan   = validPlans.includes(coachPlan) ? coachPlan : ((coach as any).coachPlan ?? 'PERSONAL');
 
+        // 🔥 TRIAL DE 7 DIAS: começa a contar a partir da aprovação (igual o
+        // FAQ da CoachPropostaScreen já promete). coachBillingStatus vira
+        // "TRIAL" — LoginScreen.js bloqueia o acesso se essa data passar sem
+        // nenhum plano pago criado (coachBillingStatus só muda pra PENDING/
+        // ACTIVE quando existir uma cobrança de verdade, ver coach-billing/create).
+        const TRIAL_DAYS = 7;
+        const trialEndsAt = new Date();
+        trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DAYS);
+
         const updated = await prisma.user.update({
             where: { id: coachId },
             data: {
                 accountStatus: 'ACTIVE',
                 inviteCode:    finalCode,
                 coachPlan:     safePlan, // ← v2: confirma ou altera o plano
+                coachBillingStatus: 'TRIAL',
+                trialEndsAt,
             } as any,
         });
 
         try {
-            if (updated.pushToken) {
-                const planLabel: Record<string, string> = {
-                    PERSONAL:     'Personal Trainer',
-                    NUTRICIONISTA:'Nutricionista',
-                    ELITE:        'Personal + Nutricionista',
-                };
-                await fetch('https://exp.host/--/api/v2/push/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to:    updated.pushToken,
-                        sound: 'default',
-                        title: '🎉 Você foi aprovado!',
-                        body:  `Acesso liberado como ${planLabel[safePlan]}. Código de convite: ${finalCode}`,
-                    }),
-                });
-            }
+            const planLabel: Record<string, string> = {
+                PERSONAL:     'Personal Trainer',
+                NUTRICIONISTA:'Nutricionista',
+                ELITE:        'Personal + Nutricionista',
+            };
+            await sendPushToUser(updated, '🎉 Você foi aprovado!', `Acesso liberado como ${planLabel[safePlan]}. Código de convite: ${finalCode}`);
         } catch (e) { /* não-crítico */ }
 
         return NextResponse.json({

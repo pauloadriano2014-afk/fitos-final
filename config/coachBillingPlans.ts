@@ -27,6 +27,17 @@ export const BILLING_PLANS: Record<string, {
 
 export const LAUNCH_PROMO_MAX = 10;
 
+// 🔥 DESCONTO POR RECORRÊNCIA: coach que ativa pagamento automático (cartão
+// salvo, ver coach-recurrence/create) paga esse percentual a menos, em vez do
+// preço cheio cobrado avulso (PIX/boleto/cartão manual todo ciclo). Aplicado
+// uma vez na criação da assinatura — a Asaas cobra esse mesmo valor sozinha
+// em todo ciclo seguinte, sem precisar recalcular nada no webhook.
+export const RECURRENCE_DISCOUNT = 0.10; // 10%
+
+export function getRecurrenceValue(totalPrice: number): number {
+    return Math.round(totalPrice * (1 - RECURRENCE_DISCOUNT) * 100) / 100;
+}
+
 export function calcProportionalCredit(
     totalPaid: number,
     totalDays: number,

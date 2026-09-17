@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
+import { sendPushToUser } from '@/app/utils/sendNotification';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -172,24 +173,12 @@ export async function POST(req: Request) {
     if (user.coachId) {
          const coach = await prisma.user.findUnique({
              where: { id: user.coachId },
-             select: { pushToken: true }
+             select: { pushToken: true, webPushSubscription: true }
          });
-         
-         if (coach?.pushToken) {
-             fetch('https://exp.host/--/api/v2/push/send', {
-                 method: 'POST',
-                 headers: {
-                     Accept: 'application/json',
-                     'Accept-encoding': 'application/json',
-                     'Content-Type': 'application/json',
-                 },
-                 body: JSON.stringify({
-                     to: coach.pushToken,
-                     sound: 'default',
-                     title: '📸 Novo Check-in Recebido!',
-                     body: `O aluno ${user.name || 'Atleta'} enviou as fotos de evolução.`,
-                 }),
-             }).catch(err => console.log("Erro ao enviar push:", err));
+
+         if (coach) {
+             sendPushToUser(coach, '📸 Novo Check-in Recebido!', `O aluno ${user.name || 'Atleta'} enviou as fotos de evolução.`)
+                 .catch(err => console.log("Erro ao enviar push:", err));
          }
     }
 

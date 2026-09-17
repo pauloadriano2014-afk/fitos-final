@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { findOrCreateCustomer, createCheckoutSession } from '@/lib/asaas';
-import { BILLING_PLANS } from '@/config/coachBillingPlans';
+import { BILLING_PLANS, getRecurrenceValue } from '@/config/coachBillingPlans';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 const DEFAULT_COACH_ID = 'paulo'; // fase 1: coach único (dono da plataforma)
@@ -172,7 +172,12 @@ export async function POST(req: NextRequest) {
     const dueStr = toDateOnly(due);
 
     const cycle = cycleFromMonths(plan.months);
-    const itemLabel = `ELITE FIT ${plan.label}`; // truncado automaticamente pra 30 chars se precisar (ver lib/asaas.ts)
+    const itemLabel = `ELITE FIT ${plan.label} -10%`; // truncado automaticamente pra 30 chars se precisar (ver lib/asaas.ts)
+
+    // 🔥 Desconto por recorrência — ver config/coachBillingPlans.ts. Esse é o
+    // valor que a Asaas vai cobrar sozinha em TODO ciclo seguinte também, não
+    // só no primeiro.
+    const recurrenceValue = getRecurrenceValue(plan.totalPrice);
 
     // ---- 5. Cria o Checkout (RECURRENT + CREDIT_CARD) ----
     const checkout = await createCheckoutSession({
@@ -187,7 +192,7 @@ export async function POST(req: NextRequest) {
         province: coachProvince,
         postalCode: coachPostalCode,
       },
-      value: plan.totalPrice,
+      value: recurrenceValue,
       description: itemLabel,
       cycle,
       nextDueDate: dueStr,
@@ -209,7 +214,7 @@ export async function POST(req: NextRequest) {
         asaasCustomerId: coachAsaasId,
         asaasCheckoutId: checkout.id,
         planName: billingPlan,
-        value: plan.totalPrice,
+        value: recurrenceValue,
         cycle,
         billingType: 'CREDIT_CARD',
         status: 'PENDING_CHECKOUT',
@@ -223,6 +228,7 @@ export async function POST(req: NextRequest) {
         checkoutUrl: checkout.link,
         subscriptionId: subscription.id,
         billingPlan,
+        value: recurrenceValue,
       },
       { status: 201 }
     );

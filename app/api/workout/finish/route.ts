@@ -6,6 +6,7 @@ import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 // 🔥 IMPORTAMOS O CÉREBRO DA NOSSA IA 🔥
 import { analyzeWorkoutEvolution } from '@/app/utils/analyzeEvolution';
+import { sendPushToUser } from '@/app/utils/sendNotification';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,7 +82,9 @@ export async function POST(req: Request) {
             currentXP: { increment: totalXp } 
         },
         include: {
-            coach: { select: { pushToken: true } } // Busca o token do Coach
+            // 🔥 Também busca a assinatura de Web Push — sem isso o coach que
+            // acessa pelo navegador (PWA) nunca recebia esse aviso.
+            coach: { select: { pushToken: true, webPushSubscription: true } }
         }
     });
 
@@ -89,26 +92,13 @@ export async function POST(req: Request) {
     // Roda a verificação de Estagnação em background. Se achar problema, salva no banco!
     analyzeWorkoutEvolution(userId, user.coachId || undefined).catch(console.error);
 
-    // 🔥 DISPARO DE NOTIFICAÇÃO PARA O COACH
-    try {
-        if (user.coach?.pushToken) {
-            await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: {
-                    Accept: 'application/json',
-                    'Accept-encoding': 'application/json',
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    to: user.coach.pushToken,
-                    sound: 'default',
-                    title: '🔥 Treino Concluído!',
-                    body: `${user.name || 'Um aluno'} acabou de esmagar o treino ${workoutName || ''}!`,
-                }),
-            });
-        }
-    } catch (pushError) {
-        console.error("Erro ao enviar push de treino finalizado:", pushError);
+    // 🔥 DISPARO DE NOTIFICAÇÃO PARA O COACH (app nativo + navegador)
+    if (user.coach) {
+        sendPushToUser(
+            user.coach,
+            '🔥 Treino Concluído!',
+            `${user.name || 'Um aluno'} acabou de esmagar o treino ${workoutName || ''}!`
+        ).catch((pushError) => console.error("Erro ao enviar push de treino finalizado:", pushError));
     }
 
     return NextResponse.json({ 

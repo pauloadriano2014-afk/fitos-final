@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { requireAuth } from '@/lib/auth';
+import { sendPushToUser } from '@/app/utils/sendNotification';
 
 // Configurações
 const apiKey = process.env.GEMINI_API_KEY || '';
@@ -20,27 +21,12 @@ async function notifyCoach(alunoName: string, exerciseName: string, score: numbe
   try {
     const admin = await prisma.user.findFirst({
       where: { role: 'ADMIN' },
-      select: { pushToken: true }
+      select: { pushToken: true, webPushSubscription: true }
     });
 
-    if (admin?.pushToken) {
-      const message = {
-        to: admin.pushToken,
-        sound: 'default',
-        title: '🤖 IA de Vídeo Utilizada!',
-        body: `${alunoName} analisou: ${exerciseName}. Nota: ${score}/10.`,
-      };
-
-      await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Accept-encoding': 'gzip, deflate',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(message),
-      });
-      console.log(`📱 Push Notification Expo enviada com sucesso pro Coach!`);
+    if (admin) {
+      await sendPushToUser(admin, '🤖 IA de Vídeo Utilizada!', `${alunoName} analisou: ${exerciseName}. Nota: ${score}/10.`);
+      console.log(`📱 Push Notification enviada com sucesso pro Coach!`);
     }
   } catch (error) {
     console.error("❌ Erro ao enviar push notification:", error);

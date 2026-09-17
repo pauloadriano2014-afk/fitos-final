@@ -148,6 +148,37 @@ model NoteSnippet {
   createdAt DateTime @default(now())
 }
 
+// 🔥 Diário alimentar por refeição (16 set 2026) — registro opcional, um toque
+// só, sem obrigar nada. status:
+//   'SEGUIU'     → aluno marcou que comeu a refeição como prescrita
+//   'SUBSTITUIU' → aluno trocou (substitutionLabel guarda qual versão/o que)
+//   'PULOU'      → aluno marcou que pulou a refeição
+//   'LIVRE'      → registro da refeição livre (mealId = 'refeicao_livre')
+// Ausência de registro pra uma refeição/dia não é "PULOU" — é simplesmente
+// nenhuma linha aqui, o que também é sinal útil pro nutricionista (silêncio).
+// Upsert por [userId, date, mealId] — reabrir e trocar a marcação atualiza,
+// não duplica.
+model DietMealLog {
+  id      String @id @default(uuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coachId String? // denormalizado pra consulta de aderência sem precisar de join
+
+  date     String // "YYYY-MM-DD", mesmo padrão do DailyCheckin
+  mealId   String // meal.id da Diet ativa, ou "refeicao_livre"
+  mealName String
+
+  status            String
+  substitutionLabel String?
+  note              String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date, mealId])
+  @@index([coachId, date])
+}
+
 model DietFeedback {
   id               String   @id @default(uuid())
   userId           String

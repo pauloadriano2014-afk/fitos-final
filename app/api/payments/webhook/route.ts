@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
+import { sendPushToUser } from '@/app/utils/sendNotification';
 
 export const dynamic = 'force-dynamic';
 
@@ -264,18 +265,9 @@ async function handleCheckoutEvent(event: string, body: any) {
             data: { isFinanceActive: true, paymentDueDate: newDueDate },
         });
 
-        const user = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true } });
-        if (user?.pushToken) {
-            await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: user.pushToken,
-                    sound: 'default',
-                    title: '✅ Pagamento automático ativado!',
-                    body: 'Sua mensalidade agora é cobrada automaticamente no cartão. Sem mais preocupação! 💪',
-                }),
-            }).catch(() => {});
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true, webPushSubscription: true } });
+        if (user) {
+            sendPushToUser(user, '✅ Pagamento automático ativado!', 'Sua mensalidade agora é cobrada automaticamente no cartão. Sem mais preocupação! 💪').catch(() => {});
         }
 
         console.log(`✅ Recorrência ativada: aluno ${userId}, subscription ${subscription.id}`);
@@ -340,18 +332,9 @@ async function handleCoachCheckoutEvent(event: string, externalRef: string, chec
             } as any,
         });
 
-        const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true } });
-        if (coach?.pushToken) {
-            await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: coach.pushToken,
-                    sound: 'default',
-                    title: '✅ Pagamento automático ativado!',
-                    body: 'Sua mensalidade ELITE FIT agora é renovada automaticamente no cartão. 💪',
-                }),
-            }).catch(() => {});
+        const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true, webPushSubscription: true } });
+        if (coach) {
+            sendPushToUser(coach, '✅ Pagamento automático ativado!', 'Sua mensalidade ELITE FIT agora é renovada automaticamente no cartão. 💪').catch(() => {});
         }
 
         console.log(`✅ Recorrência de coach ativada: coach ${coachId}, subscription ${subscription.id}`);
@@ -426,18 +409,9 @@ async function handleCoachSubscriptionRenewal(event: string, payment: any, local
         });
         await prisma.subscription.update({ where: { id: localSub.id }, data: { nextDueDate: billingEnd } });
 
-        const coach = await prisma.user.findUnique({ where: { id: localSub.userId }, select: { pushToken: true } });
-        if (coach?.pushToken) {
-            await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: coach.pushToken,
-                    sound: 'default',
-                    title: '✅ Mensalidade renovada!',
-                    body: 'Sua mensalidade ELITE FIT foi renovada automaticamente. Bora trabalhar! 💪',
-                }),
-            }).catch(() => {});
+        const coach = await prisma.user.findUnique({ where: { id: localSub.userId }, select: { pushToken: true, webPushSubscription: true } });
+        if (coach) {
+            sendPushToUser(coach, '✅ Mensalidade renovada!', 'Sua mensalidade ELITE FIT foi renovada automaticamente. Bora trabalhar! 💪').catch(() => {});
         }
 
         console.log(`✅ Ciclo recorrente de coach confirmado: coach ${localSub.userId}`);
@@ -488,18 +462,9 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
         await prisma.user.update({ where: { id: coachId }, data: updateData });
 
         // Push para o coach
-        const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true, name: true } });
-        if (coach?.pushToken && plan) {
-            await fetch('https://exp.host/--/api/v2/push/send', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to:    coach.pushToken,
-                    sound: 'default',
-                    title: '✅ Pagamento confirmado!',
-                    body:  `Seu plano ${plan.label} está ativo. Bora trabalhar! 💪`,
-                }),
-            }).catch(() => {});
+        const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true, webPushSubscription: true, name: true } });
+        if (coach && plan) {
+            sendPushToUser(coach, '✅ Pagamento confirmado!', `Seu plano ${plan.label} está ativo. Bora trabalhar! 💪`).catch(() => {});
         }
 
         console.log(`✅ Coach ${coachId} billing ativado — ${billingPlan}`);
@@ -560,18 +525,9 @@ async function handleContentPurchase(event: string, payment: any, externalRef: s
         });
 
         const content = await prisma.content.findUnique({ where: { id: contentId }, select: { title: true } });
-        const user = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true } });
-        if (user?.pushToken) {
-            await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: user.pushToken,
-                    sound: 'default',
-                    title: '✅ Compra confirmada!',
-                    body: `"${content?.title || 'Seu conteúdo'}" já está liberado na sua Biblioteca.`,
-                }),
-            }).catch(() => {});
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true, webPushSubscription: true } });
+        if (user) {
+            sendPushToUser(user, '✅ Compra confirmada!', `"${content?.title || 'Seu conteúdo'}" já está liberado na sua Biblioteca.`).catch(() => {});
         }
 
         console.log(`✅ Compra de conteúdo confirmada: user ${userId}, content ${contentId}`);
@@ -892,18 +848,7 @@ async function handleStudentPayment(event: string, payment: any) {
             } as any,
         });
 
-        if (user.pushToken) {
-            await fetch('https://exp.host/--/api/v2/push/send', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to:    user.pushToken,
-                    sound: 'default',
-                    title: '✅ Pagamento confirmado!',
-                    body:  'Seu plano foi renovado. Bora treinar! 💪',
-                }),
-            }).catch(() => {});
-        }
+        sendPushToUser(user, '✅ Pagamento confirmado!', 'Seu plano foi renovado. Bora treinar! 💪').catch(() => {});
     }
 
     if (event === 'PAYMENT_OVERDUE') {

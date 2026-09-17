@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { Expo } from 'expo-server-sdk';
 import { requireAuth, canActAsCoach, canAccessStudent } from '@/lib/auth';
-
-const expo = new Expo();
+import { sendPushToUsers } from '@/app/utils/sendNotification';
 
 // 🔥 POST: Criar um novo aviso e disparar Push Notifications
 export async function POST(req: Request) {
@@ -38,35 +36,17 @@ export async function POST(req: Request) {
       }
     });
 
-    // 3. DISPARO DE NOTIFICAÇÃO PUSH (O Celular apita no bolso!)
+    // 3. DISPARO DE NOTIFICAÇÃO PUSH (O Celular apita no bolso — ou o
+    // navegador, pra quem usa o PWA e nunca tinha token da Expo)
     // Se for 'ALL', pega todos os alunos do Coach. Se for array, pega só os selecionados.
     const usersFilter = targetUsers === 'ALL' ? { coachId: adminId } : { id: { in: targetUsers } };
-    
+
     const usersToNotify = await prisma.user.findMany({
-        where: { 
-            ...usersFilter, 
-            role: 'USER',
-            pushToken: { not: null } 
-        },
-        select: { pushToken: true }
+        where: { ...usersFilter, role: 'USER' },
+        select: { id: true, pushToken: true, webPushSubscription: true }
     });
 
-    const messages = [];
-    for (let u of usersToNotify) {
-        if (Expo.isExpoPushToken(u.pushToken)) {
-            messages.push({
-                to: u.pushToken,
-                sound: 'default',
-                title: `🔔 ${title}`,
-                body: content,
-                data: { noticeId: notice.id },
-            });
-        }
-    }
-
-    if (messages.length > 0) {
-        try { await expo.sendPushNotificationsAsync(messages); } catch(e) { console.log("Erro Push:", e) }
-    }
+    await sendPushToUsers(usersToNotify, `🔔 ${title}`, content, { noticeId: notice.id });
 
     return NextResponse.json(notice);
   } catch (error) {
