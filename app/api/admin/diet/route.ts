@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, isMasterId } from '@/lib/auth';
+import { sendPushToUser } from '@/app/utils/sendNotification';
 
 
 export async function POST(req: Request) {
@@ -18,6 +19,12 @@ export async function POST(req: Request) {
             name, goal,
             totalKcal, totalProtein, totalCarbs, totalFats,
             waterIntake, generalNotes, meals,
+            // 🔥 Aviso pro aluno (17 set 2026): NUNCA automático — o coach
+            // decide, save a save, se esse salvamento é a versão final pra
+            // avisar ("tô sempre alterando" era exatamente o motivo de não
+            // notificar em toda edição). Vem marcado só quando o app manda
+            // notifyStudent:true de propósito (toggle "avisar aluno" ligado).
+            notifyStudent,
         } = body;
 
         if (!userId || userId === '[object Object]' || userId === 'undefined') {
@@ -98,8 +105,29 @@ export async function POST(req: Request) {
             });
 
             console.log(`✅ ESTRATÉGIA ATUALIZADA: ${strategyId} (aluno ${userId})`);
+
+            if (notifyStudent) {
+                const student = await prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { pushToken: true, webPushSubscription: true },
+                });
+                if (student) {
+                    sendPushToUser(
+                        student,
+                        '🎯 Estratégia de dieta atualizada!',
+                        `"${updatedStrategy.name}" foi atualizada pelo seu coach. Toque para conferir.`
+                    ).catch(() => {});
+                }
+            }
+
             return NextResponse.json(updatedStrategy);
         }
+
+        // 🔥 Pra decidir a mensagem certa (dieta "pronta" na primeira vez vs
+        // "atualizada" depois) — precisa contar ANTES de criar a nova versão.
+        const existingBaseDietsCount = notifyStudent
+            ? await prisma.diet.count({ where: { userId, isStrategy: false } })
+            : 0;
 
         // ─── SALVANDO A DIETA BASE — fluxo original (cria nova versão) ───────────
         const newDiet = await prisma.$transaction(async (tx) => {
@@ -130,6 +158,18 @@ export async function POST(req: Request) {
         });
 
         console.log(`✅ DIETA SALVA: ${userId}`);
+
+        if (notifyStudent) {
+            const student = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { pushToken: true, webPushSubscription: true },
+            });
+            if (student) {
+                const title = existingBaseDietsCount === 0 ? '🍽️ Sua dieta está pronta!' : '🍽️ Dieta atualizada!';
+                sendPushToUser(student, title, 'Seu coach preparou seu plano alimentar. Toque para conferir.').catch(() => {});
+            }
+        }
+
         return NextResponse.json(newDiet);
 
     } catch (error: any) {

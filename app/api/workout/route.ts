@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { Expo } from 'expo-server-sdk';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { sendPushToUser } from '@/app/utils/sendNotification';
 
 const expo = new Expo();
 export const dynamic = 'force-dynamic';
@@ -172,7 +173,9 @@ export async function POST(req: Request) {
     }
 
     // Lógica original de criação manual do Admin
-    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel, intensityMultiplier, intensityEndDate, alternateSlot } = body;
+    // 🔥 notifyStudent (17 set 2026): NUNCA automático — só true quando o
+    // coach liga o sininho de propósito na hora de salvar a versão final.
+    const { userId, name, exercises, startDate, endDate, archiveCurrent, workoutModel, intensityMultiplier, intensityEndDate, alternateSlot, notifyStudent } = body;
 
     // 🔥 BLOQUEIO DE SEGURANÇA NA CRIAÇÃO (Painel Admin)
     const targetUser2 = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
@@ -243,6 +246,16 @@ export async function POST(req: Request) {
           await prisma.workoutExercise.createMany({
               data: exercisesToCreate
           });
+      }
+    }
+
+    if (notifyStudent) {
+      const student = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { pushToken: true, webPushSubscription: true },
+      });
+      if (student) {
+        sendPushToUser(student, '🏋️ Treino novo disponível!', `Seu coach preparou "${workout.name}". Bora treinar!`).catch(() => {});
       }
     }
 

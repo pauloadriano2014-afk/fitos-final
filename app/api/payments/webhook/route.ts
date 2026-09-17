@@ -17,6 +17,47 @@ const APP_URL = process.env.APP_URL || 'https://www.pauloadrianoteam.com.br';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const FROM_EMAIL = process.env.RESEND_FROM || 'ELITE FIT <onboarding@resend.dev>';
 
+// ─── PUSH: problema de pagamento (17 set 2026) ───────────────────────────────
+// Antes desses eventos (cartão recusado, checkout expirado, mensalidade em
+// atraso) só atualizavam o status no banco, sem avisar ninguém — o aluno só
+// descobria dias depois que perdeu acesso, e o coach nunca ficava sabendo pra
+// poder entrar em contato. Best effort: nunca lança erro, nunca derruba o
+// webhook (a Asaas reenvia se a resposta não for 200).
+async function notifyStudentPaymentIssue(studentId: string, title: string, body: string) {
+    try {
+        const student = await prisma.user.findUnique({
+            where: { id: studentId },
+            select: { pushToken: true, webPushSubscription: true, coachId: true, name: true },
+        });
+        if (!student) return;
+        sendPushToUser(student, title, body).catch(() => {});
+
+        if (student.coachId) {
+            const coach = await prisma.user.findUnique({
+                where: { id: student.coachId },
+                select: { pushToken: true, webPushSubscription: true },
+            });
+            if (coach) {
+                sendPushToUser(coach, `⚠️ ${student.name || 'Aluno'}: problema no pagamento`, title).catch(() => {});
+            }
+        }
+    } catch (e) {
+        console.error('[notifyStudentPaymentIssue]', e);
+    }
+}
+
+async function notifyCoachBillingIssue(coachId: string, title: string, body: string) {
+    try {
+        const coach = await prisma.user.findUnique({
+            where: { id: coachId },
+            select: { pushToken: true, webPushSubscription: true },
+        });
+        if (coach) sendPushToUser(coach, title, body).catch(() => {});
+    } catch (e) {
+        console.error('[notifyCoachBillingIssue]', e);
+    }
+}
+
 export async function POST(req: Request) {
     try {
         // 🔒 Verificação do token de autenticação do webhook — só é aplicada
@@ -275,10 +316,12 @@ async function handleCheckoutEvent(event: string, body: any) {
 
     if (event === 'CHECKOUT_CANCELED') {
         await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'CANCELLED' } });
+        await notifyStudentPaymentIssue(userId, '❌ Pagamento não aprovado', 'Sua cobrança não foi aprovada. Verifique os dados do cartão ou fale com seu coach.');
     }
 
     if (event === 'CHECKOUT_EXPIRED') {
         await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'EXPIRED' } });
+        await notifyStudentPaymentIssue(userId, '⏱️ Checkout expirado', 'O prazo para confirmar seu pagamento expirou. Peça um novo link ao seu coach.');
     }
 
     return NextResponse.json({ received: true });
@@ -342,10 +385,12 @@ async function handleCoachCheckoutEvent(event: string, externalRef: string, chec
 
     if (event === 'CHECKOUT_CANCELED') {
         await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'CANCELLED' } });
+        await notifyCoachBillingIssue(coachId, '❌ Pagamento não aprovado', 'Sua cobrança da mensalidade ELITE FIT não foi aprovada. Verifique os dados do cartão.');
     }
 
     if (event === 'CHECKOUT_EXPIRED') {
         await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'EXPIRED' } });
+        await notifyCoachBillingIssue(coachId, '⏱️ Checkout expirado', 'O prazo pra confirmar sua mensalidade expirou. Gere um novo link.');
     }
 
     return NextResponse.json({ received: true });
@@ -419,6 +464,7 @@ async function handleCoachSubscriptionRenewal(event: string, payment: any, local
 
     if (event === 'PAYMENT_OVERDUE') {
         await prisma.user.update({ where: { id: localSub.userId }, data: { coachBillingStatus: 'OVERDUE' } as any });
+        await notifyCoachBillingIssue(localSub.userId, '⚠️ Mensalidade em atraso', 'Sua mensalidade ELITE FIT está em atraso. Regularize para não perder o acesso.');
     }
 
     if (event === 'PAYMENT_DELETED' || event === 'PAYMENT_REFUNDED') {
@@ -426,6 +472,7 @@ async function handleCoachSubscriptionRenewal(event: string, payment: any, local
             where: { id: localSub.userId },
             data: { coachBillingStatus: 'CANCELLED', accountStatus: 'REJECTED' } as any,
         });
+        await notifyCoachBillingIssue(localSub.userId, '❌ Assinatura cancelada', 'Sua assinatura ELITE FIT foi cancelada.');
     }
 
     return NextResponse.json({ received: true });
@@ -475,6 +522,7 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
             where: { id: coachId },
             data:  { coachBillingStatus: 'OVERDUE' } as any,
         });
+        await notifyCoachBillingIssue(coachId, '⚠️ Mensalidade em atraso', 'Sua mensalidade ELITE FIT está em atraso. Regularize para não perder o acesso.');
         console.log(`⚠️ Coach ${coachId} billing vencido`);
     }
 
@@ -483,6 +531,7 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
             where: { id: coachId },
             data:  { coachBillingStatus: 'CANCELLED', accountStatus: 'REJECTED' } as any,
         });
+        await notifyCoachBillingIssue(coachId, '❌ Assinatura cancelada', 'Sua assinatura ELITE FIT foi cancelada.');
         console.log(`❌ Coach ${coachId} billing cancelado`);
     }
 
@@ -856,6 +905,7 @@ async function handleStudentPayment(event: string, payment: any) {
             where: { id: user.id },
             data:  { isFinanceActive: false } as any,
         });
+        await notifyStudentPaymentIssue(user.id, '⚠️ Pagamento em atraso', 'Sua mensalidade está em atraso. Regularize para não perder o acesso.');
     }
 
     return NextResponse.json({ received: true });

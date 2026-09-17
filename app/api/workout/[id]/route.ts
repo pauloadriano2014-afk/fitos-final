@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { sendPushToUser } from '@/app/utils/sendNotification';
 
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
@@ -23,7 +24,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const body = await req.json();
 
     // 🔥 RECEBENDO A CHAVE DA CARGA E DO MOTOR DE PERIODIZAÇÃO AQUI
-    const { name, startDate, endDate, exercises, workoutModel, intensityMultiplier, intensityEndDate, archiveCurrent, alternateSlot } = body;
+    // 🔥 notifyStudent (17 set 2026): NUNCA automático — só true quando o
+    // coach liga o sininho de propósito na hora de salvar a versão final
+    // (evita notificar o aluno a cada ajuste feito durante a edição).
+    const { name, startDate, endDate, exercises, workoutModel, intensityMultiplier, intensityEndDate, archiveCurrent, alternateSlot, notifyStudent } = body;
 
     const workout = await prisma.workout.update({
       where: { id },
@@ -93,6 +97,16 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
           await prisma.workoutExercise.createMany({
             data: exercisesToCreate,
           });
+      }
+    }
+
+    if (notifyStudent) {
+      const student = await prisma.user.findUnique({
+        where: { id: existingWorkout.userId },
+        select: { pushToken: true, webPushSubscription: true },
+      });
+      if (student) {
+        sendPushToUser(student, '🏋️ Treino atualizado!', `Seu coach atualizou "${workout.name}". Confira as mudanças.`).catch(() => {});
       }
     }
 
