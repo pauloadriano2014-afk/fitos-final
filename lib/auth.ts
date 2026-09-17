@@ -63,6 +63,23 @@ export function canActAsCoach(authUser: AuthUser | null, targetCoachId: string |
   return authUser.id === targetCoachId || isMasterId(authUser.id);
 }
 
+// 🔥 (17 set 2026) true se quem chamou pode LER a biblioteca/config de um
+// coach (vídeos de técnica, técnicas customizadas, PA FLIX) -- é o próprio
+// coach, é master, OU é um ALUNO daquele coach específico (`authUser.coachId`
+// já vem no próprio token, preenchido no login). Criada porque `canActAsCoach`
+// (só o coach dono ou master) estava sendo usada por engano em rotas de
+// LEITURA que o app do ALUNO também chama pra buscar a biblioteca do coach
+// dele -- todo aluno tomava 403 e as técnicas em vídeo sumiam pra todo mundo.
+// `canActAsCoach` continua correta pra POST/PUT/DELETE (só o coach dono
+// pode escrever nessas rotas).
+export function canViewCoachLibrary(authUser: AuthUser | null, targetCoachId: string | null | undefined): boolean {
+  if (!authUser || !targetCoachId) return false;
+  if (authUser.id === targetCoachId) return true;
+  if (isMasterId(authUser.id)) return true;
+  if (authUser.coachId === targetCoachId) return true;
+  return false;
+}
+
 // true se quem chamou pode ver/mexer nos dados de um ALUNO específico:
 // é o próprio aluno, é o coach dono desse aluno, ou é do time master.
 // Use quando a rota lida com dado de um userId específico (dieta, treino,

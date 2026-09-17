@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
-import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { requireAuth, canActAsCoach, canViewCoachLibrary } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +37,11 @@ export async function GET(req: Request) {
 
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    if (!canActAsCoach(auth.user, coachId)) {
+    // 🔒 Rota de LEITURA -- chamada tanto pelo painel do coach quanto pelo
+    // app do aluno (buscando a biblioteca de vídeos do PRÓPRIO coach), por
+    // isso usa canViewCoachLibrary (aceita aluno lendo o coach dele), não
+    // canActAsCoach (que só deixaria o próprio coach passar).
+    if (!canViewCoachLibrary(auth.user, coachId)) {
       return corsResponse({ error: 'Acesso negado.' }, 403);
     }
 

@@ -1,7 +1,7 @@
 // app/api/admin/techniques/route.ts
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { requireAuth, canActAsCoach, canViewCoachLibrary } from '@/lib/auth';
 
 
 // 🔥 Helper para anexar CORS limpos em todas as respostas (evita bloqueio no PWA/Web)
@@ -31,7 +31,10 @@ export async function GET(req: Request) {
 
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    if (!canActAsCoach(auth.user, coachId)) {
+    // 🔒 Rota de LEITURA -- chamada também pelo app do aluno (buscando as
+    // técnicas customizadas do PRÓPRIO coach), por isso canViewCoachLibrary
+    // em vez de canActAsCoach (que exigiria ser o próprio coach).
+    if (!canViewCoachLibrary(auth.user, coachId)) {
       return corsResponse({ error: 'Acesso negado.' }, 403);
     }
 

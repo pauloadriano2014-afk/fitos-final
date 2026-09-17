@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { sendNotificationToAll } from '../../utils/sendNotification';
-import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { requireAuth, canActAsCoach, canViewCoachLibrary } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +27,12 @@ export async function GET(request: Request) {
     if (userId && userId !== 'null' && userId !== 'undefined' && auth.user.id !== userId && !MASTER_IDS.includes(auth.user.id)) {
         return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
     }
-    if (adminId && adminId !== 'null' && adminId !== 'undefined' && !canActAsCoach(auth.user, adminId)) {
+    // 🔒 (17 set 2026) `adminId` aqui é só um filtro de LEITURA (qual biblioteca
+    // mostrar) -- o app do aluno também chama assim, passando o coachId dele
+    // (ver BibliotecaScreen.js). canActAsCoach exigia ser o próprio coach e
+    // dava 403 pra todo aluno; canViewCoachLibrary aceita aluno lendo a
+    // biblioteca do coach dele.
+    if (adminId && adminId !== 'null' && adminId !== 'undefined' && !canViewCoachLibrary(auth.user, adminId)) {
         return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
     }
 
