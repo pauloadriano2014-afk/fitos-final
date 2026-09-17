@@ -171,6 +171,7 @@ model DietMealLog {
   status            String
   substitutionLabel String?
   note              String? @db.Text
+  photoUrl          String? // 🔥 (17 set 2026) foto opcional da refeição livre — comprimida antes de subir pro R2, sem thumb separado (custo baixo de propósito)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

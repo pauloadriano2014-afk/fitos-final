@@ -72,7 +72,8 @@ export async function GET(req: Request, { params }: { params: { userId: string }
 
     const dayKeys = Object.keys(byDay).sort();
     const daysWithRecord = dayKeys.filter((k) => byDay[k].hasAnyRecord).length;
-    const substitutionsCount = mealLogs.filter((m) => m.status === 'SUBSTITUIU').length;
+    const substitutions = mealLogs.filter((m) => m.status === 'SUBSTITUIU').sort((a, b) => (a.date < b.date ? 1 : -1));
+    const substitutionsCount = substitutions.length;
     const freeMeals = mealLogs.filter((m) => m.status === 'LIVRE').sort((a, b) => (a.date < b.date ? 1 : -1));
 
     return NextResponse.json({
@@ -85,6 +86,7 @@ export async function GET(req: Request, { params }: { params: { userId: string }
           status: m.status,
           substitutionLabel: m.substitutionLabel,
           note: m.note,
+          photoUrl: m.photoUrl,
         })),
         dietAdherence: byDay[k].checkin?.dietAdherence ?? null,
         dietNote: byDay[k].checkin?.dietNote ?? null,
@@ -94,7 +96,15 @@ export async function GET(req: Request, { params }: { params: { userId: string }
         daysWithRecord,
         substitutionsCount,
         freeMealsCount: freeMeals.length,
-        recentFreeMeals: freeMeals.slice(0, 5).map((m) => ({ date: m.date, note: m.note })),
+        recentFreeMeals: freeMeals.slice(0, 5).map((m) => ({ date: m.date, note: m.note, photoUrl: m.photoUrl })),
+        // 🔥 (17 set 2026) Paulo pediu pra saber especificamente o que foi trocado
+        // por quê (antes só existia a contagem) — ver CleanMealCard.js no mobile
+        recentSubstitutions: substitutions.slice(0, 8).map((m) => ({
+          date: m.date,
+          mealName: m.mealName,
+          substitutionLabel: m.substitutionLabel,
+          note: m.note,
+        })),
       },
     });
   } catch (error: any) {
