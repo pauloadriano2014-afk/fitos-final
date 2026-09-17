@@ -20,8 +20,14 @@ model User {
   dailyCheckins     DailyCheckin[]
   dietFeedbacks     DietFeedback[]
   dietMealLogs      DietMealLog[]
-  npsRequested      Boolean  @default(false) 
-  accountStatus     String  @default("ACTIVE") 
+  npsRequested      Boolean  @default(false)
+  accountStatus     String  @default("ACTIVE")
+  // 🔥 (17 set 2026) Pedido de auto-exclusão de conta de um COACH que ainda
+  // tem aluno ativo -- fica pendente aqui em vez de anonimizar na hora, pra
+  // não deixar os alunos dele com o coachId apontando pra uma conta já
+  // anonimizada. Ver lib/accountDeletion.ts e app/api/admin/deletion-requests.
+  // Sempre null pra aluno (aluno exclui na hora, sem essa etapa).
+  deletionRequestedAt DateTime?
   inviteCode        String? @unique
   coachRequestInfo  Json?
   studentModules      String?   @default("TREINO")

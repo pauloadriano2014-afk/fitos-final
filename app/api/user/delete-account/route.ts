@@ -1,26 +1,27 @@
 // app/api/user/delete-account/route.ts
 // 🗑️ Exclusão de conta pelo próprio usuário (aluno ou coach) — exigida pela
 // Apple (App Store Guideline 5.1.1(v)) e pelo Google Play pra qualquer app
-// que permita criar conta.
+// que permita criar conta. A política do Google não abre exceção pra contas
+// "profissionais"/parceiro — vale pra aluno E pra coach igualmente.
 //
-// Não é um hard delete: apagar a linha do usuário de verdade derrubaria em
-// cascata TODAS as Subscription/Payment dele (onDelete: Cascade em
-// finance.prisma), o que destruiria histórico financeiro que a gente é
-// obrigado a manter por obrigação fiscal (Asaas, PIX, NF). Em vez disso,
-// isso aqui ANONIMIZA os dados pessoais e marca a conta como excluída
-// (accountStatus = "DELETED", active = false) — os registros financeiros
-// continuam intactos, vinculados ao mesmo id, mas sem nenhum dado pessoal
-// identificável. Isso satisfaz tanto a LGPD (direito ao esquecimento) quanto
-// a obrigação de manter registro fiscal.
+// Não é um hard delete — ver nota detalhada em lib/accountDeletion.ts sobre
+// por que isso ANONIMIZA em vez de apagar a linha.
 //
-// Login: com password trocado por um hash aleatório e accountStatus
-// "DELETED", o usuário não consegue mais entrar (auth/login precisa checar
-// accountStatus !== "DELETED" — ver nota abaixo).
+// 🔥 (17 set 2026) Coach parceiro com aluno(s) ATIVO(s) não pode sumir na
+// hora — os alunos dele ficariam com o coachId apontando pra uma conta já
+// anonimizada (biblioteca, PA FLIX, técnicas etc. quebrariam pra eles). Nesse
+// caso a exclusão vira um PEDIDO (deletionRequestedAt) em vez de acontecer na
+// hora: o coach continua ativo/logado normalmente, o master é avisado por
+// push e vê o pedido pendente no painel, e só quando ele decidir o que fazer
+// com os alunos e confirmar (ver app/api/admin/deletion-requests) é que a
+// conta do coach é de fato anonimizada. Aluno nunca passa por essa etapa —
+// continua excluindo na hora, igual sempre foi.
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
 import prisma from '@/lib/prisma';
 import { requireAuth, isMasterId } from '@/lib/auth';
+import { anonymizeUserAccount, countActiveStudents } from '@/lib/accountDeletion';
+import { sendPushToUsers } from '@/app/utils/sendNotification';
+import { MASTER_IDS } from '@/lib/masterIds';
 
 function corsResponse(body: any, status = 200) {
   return NextResponse.json(body, {
@@ -54,7 +55,7 @@ export async function DELETE(req: Request) {
 
     const existing = await prisma.user.findUnique({
       where: { id: authUser.id },
-      select: { id: true, accountStatus: true },
+      select: { id: true, name: true, role: true, accountStatus: true, deletionRequestedAt: true },
     });
 
     if (!existing) {
@@ -66,54 +67,42 @@ export async function DELETE(req: Request) {
       return corsResponse({ success: true, alreadyDeleted: true });
     }
 
-    // Hash aleatório e descartável — invalida qualquer senha antiga, ninguém
-    // (nem o próprio usuário) consegue mais logar com ela.
-    const deadPassword = await bcrypt.hash(randomUUID(), 10);
+    // 🔒 Coach com aluno ativo -> vira pedido pendente, não anonimiza na hora.
+    if (existing.role === 'COACH') {
+      const activeStudents = await countActiveStudents(existing.id);
+      if (activeStudents > 0) {
+        if (!existing.deletionRequestedAt) {
+          await prisma.user.update({
+            where: { id: existing.id },
+            data: { deletionRequestedAt: new Date() },
+          });
 
-    await prisma.user.update({
-      where: { id: authUser.id },
-      data: {
-        // Identidade / contato
-        name: 'Usuário removido',
-        email: `deleted-${authUser.id}@removed.elitefit.local`,
-        password: deadPassword,
-        phone: null,
-        cpf: null,
-        birthDate: null,
-        gender: null,
-        photoUrl: null,
-        evaluationUrl: null,
+          try {
+            const masters = await prisma.user.findMany({
+              where: { id: { in: MASTER_IDS } },
+              select: { id: true, pushToken: true, webPushSubscription: true },
+            });
+            await sendPushToUsers(
+              masters,
+              '⚠️ Pedido de exclusão de conta',
+              `${existing.name || 'Um coach parceiro'} pediu pra excluir a conta e ainda tem ${activeStudents} aluno${activeStudents === 1 ? '' : 's'} ativo${activeStudents === 1 ? '' : 's'}. Revise antes de confirmar.`
+            );
+          } catch (e) { /* não-crítico */ }
+        }
 
-        // Endereço (exigido pelo checkout Asaas, sem uso depois de excluída)
-        address: null,
-        addressNumber: null,
-        complement: null,
-        province: null,
-        postalCode: null,
+        return corsResponse({
+          success: true,
+          pending: true,
+          activeStudents,
+          message: 'Seu pedido de exclusão foi enviado. Como você ainda tem aluno(s) ativo(s), o time responsável vai revisar antes de concluir — você continua com acesso normal até lá.',
+        });
+      }
+    }
 
-        // Segredos / integrações pessoais
-        pushToken: null,
-        resetToken: null,
-        resetTokenExpiry: null,
-        coachAsaasApiKey: null,
-        brandLogoUrl: null,
-        brandColor: null,
-        coachRequestInfo: null,
-        inviteCode: null,
-
-        // Anotações que o coach fez sobre esse aluno — dado pessoal dele.
-        strategyNotes: null,
-
-        // Estado da conta
-        accountStatus: 'DELETED',
-        active: false,
-        isFinanceActive: false,
-      },
-    });
-
+    await anonymizeUserAccount(existing.id);
     return corsResponse({ success: true });
-  } catch (error) {
-    console.error('[delete-account] erro:', error);
+  } catch (error: any) {
+    console.error('[delete-account] erro:', error?.message || error);
     return corsResponse({ error: 'Erro ao excluir conta.' }, 500);
   }
 }
