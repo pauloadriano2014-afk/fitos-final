@@ -41,7 +41,8 @@ export async function POST(req: Request) {
           sendPushToUser(
             coach,
             '🍽️ Novo feedback de dieta',
-            `${alunoNome} enviou um feedback sobre a dieta. Toque para ver.`
+            `${alunoNome} enviou um feedback sobre a dieta. Toque para ver.`,
+            { type: 'diet_feedback', studentId: userId }
           ).catch(() => {});
         }
       } catch (e) {

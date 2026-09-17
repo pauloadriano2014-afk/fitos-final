@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         select: { id: true, pushToken: true, webPushSubscription: true }
     });
 
-    await sendPushToUsers(usersToNotify, `🔔 ${title}`, content, { noticeId: notice.id });
+    await sendPushToUsers(usersToNotify, `🔔 ${title}`, content, { type: 'notice', noticeId: notice.id });
 
     return NextResponse.json(notice);
   } catch (error) {

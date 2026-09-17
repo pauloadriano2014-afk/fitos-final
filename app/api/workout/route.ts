@@ -255,7 +255,7 @@ export async function POST(req: Request) {
         select: { pushToken: true, webPushSubscription: true },
       });
       if (student) {
-        sendPushToUser(student, '🏋️ Treino novo disponível!', `Seu coach preparou "${workout.name}". Bora treinar!`).catch(() => {});
+        sendPushToUser(student, '🏋️ Treino novo disponível!', `Seu coach preparou "${workout.name}". Bora treinar!`, { type: 'workout_new', workoutId: workout.id }).catch(() => {});
       }
     }
 

@@ -43,7 +43,10 @@ export async function POST(req: Request) {
     const totalXp = xpBase + xpBonus;
 
     // Salva Histórico
-    await prisma.workoutHistory.create({
+    // 🔥 (17 set 2026) `include: { details: true }` — precisamos do id de volta
+    // pra poder linkar o push de "comentário no exercício" direto pra essa
+    // observação específica (ver bloco de notificação mais abaixo).
+    const workoutHistoryRecord = await prisma.workoutHistory.create({
         data: {
             userId,
             name: workoutName,
@@ -72,7 +75,8 @@ export async function POST(req: Request) {
                     }));
                 })
             }
-        }
+        },
+        include: { details: true }
     });
 
     // Atualiza XP do Usuário e resgata dados do Treinador para Notificação
@@ -93,12 +97,34 @@ export async function POST(req: Request) {
     analyzeWorkoutEvolution(userId, user.coachId || undefined).catch(console.error);
 
     // 🔥 DISPARO DE NOTIFICAÇÃO PARA O COACH (app nativo + navegador)
+    // 🔥 (17 set 2026) Se o aluno escreveu algum comentário — RPE final ou
+    // observação em algum exercício — destaca isso no título/corpo do push,
+    // com uma prévia do texto. Sem isso o coach só via esse comentário se
+    // abrisse o histórico do aluno manualmente; agora não passa despercebido.
     if (user.coach) {
-        sendPushToUser(
-            user.coach,
-            '🔥 Treino Concluído!',
-            `${user.name || 'Um aluno'} acabou de esmagar o treino ${workoutName || ''}!`
-        ).catch((pushError) => console.error("Erro ao enviar push de treino finalizado:", pushError));
+        const feedbackClean = feedback ? String(feedback).trim() : '';
+        // 🔥 Primeira observação não-vazia (mesma regra de leitura do
+        // WorkoutLogCard.js: só a primeira ocorrência por exercício importa).
+        const noteDetail = workoutHistoryRecord.details.find((d) => d.note);
+
+        let pushTitle = '🔥 Treino Concluído!';
+        let pushBody = `${user.name || 'Um aluno'} acabou de esmagar o treino ${workoutName || ''}!`;
+        // 🔥 (17 set 2026) `data` de deep link — ao tocar, o admin abre já na
+        // tela de histórico desse treino, focado no comentário certo (se
+        // houver). Ver PENDING_MOBILE_DEEPLINKS.md pra como consumir isso.
+        let pushData: any = { type: 'workout_finished', studentId: userId, workoutHistoryId: workoutHistoryRecord.id };
+
+        if (feedbackClean) {
+            pushTitle = '📝 Treino concluído com comentário!';
+            pushBody = `${user.name || 'Um aluno'}: "${feedbackClean.slice(0, 100)}"`;
+            pushData = { type: 'workout_feedback', studentId: userId, workoutHistoryId: workoutHistoryRecord.id };
+        } else if (noteDetail) {
+            pushTitle = '📝 Treino concluído com observação!';
+            pushBody = `${user.name || 'Um aluno'} deixou um comentário em "${noteDetail.exerciseName}": "${(noteDetail.note || '').slice(0, 80)}"`;
+            pushData = { type: 'exercise_comment', studentId: userId, workoutHistoryId: workoutHistoryRecord.id, exerciseHistoryId: noteDetail.id };
+        }
+
+        sendPushToUser(user.coach, pushTitle, pushBody, pushData).catch((pushError) => console.error("Erro ao enviar push de treino finalizado:", pushError));
     }
 
     return NextResponse.json({ 

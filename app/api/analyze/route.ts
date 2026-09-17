@@ -25,7 +25,11 @@ async function notifyCoach(alunoName: string, exerciseName: string, score: numbe
     });
 
     if (admin) {
-      await sendPushToUser(admin, '🤖 IA de Vídeo Utilizada!', `${alunoName} analisou: ${exerciseName}. Nota: ${score}/10.`);
+      // 🔥 Sem userId disponível aqui (o formulário só manda o nome em texto) —
+      // por isso o deep link cai só no `type`, sem studentId. Se algum dia
+      // quisermos abrir direto no perfil do aluno, o app precisa passar o
+      // userId no FormData também.
+      await sendPushToUser(admin, '🤖 IA de Vídeo Utilizada!', `${alunoName} analisou: ${exerciseName}. Nota: ${score}/10.`, { type: 'ai_analysis' });
       console.log(`📱 Push Notification enviada com sucesso pro Coach!`);
     }
   } catch (error) {

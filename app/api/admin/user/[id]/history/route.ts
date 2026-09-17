@@ -32,7 +32,24 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         duration: true,
         rpe: true,       // <--- Importante
         feedback: true,  // <--- Importante
-        xpEarned: true
+        xpEarned: true,
+        // 🔥 (17 set 2026) Pra tela de histórico do admin poder mostrar/repetir
+        // se o feedback final já foi resolvido/respondido, e mostrar quais
+        // exercícios têm observação pendente (resolvedAt null = pendente).
+        feedbackResolvedAt: true,
+        coachReply: true,
+        coachReplyAt: true,
+        details: {
+          where: { note: { not: null } },
+          select: {
+            id: true,
+            exerciseName: true,
+            note: true,
+            resolvedAt: true,
+            coachReply: true,
+            coachReplyAt: true,
+          },
+        },
       }
     });
 

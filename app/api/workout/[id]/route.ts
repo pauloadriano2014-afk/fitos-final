@@ -106,7 +106,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         select: { pushToken: true, webPushSubscription: true },
       });
       if (student) {
-        sendPushToUser(student, '🏋️ Treino atualizado!', `Seu coach atualizou "${workout.name}". Confira as mudanças.`).catch(() => {});
+        sendPushToUser(student, '🏋️ Treino atualizado!', `Seu coach atualizou "${workout.name}". Confira as mudanças.`, { type: 'workout_updated', workoutId: id }).catch(() => {});
       }
     }
 

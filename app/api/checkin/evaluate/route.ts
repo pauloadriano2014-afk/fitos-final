@@ -154,7 +154,7 @@ export async function POST(req: Request) {
 
         // 🔥 PUSH NOTIFICATION (Não envia se for Baixa Silenciosa) 🔥
         if (checkIn.user && !silent) {
-            sendPushToUser(checkIn.user, '📋 Relatório Técnico Disponível!', 'O Coach analisou seu shape e enviou um novo laudo. Toque para ver!')
+            sendPushToUser(checkIn.user, '📋 Relatório Técnico Disponível!', 'O Coach analisou seu shape e enviou um novo laudo. Toque para ver!', { type: 'checkin_report', checkInId: checkIn.id })
                 .catch(err => console.log("Erro ao enviar push:", err));
         }
 

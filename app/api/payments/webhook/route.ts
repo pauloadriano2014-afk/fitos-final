@@ -30,7 +30,7 @@ async function notifyStudentPaymentIssue(studentId: string, title: string, body:
             select: { pushToken: true, webPushSubscription: true, coachId: true, name: true },
         });
         if (!student) return;
-        sendPushToUser(student, title, body).catch(() => {});
+        sendPushToUser(student, title, body, { type: 'payment_issue' }).catch(() => {});
 
         if (student.coachId) {
             const coach = await prisma.user.findUnique({
@@ -38,7 +38,7 @@ async function notifyStudentPaymentIssue(studentId: string, title: string, body:
                 select: { pushToken: true, webPushSubscription: true },
             });
             if (coach) {
-                sendPushToUser(coach, `⚠️ ${student.name || 'Aluno'}: problema no pagamento`, title).catch(() => {});
+                sendPushToUser(coach, `⚠️ ${student.name || 'Aluno'}: problema no pagamento`, title, { type: 'payment_issue_coach', studentId }).catch(() => {});
             }
         }
     } catch (e) {
@@ -52,7 +52,7 @@ async function notifyCoachBillingIssue(coachId: string, title: string, body: str
             where: { id: coachId },
             select: { pushToken: true, webPushSubscription: true },
         });
-        if (coach) sendPushToUser(coach, title, body).catch(() => {});
+        if (coach) sendPushToUser(coach, title, body, { type: 'billing_issue' }).catch(() => {});
     } catch (e) {
         console.error('[notifyCoachBillingIssue]', e);
     }
@@ -308,7 +308,7 @@ async function handleCheckoutEvent(event: string, body: any) {
 
         const user = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true, webPushSubscription: true } });
         if (user) {
-            sendPushToUser(user, '✅ Pagamento automático ativado!', 'Sua mensalidade agora é cobrada automaticamente no cartão. Sem mais preocupação! 💪').catch(() => {});
+            sendPushToUser(user, '✅ Pagamento automático ativado!', 'Sua mensalidade agora é cobrada automaticamente no cartão. Sem mais preocupação! 💪', { type: 'payment_ok' }).catch(() => {});
         }
 
         console.log(`✅ Recorrência ativada: aluno ${userId}, subscription ${subscription.id}`);
@@ -377,7 +377,7 @@ async function handleCoachCheckoutEvent(event: string, externalRef: string, chec
 
         const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true, webPushSubscription: true } });
         if (coach) {
-            sendPushToUser(coach, '✅ Pagamento automático ativado!', 'Sua mensalidade ELITE FIT agora é renovada automaticamente no cartão. 💪').catch(() => {});
+            sendPushToUser(coach, '✅ Pagamento automático ativado!', 'Sua mensalidade ELITE FIT agora é renovada automaticamente no cartão. 💪', { type: 'payment_ok' }).catch(() => {});
         }
 
         console.log(`✅ Recorrência de coach ativada: coach ${coachId}, subscription ${subscription.id}`);
@@ -456,7 +456,7 @@ async function handleCoachSubscriptionRenewal(event: string, payment: any, local
 
         const coach = await prisma.user.findUnique({ where: { id: localSub.userId }, select: { pushToken: true, webPushSubscription: true } });
         if (coach) {
-            sendPushToUser(coach, '✅ Mensalidade renovada!', 'Sua mensalidade ELITE FIT foi renovada automaticamente. Bora trabalhar! 💪').catch(() => {});
+            sendPushToUser(coach, '✅ Mensalidade renovada!', 'Sua mensalidade ELITE FIT foi renovada automaticamente. Bora trabalhar! 💪', { type: 'payment_ok' }).catch(() => {});
         }
 
         console.log(`✅ Ciclo recorrente de coach confirmado: coach ${localSub.userId}`);
@@ -511,7 +511,7 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
         // Push para o coach
         const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true, webPushSubscription: true, name: true } });
         if (coach && plan) {
-            sendPushToUser(coach, '✅ Pagamento confirmado!', `Seu plano ${plan.label} está ativo. Bora trabalhar! 💪`).catch(() => {});
+            sendPushToUser(coach, '✅ Pagamento confirmado!', `Seu plano ${plan.label} está ativo. Bora trabalhar! 💪`, { type: 'payment_ok' }).catch(() => {});
         }
 
         console.log(`✅ Coach ${coachId} billing ativado — ${billingPlan}`);
@@ -576,7 +576,7 @@ async function handleContentPurchase(event: string, payment: any, externalRef: s
         const content = await prisma.content.findUnique({ where: { id: contentId }, select: { title: true } });
         const user = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true, webPushSubscription: true } });
         if (user) {
-            sendPushToUser(user, '✅ Compra confirmada!', `"${content?.title || 'Seu conteúdo'}" já está liberado na sua Biblioteca.`).catch(() => {});
+            sendPushToUser(user, '✅ Compra confirmada!', `"${content?.title || 'Seu conteúdo'}" já está liberado na sua Biblioteca.`, { type: 'purchase_confirmed', contentId }).catch(() => {});
         }
 
         console.log(`✅ Compra de conteúdo confirmada: user ${userId}, content ${contentId}`);
@@ -897,7 +897,7 @@ async function handleStudentPayment(event: string, payment: any) {
             } as any,
         });
 
-        sendPushToUser(user, '✅ Pagamento confirmado!', 'Seu plano foi renovado. Bora treinar! 💪').catch(() => {});
+        sendPushToUser(user, '✅ Pagamento confirmado!', 'Seu plano foi renovado. Bora treinar! 💪', { type: 'payment_ok' }).catch(() => {});
     }
 
     if (event === 'PAYMENT_OVERDUE') {

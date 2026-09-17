@@ -10,14 +10,14 @@ import { sendPushToUser } from '@/app/utils/sendNotification';
 const PAULO_EMAIL = 'paulo_adriano2014@live.com';
 const ADRI_EMAIL  = 'adri.personal@hotmail.com';
 
-async function notifyMaster(title: string, bodyText: string) {
+async function notifyMaster(title: string, bodyText: string, data: any = {}) {
     try {
         const master = await prisma.user.findUnique({
             where: { email: PAULO_EMAIL },
             select: { pushToken: true, webPushSubscription: true },
         });
         if (master) {
-            await sendPushToUser(master, title, bodyText);
+            await sendPushToUser(master, title, bodyText, data);
         }
     } catch (e) { console.error('Erro push master:', e); }
 }
@@ -84,7 +84,8 @@ export async function POST(req: Request) {
             };
             await notifyMaster(
                 '🎯 Novo Coach quer entrar!',
-                `${name}${instagram ? ` (${instagram})` : ''} se cadastrou como ${planLabel[safePlan]} e aguarda aprovação.`
+                `${name}${instagram ? ` (${instagram})` : ''} se cadastrou como ${planLabel[safePlan]} e aguarda aprovação.`,
+                { type: 'new_coach_request', coachId: coach.id }
             );
 
             const { password: _, ...coachWithoutPassword } = coach;
@@ -145,7 +146,7 @@ export async function POST(req: Request) {
         try {
             const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true, webPushSubscription: true } });
             if (coach) {
-                await sendPushToUser(coach, '🚀 Novo Aluno na Área!', `${name} acabou de se cadastrar no seu time.`);
+                await sendPushToUser(coach, '🚀 Novo Aluno na Área!', `${name} acabou de se cadastrar no seu time.`, { type: 'new_student', studentId: user.id });
             }
         } catch (e) { console.error('Push novo aluno:', e); }
 

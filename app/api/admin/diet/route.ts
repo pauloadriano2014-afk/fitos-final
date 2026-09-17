@@ -115,7 +115,8 @@ export async function POST(req: Request) {
                     sendPushToUser(
                         student,
                         '🎯 Estratégia de dieta atualizada!',
-                        `"${updatedStrategy.name}" foi atualizada pelo seu coach. Toque para conferir.`
+                        `"${updatedStrategy.name}" foi atualizada pelo seu coach. Toque para conferir.`,
+                        { type: 'diet_updated', dietId: updatedStrategy.id }
                     ).catch(() => {});
                 }
             }
@@ -166,7 +167,8 @@ export async function POST(req: Request) {
             });
             if (student) {
                 const title = existingBaseDietsCount === 0 ? '🍽️ Sua dieta está pronta!' : '🍽️ Dieta atualizada!';
-                sendPushToUser(student, title, 'Seu coach preparou seu plano alimentar. Toque para conferir.').catch(() => {});
+                const dietPushType = existingBaseDietsCount === 0 ? 'diet_ready' : 'diet_updated';
+                sendPushToUser(student, title, 'Seu coach preparou seu plano alimentar. Toque para conferir.', { type: dietPushType, dietId: newDiet.id }).catch(() => {});
             }
         }
 

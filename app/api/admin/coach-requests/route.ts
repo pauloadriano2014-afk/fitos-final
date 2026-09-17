@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
                 NUTRICIONISTA:'Nutricionista',
                 ELITE:        'Personal + Nutricionista',
             };
-            await sendPushToUser(updated, '🎉 Você foi aprovado!', `Acesso liberado como ${planLabel[safePlan]}. Código de convite: ${finalCode}`);
+            await sendPushToUser(updated, '🎉 Você foi aprovado!', `Acesso liberado como ${planLabel[safePlan]}. Código de convite: ${finalCode}`, { type: 'coach_approved' });
         } catch (e) { /* não-crítico */ }
 
         return NextResponse.json({

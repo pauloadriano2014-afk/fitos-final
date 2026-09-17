@@ -177,7 +177,7 @@ export async function POST(req: Request) {
          });
 
          if (coach) {
-             sendPushToUser(coach, '📸 Novo Check-in Recebido!', `O aluno ${user.name || 'Atleta'} enviou as fotos de evolução.`)
+             sendPushToUser(coach, '📸 Novo Check-in Recebido!', `O aluno ${user.name || 'Atleta'} enviou as fotos de evolução.`, { type: 'checkin_received', studentId: userId, checkInId: checkIn.id })
                  .catch(err => console.log("Erro ao enviar push:", err));
          }
     }

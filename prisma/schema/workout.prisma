@@ -162,8 +162,15 @@ model WorkoutHistory {
   duration         Int?     
   progressions     Int      @default(0) 
 
-  rpe              Int?     
-  feedback         String?  
+  rpe              Int?
+  feedback         String?
+
+  // 🔥 (17 set 2026) Resolver/responder o feedback final do treino — o coach
+  // marca que já viu/tratou e opcionalmente deixa uma resposta, que dispara
+  // um push de volta pro aluno (ver /api/admin/workout-history/[id]/resolve).
+  feedbackResolvedAt DateTime?
+  coachReply         String?    @db.Text
+  coachReplyAt       DateTime?
 
   details          ExerciseHistory[]
 }
@@ -172,7 +179,7 @@ model ExerciseHistory {
   id               String         @id @default(uuid())
   workoutHistoryId String
   workoutHistory   WorkoutHistory @relation(fields: [workoutHistoryId], references: [id], onDelete: Cascade)
-  
+
   exerciseId       String
   exerciseName     String
 
@@ -181,6 +188,13 @@ model ExerciseHistory {
   reps             String
 
   note             String?  @db.Text
+
+  // 🔥 (17 set 2026) Mesma ideia do WorkoutHistory acima, só que pra uma
+  // observação específica de exercício (o aluno reclamou de dor/dificuldade
+  // num exercício certo, não do treino inteiro).
+  resolvedAt       DateTime?
+  coachReply       String?    @db.Text
+  coachReplyAt     DateTime?
 }
 
 model Technique {
