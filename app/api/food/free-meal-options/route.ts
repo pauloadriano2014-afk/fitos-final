@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
 
-    const { coachId, icon, title, desc, avoid } = await req.json();
+    const { coachId, icon, title, desc, avoid, hideRules } = await req.json();
     if (!coachId || !title?.trim())
       return NextResponse.json({ error: 'coachId e title obrigatórios' }, { status: 400 });
     if (!canActAsCoach(auth.user, coachId)) {
@@ -73,6 +73,7 @@ export async function POST(req: Request) {
         title: title.trim(),
         desc: desc?.trim() || null,
         avoid: avoid?.trim() || null,
+        hideRules: !!hideRules,
         order: nextOrder,
       },
     });

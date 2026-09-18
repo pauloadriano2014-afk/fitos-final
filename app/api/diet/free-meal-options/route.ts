@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     const options = await (prisma as any).freeMealOption.findMany({
       where: { teamId, isActive: true },
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-      select: { id: true, icon: true, title: true, desc: true, avoid: true },
+      select: { id: true, icon: true, title: true, desc: true, avoid: true, hideRules: true },
     });
 
     return NextResponse.json(options);

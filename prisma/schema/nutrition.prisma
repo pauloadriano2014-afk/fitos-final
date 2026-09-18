@@ -168,6 +168,12 @@ model FreeMealOption {
   order     Int      @default(0)
   isActive  Boolean  @default(true)
 
+  // 🔥 (18 set 2026) Marca essa opção como "dia livre total" (ex: fim de
+  // semana liberado, comemoração) — quando o aluno seleciona uma opção com
+  // hideRules=true, o app esconde o bloco fixo "AS REGRAS DO JOGO" (regra do
+  // merecimento, uma refeição só etc.), já que ele contradiz a liberação.
+  hideRules Boolean  @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

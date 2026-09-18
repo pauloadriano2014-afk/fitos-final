@@ -20,7 +20,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
 
-    const { coachId, icon, title, desc, avoid, order, isActive } = await req.json();
+    const { coachId, icon, title, desc, avoid, order, isActive, hideRules } = await req.json();
     if (!canActAsCoach(auth.user, coachId)) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
@@ -38,6 +38,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         avoid: avoid !== undefined ? (avoid?.trim() || null) : option.avoid,
         order: typeof order === 'number' ? order : option.order,
         isActive: typeof isActive === 'boolean' ? isActive : option.isActive,
+        hideRules: typeof hideRules === 'boolean' ? hideRules : option.hideRules,
       },
     });
     return NextResponse.json(updated);
