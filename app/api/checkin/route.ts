@@ -250,7 +250,8 @@ export async function GET(req: Request) {
                 photoSide: true,
                 extraPhotos: true,
                 allowMarketing: true,
-                user: { select: { id: true, name: true, email: true, coachId: true } } 
+                readAt: true,
+                user: { select: { id: true, name: true, email: true, coachId: true } }
             }
         });
 
@@ -258,6 +259,51 @@ export async function GET(req: Request) {
     } catch (error) {
         console.error("Erro Checkin GET:", error);
         return NextResponse.json({ error: "Erro ao buscar check-ins" }, { status: 500 });
+    }
+}
+
+// 🔥 (18 set 2026) Marca relatório(s) técnico(s) (coachFeedback) como lido
+// pelo aluno — "COMPREENDIDO, COACH!". Dois modos:
+//   PATCH { id }                 → marca um check-in específico
+//   PATCH { userId, markAll }    → marca TODOS os pendentes daquele aluno de
+//                                   uma vez (botão "marcar todas como lidas",
+//                                   pra não precisar dar check um por um)
+export async function PATCH(req: Request) {
+    try {
+        const auth = requireAuth(req);
+        if ('response' in auth) return auth.response;
+
+        const body = await req.json();
+        const { id, userId, markAll } = body;
+
+        if (markAll) {
+            if (!userId) return NextResponse.json({ error: 'userId obrigatório' }, { status: 400 });
+            const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+            if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
+                return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+            }
+            const result = await prisma.checkIn.updateMany({
+                where: { userId, coachFeedback: { not: null }, readAt: null },
+                data: { readAt: new Date() },
+            });
+            return NextResponse.json({ success: true, count: result.count });
+        }
+
+        if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 });
+        const existing = await prisma.checkIn.findUnique({
+            where: { id },
+            select: { userId: true, user: { select: { coachId: true } } }
+        });
+        if (!existing) return NextResponse.json({ error: 'Check-in não encontrado' }, { status: 404 });
+        if (!canAccessStudent(auth.user, existing.userId, existing.user?.coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
+
+        const updated = await prisma.checkIn.update({ where: { id }, data: { readAt: new Date() } });
+        return NextResponse.json({ success: true, checkIn: updated });
+    } catch (error) {
+        console.error("Erro Checkin PATCH:", error);
+        return NextResponse.json({ error: "Erro ao marcar leitura" }, { status: 500 });
     }
 }
 

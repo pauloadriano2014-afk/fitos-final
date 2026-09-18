@@ -164,6 +164,14 @@ model CheckIn {
 
   createdAt       DateTime @default(now())
   aiEvaluatedAt DateTime?
+
+  // 🔥 (18 set 2026) Quando o aluno confirmou ter lido o relatório técnico
+  // (coachFeedback) — "COMPREENDIDO, COACH!". Antes esse estado só existia no
+  // AsyncStorage do aparelho (`read_feedback_<id>`), então qualquer evento que
+  // limpe o storage local (reinstalar o app, cache do PWA, trocar de aparelho)
+  // fazia os relatórios antigos "voltarem" como não-lidos, um por um. Agora
+  // fica salvo no servidor também — sobrevive a reinstalação/troca de device.
+  readAt          DateTime?
 }
 
 model DailyCheckin {

@@ -1,0 +1,5 @@
+// ⚠️ Arquivo duplicado gerado por engano durante uma falha de conexão ao
+// salvar tracking.prisma (18 set 2026) — o conteúdo real está em
+// tracking.prisma. Esvaziado de propósito pra não duplicar os models e
+// quebrar `prisma db push`. Pode ser apagado com segurança (o Claude não
+// consegue apagar arquivos no seu PC, só esvaziar) — delete-o quando puder.
