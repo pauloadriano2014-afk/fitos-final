@@ -2,23 +2,23 @@
 
 model Diet {
   id            String   @id @default(uuid())
-  userId        String   
+  userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  pdfUrl        String?   
-  
+
+  pdfUrl        String?
+
   name          String    @default("Plano Alimentar")
-  goal          String?   
-  
+  goal          String?
+
   totalKcal     Float?
   totalProtein  Float?
   totalCarbs    Float?
   totalFats     Float?
-  
-  waterIntake   String?   
-  freeMeal      String?   
-  generalNotes  String?   @db.Text 
-  
+
+  waterIntake   String?
+  freeMeal      String?
+  generalNotes  String?   @db.Text
+
   isActive      Boolean   @default(true)
 
   // 🔥 ESTRATÉGIAS TEMPORÁRIAS
@@ -31,8 +31,8 @@ model Diet {
   // ou fica como opção alternativa (aluno escolhe entre ela e a base). Default = aluno escolhe.
   strategyExclusive Boolean   @default(false)
 
-  meals         Meal[]    
-  
+  meals         Meal[]
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -41,16 +41,16 @@ model Meal {
   id        String     @id @default(uuid())
   dietId    String
   diet      Diet       @relation(fields: [dietId], references: [id], onDelete: Cascade)
-  name      String     
-  time      String?    
-  order     Int        @default(0) 
-  notes     String?    @db.Text 
+  name      String
+  time      String?
+  order     Int        @default(0)
+  notes     String?    @db.Text
   dayType   String     @default("TREINO")
 
-  alternativeGroupId String?    
-  isMainVersion      Boolean    @default(true)  
-  alternativeLabel   String?    
-  
+  alternativeGroupId String?
+  isMainVersion      Boolean    @default(true)
+  alternativeLabel   String?
+
   items     FoodItem[]
 }
 
@@ -58,17 +58,17 @@ model FoodItem {
   id                  String   @id @default(uuid())
   mealId              String
   meal                Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
-  
-  name                String   
-  amount              Float    
-  unit                String   
-  
+
+  name                String
+  amount              Float
+  unit                String
+
   protein             Float?
   carbs               Float?
   fats                Float?
   calories            Float?
 
-  substitutionGroupId String?  
+  substitutionGroupId String?
 }
 
 model SubstitutionGroup {
@@ -94,9 +94,9 @@ model SubstitutionGroupMember {
 
 model Food {
   id         String   @id @default(uuid())
-  source     String   
-  externalId String?  
-  teamId     String?  
+  source     String
+  externalId String?
+  teamId     String?
 
   name        String
   category    String
@@ -125,10 +125,10 @@ model Food {
 
 model DietTemplate {
   id        String   @id @default(uuid())
-  name      String   
+  name      String
   goal      String?
   totalKcal Float?
-  meals     Json     
+  meals     Json
   createdAt DateTime @default(now())
 }
 
@@ -146,6 +146,32 @@ model NoteSnippet {
   id        String   @id @default(uuid())
   text      String   @db.Text
   createdAt DateTime @default(now())
+}
+
+// 🔥 (18 set 2026) Opções de refeição livre cadastradas pelo coach — substitui
+// a lista fixa de 5 sugestões (Pizza, Hambúrguer, Sushi, Massa, Doce) que
+// antes estava direto no código do app. Mesmo padrão de escopo do
+// SubstitutionGroup: teamId = coachId (ou "MASTER_TEAM" se for Paulo/Adri),
+// então o coach cadastra uma vez e a lista já aparece pra todos os alunos
+// dele. De propósito SEM dado nutricional (kcal/macros) — é uma sugestão
+// descritiva pro momento de "válvula de escape", não uma refeição calculada
+// como as da Mesa de Operações.
+model FreeMealOption {
+  id        String   @id @default(uuid())
+  teamId    String
+
+  icon      String   @default("🍽️")
+  title     String
+  desc      String?  @db.Text
+  avoid     String?  @db.Text // "Evite: ..." — opcional
+
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
 }
 
 // 🔥 Diário alimentar por refeição (16 set 2026) — registro opcional, um toque
@@ -172,6 +198,19 @@ model DietMealLog {
   substitutionLabel String?
   note              String? @db.Text
   photoUrl          String? // 🔥 (17 set 2026) foto opcional da refeição livre — comprimida antes de subir pro R2, sem thumb separado (custo baixo de propósito)
+
+  // 🔥 (18 set 2026) Refeição livre com opção do coach — freeMealOptionId é
+  // uma referência solta (sem @relation) pro FreeMealOption marcado; guardamos
+  // também o título no momento do registro (freeMealOptionLabel) pra não
+  // quebrar o histórico se o coach editar/apagar a opção depois. Os dois
+  // ficam null quando o aluno descreveu por texto livre em vez de marcar uma
+  // opção cadastrada.
+  freeMealOptionId    String?
+  freeMealOptionLabel String?
+
+  // 🔥 Observação do coach sobre esse registro específico (ex: "combinado,
+  // mas evite repetir semana que vem") — editável na tela de dieta do coach.
+  coachObservation String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

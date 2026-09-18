@@ -5,7 +5,8 @@
 // "PULOU" automaticamente.
 //
 // GET  ?userId=&date=YYYY-MM-DD           → lista os registros do aluno nesse dia
-// POST { userId, date, mealId, mealName, status, substitutionLabel?, note?, photo? }
+// POST { userId, date, mealId, mealName, status, substitutionLabel?, note?, photo?,
+//        freeMealOptionId?, freeMealOptionLabel? }
 //      → upsert por [userId, date, mealId]
 //
 // 🔥 (17 set 2026) `photo` opcional (base64) na refeição livre — Paulo pediu
@@ -14,6 +15,12 @@
 // imagem (sem thumb separado), redimensionada pra no máximo 800px de largura
 // e qualidade 70. Isso mantém cada foto na faixa de ~80-150KB em vez dos
 // 2-5MB de uma foto original de celular.
+//
+// 🔥 (18 set 2026) `freeMealOptionId`/`freeMealOptionLabel` opcionais — qual
+// opção de refeição livre cadastrada pelo coach o aluno marcou (ver
+// FreeMealOption em nutrition.prisma). Ficam null quando o aluno descreveu
+// por texto livre em vez de marcar uma opção. A foto continua opcional nos
+// dois casos.
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
@@ -103,7 +110,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId, date, mealId, mealName, status, substitutionLabel, note, photo } = body;
+    const {
+      userId, date, mealId, mealName, status, substitutionLabel, note, photo,
+      freeMealOptionId, freeMealOptionLabel,
+    } = body;
 
     if (!userId || !date || !mealId || !status) {
       return NextResponse.json({ error: 'userId, date, mealId e status são obrigatórios' }, { status: 400 });
@@ -129,6 +139,8 @@ export async function POST(req: NextRequest) {
       substitutionLabel: substitutionLabel ?? null,
       note: note ?? null,
       coachId: student.coachId ?? null,
+      freeMealOptionId: freeMealOptionId ?? null,
+      freeMealOptionLabel: freeMealOptionLabel ?? null,
     };
 
     // 🔥 Só mexe em photoUrl se uma foto nova veio nesse POST — assim

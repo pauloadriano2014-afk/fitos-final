@@ -81,12 +81,16 @@ export async function GET(req: Request, { params }: { params: { userId: string }
         date: k,
         hasRecord: byDay[k].hasAnyRecord,
         meals: byDay[k].meals.map((m) => ({
+          id: m.id,
           mealId: m.mealId,
           mealName: m.mealName,
           status: m.status,
           substitutionLabel: m.substitutionLabel,
           note: m.note,
           photoUrl: m.photoUrl,
+          // 🔥 (18 set 2026) opção de refeição livre marcada pelo aluno (se houver)
+          freeMealOptionLabel: m.freeMealOptionLabel,
+          coachObservation: m.coachObservation,
         })),
         dietAdherence: byDay[k].checkin?.dietAdherence ?? null,
         dietNote: byDay[k].checkin?.dietNote ?? null,
@@ -96,7 +100,18 @@ export async function GET(req: Request, { params }: { params: { userId: string }
         daysWithRecord,
         substitutionsCount,
         freeMealsCount: freeMeals.length,
-        recentFreeMeals: freeMeals.slice(0, 5).map((m) => ({ date: m.date, note: m.note, photoUrl: m.photoUrl })),
+        // 🔥 (18 set 2026) inclui `id` (pra o coach conseguir salvar uma
+        // observação nesse registro específico) e o que foi marcado —
+        // freeMealOptionLabel quando o aluno escolheu uma opção cadastrada
+        // pelo coach, ou só `note`/`photoUrl` quando descreveu por texto livre.
+        recentFreeMeals: freeMeals.slice(0, 5).map((m) => ({
+          id: m.id,
+          date: m.date,
+          note: m.note,
+          photoUrl: m.photoUrl,
+          freeMealOptionLabel: m.freeMealOptionLabel,
+          coachObservation: m.coachObservation,
+        })),
         // 🔥 (17 set 2026) Paulo pediu pra saber especificamente o que foi trocado
         // por quê (antes só existia a contagem) — ver CleanMealCard.js no mobile
         recentSubstitutions: substitutions.slice(0, 8).map((m) => ({
