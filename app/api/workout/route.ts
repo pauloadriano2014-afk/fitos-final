@@ -252,7 +252,7 @@ export async function POST(req: Request) {
     if (notifyStudent) {
       const student = await prisma.user.findUnique({
         where: { id: userId },
-        select: { pushToken: true, webPushSubscription: true },
+        select: { id: true, pushToken: true, webPushSubscription: true },
       });
       if (student) {
         sendPushToUser(student, '🏋️ Treino novo disponível!', `Seu coach preparou "${workout.name}". Bora treinar!`, { type: 'workout_new', workoutId: workout.id }).catch(() => {});

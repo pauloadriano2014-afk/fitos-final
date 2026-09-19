@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     if (student.coachId) {
       const coach = await prisma.user.findUnique({
         where: { id: student.coachId },
-        select: { pushToken: true, webPushSubscription: true },
+        select: { id: true, pushToken: true, webPushSubscription: true },
       });
       if (coach) {
         const pushTitle = exerciseName ? `📝 ${student.name || 'Aluno'} comentou em "${exerciseName}"` : `📝 ${student.name || 'Aluno'} deixou uma observação`;

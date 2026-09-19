@@ -14,7 +14,7 @@ async function notifyMaster(title: string, bodyText: string, data: any = {}) {
     try {
         const master = await prisma.user.findUnique({
             where: { email: PAULO_EMAIL },
-            select: { pushToken: true, webPushSubscription: true },
+            select: { id: true, pushToken: true, webPushSubscription: true },
         });
         if (master) {
             await sendPushToUser(master, title, bodyText, data);
@@ -144,7 +144,7 @@ export async function POST(req: Request) {
         });
 
         try {
-            const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { pushToken: true, webPushSubscription: true } });
+            const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { id: true, pushToken: true, webPushSubscription: true } });
             if (coach) {
                 await sendPushToUser(coach, '🚀 Novo Aluno na Área!', `${name} acabou de se cadastrar no seu time.`, { type: 'new_student', studentId: user.id });
             }

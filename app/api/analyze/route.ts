@@ -21,7 +21,7 @@ async function notifyCoach(alunoName: string, exerciseName: string, score: numbe
   try {
     const admin = await prisma.user.findFirst({
       where: { role: 'ADMIN' },
-      select: { pushToken: true, webPushSubscription: true }
+      select: { id: true, pushToken: true, webPushSubscription: true }
     });
 
     if (admin) {

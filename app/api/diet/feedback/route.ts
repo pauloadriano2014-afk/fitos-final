@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       try {
         const coach = await prisma.user.findUnique({
           where: { id: targetUser.coachId },
-          select: { pushToken: true, webPushSubscription: true },
+          select: { id: true, pushToken: true, webPushSubscription: true },
         });
         if (coach) {
           const alunoNome = targetUser.name || 'Um aluno';

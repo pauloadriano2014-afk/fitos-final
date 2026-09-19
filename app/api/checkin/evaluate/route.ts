@@ -100,7 +100,7 @@ export async function POST(req: Request) {
             checkIn = await prisma.checkIn.update({
                 where: { id: checkinId },
                 data: { coachFeedback: finalFeedback },
-                include: { user: { select: { name: true, pushToken: true, webPushSubscription: true } } }
+                include: { user: { select: { name: true, id: true, pushToken: true, webPushSubscription: true } } }
             });
         }
         // 🔥 CRIA NOVO CHECK-IN (Vindo da tela de Laboratório IA) 🔥
@@ -145,7 +145,7 @@ export async function POST(req: Request) {
                     weight: 0, 
                     feedback: "Relatório Técnico gerado via Laboratório IA."
                 },
-                include: { user: { select: { name: true, pushToken: true, webPushSubscription: true } } }
+                include: { user: { select: { name: true, id: true, pushToken: true, webPushSubscription: true } } }
             });
         } 
         else {

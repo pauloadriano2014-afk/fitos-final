@@ -81,10 +81,13 @@ model User {
   
   currentXP       Int      @default(0)
   pushToken       String?
-  // 🔥 Web Push (17 set 2026) — pra quem usa o PWA (navegador/"tela inicial"),
-  // onde o token da Expo não existe (expo-notifications não roda em web).
-  // Guarda o objeto de assinatura {endpoint, keys:{p256dh,auth}} devolvido
-  // pelo pushManager.subscribe() do navegador. Ver lib/webPush.ts.
+  // 🔥 Web Push (17 set 2026) — DEPRECATED (19 set 2026): guardava só UMA
+  // assinatura por usuário, então um segundo navegador (ex: PC depois do
+  // celular) sobrescrevia a anterior e um dos dois parava de receber
+  // notificação. Substituído pela relação webPushSubscriptions (ver embaixo
+  // do model), que permite várias por usuário. Mantido aqui só pra não
+  // quebrar quem ainda tiver alguma leitura antiga por aí — nada em código
+  // novo escreve ou lê esse campo.
   webPushSubscription Json?
 
   photoUrl        String?
@@ -158,6 +161,28 @@ model User {
   coachPlans        CoachPlan[]         @relation("CoachPlans")
 
   manualReceipts    ManualReceipt[]     @relation("CoachManualReceipts")
+
+  // 🔥 (19 set 2026) Substituindo o campo webPushSubscription (Json? acima —
+  // mantido só por compatibilidade, não usado mais em código novo) por uma
+  // relação 1-pra-N: cada NAVEGADOR/DISPOSITIVO em que o usuário autoriza
+  // notificação vira uma linha própria aqui. Antes, um usuário só podia ter
+  // UMA assinatura salva por vez — ativar notificação no PC sobrescrevia a
+  // do celular (e vice-versa), então um dos dois parava de receber avisos
+  // sem nenhum erro visível. Ver app/api/user/web-push-subscription e
+  // app/utils/sendNotification.ts.
+  webPushSubscriptions WebPushSubscription[]
+}
+
+model WebPushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model OfflineClient {

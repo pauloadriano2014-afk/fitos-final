@@ -109,7 +109,7 @@ export async function POST(req: Request) {
             if (notifyStudent) {
                 const student = await prisma.user.findUnique({
                     where: { id: userId },
-                    select: { pushToken: true, webPushSubscription: true },
+                    select: { id: true, pushToken: true, webPushSubscription: true },
                 });
                 if (student) {
                     sendPushToUser(
@@ -163,7 +163,7 @@ export async function POST(req: Request) {
         if (notifyStudent) {
             const student = await prisma.user.findUnique({
                 where: { id: userId },
-                select: { pushToken: true, webPushSubscription: true },
+                select: { id: true, pushToken: true, webPushSubscription: true },
             });
             if (student) {
                 const title = existingBaseDietsCount === 0 ? '🍽️ Sua dieta está pronta!' : '🍽️ Dieta atualizada!';

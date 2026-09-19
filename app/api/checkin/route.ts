@@ -173,7 +173,7 @@ export async function POST(req: Request) {
     if (user.coachId) {
          const coach = await prisma.user.findUnique({
              where: { id: user.coachId },
-             select: { pushToken: true, webPushSubscription: true }
+             select: { id: true, pushToken: true, webPushSubscription: true }
          });
 
          if (coach) {

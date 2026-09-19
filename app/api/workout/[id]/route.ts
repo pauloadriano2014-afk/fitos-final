@@ -103,7 +103,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     if (notifyStudent) {
       const student = await prisma.user.findUnique({
         where: { id: existingWorkout.userId },
-        select: { pushToken: true, webPushSubscription: true },
+        select: { id: true, pushToken: true, webPushSubscription: true },
       });
       if (student) {
         sendPushToUser(student, '🏋️ Treino atualizado!', `Seu coach atualizou "${workout.name}". Confira as mudanças.`, { type: 'workout_updated', workoutId: id }).catch(() => {});
