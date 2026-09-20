@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, workoutName, exercisesData, duration, rpe, feedback } = body;
+    const { userId, workoutName, day, exercisesData, duration, rpe, feedback } = body;
 
     if (!userId) return NextResponse.json({ error: "User ID missing" }, { status: 400 });
 
@@ -114,8 +114,20 @@ export async function POST(req: Request) {
         // WorkoutLogCard.js: só a primeira ocorrência por exercício importa).
         const noteDetail = workoutHistoryRecord.details.find((d) => d.note);
 
+        // 🔥 (20 set 2026) Pedido do Paulo: notificação só com nome + primeiro
+        // sobrenome do aluno (não o nome completo), sem "esmagou" e mostrando
+        // o nome EXATO do dia de treino (ex: "Peito e Tríceps") em vez do nome
+        // da rotina inteira (que pode ter várias dezenas de dias dentro).
+        const shortStudentName = (fullName?: string | null) => {
+            const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+            if (parts.length === 0) return 'Um aluno';
+            return parts.length === 1 ? parts[0] : `${parts[0]} ${parts[1]}`;
+        };
+        const displayName = shortStudentName(user.name);
+        const dayLabel = day || workoutName || 'treino';
+
         let pushTitle = '🔥 Treino Concluído!';
-        let pushBody = `${user.name || 'Um aluno'} acabou de esmagar o treino ${workoutName || ''}!`;
+        let pushBody = `${displayName} finalizou o treino "${dayLabel}"`;
         // 🔥 (17 set 2026) `data` de deep link — ao tocar, o admin abre já na
         // tela de histórico desse treino, focado no comentário certo (se
         // houver). Ver PENDING_MOBILE_DEEPLINKS.md pra como consumir isso.
@@ -123,11 +135,11 @@ export async function POST(req: Request) {
 
         if (feedbackClean) {
             pushTitle = '📝 Treino concluído com comentário!';
-            pushBody = `${user.name || 'Um aluno'}: "${feedbackClean.slice(0, 100)}"`;
+            pushBody = `${displayName}: "${feedbackClean.slice(0, 100)}"`;
             pushData = { type: 'workout_feedback', studentId: userId, workoutHistoryId: workoutHistoryRecord.id };
         } else if (noteDetail) {
             pushTitle = '📝 Treino concluído com observação!';
-            pushBody = `${user.name || 'Um aluno'} deixou um comentário em "${noteDetail.exerciseName}": "${(noteDetail.note || '').slice(0, 80)}"`;
+            pushBody = `${displayName} deixou um comentário em "${noteDetail.exerciseName}": "${(noteDetail.note || '').slice(0, 80)}"`;
             pushData = { type: 'exercise_comment', studentId: userId, workoutHistoryId: workoutHistoryRecord.id, exerciseHistoryId: noteDetail.id };
         }
 
