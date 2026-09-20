@@ -88,7 +88,14 @@ export async function POST(req: Request) {
         include: {
             // 🔥 Também busca a assinatura de Web Push — sem isso o coach que
             // acessa pelo navegador (PWA) nunca recebia esse aviso.
-            coach: { select: { pushToken: true, webPushSubscription: true } }
+            // 🔥 (20 set 2026) `id: true` — SEM isso, sendPushToUser(user.coach, ...)
+            // recebia um objeto sem `id`, então a busca das assinaturas na tabela
+            // WebPushSubscription (getWebPushSubscriptions(user?.id)) sempre voltava
+            // vazia — o push do app nativo (pushToken) ia normal, mas o Web Push
+            // (PWA/navegador) NUNCA disparava nesse fluxo específico de "treino
+            // finalizado". Esse arquivo não fazia parte da leva de rotas corrigida
+            // em 19/09 (é o único que ficou de fora).
+            coach: { select: { id: true, pushToken: true, webPushSubscription: true } }
         }
     });
 
