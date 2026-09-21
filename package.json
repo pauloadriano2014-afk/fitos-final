@@ -11,6 +11,7 @@
     "@anthropic-ai/sdk": "^0.102.0",
     "@aws-sdk/client-s3": "^3.1024.0",
     "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^2.23.0",
     "@prisma/client": "5.22.0",
     "@sparticuz/chromium": "^149.0.0",
     "@types/react": "18.3.3",

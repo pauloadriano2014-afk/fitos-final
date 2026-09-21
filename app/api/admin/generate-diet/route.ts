@@ -7,15 +7,21 @@
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
 import Anthropic    from '@anthropic-ai/sdk';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { requireAuth } from '@/lib/auth';
+// 🔥 (21 set 2026) Migrado do @google/generative-ai (descontinuado) pro
+// @google/genai (SDK atual) — mesma troca feita em gerar-treino/route.ts.
+// Não usamos cache explícito aqui: o catálogo de alimentos + as regras
+// fixas do prompt somados dão ~2.500 tokens, abaixo do mínimo de 4096 que
+// a Gemini exige pra aceitar um cache — não compensa tentar. Ver nota no
+// buildPrompt() sobre a reestruturação que ainda ajuda o cache automático
+// da OpenAI (esse não tem mínimo de tamanho tão alto).
+import { geminiClient } from '@/lib/geminiCache';
 
 export const dynamic     = 'force-dynamic';
 export const maxDuration = 90;
 
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const googleAI  = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 type Provider = 'openai' | 'openai-mini' | 'anthropic' | 'google';
 
@@ -635,14 +641,15 @@ async function callAnthropic(prompt: string): Promise<string> {
 }
 
 async function callGoogle(prompt: string): Promise<string> {
-    const model = googleAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        generationConfig: { responseMimeType: "application/json" } as any,
+    // 🔥 (21 set 2026) Atualizado pro Flash mais recente + migrado pro SDK
+    // novo (@google/genai). Sem cache explícito aqui (ver nota no topo do
+    // arquivo) — só a chamada direta mesmo.
+    const result = await geminiClient.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: `${prompt}\n\nGere o plano agora.`,
+        config: { responseMimeType: 'application/json' },
     });
-    const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nGere o plano agora.` }] }]
-    });
-    return result.response.text();
+    return result.text || '{}';
 }
 
 // ─── HANDLER ──────────────────────────────────────────────────────────────────
@@ -705,7 +712,7 @@ export async function POST(req: Request) {
         let raw: string; let modelUsed: string;
         switch (provider as Provider) {
             case 'anthropic':   raw = await callAnthropic(prompt); modelUsed = 'claude-3-5-sonnet-20240620'; break;
-            case 'google':      raw = await callGoogle(prompt);    modelUsed = 'gemini-2.5-flash';    break;
+            case 'google':      raw = await callGoogle(prompt);    modelUsed = 'gemini-3.8-flash';    break;
             case 'openai-mini': raw = await callOpenAI(prompt,'gpt-4o-mini'); modelUsed = 'gpt-4o-mini'; break;
             default:            raw = await callOpenAI(prompt,'gpt-4o');      modelUsed = 'gpt-4o';
         }

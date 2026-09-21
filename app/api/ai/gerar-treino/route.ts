@@ -2,9 +2,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import prisma from '@/lib/prisma';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
+// 🔥 (21 set 2026) Migrado do @google/generative-ai (descontinuado pelo
+// Google) pro @google/genai (SDK atual, com suporte a cache explícito).
+// getOrCreateGeminiCache cuida de criar/reaproveitar o cache do banco de
+// exercícios — ver lib/geminiCache.ts.
+import { geminiClient, getOrCreateGeminiCache, hashForCache } from '@/lib/geminiCache';
 
 
 const MASTER_IDS = [
@@ -205,12 +209,22 @@ ${limitationRulesCtx ? `LIMITAÇÕES:\n${limitationRulesCtx}` : ''}`;
         jointRisk: tags?.jointRisk || [], suggestedSubstitutes: substitutesByExercise[ex.id] || [] };
     });
 
-    const systemPrompt = `Você é um personal trainer experiente. Gere rotina NOVA e DIFERENTE do treino anterior.
+    // 🔥 (21 set 2026) Reestruturado pra habilitar cache de prompt (Paulo
+    // pediu explicitamente essa otimização de custo). O que antes ficava
+    // dividido meio a meio entre systemPrompt e userMessage agora fica:
+    //   - systemPromptStatic: 100% igual pro mesmo coach+ambiente, NUNCA
+    //     muda de aluno pra aluno (regras + banco de exercícios + guia de
+    //     variação) → isso é o que entra no cache explícito da Gemini e no
+    //     prefixo que a OpenAI cacheia sozinha.
+    //   - userMessage: só o que realmente varia por aluno/ciclo (antes
+    //     incluía o banco inteiro também, o que quebrava qualquer chance de
+    //     cache já que o resto do texto mudava a cada aluno).
+    const systemPromptStatic = `Você é um personal trainer experiente. Gere rotina NOVA e DIFERENTE do treino anterior.
 
 REGRAS:
 1. DIAS: Use "A","B","C"... Nunca nomes descritivos.
-2. IDs: Use APENAS ids do banco. Jamais invente.
-3. VARIAÇÃO: ${latestIds.size > 0 ? `IDs anteriores: ${Array.from(latestIds).join(', ')} — troque mínimo 40%.` : 'Crie rotina variada.'}
+2. IDs: Use APENAS ids do banco abaixo. Jamais invente.
+3. VARIAÇÃO: veja "IDs usados na rotina anterior" na mensagem do aluno (se houver) — troque no mínimo 40% deles. Se não houver, crie rotina variada.
 4. TÉCNICAS (1 por dia mínimo, diferentes):
    DROPSET: -20-30% carga sem pausa | RESTPAUSE: 20s pausa mesma carga
    BISET: EXATAMENTE 2 exercícios consecutivos, um logo após o outro, ambos marcados BISET. NUNCA 3 ou mais exercícios seguidos com BISET — sempre pares fechados
@@ -229,6 +243,9 @@ REGRAS:
 
 GUIA DE VARIAÇÕES:
 ${variationGuide}
+
+BANCO (ambiente ${trainingEnv || 'UNIVERSAL'}):
+${JSON.stringify(bankForPrompt)}
 
 FORMATO JSON — sem markdown, sem texto extra:
 {
@@ -254,12 +271,23 @@ FORMATO JSON — sem markdown, sem texto extra:
 
 IMPORTANTE: "observation" deve ser SEMPRE string vazia "". Não escreva observações — o personal trainer fará isso manualmente.`;
 
+    const variationClause = latestIds.size > 0
+      ? `IDs usados na rotina anterior: ${Array.from(latestIds).join(', ')} — troque no mínimo 40%.`
+      : 'Sem rotina anterior — crie variada.';
+
     const userMessage = `${alunoCtx}${workoutsCtx}${cycleCtx}
 
-BANCO (ambiente ${trainingEnv || 'UNIVERSAL'}):
-${JSON.stringify(bankForPrompt)}
+${variationClause}
 
 Responda APENAS com JSON válido.`.trim();
+
+    // Backwards-compat: alguns branches (Claude/GPT sem cache) ainda usam
+    // um "systemPrompt" único — pra eles é só a mesma coisa concatenada.
+    const systemPrompt = systemPromptStatic;
+
+    // Chave de cache: muda sozinha se o coach editar exercícios (o hash é
+    // do conteúdo, não de um contador manual).
+    const geminiCacheKey = hashForCache('gerar-treino', adminId, trainingEnv || 'UNIVERSAL', systemPromptStatic);
 
     // ─── ROTEAMENTO ───
     let selectedAI = cycleConfig?.selectedAI || 'GEMINI_FLASH';
@@ -290,26 +318,34 @@ Responda APENAS com JSON válido.`.trim();
       const r = await openai.chat.completions.create({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }], temperature: 0.7, max_tokens: 16000, response_format: { type: 'json_object' } });
       rawText = r.choices[0].message.content || '';
 
-    } else if (selectedAI === 'GEMINI_FLASH') {
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }] });
-      rawText = result.response.text();
+    } else if (['GEMINI_FLASH', 'GEMINI', 'GEMINI_PRO'].includes(selectedAI)) {
+      // 🔥 (21 set 2026) Migrado pro @google/genai + cache explícito do
+      // banco de exercícios (a pedido do Paulo). Se o conteúdo for pequeno
+      // demais pra qualificar pro cache (biblioteca curta, ex: ambiente
+      // "Em Casa" com poucos exercícios cadastrados), getOrCreateGeminiCache
+      // devolve null e a gente simplesmente manda tudo direto, sem cache —
+      // nunca quebra a geração por causa disso.
+      const geminiModel = selectedAI === 'GEMINI' ? 'gemini-3.8-flash'
+        : selectedAI === 'GEMINI_PRO' ? 'gemini-2.5-pro'
+        : 'gemini-1.5-flash';
 
-    } else if (selectedAI === 'GEMINI') {
-      // Gemini Flash — modelo padrão do Master (rápido e barato)
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }] });
-      rawText = result.response.text();
+      const cacheName = await getOrCreateGeminiCache({
+        model: geminiModel,
+        cacheKey: `${geminiCacheKey}:${geminiModel}`,
+        staticContent: systemPromptStatic,
+      });
 
-    } else if (selectedAI === 'GEMINI_PRO') {
-      // 🔥 NOVO: Gemini Pro — mais poderoso, opção alternativa pro Master
-      // ⚠️ Se der 403 Forbidden, é preciso habilitar o acesso ao gemini-2.5-pro no projeto do Google AI Studio/Cloud
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
-      const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + userMessage }] }] });
-      rawText = result.response.text();
+      const result = cacheName
+        ? await geminiClient.models.generateContent({
+            model: geminiModel,
+            contents: userMessage,
+            config: { cachedContent: cacheName },
+          })
+        : await geminiClient.models.generateContent({
+            model: geminiModel,
+            contents: `${systemPromptStatic}\n\n${userMessage}`,
+          });
+      rawText = result.text || '';
 
     } else if (selectedAI === 'GPT') {
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
