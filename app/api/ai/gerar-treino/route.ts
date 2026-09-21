@@ -225,19 +225,19 @@ REGRAS:
 1. DIAS: Use "A","B","C"... Nunca nomes descritivos.
 2. IDs: Use APENAS ids do banco abaixo. Jamais invente.
 3. VARIAÇÃO: veja "IDs usados na rotina anterior" na mensagem do aluno (se houver) — troque no mínimo 40% deles. Se não houver, crie rotina variada.
-4. TÉCNICAS (1 por dia mínimo, diferentes):
+4. TÉCNICAS (1 por dia mínimo, diferentes). ATENÇÃO — CARGA EXTERNA: DROPSET, RESTPAUSE, 21 e CLUSTERSET dependem de reduzir, pausar ou ajustar uma CARGA EXTERNA (halteres, barra, máquina, polia, anilha). NUNCA aplique nenhuma dessas em exercício de PESO CORPORAL puro (flexão de braço, prancha, abdominal, agachamento livre sem carga, etc.) — não existe carga pra reduzir/ajustar nesses casos. Pra peso corporal, use BISET, TRISET ou deixe technique="".
    DROPSET: -20-30% carga sem pausa | RESTPAUSE: 20s pausa mesma carga
    BISET: EXATAMENTE 2 exercícios consecutivos, um logo após o outro, ambos marcados BISET. NUNCA 3 ou mais exercícios seguidos com BISET — sempre pares fechados
    TRISET: EXATAMENTE 3 exercícios consecutivos, um logo após o outro, todos marcados TRISET. NUNCA 2 ou 4+ exercícios seguidos com TRISET — sempre trincas fechadas
    21: reps="21" SEMPRE | CLUSTERSET: reps="3" blocos 15s | 1_5_REPS: reps 8-12
-   TUT: cadência 3s descida | GVT: SEMPRE gere EXATAMENTE 10 blocos separados, cada um com sets="1", reps="10", restTime="60". NUNCA 1 bloco só
+   TUT: cadência 3s descida (também depende de carga externa, mesma regra acima) | GVT: SEMPRE gere EXATAMENTE 10 blocos separados, cada um com sets="1", reps="10", restTime="60". NUNCA 1 bloco só
 5. SUBSTITUTOS (CRÍTICA): cada exercício tem "suggestedSubstitutes" no banco — já filtrados pelo ambiente ${trainingEnv || 'UNIVERSAL'}.
    - SE tiver "suggestedSubstitutes", use OBRIGATORIAMENTE o primeiro da lista
    - SE não tiver, escolha outro exercício do banco com target semelhante
    - NUNCA invente substitutos fora do banco
    - O substituto deve ser DIFERENTE do exercício principal
 6. PROGRESSÃO: lastWeight +5% a +10%, múltiplos de 2.5kg.
-7. BLOCOS: sets="1" por bloco. Pirâmides = blocos separados.
+7. Nº DE BLOCOS = Nº DE SÉRIES (ERRO MAIS COMUM — LEIA COM ATENÇÃO): cada bloco do array "blocks" representa UMA série. A CONFIGURAÇÃO DO CICLO abaixo informa quantas séries cada grupo muscular deve ter (ex: "4 séries"). Você DEVE gerar exatamente essa quantidade de blocos pra CADA exercício daquele grupo — nunca apenas 1 bloco, a menos que a configuração peça 1 série. Todo bloco tem sets="1" (é sempre 1 série por bloco); é a QUANTIDADE de blocos no array que soma as séries totais. Pirâmide = mesma quantidade de blocos, mas com reps/load DIFERENTES entre eles (ex: 12/10/8/6 reps com carga crescente). Exceções com contagem própria: GVT sempre 10 blocos (regra 4), 21 e CLUSTERSET seguem a regra 4.
 8. LIMITAÇÕES: respeite jointRisk.
 9. CARDIO: sets=minutos, reps=kcal, technique=Leve/Moderada/Zona 2/Forte/HIIT.
 
@@ -262,12 +262,16 @@ FORMATO JSON — sem markdown, sem texto extra:
         "observation": "",
         "substitute": { "exerciseId": "id-exato-do-substituto", "title": "nome-exato-do-substituto" },
         "blocks": [
+          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
           { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" }
         ]
       }
     ]
   }
 }
+// ☝️ Exemplo com 4 blocos = 4 séries (porque a ESTRUTURA pediu 4 séries pra esse grupo). Se a ESTRUTURA pedir outra quantidade, gere essa quantidade de blocos — não sempre 4.
 
 IMPORTANTE: "observation" deve ser SEMPRE string vazia "". Não escreva observações — o personal trainer fará isso manualmente.`;
 
