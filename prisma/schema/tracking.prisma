@@ -21,6 +21,16 @@ model Anamnese {
   cirurgias       String[]
   equipamentos    String[]
 
+  // 🔥 (21 set 2026) Redesenho de "Local de Treino": equipamentos agora só
+  // guarda o(s) LOCAL(is) marcado(s) (Academia Completa / Academia de
+  // Condomínio / Em Casa). Esses dois campos guardam o detalhe de cada um:
+  // equipamentosCasa = inventário de casa (tipo + quantidade + peso em kg),
+  // preenchido sempre que "Em Casa" está marcado, não importa a combinação
+  // com os outros locais. maquinasCondominio = quais máquinas específicas o
+  // aluno assinalou que tem na academia do condomínio dele.
+  equipamentosCasa   Json?    @default("[]")
+  maquinasCondominio String[] @default([])
+
   healthConditions      String[]
   healthConditionsObs   String?   @db.Text
   bariatric             Boolean?
@@ -74,6 +84,13 @@ model Anamnese {
   foodAversions   String?   @db.Text
   supplements     String?   @db.Text
   extraNotes      String?   @db.Text
+
+  // 🔥 (21 set 2026) Alimentos que o aluno marcou como "gostaria de ter na
+  // dieta" na grade de fotos por categoria (Step11Preferencias.js) -- guarda
+  // o Food.id de cada um (mesmo catálogo da dieta), não texto livre. Convive
+  // com foodPreferences (texto livre continua existindo pra algo fora da
+  // lista curada), não substitui.
+  favoriteFoodIds String[] @default([])
 
   createdAt DateTime @default(now())
 }

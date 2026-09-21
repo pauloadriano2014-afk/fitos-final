@@ -29,6 +29,7 @@ export async function POST(req: Request) {
       userId, peso, altura, imc, aguaIdeal,
       objetivo, nivel, frequencia, tempoDisponivel,
       limitacoes, cirurgias, equipamentos,
+      equipamentosCasa, maquinasCondominio,
 
       // ── TREINO ────────────────────────────────────────────────────────────
       trainFasted,
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
 
       // ── PREFERÊNCIAS ─────────────────────────────────────────────────────
       allergies, foodPreferences, foodAversions, supplements, extraNotes,
+      favoriteFoodIds,
 
     } = body;
 
@@ -100,6 +102,8 @@ export async function POST(req: Request) {
         limitacoes:     Array.isArray(limitacoes)  ? limitacoes  : [],
         cirurgias:      Array.isArray(cirurgias)   ? cirurgias   : [],
         equipamentos:   Array.isArray(equipamentos)? equipamentos : [],
+        equipamentosCasa:   Array.isArray(equipamentosCasa) ? equipamentosCasa : [],
+        maquinasCondominio: Array.isArray(maquinasCondominio) ? maquinasCondominio : [],
 
         // ── TREINO ──────────────────────────────────────────────────────────
         trainFasted: typeof trainFasted === 'boolean' ? trainFasted : null,
@@ -161,6 +165,7 @@ export async function POST(req: Request) {
         foodAversions:   foodAversions   || null,
         supplements:     supplements     || null,
         extraNotes:      extraNotes      || null,
+        favoriteFoodIds: Array.isArray(favoriteFoodIds) ? favoriteFoodIds : [],
       },
     });
 

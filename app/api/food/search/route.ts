@@ -26,9 +26,18 @@ export async function GET(req: Request) {
     const category      = searchParams.get('category') ?? '';
     const favoritesOnly = searchParams.get('favorites') === 'true';
     const sourceFilter  = searchParams.get('source') ?? '';
+    // 🔥 (21 set 2026) `ids` -- busca um conjunto específico de alimentos pelo
+    // Food.id (comma-separated). Usado pela aba "Do Aluno" do FoodSearchModal
+    // pra resolver os IDs de `favoriteFoodIds` (marcados na anamnese) nos
+    // registros completos (nome, macros, categoria) -- sem isso o Coach não
+    // tinha como ver o que o aluno escolheu na hora de montar a dieta.
+    const idsParam       = searchParams.get('ids') ?? '';
+    const idsList        = idsParam.split(',').map(s => s.trim()).filter(Boolean);
     const page          = parseInt(searchParams.get('page') ?? '1');
-    const limit         = Math.min(parseInt(searchParams.get('limit') ?? '50'), 500);
-    const skip          = (page - 1) * limit;
+    const limit         = idsList.length
+      ? Math.min(Math.max(idsList.length, 1), 500)
+      : Math.min(parseInt(searchParams.get('limit') ?? '50'), 500);
+    const skip          = idsList.length ? 0 : (page - 1) * limit;
 
     const teamId = MASTER_IDS.includes(coachId) ? MASTER_TEAM : (coachId || null);
 
@@ -43,6 +52,10 @@ export async function GET(req: Request) {
         },
       ],
     };
+
+    if (idsList.length) {
+      where.AND.push({ id: { in: idsList } });
+    }
 
     if (q.length >= 2) {
       where.AND.push({ name: { contains: q, mode: 'insensitive' } });
