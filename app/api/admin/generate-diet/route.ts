@@ -8,6 +8,9 @@ import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
 import Anthropic    from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/auth';
+// 🔥 (22 set 2026) Precisamos do prisma agora pra resolver os
+// `favoriteFoodIds` (ver nota grande mais abaixo, perto de `resolveFavorites`).
+import prisma from '@/lib/prisma';
 // 🔥 (21 set 2026) Migrado do @google/generative-ai (descontinuado) pro
 // @google/genai (SDK atual) — mesma troca feita em gerar-treino/route.ts.
 // Não usamos cache explícito aqui: o catálogo de alimentos + as regras
@@ -60,6 +63,10 @@ interface Anamnese {
     biggestChallenge?: string;
     allergies?: string; foodPreferences?: string; foodAversions?: string;
     supplements?: string; extraNotes?: string;
+    // 🔥 (22 set 2026) IDs reais da tabela Food (mesmos UUIDs de
+    // curatedFoods.js no app) marcados pelo aluno na grade de fotos da
+    // Anamnese (StepFoodPhotos.js). Ver resolveFavorites() mais abaixo.
+    favoriteFoodIds?: string[];
 }
 
 // ─── UTILITÁRIOS DE TEMPO ─────────────────────────────────────────────────────
@@ -385,6 +392,60 @@ function filteredCatalog(a: Anamnese): string {
     }).map(f => `${f.id}|${f.n}|k${f.k}|P${f.p}|C${f.c}|G${f.f}|${f.sc}`).join('\n');
 }
 
+// ─── ALIMENTOS FAVORITOS DO ALUNO ──────────────────────────────────────────────
+// 🔥 (22 set 2026) O aluno marca favoritos numa grade de fotos na Anamnese
+// (StepFoodPhotos.js → curatedFoods.js), que guarda o Food.id REAL da tabela
+// `Food` (base TACO) — não tem nada a ver com o FOOD_CATALOG hardcoded acima,
+// que é um recorte pequeno (69 itens) feito só pra esse prompt de IA e usa
+// IDs curtos próprios. Antes esse dado era coletado e nunca usado aqui —
+// achado apontado pelo Paulo. A ponte entre os dois catálogos é por NOME
+// (normalizado, sem acento/maiúscula/parênteses), buscando o nome real na
+// tabela `Food` a partir do id (não duplicamos curatedFoods.js aqui pra não
+// ter duas listas que podem sair de sincronia).
+function normalizeFoodName(s: string): string {
+    return s
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/\([^)]*\)/g, '')
+        .replace(/[^a-z0-9\s]/g, '')
+        .trim();
+}
+
+async function resolveFavoriteNames(favoriteFoodIds: string[] | undefined): Promise<string[]> {
+    if (!favoriteFoodIds?.length) return [];
+    try {
+        const rows = await prisma.food.findMany({
+            where: { id: { in: favoriteFoodIds } },
+            select: { name: true },
+        });
+        return rows.map(r => r.name);
+    } catch (err) {
+        // Nunca deixa a geração da dieta quebrar por causa disso — sem
+        // favoritos resolvidos, o prompt simplesmente segue sem essa seção.
+        console.warn('[generate-diet] Falha ao resolver favoriteFoodIds:', (err as any)?.message || err);
+        return [];
+    }
+}
+
+// Casa os nomes reais (vindos da tabela Food) com os itens do FOOD_CATALOG
+// deste prompt — exato primeiro, e se não achar, por inclusão parcial (ex:
+// "Atum Grelhado" casa com "Atum (Grelhado ou Assado)"). Um nome que não
+// casa com nada é só ignorado — não é erro, o catálogo restrito nem sempre
+// tem o item exato que o aluno favoritou.
+function matchFavoritesToCatalog(favoriteNames: string[]): string[] {
+    const normalizedCatalog = FOOD_CATALOG.map(f => ({ n: f.n, norm: normalizeFoodName(f.n) }));
+    const matched = new Set<string>();
+    favoriteNames.forEach(name => {
+        const normFav = normalizeFoodName(name);
+        if (!normFav) return;
+        const exact = normalizedCatalog.find(c => c.norm === normFav);
+        if (exact) { matched.add(exact.n); return; }
+        const partial = normalizedCatalog.find(c => c.norm.includes(normFav) || normFav.includes(c.norm));
+        if (partial) matched.add(partial.n);
+    });
+    return Array.from(matched);
+}
+
 // ─── CONTEXTO CLÍNICO ─────────────────────────────────────────────────────────
 function buildClinicalContext(a: Anamnese): string {
     const lines: string[] = [];
@@ -463,7 +524,8 @@ function buildPrompt(
     macros: MacrosOverride,
     dayType: string,
     catalog: string,
-    schedule: MealSlot[]
+    schedule: MealSlot[],
+    favorites: string[] = []
 ): string {
     const scheduleStr = formatScheduleForPrompt(schedule, a.trainTime ?? '??:??', dayType);
     const numMeals    = schedule.length;
@@ -501,6 +563,7 @@ REGRA 4 — SUBSTITUTOS OBRIGATÓRIOS:
   - Todo CARBO principal (arroz/batata/pão/tapioca) → 1 base + 2 substitutos (mesmo groupId, mesma subcategoria)
   - Cereal de café da manhã (aveia/granola/cuscuz) → 1 base + 2 substitutos
   - Vegetais, gorduras, bebidas: 1 base SEM substitutos
+${favorites.length ? `  - Quando o ALIMENTO FAVORITO do aluno (ver PERFIL DO ALUNO) pertencer à mesma subcategoria de um item principal ou de um substituto que você já ia colocar, PRIORIZE-O sobre as outras opções da subcategoria — sem violar REGRA 1, REGRA 5 ou o contexto clínico.` : ''}
 REGRA 5 — METAS RÍGIDAS (CALORIAS E MACROS):
   - KCAL: Você DEVE atingir ${macros.kcal} kcal (tolerância ±50kcal).
   - PROT: Você DEVE atingir exatamente ${macros.prot}g (tolerância ±5g). NUNCA ultrapasse ${macros.prot + 5}g.
@@ -524,6 +587,7 @@ Objetivo: ${a.objetivo} | Peso: ${a.peso}kg | Altura: ${a.altura}cm | Gênero: $
 Alergias/Intolerâncias: ${a.allergies ?? 'Nenhuma'}
 Aversões (NUNCA use): ${a.foodAversions ?? 'Nenhuma'}
 Preferências: ${a.foodPreferences ?? 'Não informado'}
+${favorites.length ? `Alimentos favoritos (priorize como base ou substituto sempre que fizer sentido nutricionalmente, ver REGRA 4): ${favorites.join(', ')}` : ''}
 Suplementos disponíveis: ${a.supplements ?? 'Nenhum'}
 ${orcCtx}
 
@@ -707,7 +771,9 @@ export async function POST(req: Request) {
 
         const schedule = buildMealSchedule(anamnese, dayType);
         const catalog  = filteredCatalog(anamnese);
-        const prompt   = buildPrompt(anamnese, macros, dayType, catalog, schedule);
+        const favoriteNames = await resolveFavoriteNames(anamnese.favoriteFoodIds);
+        const favorites     = matchFavoritesToCatalog(favoriteNames);
+        const prompt   = buildPrompt(anamnese, macros, dayType, catalog, schedule, favorites);
 
         let raw: string; let modelUsed: string;
         switch (provider as Provider) {
