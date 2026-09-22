@@ -1,10 +1,9 @@
-// app/api/admin/generate-diet/route.ts — VERSÃO 7.0
-// Melhorias vs v6.8:
-//   - FIX ESPAÇAMENTO: O aluno não escolhe mais a quantidade de refeições. A IA calcula buracos de 3h a 4h e preenche (Gap Filler).
-//   - FIX PÓS-TREINO: Pós-treino agora é cravado 3 horas APÓS o INÍCIO do treino, limitado pelo horário de dormir.
-//   - FIX PRÉ-TREINO: Cravado 90 min (1h30) antes do treino.
-//   - FIX TREINO MADRUGADA: Se treinar em < 60 min após acordar, adapta para "Ceia Reforçada" ou "Pré-treino Líquido/Rápido".
-//   - REASONING: A IA agora devolve uma string explicando o porquê de cada escolha para auditoria do coach.
+// app/api/admin/generate-diet/route.ts — VERSÃO 7.2 (TOKENS, CUSTOS E CULINÁRIA)
+// Melhorias vs v7.0:
+//   - FIX JANTAR NO TREINO: O Gap Filler ignora o buraco entre Pré e Pós-treino.
+//   - FIX BIZARRICES CULINÁRIAS: Regras rígidas de Doce vs Salgado (Fim do Whey com Arroz).
+//   - FIX SUBSTITUTOS: Instruções agressivas para a IA retornar sempre o mesmo groupId.
+//   - CALCULADORA: Extração de Tokens e conversão para R$ em tempo real.
 
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
@@ -14,7 +13,7 @@ import prisma from '@/lib/prisma';
 import { geminiClient } from '@/lib/geminiCache';
 
 export const dynamic     = 'force-dynamic';
-export const maxDuration = 90;
+export const maxDuration = 120;
 
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -165,6 +164,11 @@ function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
             let curr = anchors[i].time;
             let next = anchors[i+1].time;
             let gap = next - curr;
+
+            // 🔥 TRAVA CONTRA JANTAR DURANTE O TREINO 🔥
+            if (anchors[i].role.includes('preworkout') && anchors[i+1].role.includes('postworkout')) {
+                continue;
+            }
 
             // Se o gap entre duas refeições for de 4 horas ou mais, precisamos injetar comida
             if (gap >= 240) { 
@@ -345,7 +349,7 @@ function filteredCatalog(a: Anamnese): string {
 // ─── ALIMENTOS FAVORITOS DO ALUNO ──────────────────────────────────────────────
 function normalizeFoodName(s: string): string {
     return s
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
         .toLowerCase()
         .replace(/\([^)]*\)/g, '')
         .replace(/[^a-z0-9\s]/g, '')
@@ -418,7 +422,7 @@ function buildClinicalContext(a: Anamnese): string {
     return lines.length ? `\n━━━ CONTEXTO CLÍNICO — PRIORIDADE MÁXIMA ━━━\n${lines.join('\n')}` : '';
 }
 
-// ─── REGRAS CULINÁRIAS BRASILEIRAS POR SLOT ───────────────────────────────────
+// ─── REGRAS CULINÁRIAS BRASILEIRAS POR SLOT (CORRIGIDAS) ──────────────────────
 function buildMealRules(slots: MealSlot[]): string {
     const rules: string[] = [];
     slots.forEach(s => {
@@ -427,25 +431,24 @@ function buildMealRules(slots: MealSlot[]): string {
                 if (timeToMinutes(s.time) < timeToMinutes('11:00')) {
                     rules.push(`• ${s.name} (${s.time}): CAFÉ DA MANHÃ → ovos/clara/queijo/iogurte/pão/tapioca/aveia/fruta. NUNCA arroz, feijão, macarrão, carne bovina inteira.`);
                 } else {
-                    rules.push(`• ${s.name} (${s.time}): ALMOÇO → arroz/batata/mandioca + porção moderada de carne/frango/peixe + vegetal. NÃO use pão, tapioca, aveia.`);
+                    rules.push(`• ${s.name} (${s.time}): ALMOÇO → arroz/batata/mandioca + carne/frango/peixe + vegetal/salada. NUNCA misture carnes com whey ou doces.`);
                 }
                 break;
             case 'snack':
-                rules.push(`• ${s.name} (${s.time}): LANCHE → opção leve: fruta + laticínio ou proteína leve. NÃO coloque arroz ou prato quente.`);
+                rules.push(`• ${s.name} (${s.time}): LANCHE → Opcão doce (Fruta + Aveia/Chia + Whey/Iogurte) OU Opção salgada (Pão/Rap10/Tapioca + Ovo/Frango/Queijo). NUNCA misture fruta com requeijão, frango ou carne.`);
                 break;
             case 'preworkout':
-                rules.push(`• ${s.name} (${s.time}): PRÉ-TREINO → carbo rápido + proteína leve. NÃO gordura saturada, NÃO feijão.`);
+                rules.push(`• ${s.name} (${s.time}): PRÉ-TREINO → Carbo de energia + proteína. Doce (Banana/Maçã + Aveia + Whey/Iogurte) OU Salgado (Pão/Tapioca + Ovo/Frango). NUNCA refeições pesadas, NUNCA arroz/feijão.`);
                 break;
             case 'postworkout':
-                rules.push(`• ${s.name} (${s.time}): PÓS-TREINO → porção moderada de proteína + carbo rápido. Frango/peixe/whey + arroz/batata/fruta. NUNCA coloque "proteína máxima" para não estourar o limite diário.`);
+                rules.push(`• ${s.name} (${s.time}): PÓS-TREINO → Se for Doce: Whey/Iogurte + Fruta + Aveia/Cereal. Se for Salgado: Frango/Carne/Peixe + Arroz/Batata/Mandioca. NUNCA misture Whey Protein com Arroz, Feijão, Batata ou Mandioca. NUNCA misture Carne com Fruta.`);
                 break;
             case 'dinner':
-                rules.push(`• ${s.name} (${s.time}): JANTAR → refeição completa com ↓CARBO. Proteína + vegetal. NÃO pule esta refeição.`);
+                rules.push(`• ${s.name} (${s.time}): JANTAR → Refeição completa (Frango/Carne/Peixe + Vegetais + quantidade controlada de Arroz/Batata). NUNCA use Whey Protein ou frutas aqui.`);
                 break;
             case 'supper':
-                rules.push(`• ${s.name} (${s.time}): CEIA → leve, fonte de proteína de lenta absorção: cottage, iogurte, caseína, ovo.`);
+                rules.push(`• ${s.name} (${s.time}): CEIA → Proteína leve e lenta absorção. Iogurte, Queijo Cottage, Ovos ou Whey/Caseína. Pode adicionar pasta de amendoim ou castanhas. NUNCA carnes pesadas ou arroz.`);
                 break;
-            // 🔥 REGRAS NOVAS PARA TREINO DE MADRUGADA
             case 'fast_preworkout':
                 rules.push(`• ${s.name} (${s.time}): PRÉ-TREINO ULTRA RÁPIDO → O aluno treina logo ao acordar! NUNCA use ovos, carnes, pães pesados ou fibras. Use APENAS fontes de energia líquida/rápida como: doce de leite, suco de uva, palatinose, banana amassada, e no máximo um Whey.`);
                 break;
@@ -497,17 +500,16 @@ REGRA 1 — CATÁLOGO: Use APENAS alimentos do CATÁLOGO abaixo. Nunca invente a
 REGRA 2 — IDs EXATOS: "food_id" e "food_name" devem ser copiados EXATAMENTE do catálogo.
 REGRA 3 — AGENDA SAGRADA: Você DEVE gerar EXATAMENTE ${numMeals} refeições, nos horários e nomes EXATOS da AGENDA. Não mude, não omita, não adicione nenhuma refeição. A última refeição da lista NUNCA pode ficar vazia.
 REGRA 4 — SUBSTITUTOS OBRIGATÓRIOS:
-  - Toda fonte de PROTEÍNA principal → 1 base + 2 substitutos (mesmo groupId, mesma subcategoria, caloricamente equivalentes)
-  - Todo CARBO principal (arroz/batata/pão/tapioca) → 1 base + 2 substitutos (mesmo groupId, mesma subcategoria)
-  - Cereal de café da manhã (aveia/granola/cuscuz) → 1 base + 2 substitutos
-  - Vegetais, gorduras, bebidas: 1 base SEM substitutos
+  - Para CADA alimento que você escolher como base de CARBOIDRATO ou PROTEÍNA principal, você DEVE obrigatoriamente incluir mais 2 alimentos substitutos.
+  - Os substitutos DEVEM ser objetos separados no array "items", mas com o EXATO MESMO "groupId" do alimento base.
+  - As calorias dos substitutos devem ser matematicamente equivalentes à porção do alimento base.
 ${favorites.length ? `  - Quando o ALIMENTO FAVORITO do aluno (ver PERFIL DO ALUNO) pertencer à mesma subcategoria de um item principal ou de um substituto que você já ia colocar, PRIORIZE-O sobre as outras opções da subcategoria — sem violar REGRA 1, REGRA 5 ou o contexto clínico.` : ''}
 REGRA 5 — METAS RÍGIDAS (CALORIAS E MACROS):
   - KCAL: Você DEVE atingir ${macros.kcal} kcal (tolerância ±50kcal).
   - PROT: Você DEVE atingir exatamente ${macros.prot}g (tolerância ±5g). NUNCA ultrapasse ${macros.prot + 5}g.
   - CARBO: Você DEVE atingir exatamente ${macros.carb}g (tolerância ±10g).
   - GORD: Você DEVE atingir exatamente ${macros.fat}g (tolerância ±5g).
-REGRA 6 — CULINÁRIA BRASILEIRA: Respeite rigorosamente as regras de cada refeição abaixo.
+REGRA 6 — CULINÁRIA BRASILEIRA: Respeite rigorosamente as regras de cada refeição abaixo. Pare de misturar Whey com Arroz ou Morango com Requeijão.
 REGRA 7 — CONTEXTO CLÍNICO: Aplique TODAS as restrições clínicas abaixo sem exceção.
 REGRA 8 — EXPLICAÇÃO OBRIGATÓRIA: Forneça um "reasoning" detalhado (relatório) explicando as escolhas baseadas no contexto clínico, espaçamento de horas, sono e treino.
 ${isFolga ? 'REGRA 9 — DIAS LIVRES: Este é um dia de FOLGA/DESCANSO. A ingestão calórica total DEVE ser distribuída uniformemente entre as refeições para garantir a recuperação. NÃO gere calorias vazias.' : ''}
@@ -515,7 +517,7 @@ ${clinico}
 
 ━━━ DIA: ${dayLabels[dayType] ?? dayType} ━━━
 
-━━━ AGENDA CALCULADA MATEMATICAMENTE (${numMeals} refeições) ━━━
+━━━ AGENDA OBRIGATÓRIA (${numMeals} refeições — não altere) ━━━
 ${scheduleStr}
 
 ━━━ REGRAS CULINÁRIAS POR REFEIÇÃO ━━━
@@ -626,32 +628,58 @@ function enrich(rawMeals: any[], dayType: string): any[] {
     }));
 }
 
+// 🔥 CALCULADORA DE CUSTO ESTIMADO
+function calculateCost(provider: string, modelUsed: string, usage: any) {
+    let inTokens = 0; let outTokens = 0;
+    if (provider === 'openai' || provider === 'openai-mini') {
+        inTokens = usage?.prompt_tokens || 0;
+        outTokens = usage?.completion_tokens || 0;
+    } else if (provider === 'anthropic') {
+        inTokens = usage?.input_tokens || 0;
+        outTokens = usage?.output_tokens || 0;
+    } else if (provider === 'google') {
+        inTokens = usage?.promptTokenCount || 0;
+        outTokens = usage?.candidatesTokenCount || 0;
+    }
+
+    let inPrice = 0; let outPrice = 0;
+    if (modelUsed === 'gpt-4o-mini') { inPrice = 0.15; outPrice = 0.60; }
+    else if (modelUsed === 'gpt-4o') { inPrice = 5.00; outPrice = 15.00; }
+    else if (modelUsed === 'claude-3-5-sonnet-20240620') { inPrice = 3.00; outPrice = 15.00; }
+    else if (modelUsed.includes('flash')) { inPrice = 0.075; outPrice = 0.30; }
+
+    const costUsd = (inTokens / 1000000) * inPrice + (outTokens / 1000000) * outPrice;
+    const costBrl = costUsd * 5.50; 
+
+    return { inTokens, outTokens, totalTokens: inTokens + outTokens, costUsd, costBrl };
+}
+
 // ─── PROVIDERS ────────────────────────────────────────────────────────────────
-async function callOpenAI(prompt: string, model: string): Promise<string> {
+async function callOpenAI(prompt: string, model: string) {
     const res = await openai.chat.completions.create({
         model, response_format: { type: 'json_object' }, temperature: 0.2,
         messages: [{ role:'system', content: prompt }, { role:'user', content:'Gere o plano agora. Retorne APENAS o JSON.' }],
     });
-    return res.choices[0].message.content ?? '{}';
+    return { content: res.choices[0].message.content ?? '{}', usage: res.usage };
 }
 
-async function callAnthropic(prompt: string): Promise<string> {
+async function callAnthropic(prompt: string) {
     const res = await anthropic.messages.create({
         model: 'claude-3-5-sonnet-20240620',
         max_tokens: 8000, temperature: 0.2,
         messages: [{ role:'user', content:`${prompt}\n\nGere o plano agora. Retorne APENAS o JSON válido.` }],
     });
-    return ((res.content.find(b => b.type === 'text') as any)?.text ?? '{}')
-        .replace(/```json\n?|\n?```/g, '').trim();
+    const text = ((res.content.find(b => b.type === 'text') as any)?.text ?? '{}').replace(/```json\n?|\n?```/g, '').trim();
+    return { content: text, usage: res.usage };
 }
 
-async function callGoogle(prompt: string): Promise<string> {
+async function callGoogle(prompt: string) {
     const result = await geminiClient.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: `${prompt}\n\nGere o plano agora.`,
         config: { responseMimeType: 'application/json' },
     });
-    return result.text || '{}';
+    return { content: result.text || '{}', usage: result.usageMetadata };
 }
 
 // ─── HANDLER ──────────────────────────────────────────────────────────────────
@@ -713,13 +741,15 @@ export async function POST(req: Request) {
         const favorites     = matchFavoritesToCatalog(favoriteNames);
         const prompt   = buildPrompt(anamnese, macros, dayType, catalog, schedule, favorites);
 
-        let raw: string; let modelUsed: string;
+        let raw: string; let modelUsed: string; let usage: any;
         switch (provider as Provider) {
-            case 'anthropic':   raw = await callAnthropic(prompt); modelUsed = 'claude-3-5-sonnet-20240620'; break;
-            case 'google':      raw = await callGoogle(prompt);    modelUsed = 'gemini-3.8-flash';    break;
-            case 'openai-mini': raw = await callOpenAI(prompt,'gpt-4o-mini'); modelUsed = 'gpt-4o-mini'; break;
-            default:            raw = await callOpenAI(prompt,'gpt-4o');      modelUsed = 'gpt-4o';
+            case 'anthropic':   { const r = await callAnthropic(prompt); raw = r.content; usage = r.usage; modelUsed = 'claude-3-5-sonnet-20240620'; break; }
+            case 'google':      { const r = await callGoogle(prompt); raw = r.content; usage = r.usage; modelUsed = 'gemini-3.8-flash'; break; }
+            case 'openai-mini': { const r = await callOpenAI(prompt,'gpt-4o-mini'); raw = r.content; usage = r.usage; modelUsed = 'gpt-4o-mini'; break; }
+            default:            { const r = await callOpenAI(prompt,'gpt-4o'); raw = r.content; usage = r.usage; modelUsed = 'gpt-4o'; break; }
         }
+
+        const costData = calculateCost(provider, modelUsed, usage);
 
         let parsed;
         try {
@@ -732,10 +762,11 @@ export async function POST(req: Request) {
 
         const meals = enrich((parsed.meals ?? []), dayType);
         
-        // 🔥 INJETANDO O REASONING NO RETORNO DA API
+        // 🔥 INJETANDO O REASONING, CUSTOS E OS TOKENS NO RETORNO DA API
         return NextResponse.json({ 
             meals, 
             reasoning: parsed.reasoning || 'Relatório de Inteligência não gerado.',
+            usageAndCost: costData,
             meta:{ dayType, provider, modelUsed, schedule, ...macros } 
         }, { status:200 });
 
