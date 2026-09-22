@@ -1,9 +1,8 @@
-// app/api/admin/generate-diet/route.ts — VERSÃO 7.2 (TOKENS, CUSTOS E CULINÁRIA)
-// Melhorias vs v7.0:
-//   - FIX JANTAR NO TREINO: O Gap Filler ignora o buraco entre Pré e Pós-treino.
-//   - FIX BIZARRICES CULINÁRIAS: Regras rígidas de Doce vs Salgado (Fim do Whey com Arroz).
-//   - FIX SUBSTITUTOS: Instruções agressivas para a IA retornar sempre o mesmo groupId.
-//   - CALCULADORA: Extração de Tokens e conversão para R$ em tempo real.
+// app/api/admin/generate-diet/route.ts — VERSÃO 7.3 (TRAVA DE MACROS E FAVORITOS OBRIGATÓRIOS)
+// Melhorias vs v7.2:
+//   - FIX MACROS INVERTIDOS: Trava rigorosa para impedir que dias de descanso ultrapassem as calorias de dias de treino.
+//   - FIX FAVORITOS: A IA é agora OBRIGADA a usar a lista de favoritos do aluno como base e substitutos primários.
+//   - FIX REASONING: Exige que a IA explique como bateu as calorias naquele dia específico.
 
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
@@ -349,7 +348,7 @@ function filteredCatalog(a: Anamnese): string {
 // ─── ALIMENTOS FAVORITOS DO ALUNO ──────────────────────────────────────────────
 function normalizeFoodName(s: string): string {
     return s
-        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .replace(/\([^)]*\)/g, '')
         .replace(/[^a-z0-9\s]/g, '')
@@ -496,22 +495,18 @@ Sua função é montar um plano alimentar diário COMPLETO, PRÁTICO e CULTURALM
 
 ━━━ REGRAS ABSOLUTAS — VIOLAÇÃO = RESPOSTA INVÁLIDA ━━━
 
-REGRA 1 — CATÁLOGO: Use APENAS alimentos do CATÁLOGO abaixo. Nunca invente alimentos.
+REGRA 1 — LISTA DE FAVORITOS (MANDATÓRIO): ${favorites.length > 0 ? `Construa a dieta INTEIRA (itens base e substitutos) usando PRIMEIRO a seguinte lista de favoritos do aluno: ${favorites.join(', ')}. É ESTRITAMENTE PROIBIDO usar um alimento do catálogo geral se houver uma opção viável nesta lista de favoritos.` : `Não há favoritos. Use o catálogo geral.`}
 REGRA 2 — IDs EXATOS: "food_id" e "food_name" devem ser copiados EXATAMENTE do catálogo.
 REGRA 3 — AGENDA SAGRADA: Você DEVE gerar EXATAMENTE ${numMeals} refeições, nos horários e nomes EXATOS da AGENDA. Não mude, não omita, não adicione nenhuma refeição. A última refeição da lista NUNCA pode ficar vazia.
-REGRA 4 — SUBSTITUTOS OBRIGATÓRIOS:
-  - Para CADA alimento que você escolher como base de CARBOIDRATO ou PROTEÍNA principal, você DEVE obrigatoriamente incluir mais 2 alimentos substitutos.
-  - Os substitutos DEVEM ser objetos separados no array "items", mas com o EXATO MESMO "groupId" do alimento base.
-  - As calorias dos substitutos devem ser matematicamente equivalentes à porção do alimento base.
-${favorites.length ? `  - Quando o ALIMENTO FAVORITO do aluno (ver PERFIL DO ALUNO) pertencer à mesma subcategoria de um item principal ou de um substituto que você já ia colocar, PRIORIZE-O sobre as outras opções da subcategoria — sem violar REGRA 1, REGRA 5 ou o contexto clínico.` : ''}
+REGRA 4 — SUBSTITUTOS OBRIGATÓRIOS: Para CADA alimento que você escolher como base (Carbo ou Proteína), você DEVE obrigatoriamente incluir mais 2 alimentos substitutos (completando 3 opções no total para aquele nutriente). Os substitutos DEVEM ser objetos separados no array "items", mas com o EXATO MESMO "groupId" do alimento base. As calorias dos substitutos devem ser equivalentes à porção base.
 REGRA 5 — METAS RÍGIDAS (CALORIAS E MACROS):
-  - KCAL: Você DEVE atingir ${macros.kcal} kcal (tolerância ±50kcal).
-  - PROT: Você DEVE atingir exatamente ${macros.prot}g (tolerância ±5g). NUNCA ultrapasse ${macros.prot + 5}g.
-  - CARBO: Você DEVE atingir exatamente ${macros.carb}g (tolerância ±10g).
-  - GORD: Você DEVE atingir exatamente ${macros.fat}g (tolerância ±5g).
+  - KCAL: Você DEVE atingir EXATAMENTE ${macros.kcal} kcal neste dia. A tolerância é de apenas ±30kcal. Se este for um dia de Descanso, ele NUNCA pode ter mais calorias que um dia de Treino.
+  - PROT: Você DEVE atingir exatamente ${macros.prot}g neste dia (tolerância ±5g). NUNCA ultrapasse ${macros.prot + 5}g. Use a média de ${avgProtPerMeal}g/refeição.
+  - CARBO: Você DEVE atingir exatamente ${macros.carb}g neste dia (tolerância ±10g).
+  - GORD: Você DEVE atingir exatamente ${macros.fat}g neste dia (tolerância ±5g).
 REGRA 6 — CULINÁRIA BRASILEIRA: Respeite rigorosamente as regras de cada refeição abaixo. Pare de misturar Whey com Arroz ou Morango com Requeijão.
 REGRA 7 — CONTEXTO CLÍNICO: Aplique TODAS as restrições clínicas abaixo sem exceção.
-REGRA 8 — EXPLICAÇÃO OBRIGATÓRIA: Forneça um "reasoning" detalhado (relatório) explicando as escolhas baseadas no contexto clínico, espaçamento de horas, sono e treino.
+REGRA 8 — EXPLICAÇÃO: Forneça um "reasoning" detalhado explicando as escolhas DENTRO DESTE DIA ESPECÍFICO (${dayType}).
 ${isFolga ? 'REGRA 9 — DIAS LIVRES: Este é um dia de FOLGA/DESCANSO. A ingestão calórica total DEVE ser distribuída uniformemente entre as refeições para garantir a recuperação. NÃO gere calorias vazias.' : ''}
 ${clinico}
 
@@ -532,8 +527,9 @@ ${favorites.length ? `Alimentos favoritos (priorize como base ou substituto semp
 Suplementos disponíveis: ${a.supplements ?? 'Nenhum'}
 ${orcCtx}
 
-━━━ METAS DO DIA ━━━
+━━━ METAS EXCLUSIVAS PARA ESTE DIA (${dayType}) ━━━
 KCAL: ${macros.kcal} | PROT: ${macros.prot}g | CARBO: ${macros.carb}g | GORD: ${macros.fat}g
+Lembre-se: Você está gerando o dia de ${dayType}. Você está expressamente proibido de ultrapassar a meta de ${macros.kcal} kcal e ${macros.prot}g de proteína estipulada PARA ESTE DIA ESPECÍFICO.
 
 ━━━ DISTRIBUIÇÃO DE MACROS POR REFEIÇÃO ━━━
 - Proteína: A meta é um TETO INTRANSPONÍVEL de ${macros.prot}g no total do dia. Para não estourar a soma matemática, use uma MÉDIA de EXATAMENTE ${avgProtPerMeal}g de proteína por refeição. NÃO use "doses duplas" de whey ou porções gigantes de carne em nenhuma refeição.
@@ -559,7 +555,7 @@ Nota: os substitutos têm amounts diferentes mas equivalentes em calorias ao ite
 
 ━━━ FORMATO DE SAÍDA (JSON puro, sem markdown, sem explicações) ━━━
 {
-  "reasoning": "Resumo clínico curto em primeira pessoa (ex: 'Analisei a janela de 17 horas em que o aluno fica acordado e criei X refeições espaçadas. O pós-treino foi cravado às 22h por conta do horário do treino e limite de sono. Carboidratos focados no peri-treino...').",
+  "reasoning": "Seu relatório detalhado em primeira pessoa justificando os horários e como bateu as calorias NESTE DIA (${dayType}).",
   "meals": [
     {
       "name": "Nome EXATO da agenda",
