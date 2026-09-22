@@ -1,23 +1,16 @@
-// app/api/admin/generate-diet/route.ts — VERSÃO 6.8
-// Melhorias vs v6.7:
-//   - FIX MACROS: Remoção da tag [↑PROT] e do termo "proteína máxima" que faziam a IA estourar a meta.
-//   - MATEMÁTICA GUIADA: A IA agora recebe a média exata de gramas de proteína permitida por refeição.
-//   - CULINÁRIA: Ajustes finos nos termos para evitar "overdose" de carnes em refeições únicas.
+// app/api/admin/generate-diet/route.ts — VERSÃO 7.0
+// Melhorias vs v6.8:
+//   - FIX ESPAÇAMENTO: O aluno não escolhe mais a quantidade de refeições. A IA calcula buracos de 3h a 4h e preenche (Gap Filler).
+//   - FIX PÓS-TREINO: Pós-treino agora é cravado 3 horas APÓS o INÍCIO do treino, limitado pelo horário de dormir.
+//   - FIX PRÉ-TREINO: Cravado 90 min (1h30) antes do treino.
+//   - FIX TREINO MADRUGADA: Se treinar em < 60 min após acordar, adapta para "Ceia Reforçada" ou "Pré-treino Líquido/Rápido".
+//   - REASONING: A IA agora devolve uma string explicando o porquê de cada escolha para auditoria do coach.
 
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
 import Anthropic    from '@anthropic-ai/sdk';
 import { requireAuth } from '@/lib/auth';
-// 🔥 (22 set 2026) Precisamos do prisma agora pra resolver os
-// `favoriteFoodIds` (ver nota grande mais abaixo, perto de `resolveFavorites`).
 import prisma from '@/lib/prisma';
-// 🔥 (21 set 2026) Migrado do @google/generative-ai (descontinuado) pro
-// @google/genai (SDK atual) — mesma troca feita em gerar-treino/route.ts.
-// Não usamos cache explícito aqui: o catálogo de alimentos + as regras
-// fixas do prompt somados dão ~2.500 tokens, abaixo do mínimo de 4096 que
-// a Gemini exige pra aceitar um cache — não compensa tentar. Ver nota no
-// buildPrompt() sobre a reestruturação que ainda ajuda o cache automático
-// da OpenAI (esse não tem mínimo de tamanho tão alto).
 import { geminiClient } from '@/lib/geminiCache';
 
 export const dynamic     = 'force-dynamic';
@@ -63,9 +56,6 @@ interface Anamnese {
     biggestChallenge?: string;
     allergies?: string; foodPreferences?: string; foodAversions?: string;
     supplements?: string; extraNotes?: string;
-    // 🔥 (22 set 2026) IDs reais da tabela Food (mesmos UUIDs de
-    // curatedFoods.js no app) marcados pelo aluno na grade de fotos da
-    // Anamnese (StepFoodPhotos.js). Ver resolveFavorites() mais abaixo.
     favoriteFoodIds?: string[];
 }
 
@@ -92,172 +82,132 @@ function roundToQuarter(t: string): string {
     return minutesToTime(Math.round(timeToMinutes(t) / 15) * 15);
 }
 
-// ─── CONSTRUTOR DE AGENDA ─────────────────────────────────────────────────────
+// ─── ALGORITMO INTELIGENTE DE AGENDA (GAP FILLER + MADRUGADA) ─────────────────
 function buildMealSchedule(a: Anamnese, dayType: string): MealSlot[] {
     const isFolga = (dayType === 'DESCANSO' || dayType === 'CARDIO') &&
                     a.freeDays && a.freeDays.length > 0 && !a.freeDays.includes('Nenhum');
 
     const wake  = isFolga && a.freeWakeUpTime ? a.freeWakeUpTime : (a.wakeUpTime  || '07:00');
     const sleep = isFolga && a.freeSleepTime  ? a.freeSleepTime  : (a.sleepTime   || '23:00');
-    const train = isFolga && a.freeTrainTime  ? a.freeTrainTime  : (a.trainTime   || '18:00');
+    const train = isFolga && a.freeTrainTime  ? a.freeTrainTime  : (a.trainTime   || '19:00');
 
     const workStart = a.workTimeStart || (a.workTime ? a.workTime.split(' às ')[0] : '09:00');
     const workEnd   = a.workTimeEnd   || (a.workTime ? a.workTime.split(' às ')[1] : '18:00');
-    const numMeals  = Math.min(8, Math.max(2, Number(a.mealsPerDay) || 5));
-    const isBariatric = !!a.bariatric;
     const hasGastrite = (a.digestiveIssues ?? []).some(d => ['Gastrite','Refluxo / DRGE'].includes(d));
-    const strategy    = a.preworkoutStrategy || 'shake';
 
     const wakeMin  = timeToMinutes(wake);
-    const sleepMin = timeToMinutes(sleep);
-    const trainMin = timeToMinutes(train);
-    const windowMin = sleepMin > wakeMin ? sleepMin - wakeMin : (1440 - wakeMin + sleepMin);
+    let sleepMin = timeToMinutes(sleep);
+    // Se o aluno dorme de madrugada (ex: 02:00) e acorda às 10:00, ajusta a matemática
+    if (sleepMin <= wakeMin) sleepMin += 1440; 
+    
+    // Se o treino é na madrugada do dia seguinte (ex: 01:00)
+    let trainMin = timeToMinutes(train);
+    if (trainMin < wakeMin && trainMin < 300) trainMin += 1440;
 
-    // ── DESCANSO ──────────────────────────────────────────────────────────────
-    if (dayType === 'DESCANSO') {
-        const interval = Math.floor(windowMin / (numMeals - 1));
-        const mealDefs = [
-            { name:'Café da Manhã',   role:'main',   carbPriority:'medium' as const, protPriority:'medium' as const },
-            { name:'Lanche da Manhã', role:'snack',  carbPriority:'low'    as const, protPriority:'medium' as const },
-            { name:'Almoço',          role:'main',   carbPriority:'medium' as const, protPriority:'high'   as const },
-            { name:'Lanche da Tarde', role:'snack',  carbPriority:'low'    as const, protPriority:'medium' as const },
-            { name:'Jantar',          role:'dinner', carbPriority:'low'    as const, protPriority:'high'   as const },
-            { name:'Ceia',            role:'supper', carbPriority:'low'    as const, protPriority:'medium' as const },
-        ];
-        return mealDefs.slice(0, numMeals).map((def, i) => {
-            const time     = roundToQuarter(minutesToTime(wakeMin + interval * i));
-            const portable = isInRange(time, workStart, workEnd);
-            return {
-                time, name: def.name, role: def.role, portable,
-                note: portable ? 'Refeição durante horário de trabalho — opção prática e portátil.'
-                    : (i === 0 && hasGastrite ? 'Não comece com café puro — inclua alimento sólido primeiro.' : ''),
-                carbPriority: def.carbPriority,
-                protPriority: def.protPriority,
-            };
-        });
-    }
+    let anchors: any[] = [];
 
     // ── DIAS COM TREINO ───────────────────────────────────────────────────────
-    const minsTillTrain = ((trainMin - wakeMin) + 1440) % 1440;
-    const hasTimeForPre = minsTillTrain >= 60 && !a.trainFasted;
-    const required: MealSlot[] = [];
+    if (dayType !== 'DESCANSO') {
+        let minsTillTrain = trainMin - wakeMin;
+        if (minsTillTrain < 0) minsTillTrain += 1440;
 
-    if (!a.trainFasted) {
-        if (hasTimeForPre) {
-            const preTime  = roundToQuarter(minutesToTime(trainMin - 70));
-            const portable = isInRange(preTime, workStart, workEnd);
-            required.push({
-                time: preTime, name: 'Pré-Treino', role: 'preworkout', portable,
-                note: portable
-                    ? 'Pré-treino no trabalho — banana + whey ou tapioca + frango fatiado.'
-                    : 'Pré-treino: carboidrato de rápida absorção + proteína leve.',
-                carbPriority: 'high', protPriority: 'medium',
-            });
-        } else if (strategy === 'ceia_pretreino') {
-            const ceiaTime = roundToQuarter(minutesToTime(sleepMin - 60));
-            required.push({
-                time: ceiaTime, name: 'Ceia Pré-Treino', role: 'preworkout', portable: false,
-                note: `Acorda ${minsTillTrain}min antes do treino — ceia na noite anterior garante energia.`,
-                carbPriority: 'high', protPriority: 'medium',
-            });
+        // 🔥 IDENTIFICA TREINO LOGO AO ACORDAR (Menos ou igual a 60 minutos)
+        if (minsTillTrain <= 60) {
+            // LÊ A ESCOLHA DA ANAMNESE PARA TREINO CEDO
+            if (a.preworkoutStrategy === 'ceia_pretreino' || a.trainFasted) {
+                // OPÇÃO A: Treina em Jejum, a Ceia do dia anterior é o combustível
+                anchors.push({ time: wakeMin + 120, type: 'pos', name: 'Pós-Treino (Café da Manhã)', role: 'postworkout', carbPriority: 'high', protPriority: 'high' });
+                
+                // Força a existência de uma super Ceia
+                anchors.push({ time: sleepMin - 60, type: 'sleep', name: 'Ceia (Pré-Treino do dia seguinte)', role: 'supper_pre', carbPriority: 'high', protPriority: 'medium' });
+            } else {
+                // OPÇÃO B: Pré-treino Rápido Líquido ao acordar
+                anchors.push({ time: wakeMin, type: 'pre', name: 'Pré-Treino Rápido', role: 'fast_preworkout', carbPriority: 'high', protPriority: 'low' });
+                
+                // Pós-treino 2h depois do início do treino (para dar tempo de treinar e chegar em casa)
+                anchors.push({ time: trainMin + 120, type: 'pos', name: 'Pós-Treino (Café da Manhã)', role: 'postworkout', carbPriority: 'high', protPriority: 'high' });
+            }
         } else {
-            const shakeTime = roundToQuarter(minutesToTime(trainMin - 20));
-            required.push({
-                time: shakeTime, name: 'Pré-Treino Rápido', role: 'preworkout', portable: false,
-                note: `Acorda ${minsTillTrain}min antes — shake rápido: banana + whey.`,
-                carbPriority: 'high', protPriority: 'low',
-            });
+            // TREINO NORMAL (Tarde, Noite ou muitas horas após acordar)
+            anchors.push({ time: wakeMin, type: 'wake', name: 'Café da Manhã', role: 'main', carbPriority: 'medium', protPriority: 'medium' });
+            
+            if (!a.trainFasted) {
+                // Pré-treino cravado 90 min (1h30) antes
+                anchors.push({ time: trainMin - 90, type: 'pre', name: 'Pré-Treino', role: 'preworkout', carbPriority: 'high', protPriority: 'medium' });
+            }
+
+            // Pós-treino cravado 3 horas APÓS o início do treino
+            let posTime = trainMin + 180;
+            // Trava de segurança: se as 3h caírem perto ou depois de dormir, puxa pra 45 min antes de deitar
+            if (posTime >= sleepMin - 30) posTime = sleepMin - 45; 
+            anchors.push({ time: posTime, type: 'pos', name: 'Pós-Treino', role: 'postworkout', carbPriority: 'high', protPriority: 'high' });
         }
-        const posTime  = roundToQuarter(minutesToTime(trainMin + 45));
-        const portable = isInRange(posTime, workStart, workEnd);
-        required.push({
-            time: posTime, name: 'Pós-Treino', role: 'postworkout', portable,
-            note: portable ? 'Pós-treino no trabalho — whey + fruta ou iogurte + granola.'
-                : 'Pós-treino: focar na recuperação. Frango/Peixe/Whey com carbo.',
-            carbPriority: 'high', protPriority: 'high',
-        });
     } else {
-        required.push({
-            time: wake, name: 'Quebra do Jejum (Pós-Treino)', role: 'postworkout', portable: false,
-            note: 'Treina em jejum — primeira refeição do dia após o treino. Carbo + proteína.',
-            carbPriority: 'high', protPriority: 'high',
-        });
+        // DIAS DE DESCANSO
+        anchors.push({ time: wakeMin, type: 'wake', name: 'Café da Manhã', role: 'main', carbPriority: 'medium', protPriority: 'medium' });
     }
 
-    const remainingSlots = numMeals - required.length;
-    const usedTimes = new Set(required.map(r => r.time));
-
-    const mainMealDefs = [
-        { name:'Café da Manhã',   role:'main',   carbPriority:'medium' as const, protPriority:'medium' as const, idealOffset:0    },
-        { name:'Lanche da Manhã', role:'snack',  carbPriority:'medium' as const, protPriority:'low'    as const, idealOffset:0.2  },
-        { name:'Almoço',          role:'main',   carbPriority:'high'   as const, protPriority:'high'   as const, idealOffset:0.4  },
-        { name:'Lanche da Tarde', role:'snack',  carbPriority:'low'    as const, protPriority:'medium' as const, idealOffset:0.6  },
-        { name:'Jantar',          role:'dinner', carbPriority:'low'    as const, protPriority:'high'   as const, idealOffset:0.8  },
-        { name:'Ceia',            role:'supper', carbPriority:'low'    as const, protPriority:'medium' as const, idealOffset:0.95 },
-    ];
-
-    const mappedDefs = mainMealDefs.map(def => {
-        const idealMin = wakeMin + Math.round(windowMin * def.idealOffset);
-        let minDistance = Infinity;
-        required.forEach(r => {
-            let dist = Math.abs(timeToMinutes(r.time) - idealMin);
-            if (dist > 720) dist = 1440 - dist; 
-            if (dist < minDistance) minDistance = dist;
-        });
-        return { def, idealMin, minDistance };
-    });
-
-    mappedDefs.sort((a, b) => b.minDistance - a.minDistance);
-    const selectedDefs = mappedDefs.slice(0, remainingSlots).map(m => m.def);
-
-    selectedDefs.sort((a, b) => a.idealOffset - b.idealOffset);
-
-    selectedDefs.forEach(def => {
-        let idealMin = wakeMin + Math.round(windowMin * def.idealOffset);
-        let attempts = 0;
-        while (attempts < 20) {
-            const t = roundToQuarter(minutesToTime(idealMin));
-            const conflict = [...usedTimes].some(ut => {
-                let d = Math.abs(timeToMinutes(ut) - timeToMinutes(t));
-                return d < 60 || (1440 - d) < 60; 
-            });
-            if (!conflict) {
-                usedTimes.add(t);
-                const portable = isInRange(t, workStart, workEnd);
-                required.push({
-                    time: t, name: def.name, role: def.role, portable,
-                    note: portable ? 'Refeição durante horário de trabalho — opção portátil.'
-                        : (def.role === 'main' && hasGastrite && def.idealOffset === 0
-                            ? 'Não comece o dia com café puro — inclua alimento sólido antes.' : ''),
-                    carbPriority: def.carbPriority,
-                    protPriority: def.protPriority,
-                });
-                break;
-            }
-            idealMin += 15; attempts++;
-        }
-    });
-
-    required.sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
-
-    if (isBariatric && required.length < 6) {
-        const extra = 6 - required.length;
-        for (let i = 0; i < extra; i++) {
-            const insertAfter = required[Math.floor(required.length / 2) + i];
-            const newTime = roundToQuarter(addMinutes(insertAfter.time, 120));
-            if (!usedTimes.has(newTime)) {
-                usedTimes.add(newTime);
-                required.push({
-                    time: newTime, name: `Lanche Extra ${i + 1}`, role: 'snack', portable: false,
-                    note: 'Bariátrico: volume máx ~150ml, rico em proteína.',
-                    carbPriority: 'low', protPriority: 'high',
-                });
-            }
-        }
-        required.sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
+    // ── ANCORA DE DORMIR (Ceia Padrão) ────────────────────────────────────────
+    anchors.sort((a,b) => a.time - b.time);
+    let lastAnchor = anchors[anchors.length - 1];
+    // Só cria ceia padrão se houver um buraco de 2h30+ entre a última ref e o sono, E se não existir já a super ceia
+    if (sleepMin - lastAnchor.time >= 150 && !anchors.some(a => a.role === 'supper_pre')) { 
+        anchors.push({ time: sleepMin - 60, type: 'sleep', name: 'Ceia', role: 'supper', carbPriority: 'low', protPriority: 'medium' });
     }
 
-    return required;
+    // ── PREENCHIMENTO DOS BURACOS (GAP FILLER) ────────────────────────────────
+    anchors.sort((a,b) => a.time - b.time);
+    let finalSchedule: any[] = [];
+    
+    for (let i = 0; i < anchors.length; i++) {
+        finalSchedule.push(anchors[i]);
+        if (i < anchors.length - 1) {
+            let curr = anchors[i].time;
+            let next = anchors[i+1].time;
+            let gap = next - curr;
+
+            // Se o gap entre duas refeições for de 4 horas ou mais, precisamos injetar comida
+            if (gap >= 240) { 
+                let inserts = Math.floor(gap / 180); // Injeta a cada ~3h
+                if (inserts > 0) {
+                    let interval = Math.floor(gap / (inserts + 1));
+                    for (let j = 1; j <= inserts; j++) {
+                        let insertTime = curr + (interval * j);
+                        let timeStringMod = insertTime % 1440; // Volta pra formato 24h
+                        
+                        let mealName = 'Lanche'; let role = 'snack'; let protP = 'low';
+                        
+                        // Batiza a refeição de acordo com o relógio biológico
+                        if (timeStringMod >= 660 && timeStringMod <= 840 && !finalSchedule.some(s => s.role === 'main' && s.name !== 'Café da Manhã')) { 
+                            // Entre 11:00 e 14:00 vira Almoço
+                            mealName = 'Almoço'; role = 'main'; protP = 'high';
+                        } else if (timeStringMod >= 1080 && timeStringMod <= 1260 && !finalSchedule.some(s => s.role === 'dinner')) { 
+                            // Entre 18:00 e 21:00 vira Jantar
+                            mealName = 'Jantar'; role = 'dinner'; protP = 'high';
+                        } else if (timeStringMod < 720) {
+                            mealName = 'Lanche da Manhã';
+                        } else {
+                            mealName = 'Lanche da Tarde';
+                        }
+                        
+                        finalSchedule.push({ time: insertTime, type: 'fill', name: mealName, role: role, carbPriority: 'low', protPriority: protP });
+                    }
+                }
+            }
+        }
+    }
+
+    finalSchedule.sort((a,b) => a.time - b.time);
+
+    // Mapeia para o formato final MealSlot
+    return finalSchedule.map(s => {
+        let t = roundToQuarter(minutesToTime(s.time));
+        let portable = isInRange(t, workStart, workEnd);
+        let note = portable ? 'Refeição no horário de trabalho — prática e portátil.' : '';
+        if (s.name === 'Café da Manhã' && hasGastrite) note = 'Não comece com café puro — inclua alimento sólido primeiro.';
+
+        return { time: t, name: s.name, role: s.role, portable: portable, note: note, carbPriority: s.carbPriority, protPriority: s.protPriority }
+    });
 }
 
 // ─── FORMATAR AGENDA PARA PROMPT ─────────────────────────────────────────────
@@ -364,7 +314,7 @@ const FOOD_CATALOG = [
     { id:"40d69ef4", n:"YoPRO 15g (Bebida Láctea)",sc:"Prontos p/ Consumo",k:45,  p:6,  c:5,  f:0  },
     { id:"7b22ccb6", n:"YoPRO 25g (Bebida Láctea)",sc:"Prontos p/ Consumo",k:62,  p:10, c:5,  f:0  },
     { id:"34c424a4", n:"Barra de Proteína Bold",   sc:"Prontos p/ Consumo",k:350, p:33, c:33, f:15 },
-    { id:"2cadb09b", n:"Paçoca (Rolha)",            sc:"Doces e Açúcares",  k:490, p:15, c:60, f:25 },
+    { id:"2cadb09b", n:"Paçoca (Rolha)",             sc:"Doces e Açúcares",  k:490, p:15, c:60, f:25 },
     { id:"9b1aebc9", n:"Chocolate Meio Amargo (70%)",sc:"Doces e Açúcares", k:540, p:6,  c:45, f:35 },
     { id:"638a0cc5", n:"Geleia de Frutas (100% Fruta)",sc:"Doces e Açúcares",k:150,p:0,  c:10, f:0  },
     { id:"08a0c3cb", n:"Café sem Açúcar",   sc:"Bebidas Zero", k:0, p:0, c:0, f:0 },
@@ -393,18 +343,9 @@ function filteredCatalog(a: Anamnese): string {
 }
 
 // ─── ALIMENTOS FAVORITOS DO ALUNO ──────────────────────────────────────────────
-// 🔥 (22 set 2026) O aluno marca favoritos numa grade de fotos na Anamnese
-// (StepFoodPhotos.js → curatedFoods.js), que guarda o Food.id REAL da tabela
-// `Food` (base TACO) — não tem nada a ver com o FOOD_CATALOG hardcoded acima,
-// que é um recorte pequeno (69 itens) feito só pra esse prompt de IA e usa
-// IDs curtos próprios. Antes esse dado era coletado e nunca usado aqui —
-// achado apontado pelo Paulo. A ponte entre os dois catálogos é por NOME
-// (normalizado, sem acento/maiúscula/parênteses), buscando o nome real na
-// tabela `Food` a partir do id (não duplicamos curatedFoods.js aqui pra não
-// ter duas listas que podem sair de sincronia).
 function normalizeFoodName(s: string): string {
     return s
-        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .replace(/\([^)]*\)/g, '')
         .replace(/[^a-z0-9\s]/g, '')
@@ -420,18 +361,11 @@ async function resolveFavoriteNames(favoriteFoodIds: string[] | undefined): Prom
         });
         return rows.map(r => r.name);
     } catch (err) {
-        // Nunca deixa a geração da dieta quebrar por causa disso — sem
-        // favoritos resolvidos, o prompt simplesmente segue sem essa seção.
         console.warn('[generate-diet] Falha ao resolver favoriteFoodIds:', (err as any)?.message || err);
         return [];
     }
 }
 
-// Casa os nomes reais (vindos da tabela Food) com os itens do FOOD_CATALOG
-// deste prompt — exato primeiro, e se não achar, por inclusão parcial (ex:
-// "Atum Grelhado" casa com "Atum (Grelhado ou Assado)"). Um nome que não
-// casa com nada é só ignorado — não é erro, o catálogo restrito nem sempre
-// tem o item exato que o aluno favoritou.
 function matchFavoritesToCatalog(favoriteNames: string[]): string[] {
     const normalizedCatalog = FOOD_CATALOG.map(f => ({ n: f.n, norm: normalizeFoodName(f.n) }));
     const matched = new Set<string>();
@@ -503,15 +437,20 @@ function buildMealRules(slots: MealSlot[]): string {
                 rules.push(`• ${s.name} (${s.time}): PRÉ-TREINO → carbo rápido + proteína leve. NÃO gordura saturada, NÃO feijão.`);
                 break;
             case 'postworkout':
-                // 🔴 FIX: Avisando para NÃO exagerar na proteína aqui
                 rules.push(`• ${s.name} (${s.time}): PÓS-TREINO → porção moderada de proteína + carbo rápido. Frango/peixe/whey + arroz/batata/fruta. NUNCA coloque "proteína máxima" para não estourar o limite diário.`);
                 break;
             case 'dinner':
-                // 🔴 FIX: Retirado o '↑PROT'
                 rules.push(`• ${s.name} (${s.time}): JANTAR → refeição completa com ↓CARBO. Proteína + vegetal. NÃO pule esta refeição.`);
                 break;
             case 'supper':
                 rules.push(`• ${s.name} (${s.time}): CEIA → leve, fonte de proteína de lenta absorção: cottage, iogurte, caseína, ovo.`);
+                break;
+            // 🔥 REGRAS NOVAS PARA TREINO DE MADRUGADA
+            case 'fast_preworkout':
+                rules.push(`• ${s.name} (${s.time}): PRÉ-TREINO ULTRA RÁPIDO → O aluno treina logo ao acordar! NUNCA use ovos, carnes, pães pesados ou fibras. Use APENAS fontes de energia líquida/rápida como: doce de leite, suco de uva, palatinose, banana amassada, e no máximo um Whey.`);
+                break;
+            case 'supper_pre':
+                rules.push(`• ${s.name} (${s.time}): CEIA REFORÇADA (PRÉ-TREINO DO DIA SEGUINTE) → O aluno treina de madrugada e não quer comer de manhã. Esta ceia precisa ter energia OBRIGATÓRIA. Coloque carbo complexo (aveia, frutas, tapioca) + proteína (ovos/whey/iogurte).`);
                 break;
         }
     });
@@ -547,7 +486,6 @@ function buildPrompt(
         DESCANSO:      'DESCANSO — recuperação, sem treino',
     };
 
-    // 🔴 FIX: Cálculo da média para engessar a IA matematicamente
     const avgProtPerMeal = Math.round(macros.prot / numMeals);
 
     return `Você é o Nutricionista Especialista do Coach Paulo Adriano (ELITE FIT).
@@ -571,12 +509,13 @@ REGRA 5 — METAS RÍGIDAS (CALORIAS E MACROS):
   - GORD: Você DEVE atingir exatamente ${macros.fat}g (tolerância ±5g).
 REGRA 6 — CULINÁRIA BRASILEIRA: Respeite rigorosamente as regras de cada refeição abaixo.
 REGRA 7 — CONTEXTO CLÍNICO: Aplique TODAS as restrições clínicas abaixo sem exceção.
-${isFolga ? 'REGRA 8 — DIAS LIVRES: Este é um dia de FOLGA/DESCANSO. A ingestão calórica total DEVE ser distribuída uniformemente entre as refeições para garantir a recuperação. NÃO gere calorias vazias.' : ''}
+REGRA 8 — EXPLICAÇÃO OBRIGATÓRIA: Forneça um "reasoning" detalhado (relatório) explicando as escolhas baseadas no contexto clínico, espaçamento de horas, sono e treino.
+${isFolga ? 'REGRA 9 — DIAS LIVRES: Este é um dia de FOLGA/DESCANSO. A ingestão calórica total DEVE ser distribuída uniformemente entre as refeições para garantir a recuperação. NÃO gere calorias vazias.' : ''}
 ${clinico}
 
 ━━━ DIA: ${dayLabels[dayType] ?? dayType} ━━━
 
-━━━ AGENDA OBRIGATÓRIA (${numMeals} refeições — não altere) ━━━
+━━━ AGENDA CALCULADA MATEMATICAMENTE (${numMeals} refeições) ━━━
 ${scheduleStr}
 
 ━━━ REGRAS CULINÁRIAS POR REFEIÇÃO ━━━
@@ -618,6 +557,7 @@ Nota: os substitutos têm amounts diferentes mas equivalentes em calorias ao ite
 
 ━━━ FORMATO DE SAÍDA (JSON puro, sem markdown, sem explicações) ━━━
 {
+  "reasoning": "Resumo clínico curto em primeira pessoa (ex: 'Analisei a janela de 17 horas em que o aluno fica acordado e criei X refeições espaçadas. O pós-treino foi cravado às 22h por conta do horário do treino e limite de sono. Carboidratos focados no peri-treino...').",
   "meals": [
     {
       "name": "Nome EXATO da agenda",
@@ -628,7 +568,8 @@ Nota: os substitutos têm amounts diferentes mas equivalentes em calorias ao ite
       ]
     }
   ]
-}`;
+}
+`;
 }
 
 // ─── ENRIQUECER COM MEDIDAS CASEIRAS ─────────────────────────────────────────
@@ -705,9 +646,6 @@ async function callAnthropic(prompt: string): Promise<string> {
 }
 
 async function callGoogle(prompt: string): Promise<string> {
-    // 🔥 (21 set 2026) Atualizado pro Flash mais recente + migrado pro SDK
-    // novo (@google/genai). Sem cache explícito aqui (ver nota no topo do
-    // arquivo) — só a chamada direta mesmo.
     const result = await geminiClient.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: `${prompt}\n\nGere o plano agora.`,
@@ -793,7 +731,13 @@ export async function POST(req: Request) {
         }
 
         const meals = enrich((parsed.meals ?? []), dayType);
-        return NextResponse.json({ meals, meta:{ dayType, provider, modelUsed, schedule, ...macros } }, { status:200 });
+        
+        // 🔥 INJETANDO O REASONING NO RETORNO DA API
+        return NextResponse.json({ 
+            meals, 
+            reasoning: parsed.reasoning || 'Relatório de Inteligência não gerado.',
+            meta:{ dayType, provider, modelUsed, schedule, ...macros } 
+        }, { status:200 });
 
     } catch (err: any) {
         console.error('[generate-diet]', err?.message ?? err);
