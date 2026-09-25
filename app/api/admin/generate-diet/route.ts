@@ -466,7 +466,8 @@ function buildPrompt(
     dayType: string,
     catalog: string,
     schedule: MealSlot[],
-    favorites: string[] = []
+    favorites: string[] = [],
+    customInstruction: string = ''
 ): string {
     const scheduleStr = formatScheduleForPrompt(schedule, a.trainTime ?? '??:??', dayType);
     const numMeals    = schedule.length;
@@ -508,6 +509,7 @@ REGRA 6 — CULINÁRIA BRASILEIRA: Respeite rigorosamente as regras de cada refe
 REGRA 7 — CONTEXTO CLÍNICO: Aplique TODAS as restrições clínicas abaixo sem exceção.
 REGRA 8 — EXPLICAÇÃO: Forneça um "reasoning" detalhado explicando as escolhas DENTRO DESTE DIA ESPECÍFICO (${dayType}).
 ${isFolga ? 'REGRA 9 — DIAS LIVRES: Este é um dia de FOLGA/DESCANSO. A ingestão calórica total DEVE ser distribuída uniformemente entre as refeições para garantir a recuperação. NÃO gere calorias vazias.' : ''}
+${customInstruction.trim() ? `REGRA 10 — INSTRUÇÃO DIRETA DO COACH (PRIORIDADE ALTA): O Coach responsável por este aluno pediu especificamente: "${customInstruction.trim()}". Siga essa instrução ao montar o cardápio sempre que possível. Ela NUNCA pode fazer você violar a REGRA 5 (metas de kcal/macros) nem a REGRA 7 (contexto clínico) — se a instrução conflitar com essas duas, priorize kcal/macros e segurança clínica, e mencione o ajuste no "reasoning".` : ''}
 ${clinico}
 
 ━━━ DIA: ${dayLabels[dayType] ?? dayType} ━━━
@@ -684,7 +686,7 @@ export async function POST(req: Request) {
         const auth = requireAuth(req);
         if ('response' in auth) return auth.response;
 
-        const { anamnese, dayType = 'TREINO', provider = 'anthropic', birthDate, gender, macrosOverride } = await req.json();
+        const { anamnese, dayType = 'TREINO', provider = 'anthropic', birthDate, gender, macrosOverride, customInstruction = '' } = await req.json();
 
         if (!anamnese) return NextResponse.json({ error:'Anamnese não encontrada.' }, { status:400 });
 
@@ -735,7 +737,7 @@ export async function POST(req: Request) {
         const catalog  = filteredCatalog(anamnese);
         const favoriteNames = await resolveFavoriteNames(anamnese.favoriteFoodIds);
         const favorites     = matchFavoritesToCatalog(favoriteNames);
-        const prompt   = buildPrompt(anamnese, macros, dayType, catalog, schedule, favorites);
+        const prompt   = buildPrompt(anamnese, macros, dayType, catalog, schedule, favorites, customInstruction);
 
         let raw: string; let modelUsed: string; let usage: any;
         switch (provider as Provider) {
