@@ -60,19 +60,23 @@ async function notifyCoachBillingIssue(coachId: string, title: string, body: str
 
 export async function POST(req: Request) {
     try {
-        // 🔒 Verificação do token de autenticação do webhook — só é aplicada
-        // se ASAAS_WEBHOOK_TOKEN estiver configurado no Render, pra não
-        // quebrar pagamentos em produção antes de você configurar o mesmo
-        // valor em Asaas > Integrações > Webhooks > Token de autenticação.
-        // Configure isso o quanto antes: sem token, qualquer requisição
-        // forjada pode simular "pagamento confirmado".
+        // 🔒 (26 set 2026 — auditoria de segurança) ASAAS_WEBHOOK_TOKEN já
+        // está configurado no Render e na Asaas (Integrações > Webhooks >
+        // Token de autenticação) — a partir de agora a verificação é
+        // OBRIGATÓRIA: se a env var sumir (deploy errado, reset de config
+        // etc.), a rota passa a RECUSAR tudo em vez de aceitar sem checar.
+        // Antes, faltando a env var, qualquer requisição forjada conseguia
+        // simular "pagamento confirmado" — esse buraco fica fechado por
+        // padrão agora, não só enquanto alguém lembra de configurar.
         const expectedWebhookToken = process.env.ASAAS_WEBHOOK_TOKEN;
-        if (expectedWebhookToken) {
-            const receivedWebhookToken = req.headers.get('asaas-access-token');
-            if (receivedWebhookToken !== expectedWebhookToken) {
-                console.warn('[payments/webhook] Token de autenticação ausente ou inválido.');
-                return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-            }
+        if (!expectedWebhookToken) {
+            console.error('[payments/webhook] ASAAS_WEBHOOK_TOKEN não configurado — recusando por segurança.');
+            return NextResponse.json({ error: 'webhook not configured' }, { status: 503 });
+        }
+        const receivedWebhookToken = req.headers.get('asaas-access-token');
+        if (receivedWebhookToken !== expectedWebhookToken) {
+            console.warn('[payments/webhook] Token de autenticação ausente ou inválido.');
+            return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
         }
 
         const body = await req.json();

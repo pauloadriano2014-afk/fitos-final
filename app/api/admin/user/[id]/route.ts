@@ -19,6 +19,45 @@ async function checkOwnership(userId: string, authUser: AuthUser | null) {
     return targetUser.coachId === authUser.id || targetUser.nutritionistId === authUser.id;
 }
 
+// 🔒 (26 set 2026 — auditoria de segurança) FECHA MASS ASSIGNMENT: antes,
+// PATCH/PUT aceitava QUALQUER campo do body e mandava direto pro Prisma. Como
+// `checkOwnership` acima libera o próprio usuário editando o PRÓPRIO id, isso
+// permitia qualquer aluno logado se auto-promover mandando, por exemplo,
+// { "plan": "ELITE", "role": "COACH", "isFinanceActive": true } pro próprio
+// registro — e o servidor aplicava sem questionar.
+//
+// A regra agora é: editando o PRÓPRIO registro (você mesmo, seja aluno ou
+// coach), só os campos de perfil abaixo passam — nada financeiro, de plano,
+// de acesso ou administrativo. Editando o registro de OUTRA pessoa (coach/
+// nutricionista dono do aluno, ou master) continua liberado por completo,
+// exatamente como já funcionava — é o uso legítimo do painel admin.
+const SELF_EDIT_ALLOWED_FIELDS = [
+    'name', 'phone', 'photoUrl', 'gender', 'goal',
+    'currentWeight', 'isMenstruating', 'menstruationStartDate',
+    'onboardingCompleted', 'onboardingStep',
+    'brandLogoUrl', 'brandLogoSize', 'brandColor',
+];
+
+function sanitizeUpdateData(rawBody: any, { isSelfEdit }: { isSelfEdit: boolean }) {
+    const body = { ...rawBody };
+    delete body.adminId;
+    // Nunca aceitos por essa rota, nem em edição de terceiro — têm rota
+    // própria com hash (app/api/user/update) ou são derivados pelo servidor.
+    delete body.password;
+    delete body.id;
+    delete body.email;
+
+    if (!isSelfEdit) return body; // coach/master editando outra pessoa: sem mudança de comportamento
+
+    const safeData: Record<string, any> = {};
+    for (const field of SELF_EDIT_ALLOWED_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(body, field)) {
+            safeData[field] = body[field];
+        }
+    }
+    return safeData;
+}
+
 // 🔥 Tratamento de CORS GLOBAL para evitar bloqueios na PWA
 function corsResponse(body: any, status = 200) {
     return NextResponse.json(body, {
@@ -131,8 +170,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         const isOwner = await checkOwnership(userId, auth.user);
         if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
 
-        const dataToUpdate = { ...body };
-        delete dataToUpdate.adminId;
+        const dataToUpdate = sanitizeUpdateData(body, { isSelfEdit: auth.user.id === userId });
 
         const user = await prisma.user.update({ where: { id: userId }, data: dataToUpdate });
         return corsResponse(user);
@@ -152,8 +190,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         const isOwner = await checkOwnership(userId, auth.user);
         if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
 
-        const dataToUpdate = { ...body };
-        delete dataToUpdate.adminId;
+        const dataToUpdate = sanitizeUpdateData(body, { isSelfEdit: auth.user.id === userId });
 
         const user = await prisma.user.update({ where: { id: userId }, data: dataToUpdate });
 

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { signAuthToken } from '@/lib/auth';
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,23 @@ export async function POST(req: Request) {
   try {
     const { email, password } = await req.json();
 
-    const user = await prisma.user.findUnique({ 
+    // 🔒 (26 set 2026) Sem limite de tentativas dava pra tentar senha
+    // indefinidamente. Limita por IP+e-mail (8 tentativas / 15 min) — generoso
+    // o bastante pra não travar gente que erra a senha de boa-fé, apertado o
+    // bastante pra inviabilizar força bruta.
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(`login:${ip}:${String(email || '').toLowerCase()}`, {
+      max: 8,
+      windowMs: 15 * 60 * 1000,
+    });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Muitas tentativas. Aguarde alguns minutos antes de tentar de novo.' },
+        { status: 429 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
       where: { email },
       include: { 
         anamneses: true 

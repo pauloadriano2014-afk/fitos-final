@@ -27,14 +27,18 @@ const EVENTOS_PAGAMENTO_CONFIRMADO = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'];
 
 export async function POST(request: NextRequest) {
     try {
-        // 🔒 Mesma verificação de token usada em payments/webhook — só é
-        // aplicada se ASAAS_WEBHOOK_TOKEN estiver configurado no Render.
+        // 🔒 (26 set 2026) Mesma verificação de payments/webhook — agora
+        // OBRIGATÓRIA (recusa se a env var não estiver configurada, em vez
+        // de deixar passar sem checar). Ver comentário completo em
+        // app/api/payments/webhook/route.ts.
         const expectedWebhookToken = process.env.ASAAS_WEBHOOK_TOKEN;
-        if (expectedWebhookToken) {
-            const tokenRecebido = request.headers.get('asaas-access-token');
-            if (tokenRecebido !== expectedWebhookToken) {
-                return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
-            }
+        if (!expectedWebhookToken) {
+            console.error('[webhook/asaas-desafio] ASAAS_WEBHOOK_TOKEN não configurado — recusando por segurança.');
+            return NextResponse.json({ error: 'webhook not configured' }, { status: 503 });
+        }
+        const tokenRecebido = request.headers.get('asaas-access-token');
+        if (tokenRecebido !== expectedWebhookToken) {
+            return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
         }
 
         const body = await request.json();

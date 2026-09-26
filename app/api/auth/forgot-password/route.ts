@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import crypto from 'crypto';
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +61,19 @@ export async function POST(req: Request) {
     const { email } = await req.json();
 
     if (!email || typeof email !== 'string') {
+      return NextResponse.json(GENERIC_RESPONSE);
+    }
+
+    // 🔒 (26 set 2026) Limita pedidos repetidos pro mesmo e-mail/IP — sem
+    // isso dava pra spammar a caixa de entrada de alguém com e-mails de
+    // redefinição. Resposta continua a mesma genérica, então quem está
+    // abusando nem percebe que foi limitado.
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(`forgot-password:${ip}:${email.trim().toLowerCase()}`, {
+      max: 4,
+      windowMs: 15 * 60 * 1000,
+    });
+    if (!rl.allowed) {
       return NextResponse.json(GENERIC_RESPONSE);
     }
 
