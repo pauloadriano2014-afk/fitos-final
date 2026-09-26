@@ -7,7 +7,7 @@
 import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
 import Anthropic    from '@anthropic-ai/sdk';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, isMasterId } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { geminiClient } from '@/lib/geminiCache';
 
@@ -17,7 +17,11 @@ export const maxDuration = 120;
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-type Provider = 'openai' | 'openai-mini' | 'anthropic' | 'google';
+// 🔒 (26 set 2026) 'anthropic-haiku' só pode ser usado por Paulo/Adri (MASTER_IDS)
+// -- travado tanto na UI (ModelSelectorModal só mostra a aba de modelo pra
+// master) quanto aqui no servidor, pra um coach parceiro não conseguir usar
+// batendo direto na API.
+type Provider = 'openai' | 'openai-mini' | 'anthropic' | 'anthropic-haiku' | 'google';
 
 interface MacrosOverride { kcal: number; prot: number; carb: number; fat: number; }
 
@@ -626,13 +630,118 @@ function enrich(rawMeals: any[], dayType: string): any[] {
     }));
 }
 
+// ─── CORREÇÃO AUTOMÁTICA DE MACROS (pós-IA) ──────────────────────────────────
+// 🔥 (26 set 2026) A REGRA 5 do prompt já pede tolerância de ±5g de proteína,
+// ±10g de carbo, ±5g de gordura -- mas a IA às vezes ignora isso feio (já
+// vimos ela estourar 70-90g de proteína num dia só). Como cada aba (Treino,
+// Treino+Cardio, Cardio, Descanso) é gerada numa chamada de IA INDEPENDENTE
+// (nenhuma sabe o que a outra gerou), esse desvio virava um "ruído" maior que
+// a diferença real entre os tipos de dia -- e por isso um dia que deveria ter
+// MAIS caloria (ex: Treino+Cardio) podia sair com MENOS que um dia mais leve.
+//
+// Em vez de confiar só no prompt, o servidor agora CONFERE os macros que a IA
+// realmente devolveu e, se estourar a tolerância, REESCALA as próprias
+// quantidades (gramas) até bater exatamente na meta -- sem gastar tokens
+// extras nem trocar o cardápio, só ajusta "quanto" de cada alimento.
+//
+// Como funciona: cada refeição tem "grupos" de alimentos (groupId) -- o
+// primeiro item de cada grupo é o que conta pro total do dia (os outros 2 são
+// substitutos alternativos da REGRA 4, e são reescalados junto pra continuar
+// nutricionalmente equivalentes ao item base). Cada grupo é classificado pelo
+// macro que ele mais fornece (proteína, carbo ou gordura -- comparando kcal
+// por grama: p*4 vs c*4 vs f*9). Depois, um macro de cada vez (proteína →
+// carbo → gordura), calculamos quanto falta pra bater a meta e reescalamos só
+// os grupos daquele "balde", sem tocar no que já está dentro da tolerância.
+const MACRO_TOLERANCE = { prot: 5, carb: 10, fat: 5 };
+
+function dominantMacro(p: number, c: number, f: number): 'prot' | 'carb' | 'fat' | 'none' {
+    const pk = p * 4, ck = c * 4, fk = f * 9;
+    if (pk === 0 && ck === 0 && fk === 0) return 'none';
+    if (pk >= ck && pk >= fk) return 'prot';
+    if (ck >= pk && ck >= fk) return 'carb';
+    return 'fat';
+}
+
+function enforceMacroTargets(meals: any[], target: MacrosOverride) {
+    // key = "índice-da-refeição:groupId" -- evita colidir grupos de refeições
+    // diferentes que por acaso tenham o mesmo groupId.
+    const allByGroup     = new Map<string, any[]>();
+    const countedByGroup = new Map<string, any>();
+
+    meals.forEach((meal, mealIdx) => {
+        (meal.items ?? []).forEach((item: any) => {
+            const key = `${mealIdx}:${item.groupId}`;
+            if (!allByGroup.has(key)) allByGroup.set(key, []);
+            allByGroup.get(key)!.push(item);
+            if (!countedByGroup.has(key)) countedByGroup.set(key, item); // 1º item do grupo = o que conta no total do dia
+        });
+    });
+
+    const countedItems = Array.from(countedByGroup.entries()).map(([key, item]) => ({
+        key, item, bucket: dominantMacro(item.p, item.c, item.f),
+    }));
+
+    const sumMacro = (k: 'p' | 'c' | 'f') =>
+        countedItems.reduce((sum, { item }) => sum + (item[k] * parseFloat(item.amount)) / 100, 0);
+    const sumKcal = () =>
+        countedItems.reduce((sum, { item }) => sum + (item.calories_per_100 * parseFloat(item.amount)) / 100, 0);
+
+    const before = {
+        prot: Math.round(sumMacro('p')), carb: Math.round(sumMacro('c')),
+        fat:  Math.round(sumMacro('f')), kcal: Math.round(sumKcal()),
+    };
+
+    let corrected = false;
+    const passes: Array<{ macroKey: 'prot' | 'carb' | 'fat'; itemKey: 'p' | 'c' | 'f'; tolerance: number }> = [
+        { macroKey: 'prot', itemKey: 'p', tolerance: MACRO_TOLERANCE.prot },
+        { macroKey: 'carb', itemKey: 'c', tolerance: MACRO_TOLERANCE.carb },
+        { macroKey: 'fat',  itemKey: 'f', tolerance: MACRO_TOLERANCE.fat },
+    ];
+
+    for (const { macroKey, itemKey, tolerance } of passes) {
+        const totalNow  = sumMacro(itemKey);
+        const targetVal = target[macroKey];
+        if (Math.abs(totalNow - targetVal) <= tolerance) continue; // já dentro da tolerância -- não mexe
+
+        const bucketCounted = countedItems.filter(c => c.bucket === macroKey);
+        const bucketNow = bucketCounted.reduce((sum, { item }) => sum + (item[itemKey] * parseFloat(item.amount)) / 100, 0);
+        const residual  = totalNow - bucketNow; // o que já vem de itens fora desse balde (ex: um pouco de carbo escondido na proteína)
+        const bucketTarget = targetVal - residual;
+
+        // Sem itens desse macro pra escalar, ou meta impossível (residual já
+        // estourou sozinho) -- não força uma escala absurda, deixa como está
+        // e o desvio fica registrado em "before/after" pro coach ver.
+        if (bucketCounted.length === 0 || bucketNow <= 0 || bucketTarget <= 0) continue;
+
+        let scale = bucketTarget / bucketNow;
+        scale = Math.max(0.3, Math.min(3, scale)); // trava contra porção absurda (ex: 10x o tamanho)
+
+        for (const { key } of bucketCounted) {
+            // Reescala TODOS os itens do grupo (base + substitutos), não só o
+            // contado -- mantém a equivalência nutricional entre eles (REGRA 4).
+            for (const groupItem of allByGroup.get(key)!) {
+                const newAmt = Math.max(5, Math.round(parseFloat(groupItem.amount) * scale));
+                groupItem.amount = newAmt.toString();
+            }
+        }
+        corrected = true;
+    }
+
+    const after = {
+        prot: Math.round(sumMacro('p')), carb: Math.round(sumMacro('c')),
+        fat:  Math.round(sumMacro('f')), kcal: Math.round(sumKcal()),
+    };
+
+    return { meals, corrected, before, after };
+}
+
 // 🔥 CALCULADORA DE CUSTO ESTIMADO
 function calculateCost(provider: string, modelUsed: string, usage: any) {
     let inTokens = 0; let outTokens = 0;
     if (provider === 'openai' || provider === 'openai-mini') {
         inTokens = usage?.prompt_tokens || 0;
         outTokens = usage?.completion_tokens || 0;
-    } else if (provider === 'anthropic') {
+    } else if (provider === 'anthropic' || provider === 'anthropic-haiku') {
         inTokens = usage?.input_tokens || 0;
         outTokens = usage?.output_tokens || 0;
     } else if (provider === 'google') {
@@ -644,6 +753,10 @@ function calculateCost(provider: string, modelUsed: string, usage: any) {
     if (modelUsed === 'gpt-4o-mini') { inPrice = 0.15; outPrice = 0.60; }
     else if (modelUsed === 'gpt-4o') { inPrice = 5.00; outPrice = 15.00; }
     else if (modelUsed === 'claude-3-5-sonnet-20240620') { inPrice = 3.00; outPrice = 15.00; }
+    // 🔥 (26 set 2026) Preço estimado do Claude Haiku 4.5 em USD/milhão de tokens
+    // -- confira contra a página de preços da Anthropic de vez em quando, essa
+    // faixa muda; deixei um valor conservador de modelo "rápido/barato".
+    else if (modelUsed === 'claude-haiku-4-5') { inPrice = 1.00; outPrice = 5.00; }
     else if (modelUsed.includes('flash')) { inPrice = 0.075; outPrice = 0.30; }
 
     const costUsd = (inTokens / 1000000) * inPrice + (outTokens / 1000000) * outPrice;
@@ -661,9 +774,9 @@ async function callOpenAI(prompt: string, model: string) {
     return { content: res.choices[0].message.content ?? '{}', usage: res.usage };
 }
 
-async function callAnthropic(prompt: string) {
+async function callAnthropic(prompt: string, model: string = 'claude-3-5-sonnet-20240620') {
     const res = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20240620',
+        model,
         max_tokens: 8000, temperature: 0.2,
         messages: [{ role:'user', content:`${prompt}\n\nGere o plano agora. Retorne APENAS o JSON válido.` }],
     });
@@ -689,6 +802,12 @@ export async function POST(req: Request) {
         const { anamnese, dayType = 'TREINO', provider = 'anthropic', birthDate, gender, macrosOverride, customInstruction = '' } = await req.json();
 
         if (!anamnese) return NextResponse.json({ error:'Anamnese não encontrada.' }, { status:400 });
+
+        // 🔒 Claude Haiku é modelo exclusivo de master (Paulo/Adri) -- a UI já
+        // esconde essa opção pra coach parceiro, isso aqui é a trava real.
+        if (provider === 'anthropic-haiku' && !isMasterId(auth.user.id)) {
+            return NextResponse.json({ error: 'Este modelo de IA está disponível apenas para os administradores master.' }, { status: 403 });
+        }
 
         const macros: MacrosOverride = macrosOverride ?? (() => {
             const peso = anamnese.peso ?? 70;
@@ -741,7 +860,8 @@ export async function POST(req: Request) {
 
         let raw: string; let modelUsed: string; let usage: any;
         switch (provider as Provider) {
-            case 'anthropic':   { const r = await callAnthropic(prompt); raw = r.content; usage = r.usage; modelUsed = 'claude-3-5-sonnet-20240620'; break; }
+            case 'anthropic':        { const r = await callAnthropic(prompt); raw = r.content; usage = r.usage; modelUsed = 'claude-3-5-sonnet-20240620'; break; }
+            case 'anthropic-haiku':  { const r = await callAnthropic(prompt, 'claude-haiku-4-5'); raw = r.content; usage = r.usage; modelUsed = 'claude-haiku-4-5'; break; }
             case 'google':      { const r = await callGoogle(prompt); raw = r.content; usage = r.usage; modelUsed = 'gemini-3.8-flash'; break; }
             case 'openai-mini': { const r = await callOpenAI(prompt,'gpt-4o-mini'); raw = r.content; usage = r.usage; modelUsed = 'gpt-4o-mini'; break; }
             default:            { const r = await callOpenAI(prompt,'gpt-4o'); raw = r.content; usage = r.usage; modelUsed = 'gpt-4o'; break; }
@@ -759,13 +879,25 @@ export async function POST(req: Request) {
         }
 
         const meals = enrich((parsed.meals ?? []), dayType);
-        
+
+        // 🔥 (26 set 2026) Confere e corrige os macros que a IA realmente
+        // devolveu contra a meta -- ver comentário completo em enforceMacroTargets.
+        const macroFix = enforceMacroTargets(meals, macros);
+
+        let reasoning = parsed.reasoning || 'Relatório de Inteligência não gerado.';
+        if (macroFix.corrected) {
+            reasoning += `\n\n⚙️ Ajuste automático do servidor: a IA gerou ${macroFix.before.kcal}kcal (P:${macroFix.before.prot}g C:${macroFix.before.carb}g G:${macroFix.before.fat}g), fora da tolerância da meta (P:${macros.prot}g C:${macros.carb}g G:${macros.fat}g). As porções foram reescaladas automaticamente para ${macroFix.after.kcal}kcal (P:${macroFix.after.prot}g C:${macroFix.after.carb}g G:${macroFix.after.fat}g).`;
+        }
+
         // 🔥 INJETANDO O REASONING, CUSTOS E OS TOKENS NO RETORNO DA API
-        return NextResponse.json({ 
-            meals, 
-            reasoning: parsed.reasoning || 'Relatório de Inteligência não gerado.',
+        return NextResponse.json({
+            meals: macroFix.meals,
+            reasoning,
             usageAndCost: costData,
-            meta:{ dayType, provider, modelUsed, schedule, ...macros } 
+            meta:{
+                dayType, provider, modelUsed, schedule, ...macros,
+                macroCorrection: { applied: macroFix.corrected, aiRaw: macroFix.before, final: macroFix.after },
+            },
         }, { status:200 });
 
     } catch (err: any) {
