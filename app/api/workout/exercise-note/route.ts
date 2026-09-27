@@ -13,7 +13,17 @@
 // hora. O registro definitivo ligado às séries/pesos continua sendo salvo
 // em /api/workout/finish como já era -- esta rota é só o aviso "ao vivo".
 //
-// Body: { userId, exerciseName, note, workoutName? }
+// Body: { userId, exerciseName, note, workoutName?, workoutId?, day?, workoutExerciseId? }
+//
+// 🔥 (27 set 2026) Adicionados workoutId/day/workoutExerciseId -- o Paulo
+// relatou que, com só o exerciseName salvo, era impossível saber COM
+// CERTEZA qual exercício era quando (a) o mesmo exercício aparece em mais
+// de um dia/treino, ou (b) o aluno comentou vendo um exercício SUBSTITUTO
+// (nome diferente do "dono" do card, ex: comentou em "Agachamento no Smith"
+// mas o card na tela de montagem é "Agachamento livre com barra"). Esses 3
+// campos são OPCIONAIS -- se o app do aluno que chamar essa rota ainda for
+// uma versão antiga sem eles, o alerta continua sendo criado normalmente,
+// só sem a localização exata (o painel do coach cai pro palpite por nome).
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
@@ -24,8 +34,9 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { userId, exerciseName, note, workoutName } = body as {
+    const { userId, exerciseName, note, workoutName, workoutId, day, workoutExerciseId } = body as {
       userId?: string; exerciseName?: string; note?: string; workoutName?: string;
+      workoutId?: string; day?: string; workoutExerciseId?: string;
     };
 
     if (!userId) return NextResponse.json({ error: 'User ID ausente.' }, { status: 400 });
@@ -52,6 +63,9 @@ export async function POST(req: Request) {
         title: exerciseName ? `📝 Observação em "${exerciseName}"` : '📝 Observação do aluno',
         message: noteClean.slice(0, 500),
         exerciseName: exerciseName || null,
+        workoutId: workoutId || null,
+        day: day || null,
+        workoutExerciseId: workoutExerciseId || null,
       },
     });
 

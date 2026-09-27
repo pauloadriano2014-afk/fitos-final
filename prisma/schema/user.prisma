@@ -224,11 +224,24 @@ model StudentAlert {
   coachId      String?
   coach        User?    @relation("CoachAlerts", fields: [coachId], references: [id], onDelete: Cascade)
 
-  type         String   
-  title        String   
-  message      String   @db.Text 
-  exerciseName String?  
-  
-  isRead       Boolean  @default(false) 
+  type         String
+  title        String
+  message      String   @db.Text
+  exerciseName String?
+
+  // 🔥 (27 set 2026) Localização EXATA do exercício comentado -- antes só
+  // guardávamos exerciseName (texto solto), então quando o mesmo exercício
+  // aparecia em mais de um treino/dia, ou quando o aluno comentou vendo um
+  // exercício SUBSTITUTO (nome diferente do principal cadastrado no card),
+  // não tinha como saber com certeza qual card era. workoutExerciseId é o id
+  // real da linha (WorkoutExercise.id) -- não ambíguo mesmo com nomes
+  // repetidos ou substitutos. Todos opcionais pra não quebrar alertas
+  // antigos já salvos sem esses campos (o app cai pro palpite por nome
+  // nesse caso).
+  workoutId         String?
+  day               String?
+  workoutExerciseId String?
+
+  isRead       Boolean  @default(false)
   createdAt    DateTime @default(now())
 }
