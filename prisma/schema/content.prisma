@@ -7,6 +7,15 @@ model Notice {
   active    Boolean  @default(true)
   date      DateTime @default(now())
 
+  // 🚨 (28 set 2026) Campos opcionais pra deixar o aviso "moderninho" em vez
+  // de só título+texto: imageUrl é um preview/screenshot mostrado no topo do
+  // modal, e ctaLabel/ctaRoute (opcionais) ligam um botão de ação que leva o
+  // aluno direto pra tela da novidade. Um aviso sem esses campos continua
+  // aparecendo exatamente como antes (compatível com avisos já criados).
+  imageUrl  String?
+  ctaLabel  String?
+  ctaRoute  String?
+
   coachId   String?
   coach     User?    @relation("CoachNotices", fields: [coachId], references: [id], onDelete: Cascade)
 }

@@ -7,7 +7,10 @@ import { sendPushToUsers } from '@/app/utils/sendNotification';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { title, content, adminId, targetUsers } = body;
+    // 🚨 (28 set 2026) imageUrl/ctaLabel/ctaRoute são opcionais -- avisos
+    // simples (só título+texto) continuam funcionando mandando só isso, sem
+    // precisar dos campos novos.
+    const { title, content, adminId, targetUsers, imageUrl, ctaLabel, ctaRoute } = body;
 
     if (!title || !content || !adminId) {
         return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
@@ -32,7 +35,10 @@ export async function POST(req: Request) {
         content,
         date: new Date(),
         active: true,
-        coachId: adminId
+        coachId: adminId,
+        imageUrl: imageUrl || null,
+        ctaLabel: ctaLabel || null,
+        ctaRoute: ctaRoute || null,
       }
     });
 
