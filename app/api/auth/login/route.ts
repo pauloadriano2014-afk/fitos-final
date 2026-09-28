@@ -29,8 +29,13 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.findUnique({
       where: { email },
-      include: { 
-        anamneses: true 
+      include: {
+        anamneses: true,
+        // 🔒 (28 set 2026) Plano do coach vinculado (coachId) -- usado pelo
+        // app do aluno pra travar as abas Treinos/Dieta de acordo com o
+        // plano do coach dele (ver app/api/admin/user/[id]/route.ts, que
+        // devolve a mesma informação nos refreshes seguintes ao login).
+        coach: { select: { coachPlan: true } },
       }
     });
 
@@ -73,7 +78,7 @@ export async function POST(req: Request) {
     }
 
     if (passwordOk) {
-      const { password: _, ...userWithoutPassword } = user;
+      const { password: _, coach: linkedCoach, ...userWithoutPassword } = user as any;
 
       // 🔐 Token assinado — a partir de agora é ele que prova quem está
       // chamando cada rota, em vez do app mandar coachId/userId no corpo.
@@ -84,7 +89,10 @@ export async function POST(req: Request) {
       });
 
       // 🔥 O Servidor agora devolve o usuário com a role ('ADMIN' ou 'USER')
-      return NextResponse.json({ user: userWithoutPassword, token });
+      return NextResponse.json({
+        user: { ...userWithoutPassword, assignedCoachPlan: linkedCoach?.coachPlan ?? null },
+        token,
+      });
     }
 
     return NextResponse.json({ error: 'E-mail ou senha incorretos' }, { status: 401 });

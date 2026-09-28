@@ -1,9 +1,9 @@
-// app/api/admin/coach-billing/upgrade/route.ts
+// app/api/admin/coach-billing/create/upgrade/route.ts
 // Calcula crédito proporcional e gera cobrança da diferença para upgrade de plano
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcProportionalCredit, calcBillingEnd } from '@/config/coachBillingPlans';
-import { requireMaster } from '@/lib/auth';
+import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,12 +24,19 @@ async function asaasFetch(path: string, options: RequestInit = {}) {
 
 export async function POST(req: Request) {
     try {
-        const { coachId, newBillingPlan, paymentMethod = 'PIX' } = await req.json();
+        const { coachId, newBillingPlan, paymentMethod = 'UNDEFINED', dryRun = false } = await req.json();
 
-        // 🔒 Upgrade de plano é uma ação de master (igual já era, mas agora
-        // a identidade vem do token, não de um adminId forjável no corpo).
-        const auth = requireMaster(req);
+        // 🔒 (28 set 2026) Upgrade agora pode ser feito pelo PRÓPRIO coach (tela
+        // de recurso bloqueado no app) OU pelo time master, igual já
+        // funcionava. Antes era `requireMaster` -- só Paulo/Adri conseguiam
+        // chamar essa rota, então não tinha como o coach fazer upgrade sozinho
+        // pelo app, só manualmente.
+        const auth = requireAuth(req);
         if ('response' in auth) return auth.response;
+        if (!canActAsCoach(auth.user, coachId)) {
+            return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+        }
+        const isSelfService = !isMasterId(auth.user.id);
 
         const newPlan = BILLING_PLANS[newBillingPlan];
         if (!newPlan) {
@@ -41,7 +48,7 @@ export async function POST(req: Request) {
             where:  { id: coachId },
             select: {
                 id:true, name:true, email:true,
-                coachAsaasId:true, coachBillingPlan:true,
+                coachAsaasId:true, coachBillingPlan:true, coachPlan:true,
                 coachBillingStart:true, coachBillingEnd:true,
                 coachBillingStatus:true,
             } as any,
@@ -50,10 +57,43 @@ export async function POST(req: Request) {
 
         const currentPlanKey = (coach as any).coachBillingPlan;
         const currentPlan    = currentPlanKey ? BILLING_PLANS[currentPlanKey] : null;
-        const billingEnd     = (coach as any).coachBillingEnd ? new Date((coach as any).coachBillingEnd) : null;
+
+        // 🔒 Travas de segurança quando é o PRÓPRIO coach fazendo o upgrade
+        // sozinho pelo app (o time master continua com passe livre, igual
+        // sempre teve, pra casos especiais combinados na mão).
+        if (isSelfService) {
+            if (newPlan.isPromo) {
+                return NextResponse.json({ error: 'Esse plano promocional não está disponível pra upgrade. Fale com a Elite Fit.' }, { status: 400 });
+            }
+            if (currentPlan && newPlan.monthlyPrice < currentPlan.monthlyPrice) {
+                return NextResponse.json({ error: 'Downgrade de plano não é feito por aqui ainda. Fale com a Elite Fit pra ajustar seu plano.' }, { status: 400 });
+            }
+        }
+
+        // 🔥 (28 set 2026) Coach ainda no teste grátis de 7 dias (nunca teve
+        // NENHUMA cobrança de verdade) -- não faz sentido calcular crédito
+        // proporcional de um plano que ele nunca pagou. Aqui é só uma troca
+        // do plano desejado, sem cobrar nada agora; a cobrança normal (ou já
+        // com a promo de lançamento, se ainda tiver vaga) acontece do jeito
+        // que sempre aconteceu quando o trial acabar ou ele decidir pagar
+        // antes (ver app/api/admin/coach-billing/create/route.ts).
+        const isTrialNoChargeYet = !currentPlanKey && (coach as any).coachBillingStatus === 'TRIAL';
+        if (isTrialNoChargeYet) {
+            if (dryRun) {
+                return NextResponse.json({ ok: true, trialSwap: true, coachType: newPlan.coachType, newPlanLabel: newPlan.label });
+            }
+            await prisma.user.update({
+                where: { id: coachId },
+                data:  { coachPlan: newPlan.coachType } as any,
+            });
+            return NextResponse.json({ ok: true, trialSwap: true, coachType: newPlan.coachType, newPlanLabel: newPlan.label });
+        }
+
+        const billingEnd     = (coach as any).coachBillingEnd   ? new Date((coach as any).coachBillingEnd)   : null;
         const billingStart   = (coach as any).coachBillingStart ? new Date((coach as any).coachBillingStart) : null;
 
-        // Calcula crédito proporcional
+        // Calcula crédito proporcional (valor que sobrou do plano atual, não
+        // usado ainda) a partir do que ele realmente pagou nesse ciclo.
         let credit = 0;
         let daysRemaining = 0;
         let totalDays = 0;
@@ -65,10 +105,27 @@ export async function POST(req: Request) {
             credit        = calcProportionalCredit(currentPlan.totalPrice, totalDays, daysRemaining);
         }
 
-        // Valor a cobrar = novo plano - crédito (mínimo R$5)
+        // Valor a cobrar = novo plano - crédito (mínimo R$5, pra nunca gerar
+        // uma cobrança de centavos que nem compensa processar no Asaas)
         const chargeValue = Math.max(5, Math.round((newPlan.totalPrice - credit) * 100) / 100);
 
-        // Gera cobrança de diferença no Asaas
+        if (dryRun) {
+            return NextResponse.json({
+                ok: true,
+                trialSwap: false,
+                coachType: newPlan.coachType,
+                newPlanLabel: newPlan.label,
+                credit,
+                daysRemaining,
+                chargeValue,
+            });
+        }
+
+        // Gera cobrança de diferença no Asaas — UNDEFINED abre o checkout
+        // completo (Pix/Boleto/Cartão), igual o resto do app já faz pra
+        // cobrança normal (ver coach-billing/create/route.ts e
+        // TabAssinatura.js). Mantém suporte a forçar um método específico
+        // caso o time master queira, mas o app do coach sempre manda UNDEFINED.
         const dueDate = new Date();
         dueDate.setDate(dueDate.getDate() + 1);
         const dueDateStr = dueDate.toISOString().split('T')[0];
@@ -80,7 +137,7 @@ export async function POST(req: Request) {
             method: 'POST',
             body: JSON.stringify({
                 customer:          (coach as any).coachAsaasId,
-                billingType:       paymentMethod === 'BOLETO' ? 'BOLETO' : 'PIX',
+                billingType:       paymentMethod,
                 value:             chargeValue,
                 dueDate:           dueDateStr,
                 description,
@@ -89,14 +146,20 @@ export async function POST(req: Request) {
         });
 
         if (!charge.id) {
-            return NextResponse.json({ error: 'Falha ao gerar cobrança no Asaas.', details: charge }, { status: 500 });
+            console.error('[Asaas] Erro ao gerar cobrança de upgrade:', charge);
+            const asaasError = charge.errors?.[0]?.description || 'Erro desconhecido ao gerar a cobrança.';
+            return NextResponse.json({ error: `Asaas recusou a cobrança: ${asaasError}`, details: charge }, { status: 500 });
         }
 
-        // Novo ciclo começa hoje, termina daqui N meses
+        // Novo ciclo começa hoje, termina daqui N meses -- igual já era: o
+        // plano/ciclo muda na hora (pra próxima renovação já sair certa), e o
+        // acesso de verdade fica preso ao coachBillingStatus, que só vira
+        // ACTIVE de novo quando o webhook confirmar esse pagamento (até lá,
+        // se o ciclo antigo já tiver vencido, cai no fluxo normal de
+        // CoachBlockedScreen -- igual qualquer renovação já funciona hoje).
         const newStart = new Date();
         const newEnd   = calcBillingEnd(newStart, newPlan.months);
 
-        // Atualiza o coach — status PENDING até webhook confirmar
         await prisma.user.update({
             where: { id: coachId },
             data: {
@@ -106,11 +169,14 @@ export async function POST(req: Request) {
                 coachBillingEnd:    newEnd,
                 coachAsaasChargeId: charge.id,
                 coachPlan:          newPlan.coachType,
+                isLaunchPromo:      false,
             } as any,
         });
 
         return NextResponse.json({
             ok:            true,
+            trialSwap:     false,
+            coachType:     newPlan.coachType,
             chargeId:      charge.id,
             credit,
             daysRemaining,

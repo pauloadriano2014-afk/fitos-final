@@ -127,13 +127,35 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             onboardingCompleted: true,
             onboardingStep:      true,
             coachPlan:           true,
+            coachId:             true,
+            nutritionistId:      true,
+            studentModules:      true,
 
             // 🔥 AS DUAS LINHAS QUE FALTAVAM E QUE RESOLVEM TUDO 🔥
             brandLogoUrl:        true,
             brandLogoSize:       true,
+
+            // 🔒 (28 set 2026) Plano do COACH VINCULADO (não confundir com o
+            // campo "coachPlan" acima, que é o plano da PRÓPRIA linha sendo
+            // buscada -- só faz sentido quando quem tá sendo buscado é o
+            // coach; pra um aluno é sempre o valor default, sem significado).
+            // Usado pelo app do aluno (App.js / studentTabs.js) pra travar as
+            // abas Treinos/Dieta de acordo com o plano do coach dele.
+            coach: { select: { coachPlan: true } },
         };
 
-        // 🔥 "studentModules" foi removido daqui pois não existe na tabela e dava Erro 500!
+        // 🔥 (28 set 2026 — bug corrigido) "coachId", "nutritionistId" e
+        // "studentModules" faltavam nesse select (o comentário antigo dizia
+        // que studentModules tinha sido removido por dar Erro 500 -- isso é
+        // de antes desses campos existirem na tabela; hoje existem, ver
+        // prisma/schema/user.prisma). Sem eles aqui, TODA VEZ que o app do
+        // aluno atualiza os dados (StudentTabs em App.js chama essa rota
+        // logo na abertura do app), esses 3 campos voltavam undefined e
+        // SOBRESCREVIAM o valor certo que tinha vindo do login -- inclusive
+        // apagando silenciosamente uma liberação manual de Dieta
+        // (studentModules) feita pelo coach, e fazendo belongsToMaster virar
+        // sempre true (coachId sumindo). Devolvidos aqui pra esse refresh
+        // parar de corromper o estado do usuário.
         if (!omit.has('anamneses')) select.anamneses = { orderBy: { createdAt: 'desc' }, take: 1 };
         if (!omit.has('workouts'))  select.workouts  = { where: { archived: false }, orderBy: { createdAt: 'desc' }, take: 1 };
         if (!omit.has('diets')) {
@@ -152,7 +174,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
         if (!user) return corsResponse({ error: 'Usuário não encontrado' }, 404);
 
-        return corsResponse(user);
+        // 🔒 Achata o plano do coach vinculado num campo próprio
+        // (assignedCoachPlan) pra não confundir com o "coachPlan" da própria
+        // linha, e tira o objeto aninhado "coach" da resposta (só usamos o
+        // plano dele, sem necessidade de expor mais nada do coach aqui).
+        const { coach: linkedCoach, ...userResponse } = user as any;
+        return corsResponse({
+            ...userResponse,
+            assignedCoachPlan: linkedCoach?.coachPlan ?? null,
+        });
 
     } catch (error) {
         console.error('Erro GET Admin User ID:', error);

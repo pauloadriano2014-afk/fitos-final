@@ -12,6 +12,24 @@ export const dynamic = 'force-dynamic';
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY!;
 const ASAAS_BASE    = process.env.ASAAS_BASE_URL || 'https://api.asaas.com/v3';
 
+// 🔥 (28 set 2026) PROMOÇÃO DE LANÇAMENTO — as primeiras LAUNCH_PROMO_MAX
+// cobranças de coach saem automaticamente no valor promocional (_LAUNCH), sem
+// precisar de nenhuma tela nova pra selecionar esse plano: o app (TabAssinatura)
+// sempre pede o plano cheio mensal (_MONTHLY) na primeira cobrança, e aqui a
+// gente troca por baixo pro _LAUNCH correspondente, se ainda sobrar vaga.
+//
+// IMPORTANTE: isso NÃO mexe no teste grátis de 7 dias. O trial é concedido na
+// APROVAÇÃO do cadastro (coachBillingStatus:'TRIAL', trialEndsAt +7 dias em
+// app/api/admin/coach-requests/route.ts) e roda do jeito que já rodava, sem
+// nenhuma cobrança. Essa troca de plano só entra em ação quando essa PRIMEIRA
+// cobrança de verdade é gerada -- seja porque os 7 dias acabaram, seja porque
+// o coach decidiu pagar antes -- nunca antes disso.
+const LAUNCH_PLAN_BY_TYPE: Record<string, string> = {
+    PERSONAL:      'PERSONAL_LAUNCH',
+    NUTRICIONISTA: 'NUTRI_LAUNCH',
+    ELITE:         'ELITE_LAUNCH',
+};
+
 // ─── HELPERS ASAAS ───────────────────────────────────────────────────────────
 async function asaasFetch(path: string, options: RequestInit = {}) {
     const res = await fetch(`${ASAAS_BASE}${path}`, {
@@ -66,7 +84,9 @@ async function getOrCreateAsaasCustomer(coach: any): Promise<string> {
 export async function POST(req: Request) {
     try {
         // Recebe UNDEFINED por padrão para abrir o checkout completo no Asaas
-        const { coachId, billingPlan, paymentMethod = 'UNDEFINED', customValue } = await req.json();
+        const body = await req.json();
+        const { coachId, paymentMethod = 'UNDEFINED', customValue } = body;
+        let { billingPlan } = body; // 🔥 "let": pode ser trocado pelo plano de lançamento mais abaixo
 
         // 🔒 Identidade vem do token — só masters podem gerar cobrança de
         // terceiros, mas o coach pode gerar a própria.
@@ -76,7 +96,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
-        const plan = BILLING_PLANS[billingPlan];
+        let plan = BILLING_PLANS[billingPlan];
         if (!plan) {
             return NextResponse.json({ error: `Plano não reconhecido: ${billingPlan}` }, { status: 400 });
         }
@@ -84,11 +104,32 @@ export async function POST(req: Request) {
         // Busca o coach
         const coach = await prisma.user.findUnique({
             where:  { id: coachId },
-            select: { id:true, name:true, email:true, phone:true, cpf:true, coachAsaasId:true, isLaunchPromo:true } as any,
+            select: { id:true, name:true, email:true, phone:true, cpf:true, coachAsaasId:true, isLaunchPromo:true, coachPlan:true, coachBillingPlan:true } as any,
         });
         if (!coach) return NextResponse.json({ error: 'Coach não encontrado.' }, { status: 404 });
 
-        // Verifica vagas de promoção
+        // 🔥 PROMOÇÃO DE LANÇAMENTO: só entra na 1ª cobrança de verdade desse
+        // coach (nunca teve coachBillingPlan salvo) e só quando o pedido é o
+        // plano cheio mensal -- não mexe em cobranças de renovação nem em
+        // planos mais longos escolhidos de propósito (trimestral/semestral/anual).
+        const isFirstCharge  = !(coach as any).coachBillingPlan;
+        const launchKey      = LAUNCH_PLAN_BY_TYPE[(coach as any).coachPlan as string];
+        if (isFirstCharge && launchKey && billingPlan.endsWith('_MONTHLY')) {
+            const config = await prisma.platformConfig.upsert({
+                where:  { id: 'singleton' },
+                update: {},
+                create: { id: 'singleton', launchPromoUsed: 0, launchPromoMax: LAUNCH_PROMO_MAX },
+            }) as any;
+
+            if (config.launchPromoUsed < config.launchPromoMax) {
+                billingPlan = launchKey;
+                plan = BILLING_PLANS[billingPlan];
+            }
+        }
+
+        // Verifica vagas de promoção (revalida aqui pra cobrir tanto o caso
+        // acima quanto um billingPlan "_LAUNCH" pedido direto, ex: por você
+        // na mão, via Postman, pra um coach específico)
         if (plan.isPromo) {
             const config = await prisma.platformConfig.upsert({
                 where:  { id: 'singleton' },

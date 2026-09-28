@@ -22,7 +22,9 @@ export const BILLING_PLANS: Record<string, {
     ELITE_QUARTERLY:     { label:'Elite Trimestral',     coachType:'ELITE',         months:3,  totalPrice:414,   monthlyPrice:138,  isPromo:false, promoMonths:0 },
     ELITE_SEMIANNUAL:    { label:'Elite Semestral',      coachType:'ELITE',         months:6,  totalPrice:774,   monthlyPrice:129,  isPromo:false, promoMonths:0 },
     ELITE_ANNUAL:        { label:'Elite Anual',          coachType:'ELITE',         months:12, totalPrice:1428,  monthlyPrice:119,  isPromo:false, promoMonths:0 },
-    ELITE_LAUNCH:        { label:'Elite Lançamento',     coachType:'ELITE',         months:3,  totalPrice:329.7, monthlyPrice:109.9,isPromo:true,  promoMonths:3 },
+    // 🔥 (28 set 2026) Promo agressiva pras 10 primeiras vagas de lançamento
+    // (LAUNCH_PROMO_MAX abaixo) -- R$197 total pelos 3 meses, ~R$65,67/mês.
+    ELITE_LAUNCH:        { label:'Elite Lançamento',     coachType:'ELITE',         months:3,  totalPrice:197,   monthlyPrice:65.67,isPromo:true,  promoMonths:3 },
 };
 
 export const LAUNCH_PROMO_MAX = 10;
