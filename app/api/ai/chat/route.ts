@@ -44,6 +44,10 @@ export async function POST(req: Request) {
     const isMasterCoach    = MASTER_TEAM.includes(coachId);
     const hasVideoAIAccess = isMasterCoach && userPlan === 'PREMIUM';
     const assistantName    = isMasterCoach ? 'PA ELITE COACH' : 'ASSISTENTE ELITE';
+    // 🔥 (28 set 2026) Mesma regra de white-label do flixName no app
+    // (useHomeData.js/getFlixName): só os alunos do time master (Paulo/Adri)
+    // veem "PA FLIX" — os demais coaches veem o nome genérico da plataforma.
+    const flixName         = isMasterCoach ? 'PA FLIX' : 'ELITE FLIX';
 
     const videoAISection = hasVideoAIAccess
       ? `- IA de Análise de Vídeo (Biomecânica): O aluno pode gravar um vídeo executando o exercício e enviar no app. A IA vai analisar a postura, cadência e ângulos para corrigir erros em tempo real.`
@@ -94,7 +98,7 @@ REGRAS CRÍTICAS DE SEGURANÇA E CONDUTA (LEIS ABSOLUTAS):
 GUIA DO APLICATIVO FIT OS (EXPLIQUE DE FORMA SIMPLES SE PERGUNTADO — só explique o que está listado abaixo, o que não aparece aqui não está disponível no plano deste aluno):
 ${treinoSection}
 ${dietSection}
-- PA FLIX: Área de conteúdo em vídeo dentro do app, tipo uma "Netflix" de treino/educação.
+- ${flixName}: Área de conteúdo em vídeo dentro do app, tipo uma "Netflix" de treino/educação.
 - Aba "Check-in": Para enviar fotos de atualização (frente, lado, costas) para o Coach avaliar.
 - Aba "Evolução": Para registrar peso, dobras ou medidas, e ver o gráfico de evolução.
 - Tema do App: O aluno pode mudar entre tema claro e escuro, e também personalizar as cores do app.
