@@ -33,6 +33,20 @@ export const revalidate = 0;
 
 const VALID_STATUS = ['SEGUIU', 'SUBSTITUIU', 'PULOU', 'LIVRE'];
 
+// 🔥 (28 set 2026) Gamificação do diário alimentar — cada refeição registrada
+// como seguida (ou substituída dentro do plano) rende XP pro aluno, igual já
+// acontece com treino (workout/finish) e curtida de conteúdo (contents/like).
+// "PULOU" não rende nada; refeição livre rende menos (ainda vale registrar,
+// mesmo fora do plano). Como a rota faz upsert por [userId,date,mealId],
+// creditamos/debitamos só a DIFERENÇA entre o status anterior e o novo — daí
+// o aluno não consegue farmar XP marcando e desmarcando a mesma refeição.
+const MEAL_STATUS_XP: Record<string, number> = {
+  SEGUIU: 10,
+  SUBSTITUIU: 10,
+  LIVRE: 5,
+  PULOU: 0,
+};
+
 const s3 = new S3Client({
   region: 'auto',
   endpoint: process.env.R2_ENDPOINT as string,
@@ -133,6 +147,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
+    // 🔥 Busca o registro anterior (se existir) ANTES do upsert, só pra saber
+    // quanto XP esse status já tinha rendido — ver MEAL_STATUS_XP acima.
+    const existingLog = await prisma.dietMealLog.findUnique({
+      where: { userId_date_mealId: { userId, date, mealId } },
+    });
+
     const data: any = {
       mealName: mealName || '',
       status,
@@ -156,7 +176,18 @@ export async function POST(req: NextRequest) {
       create: { userId, date, mealId, ...data },
     });
 
-    return NextResponse.json({ success: true, log });
+    // 🔥 Credita/debita a diferença de XP entre o status anterior e o novo
+    const oldXp = existingLog ? (MEAL_STATUS_XP[existingLog.status] ?? 0) : 0;
+    const newXp = MEAL_STATUS_XP[status] ?? 0;
+    const xpDelta = newXp - oldXp;
+    if (xpDelta !== 0) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { currentXP: { increment: xpDelta } },
+      });
+    }
+
+    return NextResponse.json({ success: true, log, xpDelta });
   } catch (error: any) {
     console.error('[diet/meal-log] Erro POST:', error?.message || error);
     return NextResponse.json({ error: 'Erro ao salvar diário alimentar' }, { status: 500 });

@@ -17,6 +17,16 @@ import { requireAuth, canAccessStudent } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// 🔥 (28 set 2026) Gamificação — "seguiu o plano hoje?" também rende XP,
+// igual ao registro por refeição em diet/meal-log. SIM rende o bônus cheio
+// do dia, PARCIAL rende metade, NAO não rende nada. Mesma lógica de crédito/
+// débito pela diferença (evita farm trocando a resposta repetidamente).
+const DIET_ADHERENCE_XP: Record<string, number> = {
+  SIM: 50,
+  PARCIAL: 20,
+  NAO: 0,
+};
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -69,6 +79,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
+    // 🔥 Busca o registro anterior (se existir) ANTES do upsert, só pra saber
+    // quanto XP a resposta anterior de dietAdherence já tinha rendido.
+    let existingCheckin: { dietAdherence: string | null } | null = null;
+    if (dietAdherence !== undefined) {
+      existingCheckin = await prisma.dailyCheckin.findUnique({
+        where: { studentId_date: { studentId, date } },
+        select: { dietAdherence: true },
+      });
+    }
+
     const data: any = {};
     if (fome !== undefined) data.fome = fome;
     if (digestao !== undefined) data.digestao = digestao;
@@ -82,7 +102,21 @@ export async function POST(req: NextRequest) {
       create: { studentId, date, ...data },
     });
 
-    return NextResponse.json({ success: true, checkin });
+    // 🔥 Credita/debita a diferença de XP do bônus de aderência do dia
+    let xpDelta = 0;
+    if (dietAdherence !== undefined) {
+      const oldXp = DIET_ADHERENCE_XP[existingCheckin?.dietAdherence as string] ?? 0;
+      const newXp = DIET_ADHERENCE_XP[dietAdherence as string] ?? 0;
+      xpDelta = newXp - oldXp;
+      if (xpDelta !== 0) {
+        await prisma.user.update({
+          where: { id: studentId },
+          data: { currentXP: { increment: xpDelta } },
+        });
+      }
+    }
+
+    return NextResponse.json({ success: true, checkin, xpDelta });
   } catch (error: any) {
     console.error('[checkins] Erro POST:', error?.message || error);
     return NextResponse.json({ error: 'Erro ao salvar diário do dia' }, { status: 500 });

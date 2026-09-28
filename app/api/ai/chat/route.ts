@@ -19,7 +19,16 @@ export async function POST(req: Request) {
     if ('response' in auth) return auth.response;
 
     const body = await req.json();
-    const { message, userName, userGender, userGoal, userLevel, userId, userPlan, coachId } = body;
+    const {
+      message, userName, userGender, userGoal, userLevel, userId, userPlan, coachId,
+      // 🔒 (28 set 2026) Mesma trava de coachHasTreinos/coachHasDiet usada no
+      // app (App.js/studentTabs.js/HomeScreen.js/useHomeData.js) — manda o
+      // guia do app pro assistente só com o que o aluno realmente tem acesso.
+      // Default true/true pra não quebrar um app antigo que ainda não manda
+      // esses campos (melhor mostrar tudo do que travar o assistente).
+      coachHasTreinos = true,
+      coachHasDiet = true,
+    } = body;
 
     if (!message?.trim()) {
       return NextResponse.json({ reply: "Mensagem vazia." }, { status: 400 });
@@ -39,6 +48,25 @@ export async function POST(req: Request) {
     const videoAISection = hasVideoAIAccess
       ? `- IA de Análise de Vídeo (Biomecânica): O aluno pode gravar um vídeo executando o exercício e enviar no app. A IA vai analisar a postura, cadência e ângulos para corrigir erros em tempo real.`
       : ``;
+
+    // 🔒 (28 set 2026) Guia de Treino só entra se o coach do aluno tiver
+    // Treinos liberado (Personal ou Elite) — pro aluno de coach 100% Nutri
+    // esse módulo não existe, então nem faz sentido a IA explicar.
+    const treinoSection = coachHasTreinos ? `
+${videoAISection}
+- Execução do Treino: Na aba de Treinos, clicar no exercício para abrir o modal. Lá, marcar o "Check" em cada série, anotar a carga (kg) e o RPE. No final, clicar em "Finalizar Treino".
+- Como Executar um Exercício: Dentro do exercício, tem um guia de técnica com abas de Texto, Áudio e Vídeo, mostrando a execução correta e os erros mais comuns.
+- Deload Menstrual (mulheres): O treino se ajusta automaticamente conforme a fase do ciclo menstrual, reduzindo volume/intensidade quando necessário.
+- Aba "Histórico": Mostra os treinos concluídos no passado.` : ``;
+
+    // 🔒 Guia de Dieta só entra se o coach tiver Dieta liberada (Nutricionista
+    // ou Elite) — antes só existia UMA linha genérica aqui ("Trocar Refeição"),
+    // o que deixava a IA sem repertório pra aluno de coach 100% Nutri.
+    const dietSection = coachHasDiet ? `
+- Aba "Dieta" → CARDÁPIO: Mostra as refeições do dia. Se uma refeição tiver versão alternativa cadastrada pelo Coach, dá pra trocar direto ali.
+- Diário Alimentar: Em cada refeição, o aluno marca se seguiu o plano, substituiu ou pulou — isso também rende pontos de XP pro nível dele.
+- Aba "Dieta" → FERRAMENTAS: É onde fica o controle de água, a lista de compras (mercado), o botão de ajustes pra pedir mudança no plano pro Coach, e o registro de Refeição Livre (com foto opcional).
+- Aba "Dieta" → GUIAS: Conteúdo de apoio — como usar o diário alimentar e dicas de mindset/aderência.` : ``;
 
     const systemPrompt = `ATUAR COMO: "${assistantName}", o assistente virtual de inteligência artificial oficial dentro do app Fit OS.
 
@@ -60,17 +88,15 @@ REGRAS CRÍTICAS DE SEGURANÇA E CONDUTA (LEIS ABSOLUTAS):
 3. 🚫 MEDICAMENTOS: Nunca prescreva remédios. Oriente a procurar um médico.
 4. 🍎 DIETAS: Pode dar dicas e receitas, mas diga que o planejamento exato é feito pelo Coach.
 5. 🔒 IA DE VÍDEO: Se o aluno perguntar sobre análise de vídeo/biomecânica e ele NÃO tiver acesso a essa feature, diga apenas que essa funcionalidade não está disponível no plano dele atualmente, sem detalhar como funciona.
+6. 🔒 TREINO: Se o aluno perguntar sobre treino, exercícios ou séries e o plano dele NÃO incluir Treinos (só Dieta), diga que esse módulo não está disponível no plano dele e oriente a falar com o Coach sobre um upgrade — não explique como o módulo funciona.
+7. 🔒 DIETA: Se o aluno perguntar sobre cardápio, refeições ou dieta e o plano dele NÃO incluir Dieta (só Treinos), diga que esse módulo não está disponível no plano dele e oriente a falar com o Coach sobre um upgrade — não explique como o módulo funciona.
 
-GUIA DO APLICATIVO FIT OS (EXPLIQUE DE FORMA SIMPLES SE PERGUNTADO):
-${videoAISection}
-- Execução do Treino: Na aba de Treinos, clicar no exercício para abrir o modal. Lá, marcar o "Check" em cada série, anotar a carga (kg) e o RPE. No final, clicar em "Finalizar Treino".
-- Como Executar um Exercício: Dentro do exercício, tem um guia de técnica com abas de Texto, Áudio e Vídeo, mostrando a execução correta e os erros mais comuns.
-- Deload Menstrual (mulheres): O treino se ajusta automaticamente conforme a fase do ciclo menstrual, reduzindo volume/intensidade quando necessário.
+GUIA DO APLICATIVO FIT OS (EXPLIQUE DE FORMA SIMPLES SE PERGUNTADO — só explique o que está listado abaixo, o que não aparece aqui não está disponível no plano deste aluno):
+${treinoSection}
+${dietSection}
 - PA FLIX: Área de conteúdo em vídeo dentro do app, tipo uma "Netflix" de treino/educação.
 - Aba "Check-in": Para enviar fotos de atualização (frente, lado, costas) para o Coach avaliar.
-- Aba "Evolução": Para registrar peso, dobras ou medidas, e ver o gráfico de toneladas movidas.
-- Aba "Histórico": Mostra os treinos concluídos no passado.
-- Dieta - Trocar Refeição: Se a refeição tiver uma versão alternativa disponível, o aluno pode alternar entre elas direto na tela da dieta.
+- Aba "Evolução": Para registrar peso, dobras ou medidas, e ver o gráfico de evolução.
 - Tema do App: O aluno pode mudar entre tema claro e escuro, e também personalizar as cores do app.
 - Tela de Perfil: Mostra o plano contratado e a data de vencimento do plano.
 - Pagamento: O aluno pode pagar via PIX/QR Code direto no app. Se já pagou fora do app, existe o botão "Já Paguei" que libera acesso temporário de 2 dias até o Coach confirmar.
