@@ -102,6 +102,17 @@ model FoodPortion {
   @@index([scope])
 }
 
+// 🎯 (30 set 2026) Metas do nutricionista/coach para UM aluno (equação de TMB, fator de atividade, ajuste do
+// objetivo, macros por g/kg ou %, kcal manual por dia). Uma linha por aluno; vale para a dieta base e
+// para as estratégias. Tabela nova e independente: sem ela o app usa o cálculo padrão.
+model StudentDietTargets {
+  userId      String   @id
+  config      Json
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model FoodItemMeta {
   foodItemId String   @id
   foodItem   FoodItem @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
