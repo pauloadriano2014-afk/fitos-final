@@ -7,7 +7,7 @@ import prisma from '@/lib/prisma';
 import { randomUUID } from 'crypto';
 import { requireAuth, isMasterId } from '@/lib/auth';
 import { saveItemMetas, type ItemMetaInput } from '@/lib/foodMeasures';
-import { saveDayScheme } from '@/lib/dayScheme';
+import { saveDayScheme, loadDayScheme, sanitizeDayScheme, allowedKeys, isExtended, daySchemeAvailable } from '@/lib/dayScheme';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 
 
@@ -28,8 +28,11 @@ export async function POST(req: Request) {
             // notificar em toda edição). Vem marcado só quando o app manda
             // notifyStudent:true de propósito (toggle "avisar aluno" ligado).
             notifyStudent,
-            // 🏷️ nomes personalizados das abas de dia (undefined = não mexer: herda o esquema da versão anterior)
+            // 🏷️ abas da dieta (nomes, tipos e até 7 abas). undefined = não mexer: herda o esquema da versão anterior
             dayScheme,
+            // 🏷️ o app que salvou conhece as abas extras (EXTRA_5..7)? Um editor antigo não pode sobrescrever uma dieta com
+            // mais de 4 abas: ele não enxerga as extras e as apagaria.
+            daysV2,
         } = body;
 
         if (!userId || userId === '[object Object]' || userId === 'undefined') {
@@ -48,6 +51,25 @@ export async function POST(req: Request) {
                 return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
             }
         }
+
+        // 🏷️ abas extras: trava editor antigo, tabela ausente e refeição numa aba que o esquema não tem
+        const incomingScheme = dayScheme === undefined ? undefined : sanitizeDayScheme(dayScheme);
+        const checkDayTabs = async (currentDietId: string | null) => {
+            const current = await loadDayScheme(currentDietId);
+            if (daysV2 !== true && isExtended(current)) {
+                return NextResponse.json({ error: 'Esta dieta usa mais de 4 abas. Atualize o app para editá-la (senão as abas extras seriam apagadas).' }, { status: 409 });
+            }
+            if (isExtended(incomingScheme ?? null) && !(await daySchemeAvailable())) {
+                return NextResponse.json({ error: 'As abas extras ainda não estão ativas no servidor (falta rodar "prisma db push").' }, { status: 503 });
+            }
+            const resulting = incomingScheme === undefined ? current : incomingScheme;
+            const allowed = allowedKeys(resulting);
+            const orphan = (meals || []).find((m: any) => /^EXTRA_\d$/.test(String(m?.dayType || '')) && !allowed.includes(m.dayType));
+            if (orphan) {
+                return NextResponse.json({ error: 'Há refeições numa aba que não existe mais nesta dieta.' }, { status: 400 });
+            }
+            return null;
+        };
 
         // 🥄 (30 set 2026) Cada item nasce com id nosso, pra gravar à parte (FoodItemMeta) o alimento do
         // catálogo e as medidas vigentes -- sem depender da ordem em que o banco devolve os itens.
@@ -92,6 +114,9 @@ export async function POST(req: Request) {
             if (!existing) {
                 return NextResponse.json({ error: 'Estratégia não encontrada.' }, { status: 404 });
             }
+
+            const tabsProblem = await checkDayTabs(strategyId);
+            if (tabsProblem) return tabsProblem;
 
             const updatedStrategy = await prisma.$transaction(async (tx) => {
                 // Apaga as refeições antigas dessa estratégia (cascade cuida dos FoodItem)
@@ -149,6 +174,9 @@ export async function POST(req: Request) {
             where: { userId: String(userId), isActive: true, isStrategy: false },
             select: { id: true },
         });
+
+        const tabsProblemBase = await checkDayTabs(previousBase?.id ?? null);
+        if (tabsProblemBase) return tabsProblemBase;
 
         // ─── SALVANDO A DIETA BASE — fluxo original (cria nova versão) ───────────
         const newDiet = await prisma.$transaction(async (tx) => {
