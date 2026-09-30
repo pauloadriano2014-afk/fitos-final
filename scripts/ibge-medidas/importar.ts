@@ -15,6 +15,8 @@
 //   - Na leitura do app, a ordem continua: ajuste do coach > medida manual > tabela antiga do app > IBGE.
 //     Ou seja, o IBGE só preenche o que ainda não tinha valor.
 //   - Os números da planilha podem ser editados (aceita 12,5 ou 12.5). Célula vazia = medida não entra.
+//   - Aceita o CSV do Excel em português (;) e o exportado pelo Google Sheets (,).
+//   - Aceita o CSV do Excel em português (;) e o exportado pelo Google Sheets (,).
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import { dirname, join } from 'path';
@@ -32,17 +34,19 @@ const apply = args.includes('--aplicar');
 const csvArg = args.indexOf('--csv');
 const csvPath = csvArg >= 0 ? args[csvArg + 1] : join(__dirname, '../../prisma/data/ibge/revisao-ibge.csv');
 
-/** CSV com ; e aspas (o que o Excel/Sheets gera em português). */
+/** CSV com aspas. Aceita ; (Excel em português) ou , (Google Sheets) — detecta pelo cabeçalho. */
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [], cell = '', q = false;
-  const t = text.replace(/^﻿/, '');
+  const t = text.replace(/^\uFEFF/, '');
+  const first = t.split(/\r?\n/, 1)[0] || '';
+  const sep = (first.match(/;/g) || []).length >= (first.match(/,/g) || []).length ? ';' : ',';
   for (let i = 0; i < t.length; i++) {
     const c = t[i];
     if (q) {
       if (c === '"' && t[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c;
     } else if (c === '"') q = true;
-    else if (c === ';') { row.push(cell); cell = ''; }
+    else if (c === sep) { row.push(cell); cell = ''; }
     else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(cell); cell = ''; if (row.some((x) => x.trim() !== '')) rows.push(row); row = []; }
     else cell += c;
   }

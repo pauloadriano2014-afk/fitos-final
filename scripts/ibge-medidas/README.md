@@ -18,7 +18,7 @@ preparo e de medida conferidos contra os quadros oficiais do próprio PDF.
 ## Como ler a planilha
 
 - `confianca = ALTA` → nome e preparo batem; `aplicar` já vem **SIM**. `MEDIA` → sugestão a conferir; `aplicar` vem vazio.
-- Para aprovar uma linha, escreva **SIM** em `aplicar`. Para reprovar, apague o SIM. Pode **corrigir os números** (12,5 ou 12.5).
+- Para aprovar uma linha, escreva **SIM** em `aplicar`. Para reprovar, apague o SIM. Pode **corrigir os números** (12,5 ou 12.5). Também dá para editar no Google Sheets/Excel (`Medidas-IBGE-revisao.xlsx`) e exportar de volta como CSV — o importador aceita `;` e `,`.
 - `conflito_com_o_app` → onde o valor que o app já usava difere mais de 15% do IBGE. **O valor do app continua valendo**
   (ordem de precedência: ajuste do coach > medida manual > tabela antiga do app > IBGE); o IBGE só preenche o que falta.
 
