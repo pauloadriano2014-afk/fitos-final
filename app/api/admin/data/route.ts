@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { withExerciseNotes, loadRecentExerciseNotes } from '@/lib/dashboardFeed';
 
 export const dynamic = 'force-dynamic';
 
@@ -159,12 +160,20 @@ export async function GET(req: Request) {
         };
     }
 
-    const recentLogs = await prisma.workoutHistory.findMany({
+    const recentLogsRaw = await prisma.workoutHistory.findMany({
       where: logsWhere,
       take: 50, 
       orderBy: { date: 'desc' },
-      include: { user: { select: { id: true, name: true, photoUrl: true, coachId: true } } } 
+      include: {
+        user: { select: { id: true, name: true, photoUrl: true, coachId: true } },
+        // 💬 só as séries que têm observação do aluno (a observação é repetida em cada série do exercício -> vira uma por exercício abaixo)
+        details: { where: { note: { not: null } }, select: { id: true, exerciseName: true, note: true }, orderBy: { setNumber: 'asc' } },
+      } 
     });
+    const recentLogs = recentLogsRaw.map((l: any) => withExerciseNotes(l));
+
+    // 💬 observações enviadas na hora (durante o treino) e ainda não resolvidas -- aparecem no feed ao lado dos treinos concluídos
+    const recentNotes = await loadRecentExerciseNotes(prisma, logsWhere.user);
 
     // 🔒 4. BIBLIOTECA DE EXERCÍCIOS
     // - Parceiros e Adri herdam os exercícios básicos do Paulo para não recadastrar do zero
@@ -197,6 +206,7 @@ export async function GET(req: Request) {
         activeUsers, 
         inactiveUsers,
         recentLogs, 
+        recentNotes,
         exercises,
         requesterRole: requester.role,
     });

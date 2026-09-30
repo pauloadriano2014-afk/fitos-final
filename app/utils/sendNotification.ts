@@ -1,6 +1,20 @@
 import prisma from '@/lib/prisma';
 import { sendWebPush } from '@/lib/webPush';
 
+// Token do Expo: "ExponentPushToken[...]" (ou "ExpoPushToken[...]" nas versões novas da API).
+const isExpoPushToken = (t?: string | null): t is string => typeof t === 'string' && /^Expo(nent)?PushToken\[.+\]$/.test(t);
+
+// A API do Expo responde 200 mesmo quando recusa o envio (token de aparelho inválido, credencial do APNs/FCM faltando...): o motivo vem no
+// "ticket". Antes isso se perdia em silêncio; agora aparece no log do Render (busque por [expo-push]).
+async function logExpoTickets(res: Response, label: string) {
+  try {
+    const json: any = await res.json();
+    const tickets = Array.isArray(json?.data) ? json.data : json?.data ? [json.data] : [];
+    tickets.filter((t: any) => t?.status === 'error').forEach((t: any) =>
+      console.error(`[expo-push] ${label}: ${t?.details?.error || 'erro'} — ${t?.message || ''}`));
+  } catch { /* resposta sem JSON: nada a registrar */ }
+}
+
 // Função para dividir o array em lotes (A Expo aceita max 100 por vez)
 function chunkArray(myArray: any[], chunk_size: number){
     var index = 0;
@@ -51,13 +65,13 @@ async function getWebPushSubscriptions(userId?: string) {
 export async function sendPushToUser(user: PushableUser, title: string, body: string, data: any = {}) {
   const jobs: Promise<any>[] = [];
 
-  if (user?.pushToken && user.pushToken.startsWith('ExponentPushToken')) {
+  if (user?.pushToken && isExpoPushToken(user.pushToken)) {
     jobs.push(
       fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: user.pushToken, sound: 'default', title, body, data }),
-      }).catch((e) => console.error('[sendPushToUser] Erro Expo:', e?.message || e))
+      }).then((r) => logExpoTickets(r, 'sendPushToUser')).catch((e) => console.error('[sendPushToUser] Erro Expo:', e?.message || e))
     );
   }
 
@@ -82,7 +96,7 @@ export async function sendPushToUser(user: PushableUser, title: string, body: st
 export async function sendPushToUsers(users: PushableUser[], title: string, body: string, data: any = {}) {
   try {
     const expoMessages = users
-      .filter((u) => u.pushToken && u.pushToken.startsWith('ExponentPushToken'))
+      .filter((u) => u.pushToken && isExpoPushToken(u.pushToken))
       .map((u) => ({ to: u.pushToken, sound: 'default', title, body, data }));
 
     // 🔥 (19 set 2026) Busca todas as assinaturas de Web Push dos usuários da
@@ -102,7 +116,7 @@ export async function sendPushToUsers(users: PushableUser[], title: string, body
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify(chunk),
-      }).catch((e) => console.error('[sendPushToUsers] Erro Expo:', e?.message || e));
+      }).then((r) => logExpoTickets(r, 'sendPushToUsers')).catch((e) => console.error('[sendPushToUsers] Erro Expo:', e?.message || e));
     }
 
     await Promise.allSettled(
