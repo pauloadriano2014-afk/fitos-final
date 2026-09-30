@@ -113,6 +113,17 @@ model StudentDietTargets {
   updatedAt   DateTime @updatedAt
 }
 
+// 🪪 (30 set 2026) Título e registro profissional de quem assina os documentos (ex.: "Nutricionista" + "CRN-3 12345",
+// "Educador Físico" + "CREF 012345-G/SP"). Uma linha por profissional; aparece no fim do PDF da dieta quando ele
+// marca "assinar". Tabela nova e independente: sem ela o PDF sai sem assinatura, como sempre foi.
+model ProfessionalProfile {
+  userId    String   @id
+  title     String?
+  registry  String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
 model FoodItemMeta {
   foodItemId String   @id
   foodItem   FoodItem @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
