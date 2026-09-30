@@ -78,7 +78,11 @@ export async function GET(req: Request) {
       where.AND.push({ source: 'CUSTOM' });
     }
 
-    if (favoritesOnly && !isIbge) {
+    // ⭐ (1 out 2026) Favoritos: o alimento do IBGE que o coach marcou com estrela entra na lista de favoritos (aba Favoritos do seletor,
+    // filtro Favoritos do Gerenciar alimentos). Sem favoritar, o IBGE continua só na aba IBGE. Dentro da aba IBGE, `favorites=true`
+    // mostra só os favoritados. (O favorito é um campo do alimento, igual ao da TACO: vale para todos os coaches.)
+    if (favoritesOnly) {
+      if (!isIbge) where.AND[0].OR.push({ source: 'IBGE', teamId: null });
       where.AND.push({ isFavorite: true });
     }
 
