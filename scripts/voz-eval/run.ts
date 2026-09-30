@@ -73,7 +73,7 @@ function exportCases(index: ReturnType<typeof buildIndex>) {
   const L: string[] = [];
   L.push('# Casos da avaliação — montar treino por voz', '');
   L.push(`${CASES.length} casos. **Você é quem valida**: leia cada fala e a coluna “como o sistema deve entender”. Se algum estiver errado, ou se faltar um tipo de fala que você usa, me diga o número do caso.`, '');
-  L.push('Legenda do esperado: `3x12[DROPSET]/60s` = 3 séries de 12 com drop set e 60 s de descanso. “assumido” = o coach não falou e o sistema completa com o padrão (3 séries, 12 reps, 60 s; GVT = 10×10).', '');
+  L.push('Legenda do esperado: `3x12[DROPSET]/60s` = 3 séries de 12 com drop set e 60 s de descanso. “assumido” = o coach não falou e o sistema completa com o padrão (3 séries, 12 reps, 60 s; GVT = 10×10; método 21 = 21 reps).', '');
   L.push('| caso | origem | tags | o que testa |', '|---|---|---|---|');
   for (const c of CASES) L.push(`| ${c.id} | ${c.origem} | ${c.tags.join(', ')} | ${c.why} |`);
   L.push('');

@@ -111,7 +111,7 @@ export const CASES: EvalCase[] = [
     text: 'Tri-set: elevação lateral com halteres, elevação frontal com anilha e posterior de ombros com halteres, 3 séries de 12, descanso de 60 segundos.',
     ideal: { exercicios: [ex('elevação lateral com halteres', [b(3, '12')], { tecnica_geral: 'TRISET', descanso_seg: 60 }), ex('elevação frontal com anilha', [b(3, '12')], { tecnica_geral: 'TRISET', descanso_seg: 60 }), ex('posterior de ombros com halteres', [b(3, '12')], { tecnica_geral: 'TRISET', descanso_seg: 60 })] } },
 
-  { id: 'c19', origem: 'sintético', tags: ['técnica', 'método 21'], why: 'método 21 sem repetições',
+  { id: 'c19', origem: 'sintético', tags: ['técnica', 'método 21'], why: 'método 21 sem repetições: o padrão é 21 (7+7+7)',
     text: 'Rosca Scott, método 21, 3 séries.',
     ideal: { exercicios: [ex('rosca Scott', [b(3)], { tecnica_geral: '21' })] } },
 

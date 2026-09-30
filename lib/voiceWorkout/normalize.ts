@@ -72,7 +72,7 @@ function cleanText(v: unknown, max: number): string {
 export function normalizeReps(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? String(Math.round(v)) : null;
-  const s = String(v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  const s = String(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   if (!s) return null;
   if (/falha/.test(s)) return 'Falha';
   if (/^max(imo|imas)?$/.test(s)) return 'Máx';

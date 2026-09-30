@@ -24,12 +24,15 @@ export const DEFAULT_REST_SECONDS = 60;
 
 export const TECH_DEFAULTS: Partial<Record<TechKey, { series?: number; reps?: string; rest?: number }>> = {
   GVT: { series: 10, reps: '10', rest: 60 },
+  // Método 21 = 7+7+7 = 21 repetições. O app guarda 21 e só troca por uma faixa
+  // normal quando o deload do aluno está ativo (workoutMaskUtils.js).
+  '21': { reps: '21' },
 };
 
 // minúsculo, sem acento, hífen/underscore viram espaço
 function normTech(raw: string): string {
   return raw
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[-_]+/g, ' ')
     .replace(/\s+/g, ' ')

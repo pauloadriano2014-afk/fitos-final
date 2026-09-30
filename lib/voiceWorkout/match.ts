@@ -65,7 +65,7 @@ const PHRASE_SYN: Array<[RegExp, string]> = [
 
 export function norm(s: string): string {
   return String(s || '')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[°º]/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')

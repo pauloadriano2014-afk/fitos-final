@@ -2,7 +2,7 @@
 
 34 casos. **Você é quem valida**: leia cada fala e a coluna “como o sistema deve entender”. Se algum estiver errado, ou se faltar um tipo de fala que você usa, me diga o número do caso.
 
-Legenda do esperado: `3x12[DROPSET]/60s` = 3 séries de 12 com drop set e 60 s de descanso. “assumido” = o coach não falou e o sistema completa com o padrão (3 séries, 12 reps, 60 s; GVT = 10×10).
+Legenda do esperado: `3x12[DROPSET]/60s` = 3 séries de 12 com drop set e 60 s de descanso. “assumido” = o coach não falou e o sistema completa com o padrão (3 séries, 12 reps, 60 s; GVT = 10×10; método 21 = 21 reps).
 
 | caso | origem | tags | o que testa |
 |---|---|---|---|
@@ -24,7 +24,7 @@ Legenda do esperado: `3x12[DROPSET]/60s` = 3 séries de 12 com drop set e 60 s d
 | c16 | sintético | GVT, grafia | sigla soletrada pela transcrição ("G V T") |
 | c17 | sintético | técnica, bi-set | bi-set junta dois exercícios: um item cada, técnica nos dois |
 | c18 | sintético | técnica, tri-set | tri-set com três exercícios numa frase só |
-| c19 | sintético | técnica, método 21 | método 21 sem repetições |
+| c19 | sintético | técnica, método 21 | método 21 sem repetições: o padrão é 21 (7+7+7) |
 | c20 | sintético | técnica, cluster | cluster set com descanso longo |
 | c21 | sintético | técnica, TUT | "tempo sob tensão" por extenso |
 | c22 | sintético | descanso, global | um descanso único dito no começo |
@@ -299,7 +299,7 @@ Como o sistema deve entender:
 2. Elevação frontal com anilha — 3x12[TRISET]/60s
 3. Posterior de ombros c/halteres — 3x12[TRISET]/60s
 
-## c19 — método 21 sem repetições
+## c19 — método 21 sem repetições: o padrão é 21 (7+7+7)
 
 Origem: **sintético** · tags: técnica, método 21
 
@@ -311,7 +311,7 @@ Rosca Scott, método 21, 3 séries.
 
 Como o sistema deve entender:
 
-1. Rosca Scott — 3x12[21]/60s  (assumido: reps, rest)
+1. Rosca Scott — 3x21[21]/60s  (assumido: reps, rest)
 
 ## c20 — cluster set com descanso longo
 
