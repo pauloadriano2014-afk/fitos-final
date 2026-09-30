@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { COACH_REPLY_TYPE } from '@/lib/coachReplies';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,8 @@ export async function GET(req: Request) {
             where: {
                 userId: userId,
                 isRead: false,
+                // 💬 as respostas do coach (COACH_REPLY) são do ALUNO (sininho dele), nunca entram no painel de observações do coach
+                type: { not: COACH_REPLY_TYPE },
             },
             orderBy: {
                 createdAt: 'desc'
