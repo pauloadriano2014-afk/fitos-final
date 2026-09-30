@@ -1,0 +1,400 @@
+﻿origem;chave;alimento;ibge_codigo;ibge_alimento;ibge_preparo;confianca;aplicar;colher;colher_sobremesa;colher_cha;colher_cafe;colher_servir;concha;escumadeira;xícara;fatia;unid;pedaco;punhado;bife_p;bife_m;bife_g;observacao;conflito_com_o_app
+CUSTOM;custom-abacate;Abacate;6802701;Abacate;Não se aplica;ALTA;SIM;45;;;;;;;;90;430;22,5;;;;;;"fatia: app 50 g × IBGE 90 g; colher: app 30 g × IBGE 45 g"
+CUSTOM;custom-abacaxi;Abacaxi;6802601;Abacaxi;Não se aplica;ALTA;SIM;;;;;;;;;75;750;11;;;;;;
+CUSTOM;custom-abobrinha;Abobrinha;6703701;Abobrinha;Cozido(a);MEDIA;;30;15;;;70;90;90;;61;335;17;;;;;sem preparo no nome: usei cozido;
+CUSTOM;custom-abóbora-cabotiá-;Abóbora (Cabotiá);6703901;Abóbora;Cozido(a);MEDIA;;36;18;9;;72;100;100;;50;;50;;;;;sem preparo no nome: usei cozido;fatia: app 80 g × IBGE 50 g
+CUSTOM;custom-agrião;Agrião;6701301;Agrião;Cru(a);MEDIA;;7;;;;50;;;;;;;;;;;usei cru;
+CUSTOM;custom-alcatra-grelhada;Alcatra Grelhada;7100301;Alcatra;Grelhado(a)/brasa/churrasco;ALTA;SIM;;;;;;;;;;;35;;75;100;150;"bife P = 75% do médio (regra IBGE); bife G = 150 g (IBGE: bife bovino unidade grande)";
+CUSTOM;custom-alface-qualquer-tipo-;Alface (Qualquer tipo);6700101;Alface;Não se aplica;ALTA;SIM;8;4;2;;16;32;16;;;200;;;;;;;
+CUSTOM;custom-arroz-branco;Arroz Branco;6300101;Arroz (polido, parboilizado);Não se aplica;ALTA;SIM;25;12,5;6,3;3,1;45;100;85;100;;;;;;;;;"colher: app 30 g × IBGE 25 g; xícara: app 160 g × IBGE 100 g"
+CUSTOM;custom-arroz-integral;Arroz Integral;6300201;Arroz integral;Não se aplica;ALTA;SIM;20;10;5;;63;117;59;;;;;;;;;;colher: app 30 g × IBGE 20 g
+CUSTOM;custom-arroz-parboilizado;Arroz Parboilizado;6300101;Arroz (polido, parboilizado);Não se aplica;ALTA;SIM;25;12,5;6,3;3,1;45;100;85;100;;;;;;;;IBGE junta polido e parboilizado;
+CUSTOM;custom-aspargos;Aspargos;7700701;Aspargo em conserva;Não se aplica;MEDIA;;;;;;;;;;;;7,5;;;;;IBGE: aspargo em conserva;
+CUSTOM;custom-atum-grelhado-ou-assado-;Atum (Grelhado ou Assado);7200101;Peixe de mar (inteiro, em posta, em filé, etc.);Grelhado(a)/brasa/churrasco;MEDIA;;;;;;;;;;;;;;90;120;;"IBGE: usei peixe de mar (o atum em conserva é outro alimento); bife P = 75% do médio (regra IBGE)";
+CUSTOM;custom-aveia-em-flocos;Aveia em Flocos;6500401;Aveia em flocos;Não se aplica;ALTA;SIM;15;7;2;1;30;;;;;;;;;;;;
+CUSTOM;custom-azeite-de-oliva;Azeite de Oliva;8400101;Azeite de oliva;Não se aplica;ALTA;SIM;8;5;2;1;;;;;;;;;;;;;colher: app 15 g × IBGE 8 g
+CUSTOM;custom-bacalhau-dessalgado-cozido-;Bacalhau Dessalgado (Cozido);7270401;Bacalhau;Cozido(a);ALTA;SIM;20;;;;55;;;;;;135;;;;;;
+CUSTOM;custom-bacon-frito;Bacon Frito;8101005;Bacon;Não se aplica;ALTA;SIM;;;;;;;;;15;;;;;;;;
+CUSTOM;custom-banana;Banana;6801101;Banana (ouro, prata, d´água, da terra, etc.);Cru(a);ALTA;SIM;;;;;;;;;26;75;16;;;;;;"unid: app 120 g × IBGE 75 g; fatia: app 60 g × IBGE 26 g"
+CUSTOM;custom-batata-doce-assada;Batata Doce Assada;6400401;Batata-doce;Assado(a);ALTA;SIM;;;;;100;;;;;355;70;;;;;;
+CUSTOM;custom-batata-doce-cozida;Batata Doce Cozida;6400401;Batata-doce;Cozido(a);ALTA;SIM;42;;;;100;100;;;70;355;70;;;;;;"unid: app 120 g × IBGE 355 g; fatia: app 30 g × IBGE 70 g"
+CUSTOM;custom-batata-inglesa-cozida;Batata Inglesa Cozida;6400101;Batata-inglesa;Cozido(a);ALTA;SIM;30;15;7,5;;60;80;80;;16;140;16;;;;;;fatia: app 30 g × IBGE 16 g
+CUSTOM;custom-berinjela;Berinjela;6705401;Berinjela;Cozido(a);MEDIA;;25;12,5;;;75;;125;;20;;20;;;;;usei cozido;
+CUSTOM;custom-beterraba;Beterraba;6401101;Beterraba;Cozido(a);MEDIA;;20;10;;;38;76;45;84;12;125;12;;;;;usei cozida;"unid: app 100 g × IBGE 125 g; fatia: app 20 g × IBGE 12 g"
+CUSTOM;custom-brócolis-cozido-;Brócolis (Cozido);6701704;Brócolis;Cozido(a);ALTA;SIM;10;5;;;20;40;20;;;60;;;;;;;colher: app 30 g × IBGE 10 g
+CUSTOM;custom-café-sem-açúcar;Café sem Açúcar;8501302;Café;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;xícara=200 ml do IBGE;
+CUSTOM;custom-camarão-grelhado;Camarão Grelhado;7260101;Camarão;Grelhado(a)/brasa/churrasco;MEDIA;;20;;;;;;;;;;;;;;;"só colher de sopa no preparo grelhado; unid (30 g) vem do assado";
+CUSTOM;custom-carne-moída-patinho-;Carne Moída (Patinho);7104301;Carne moída;Cozido(a);ALTA;SIM;25;12,5;;;60;120;60;;;;;;;;;;
+CUSTOM;custom-carne-seca-charque-desfiada-;Carne Seca / Charque (Desfiada);8100101;Carne seca;Cozido(a);ALTA;SIM;18;;;;28;56;;;;;;;;;;;
+CUSTOM;custom-carne-de-panela-cozida-;Carne de Panela (Cozida);7109101;Carne bovina;Cozido(a);ALTA;SIM;30;;;;70;140;70;;;;35;;;;;;
+CUSTOM;custom-castanha-do-pará;Castanha do Pará;6600701;Castanha-do-pará;Não se aplica;ALTA;SIM;;;;;;;;;;4;;40;;;;;unid: app 5 g × IBGE 4 g
+CUSTOM;custom-cebola;Cebola;6705701;Cebola;Cru(a);MEDIA;;10;5;2,5;;20;;;;6;70;17,5;;;;;usei crua;unid: app 100 g × IBGE 70 g
+CUSTOM;custom-cenoura-cozida-;Cenoura (Cozida);6401201;Cenoura;Cozido(a);ALTA;SIM;25;;;;40;48;48;48;5;100;5;;;;;;"unid: app 80 g × IBGE 100 g; fatia: app 15 g × IBGE 5 g"
+CUSTOM;custom-chocolate-meio-amargo-70%-;Chocolate Meio Amargo (70%);8507601;Chocolate;Não se aplica;MEDIA;;;6,3;;;;;;;;;6,3;;;;;IBGE só tem chocolate genérico;
+CUSTOM;custom-chuchu;Chuchu;6704101;Chuchu;Cozido(a);MEDIA;;20;10;;;45;110;110;;30;230;30;;;;;usei cozido;
+CUSTOM;custom-chá-sem-açúcar;Chá sem Açúcar;8206301;Chá (preto, camomila, erva cidreira, capim limão, etc.);Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;;
+CUSTOM;custom-couve-manteiga-;Couve (Manteiga);6700501;Couve;Cozido(a);MEDIA;;20;10;;;42;84;42;;;;;;;;;usei cozida;
+CUSTOM;custom-couve-flor;Couve-flor;6700601;Couve-flor;Cozido(a);MEDIA;;25;12,5;;;50;100;50;;;60;60;;;;;usei cozida;
+CUSTOM;custom-cream-cheese-light;Cream Cheese Light;7902902;Queijo cremoso;Não se aplica;MEDIA;;30;15;;;60;;;;;;;;;;;IBGE: queijo cremoso;colher: app 20 g × IBGE 30 g
+CUSTOM;custom-cuscuz-de-milho;Cuscuz de Milho;6902901;Cuscuz;Não se aplica;ALTA;SIM;12;6;3;1,5;24;48;24;;;;;;;;;fatia/pedaço do IBGE (135 g) são do cuscuz inteiro;colher: app 35 g × IBGE 12 g
+CUSTOM;custom-espinafre;Espinafre;6700701;Espinafre;Cozido(a);MEDIA;;25;;;;50;;;;;;;;;;;usei cozido;
+CUSTOM;custom-farinha-de-linhaça;Farinha de Linhaça;6302001;Semente de linhaça;Não se aplica;MEDIA;;13;3;1,5;0,4;;;;;;;;;;;;IBGE é semente de linhaça, não a farinha;colher: app 10 g × IBGE 13 g
+CUSTOM;custom-feijão-carioca-cozido;Feijão Carioca Cozido;6303102;Feijão (preto, mulatinho, roxo, rosinha, etc.);Não se aplica;ALTA;SIM;17;8,5;4,3;;35;140;35;140;;;;;;;;IBGE: feijão (preto, mulatinho, roxo, rosinha etc.);"colher: app 45 g × IBGE 17 g; xícara: app 170 g × IBGE 140 g"
+CUSTOM;custom-feijão-preto-cozido;Feijão Preto Cozido;6303102;Feijão (preto, mulatinho, roxo, rosinha, etc.);Não se aplica;ALTA;SIM;17;8,5;4,3;;35;140;35;140;;;;;;;;;"colher: app 45 g × IBGE 17 g; xícara: app 170 g × IBGE 140 g"
+CUSTOM;custom-filé-mignon-grelhado;Filé Mignon Grelhado;7100101;Filé mignon;Grelhado(a)/brasa/churrasco;ALTA;SIM;;;;;;;;;;;35;;75;100;150;"bife P = 75% do médio (regra IBGE); bife G = 150 g (IBGE: bife bovino unidade grande)";
+CUSTOM;custom-frango-desfiado-cozido-;Frango Desfiado (Cozido);7800401;Peito de galinha ou frango;Cozido(a);ALTA;SIM;20;;;;40;;;;;;;;;;;;
+CUSTOM;custom-frango-grelhado;Frango Grelhado;7800401;Peito de galinha ou frango;Grelhado(a)/brasa/churrasco;ALTA;SIM;;;;;;;;;;;;;75;100;;"filé médio = 100 g; bife P = 75% do médio (regra IBGE)";
+CUSTOM;custom-gelatina-zero;Gelatina Zero;6913901;Gelatina de qualquer sabor light;Não se aplica;MEDIA;;25;;;;50;;;110;;;;;;;;;
+CUSTOM;custom-geleia-de-frutas-100%-fruta-;Geleia de Frutas (100% Fruta);6901001;Geleia de frutas de qualquer marca ou sabor;Não se aplica;ALTA;SIM;34;26;9,5;4,8;;;;200;;;;;;;;;
+CUSTOM;custom-granola-sem-açúcar;Granola Sem Açúcar;6504101;Granola;Não se aplica;ALTA;SIM;10;5;2,5;;20;;;80;;;;;;;;;"colher: app 30 g × IBGE 10 g; xícara: app 100 g × IBGE 80 g"
+CUSTOM;custom-grão-de-bico-cozido;Grão de Bico Cozido;6302801;Grão de bico;Não se aplica;ALTA;SIM;22;;;;45;120;;120;;;;;;;;;"colher: app 45 g × IBGE 22 g; xícara: app 170 g × IBGE 120 g"
+CUSTOM;custom-inhame-cozido-;Inhame (Cozido);6400501;Inhame;Cozido(a);ALTA;SIM;35;;;;62;110;110;;60;125;60;;;;;;
+CUSTOM;custom-iogurte-grego-tradicional;Iogurte Grego Tradicional;7901201;Iogurte de qualquer sabor;Não se aplica;MEDIA;;15;;;;;;;200;;;;;;;;IBGE: iogurte de qualquer sabor;colher: app 50 g × IBGE 15 g
+CUSTOM;custom-iogurte-grego-zero-light;Iogurte Grego Zero/Light;7901201;Iogurte de qualquer sabor;Não se aplica;MEDIA;;15;;;;;;;200;;;;;;;;;colher: app 50 g × IBGE 15 g
+CUSTOM;custom-iogurte-natural-desnatado;Iogurte Natural Desnatado;7901204;Iogurte natural;Não se aplica;ALTA;SIM;15;;;;;;;;;;;;;;;;colher: app 50 g × IBGE 15 g
+CUSTOM;custom-iogurte-proteico;Iogurte Proteico;7901201;Iogurte de qualquer sabor;Não se aplica;MEDIA;;15;;;;;;;200;;;;;;;;;
+CUSTOM;custom-kiwi;Kiwi;6807801;Kiwi;Não se aplica;ALTA;SIM;;;;;;;;;;94;23,5;;;;;;unid: app 80 g × IBGE 94 g
+CUSTOM;custom-laranja;Laranja;6801801;Laranja (pera, seleta, lima, da terra, etc.);Não se aplica;ALTA;SIM;;;;;;;;;18;180;18;;;;;;
+CUSTOM;custom-leite-desnatado;Leite Desnatado;7903601;Leite de vaca desnatado;Não se aplica;ALTA;SIM;;;;;;;;200;;;;;;;;;xícara: app 240 g × IBGE 200 g
+CUSTOM;custom-leite-integral;Leite Integral;7900101;Leite de vaca integral;Não se aplica;ALTA;SIM;;;;;;;;200;;;;;;;;;xícara: app 240 g × IBGE 200 g
+CUSTOM;custom-leite-zero-lactose;Leite Zero Lactose;7900101;Leite de vaca integral;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;usei leite integral;xícara: app 240 g × IBGE 200 g
+CUSTOM;custom-lentilha-cozida;Lentilha Cozida;6302901;Lentilha;Não se aplica;ALTA;SIM;18;;;;32;160;32;;;;;;;;;;colher: app 45 g × IBGE 18 g
+CUSTOM;custom-linguado-grelhado;Linguado Grelhado;7200101;Peixe de mar (inteiro, em posta, em filé, etc.);Grelhado(a)/brasa/churrasco;ALTA;SIM;;;;;;;;;;;;;90;120;;bife P = 75% do médio (regra IBGE);
+CUSTOM;custom-macarrão-cozido;Macarrão Cozido;6503401;Macarrão;Cozido(a);ALTA;SIM;25;12,5;6,3;;50;110;110;;;;;;;;;;colher: app 50 g × IBGE 25 g
+CUSTOM;custom-macarrão-integral-cozido-;Macarrão Integral (Cozido);6503401;Macarrão;Cozido(a);ALTA;SIM;25;12,5;6,3;;50;110;110;;;;;;;;;IBGE não separa integral;colher: app 50 g × IBGE 25 g
+CUSTOM;custom-mamão;Mamão;6803101;Mamão;Não se aplica;ALTA;SIM;40;;;;70;140;;;170;310;120;;;;;;unid: app 400 g × IBGE 310 g
+CUSTOM;custom-mandioca-cozida;Mandioca Cozida;6400601;Mandioca;Cozido(a);ALTA;SIM;30;;;;60;120;60;;100;;100;;;;;;fatia: app 50 g × IBGE 100 g
+CUSTOM;custom-mandioquinha-batata-baroa;Mandioquinha / Batata Baroa;6400303;Mandioquinha salsa (Batata-baroa);Cozido(a);ALTA;SIM;35;;;;;;;;;80;;;;;;;
+CUSTOM;custom-manteiga;Manteiga;7901501;Manteiga com ou sem sal;Não se aplica;ALTA;SIM;32;23;8;4;;;;;;;;;;;;;colher: app 14 g × IBGE 32 g
+CUSTOM;custom-manteiga-ghee;Manteiga Ghee;7901501;Manteiga com ou sem sal;Não se aplica;MEDIA;;32;23;8;4;;;;;;;;;;;;usei a manteiga comum;
+CUSTOM;custom-maçã;Maçã;6803001;Maçã;Não se aplica;ALTA;SIM;;;;;;;;;37,5;150;37,5;;;;;;
+CUSTOM;custom-melancia;Melancia;6803401;Melancia;Não se aplica;ALTA;SIM;;;;;;;;;200;;150;;;;;;
+CUSTOM;custom-melão;Melão;6803501;Melão;Não se aplica;ALTA;SIM;;;;;;;;;90;660;22,5;;;;;;"fatia: app 150 g × IBGE 90 g; unid: app 400 g × IBGE 660 g"
+CUSTOM;custom-moela-de-frango-cozida-;Moela de Frango (Cozida);7801101;Moela de galinha ou frango;Cozido(a);ALTA;SIM;;;;;100;;;;;18;;;;;;;
+CUSTOM;custom-morango;Morango;6805201;Morango;Não se aplica;ALTA;SIM;;;;;;;;120;;12;;;;;;;
+CUSTOM;custom-musculo-cozido;Músculo (Cozido);7101001;Músculo bovino;Cozido(a);ALTA;SIM;30;;;;;140;70;;;;35;;;;;;
+CUSTOM;custom-nozes;Nozes;6601501;Noz;Não se aplica;ALTA;SIM;;;;;;;;;;5;;40;;;;;unid: app 7 g × IBGE 5 g
+CUSTOM;custom-ovos-inteiros;Ovos Inteiros;7803301;Ovo de galinha;Cozido(a);ALTA;SIM;;;;;;;;;;45;;;;;;;unid: app 60 g × IBGE 45 g
+CUSTOM;custom-ovos-mexidos;Ovos Mexidos;7803301;Ovo de galinha;Refogado(a);ALTA;SIM;;;;;;;;;;50;;;;;;"IBGE: preparo ""refogado(a)""";unid: app 60 g × IBGE 50 g
+CUSTOM;custom-patinho-cozido-iscas-;Patinho (Cozido / Iscas);7100501;Patinho;Cozido(a);ALTA;SIM;;;;;;;;;;;35;;75;100;150;"bife P = 75% do médio (regra IBGE); bife G = 150 g (IBGE: bife bovino unidade grande)";
+CUSTOM;custom-paçoca-rolha-;Paçoca (Rolha);6903205;Paçoquinha de amendoim;Não se aplica;MEDIA;;;;;;;;;;;30;;;;;;IBGE: paçoquinha de amendoim (30 g);
+CUSTOM;custom-peito-de-peru-fatiado-;Peito de Peru (Fatiado);8102801;Blanquet de peru;Não se aplica;MEDIA;;;;;;;;;;10;;;;;;;"IBGE: blanquet de peru (10 g); o app tinha 20 g";
+CUSTOM;custom-peito-de-peru-grelhado;Peito de Peru Grelhado;7801801;Peito de peru;Grelhado(a)/brasa/churrasco;ALTA;SIM;;;;;;;;;32;;;;;;;;
+CUSTOM;custom-pepino-com-casca-;Pepino (Com casca);6704001;Pepino;Não se aplica;ALTA;SIM;18;9;4,5;;36;;36;;3;100;3;;;;;;
+CUSTOM;custom-pera;Pera;6803601;Pera;Não se aplica;ALTA;SIM;;;;;;;;;32,5;130;32,5;;;;;;unid: app 170 g × IBGE 130 g
+CUSTOM;custom-pescada-branca-grelhada;Pescada Branca Grelhada;7200101;Peixe de mar (inteiro, em posta, em filé, etc.);Grelhado(a)/brasa/churrasco;ALTA;SIM;;;;;;;;;;;;;90;120;;bife P = 75% do médio (regra IBGE);
+CUSTOM;custom-pimentão;Pimentão;6704501;Pimentão;Não se aplica;ALTA;SIM;13;;;;26;52;;;6;55;6;;;;;;
+CUSTOM;custom-presunto-magro;Presunto Magro;8102901;Presunto;Não se aplica;ALTA;SIM;;;;;;;;;15;;;;;;;o app já tinha 20 g/fatia (vale o do app);fatia: app 20 g × IBGE 15 g
+CUSTOM;custom-proteína-de-soja-pts-crua-;Proteína de Soja (PTS Crua);6505601;Proteína de soja;Não se aplica;MEDIA;;24;12;;;48;48;;;;;;;;;;IBGE mede a proteína de soja já hidratada;
+CUSTOM;custom-pure-de-batata-sem-leite;Purê de Batata (Sem Leite);6503501;Purê de batata;Não se aplica;ALTA;SIM;45;22,5;11,3;5,6;80;140;80;140;;;;;;;;;xícara: app 200 g × IBGE 140 g
+CUSTOM;custom-pão-francês;Pão Francês;8000105;Pão de sal;Não se aplica;ALTA;SIM;;;;;;;;;25;50;25;;;;;"IBGE: ""pão de sal"" = pão francês (50 g)";
+CUSTOM;custom-pão-integral;Pão Integral;8001401;Pão integral;Não se aplica;ALTA;SIM;;;;;;;;;25;;;;;;;;
+CUSTOM;custom-pão-de-forma-tradicional;Pão de Forma Tradicional;8000501;Pão de forma industrializado de qualquer marca;Não se aplica;ALTA;SIM;;;;;;;;;25;;;;;;;;
+CUSTOM;custom-queijo-minas-frescal-light;Queijo Minas Frescal Light;7906001;Queijo de minas light;Não se aplica;ALTA;SIM;;;;;;;;;19;;;;;;;;fatia: app 30 g × IBGE 19 g
+CUSTOM;custom-queijo-minas-padrão;Queijo Minas Padrão;7902001;Queijo de minas;Não se aplica;ALTA;SIM;;;;;;;;;45;;;;;;;;
+CUSTOM;custom-queijo-mussarela-light;Queijo Mussarela Light;7905104;Queijo muçarela light;Não se aplica;ALTA;SIM;;;;;;;;;20;;;;;;;;
+CUSTOM;custom-queijo-mussarela-tradicional;Queijo Mussarela Tradicional;7901801;Queijo muçarela;Não se aplica;ALTA;SIM;;;;;;;;;20;;;;;;;;
+CUSTOM;custom-queijo-ricota-fresca;Queijo Ricota Fresca;7902201;Queijo ricota;Não se aplica;ALTA;SIM;44;;;;;;;;35;;;;;;;;"fatia: app 30 g × IBGE 35 g; colher: app 30 g × IBGE 44 g"
+CUSTOM;custom-repolho;Repolho;6700901;Repolho;Cru(a);MEDIA;;10;5;2,5;;25;50;25;;;;;;;;;usei cru;
+CUSTOM;custom-requeijão-light;Requeijão Light;7906501;Requeijão light;Não se aplica;ALTA;SIM;30;15;;;;;;;;;;;;;;;colher: app 20 g × IBGE 30 g
+CUSTOM;custom-rúcula;Rúcula;6702001;Rúcula;Não se aplica;ALTA;SIM;8;;;;16;;16;;;;;;;;;;
+CUSTOM;custom-salmão-grelhado;Salmão Grelhado;7200101;Peixe de mar (inteiro, em posta, em filé, etc.);Grelhado(a)/brasa/churrasco;ALTA;SIM;;;;;;;;;;;;;90;120;;"IBGE: peixe de mar, filé médio = 120 g; bife P = 75% do médio (regra IBGE)";
+CUSTOM;custom-salsicha-cozida;Salsicha Cozida;8102101;Salsicha no varejo;Cozido(a);ALTA;SIM;;;;;;;;;;31;19;;;;;;
+CUSTOM;custom-sardinha-enlatada-em-água-;Sardinha (Enlatada em Água);7703002;Sardinha em conserva;Não se aplica;ALTA;SIM;16;10;;;;;;;;41,5;;;;;;;
+CUSTOM;custom-sobrecoxa-de-frango-sem-pele-;Sobrecoxa de Frango (Sem pele);7800302;Frango em pedaços;Grelhado(a)/brasa/churrasco;ALTA;SIM;;;;;;;;;;65;;;;;;"IBGE: ""sobrecoxa média"" = 65 g (registrada como unid.)";
+CUSTOM;custom-tangerina;Tangerina;6802201;Tangerina;Não se aplica;ALTA;SIM;;;;;;;;;;135;;;;;;;unid: app 100 g × IBGE 135 g
+CUSTOM;custom-tapioca-goma-;Tapioca (Goma);6501516;Tapioca de goma;Não se aplica;MEDIA;;;;;;;;;;12,5;50;12,5;;;;;IBGE: tapioca de goma já hidratada (unid=50 g);
+CUSTOM;custom-tilápia-grelhada;Tilápia Grelhada;7400101;Peixe de água doce (inteiro, em posta, em filé, etc.);Grelhado(a)/brasa/churrasco;ALTA;SIM;;;;;;;;;;;;;90;120;;"IBGE: peixe de água doce, filé médio = 120 g; bife P = 75% do médio (regra IBGE)";
+CUSTOM;custom-tofu-queijo-de-soja-;Tofu (Queijo de Soja);7903402;Tofu;Não se aplica;ALTA;SIM;;;;;;;;;20;;;;;;;;
+CUSTOM;custom-tomate;Tomate;6705101;Tomate;Não se aplica;ALTA;SIM;30;15;7,5;;60;120;60;;15;100;15;;;;;;fatia: app 25 g × IBGE 15 g
+CUSTOM;custom-uva;Uva;6803901;Uva;Não se aplica;ALTA;SIM;;;;;;;;;;8;;;;;;"punhado=170 g do IBGE parece alto; deixei de fora";unid: app 5 g × IBGE 8 g
+CUSTOM;custom-vagem;Vagem;6705201;Vagem;Cozido(a);MEDIA;;20;10;;;73;73;73;;;;;;;;;usei cozida;
+CUSTOM;custom-água-de-coco;Água de Coco;8202101;Água de coco;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;;
+CUSTOM;custom-óleo-de-coco;Óleo de Coco;8403201;Óleo não especificado;Não se aplica;MEDIA;;8;5;;1;;;;;;;;;;;;"IBGE só tem ""óleo não especificado""";
+TACO;520;Acarajé;8500209;Acarajé;Não se aplica;ALTA;SIM;;;;;;;;;;100;;;;;;;
+TACO;74;Acelga, crua;6701501;Acelga;Cru(a);ALTA;SIM;6;;;;10;;;;;;;;;;;;
+TACO;488;Achocolatado, pó;6900821;Achocolatado em pó;Não se aplica;ALTA;SIM;16;11;4;2;30;;;26,7;;;;;;;;;
+TACO;75;Agrião, cru;6701301;Agrião;Cru(a);ALTA;SIM;7;;;;50;;;;;;;;;;;;
+TACO;84;Almeirão, cru;6701601;Almeirão;Cru(a);ALTA;SIM;25;;;;50;;;;;;;;;;;;
+TACO;85;Almeirão, refogado;6701601;Almeirão;Refogado(a);ALTA;SIM;25;;;;50;;;;;;;;;;;;
+TACO;521;Arroz carreteiro;8579002;Arroz carreteiro;Não se aplica;ALTA;SIM;30;;;;60;120;60;;;;;;;;;;
+TACO;490;Açúcar, mascavo;6900304;Açúcar mascavo;Não se aplica;ALTA;SIM;19;;;;;;;;;;;;;;;;
+TACO;175;Banana, da terra, crua;6801101;Banana (ouro, prata, d´água, da terra, etc.);Cru(a);ALTA;SIM;;;;;;;;;26;75;16;;;;;;
+TACO;180;Banana, ouro, crua;6801101;Banana (ouro, prata, d´água, da terra, etc.);Cru(a);ALTA;SIM;;;;;;;;;26;75;16;;;;;;
+TACO;182;Banana, prata, crua;6801101;Banana (ouro, prata, d´água, da terra, etc.);Cru(a);ALTA;SIM;;;;;;;;;26;75;16;;;;;;
+TACO;88;Batata, doce, cozida;6400401;Batata-doce;Cozido(a);ALTA;SIM;42;;;;100;100;;;70;355;70;;;;;;
+TACO;89;Batata, doce, crua;6400401;Batata-doce;Cru(a);ALTA;SIM;;;;;;;;;;355;;;;;;;
+TACO;91;Batata, inglesa, cozida;6400101;Batata-inglesa;Cozido(a);ALTA;SIM;30;15;7,5;;60;80;80;;16;140;16;;;;;;
+TACO;93;Batata, inglesa, frita;6400101;Batata-inglesa;Frito(a);ALTA;SIM;25;;;;50;65;65;;16;140;16;45;;;;;
+TACO;95;Berinjela, cozida;6705401;Berinjela;Cozido(a);ALTA;SIM;25;12,5;;;75;;125;;20;;20;;;;;;
+TACO;96;Berinjela, crua;6705401;Berinjela;Cru(a);ALTA;SIM;;;;;;125;;;;;;;;;;;
+TACO;97;Beterraba, cozida;6401101;Beterraba;Cozido(a);ALTA;SIM;20;10;;;38;76;45;84;12;125;12;;;;;;
+TACO;98;Beterraba, crua;6401101;Beterraba;Cru(a);ALTA;SIM;16;8;;;38;76;;;12;140;12;;;;;;
+TACO;100;Brócolis, cozido;6701704;Brócolis;Cozido(a);ALTA;SIM;10;5;;;20;40;20;;;60;;;;;;;
+TACO;101;Brócolis, cru;6701704;Brócolis;Cru(a);ALTA;SIM;;5;;;20;;;;;;;;;;;;
+TACO;470;Cana, caldo de;8202001;Caldo de cana;Não se aplica;ALTA;SIM;;;;;;50;;;;;;;;;;;
+TACO;102;Cará, cozido;6400701;Cará;Cozido(a);ALTA;SIM;30;;;;60;120;60;;;;100;;;;;;
+TACO;107;Cebola, crua;6705701;Cebola;Cru(a);ALTA;SIM;10;5;2,5;;20;;;;6;70;17,5;;;;;;
+TACO;109;Cenoura, cozida;6401201;Cenoura;Cozido(a);ALTA;SIM;25;;;;40;48;48;48;5;100;5;;;;;;
+TACO;110;Cenoura, crua;6401201;Cenoura;Cru(a);ALTA;SIM;12;6;;;40;48;48;;5;120;5;;;;;;
+TACO;111;Chicória, crua;6700301;Chicória;Cru(a);ALTA;SIM;45;;;;;136;136;;;;;;;;;;
+TACO;112;Chuchu, cozido;6704101;Chuchu;Cozido(a);ALTA;SIM;20;10;;;45;110;110;;30;230;30;;;;;;
+TACO;113;Chuchu, cru;6704101;Chuchu;Cru(a);ALTA;SIM;20;;;;45;;110;;30;230;30;;;;;;
+TACO;475;Coco, água de;8202101;Água de coco;Não se aplica;ALTA;SIM;;;;;;;;200;;340;;;;;;;
+TACO;118;Couve-flor, cozida;6700601;Couve-flor;Cozido(a);ALTA;SIM;25;12,5;;;50;100;50;;;60;60;;;;;;
+TACO;117;Couve-flor, crua;6700601;Couve-flor;Cru(a);ALTA;SIM;25;;;;50;;50;;;60;60;;;;;;
+TACO;447;Creme de Leite;7901001;Creme de leite;Não se aplica;ALTA;SIM;15;20;5;2,5;30;;;;;;;;;;;;
+TACO;529;Cuscuz, paulista;8505801;Cuscuz paulista;Não se aplica;ALTA;SIM;35;;;;60;;;;150;;;;;;;;
+TACO;126;Inhame, cru;6400501;Inhame;Cru(a);ALTA;SIM;;;;;;;110;;;125;;;;;;;
+TACO;448;Iogurte, natural;7901204;Iogurte natural;Não se aplica;ALTA;SIM;15;;;;;;;;;;;;;;;;
+TACO;127;Jiló, cru;6704201;Jiló;Cru(a);ALTA;SIM;60;;;;95;;;;;26;;;;;;;
+TACO;452;Leite, condensado;7900901;Leite condensado;Não se aplica;ALTA;SIM;15;10;2;;30;;;200;;;;;;;;;
+TACO;453;Leite, de cabra;7900301;Leite de cabra;Não se aplica;ALTA;SIM;;;;;;;;200;;;;;;;;;
+TACO;518;Leite, de coco;7003801;Leite de coco;Não se aplica;ALTA;SIM;20;;5;;;80;;;;;;;;;;;
+TACO;457;Leite, fermentado;7901304;Leite fermentado;Não se aplica;ALTA;SIM;;;;;;;;;;80;;;;;;;
+TACO;588;Linhaça, semente;6302001;Semente de linhaça;Não se aplica;ALTA;SIM;13;3;1,5;0,4;;;;;;;;;;;;;
+TACO;39;Macarrão, instantâneo;6504802;Macarrão instântaneo;Não se aplica;ALTA;SIM;25;;;;50;110;110;;;320;;;;;;;
+TACO;129;Mandioca, cozida;6400601;Mandioca;Cozido(a);ALTA;SIM;30;;;;60;120;60;;100;;100;;;;;;
+TACO;130;Mandioca, crua;6400601;Mandioca;Cru(a);ALTA;SIM;;;;;;;;;;;100;;;;;;
+TACO;132;Mandioca, frita;6400601;Mandioca;Frito(a);ALTA;SIM;35;;;;60;95;;;70;;80;45;;;;;
+TACO;538;Maniçoba;8507201;Maniçoba;Não se aplica;ALTA;SIM;;;;;70;225;;;;;;;;;;;
+TACO;261;Manteiga, com sal;7901501;Manteiga com ou sem sal;Não se aplica;ALTA;SIM;32;23;8;4;64;;;;32;;;;;;;;
+TACO;262;Manteiga, sem sal;7901501;Manteiga com ou sem sal;Não se aplica;ALTA;SIM;32;23;8;4;64;;;;32;;;;;;;;
+TACO;501;Maria mole;6903001;Maria mole;Não se aplica;ALTA;SIM;;;;;;;;;;;90;;;;;;
+TACO;503;Marmelada;6901206;Marmelada;Não se aplica;ALTA;SIM;;;;;;;;;60;;60;;;;;;
+TACO;134;Maxixe, cru;6704301;Maxixe;Cru(a);ALTA;SIM;40;;;;;;;;;;;;;;;;
+TACO;505;Melado;6901501;Melado;Não se aplica;ALTA;SIM;15;9;3;2;;;;;;;;;;;;;
+TACO;464;Queijo, prato;7901701;Queijo prato;Não se aplica;ALTA;SIM;;;;;;;;;15;;;;;;;;
+TACO;466;Queijo, ricota;7902201;Queijo ricota;Não se aplica;ALTA;SIM;44;;;;;;;;35;;;;;;;;
+TACO;147;Quiabo, cru;6705001;Quiabo;Cru(a);ALTA;SIM;40;;;;;;;;;18;;;;;;;
+TACO;539;Quibebe;8506701;Quibebe;Não se aplica;ALTA;SIM;35;24;;;100;100;100;;;;;;;;;;
+TACO;506;Quindim;6904105;Quindim;Não se aplica;ALTA;SIM;;;;;;;;;;35;;;;;;;
+TACO;148;Rabanete, cru;6401001;Rabanete;Cru(a);ALTA;SIM;11;;;;22;;22;;4;25;;;;;;;
+TACO;507;Rapadura;6900401;Rapadura;Não se aplica;ALTA;SIM;;;;;;;;;;;55;;;;;;
+TACO;155;Serralha, crua;6701801;Serralha;Cru(a);ALTA;SIM;25;;;;;;;;;;;;;;;;
+TACO;156;Taioba, crua;6701401;Taioba;Cru(a);ALTA;SIM;;;;;46,6;;;;;;;;;;;;
+TACO;548;Vaca atolada;8508301;Vaca atolada;Não se aplica;ALTA;SIM;;;;;40;130;;;;;;;;;;;
+TACO;162;Vagem, crua;6705201;Vagem;Cru(a);ALTA;SIM;20;;;;;;;;;;;;;;;;
+TACO;549;Vatapá;8502801;Vatapá;Não se aplica;ALTA;SIM;25;;;;77;150;;;;;;;;;;;
+TACO;551;Yakisoba;7701406;Yakisoba;Não se aplica;ALTA;SIM;;;;;50;100;110;;;;;;;;;;
+TACO;272;Óleo, de soja;8400301;Óleo de soja;Não se aplica;ALTA;SIM;8;;2;1;;32;;;;;;;;;;;
+TACO;165;Abacaxi, polpa, congelada;6802601;Abacaxi;Não se aplica;MEDIA;;;;;;;;;;75;750;11;;;;;"derivado/preparação (polpa); nome do TACO tem detalhe que o IBGE não tem (congelada, polpa)";
+TACO;70;Abobrinha, italiana, cozida;6703701;Abobrinha;Cozido(a);MEDIA;;30;15;;;70;90;90;;61;335;17;;;;;nome do TACO tem detalhe que o IBGE não tem (italiana);
+TACO;71;Abobrinha, italiana, crua;6703701;Abobrinha;Cru(a);MEDIA;;30;;7,5;;70;;90;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (italiana);
+TACO;72;Abobrinha, italiana, refogada;6703701;Abobrinha;Refogado(a);MEDIA;;30;15;7,5;;70;90;90;;;335;17;;;;;nome do TACO tem detalhe que o IBGE não tem (italiana);
+TACO;73;Abobrinha, paulista, crua;6703701;Abobrinha;Cru(a);MEDIA;;30;;7,5;;70;;90;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (paulista);
+TACO;64;Abóbora, cabotian, cozida;6703901;Abóbora;Cozido(a);MEDIA;;36;18;9;;72;100;100;;50;;50;;;;;nome do TACO tem detalhe que o IBGE não tem (cabotian);
+TACO;65;Abóbora, cabotian, crua;6703901;Abóbora;Cru(a);MEDIA;;36;;;;72;100;;;;;50;;;;;nome do TACO tem detalhe que o IBGE não tem (cabotian);
+TACO;66;Abóbora, menina brasileira, crua;6703901;Abóbora;Cru(a);MEDIA;;36;;;;72;100;;;;;50;;;;;nome do TACO tem detalhe que o IBGE não tem (brasileira, menina);
+TACO;68;Abóbora, moranga, refogada;6703306;Moranga;Refogado(a);MEDIA;;30;;;;60;;;;50;;;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (abobora)";
+TACO;69;Abóbora, pescoço, crua;6703901;Abóbora;Cru(a);MEDIA;;36;;;;72;100;;;;;50;;;;;nome do TACO tem detalhe que o IBGE não tem (pescoco);
+TACO;170;Acerola, polpa, congelada;6807701;Acerola;Não se aplica;MEDIA;;;;;;;;;;;12;;;;;;"derivado/preparação (polpa); nome do TACO tem detalhe que o IBGE não tem (congelada, polpa)";
+TACO;171;Ameixa, calda, enlatada;6804301;Ameixa;Não se aplica;MEDIA;;25;;;;;;;;;42;;;;;;nome do TACO tem detalhe que o IBGE não tem (calda, enlatada);
+TACO;173;Ameixa, em calda, enlatada, drenada;6804301;Ameixa;Não se aplica;MEDIA;;25;;;;;;;;;42;;;;;;nome do TACO tem detalhe que o IBGE não tem (calda, drenada, enlatada);
+TACO;553;Amendoim, torrado, salgado;6903304;Amendoim cozido;Não se aplica;MEDIA;;16;;;;;64;;;;2;;17;;;;"ambíguo: Amendoim (em grão) (in natura ; nome do TACO tem detalhe que o IBGE não tem (salgado, torrado)";
+TACO;582;Amêndoa, torrada, salgada;6600501;Amêndoa;Não se aplica;MEDIA;;;;;;;;;;;1;;;;;;nome do TACO tem detalhe que o IBGE não tem (salgada, torrada);
+TACO;277;Atum, conserva em óleo;7703402;Atum em conserva;Não se aplica;MEDIA;;16;10;;;;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (oleo);
+TACO;260;Azeite, de oliva, extra virgem;8400101;Azeite de oliva;Não se aplica;MEDIA;;8;5;2;1;16;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (extra, virgem);
+TACO;515;Azeitona, preta, conserva;7700101;Azeitona;Não se aplica;MEDIA;;25;14;;;;;;;;4;;45;;;;"derivado/preparação (conserva); nome do TACO tem detalhe que o IBGE não tem (conserva, preta)";
+TACO;516;Azeitona, verde, conserva;7700101;Azeitona;Não se aplica;MEDIA;;25;14;;;;;;;;4;;45;;;;"derivado/preparação (conserva); nome do TACO tem detalhe que o IBGE não tem (conserva, verde)";
+TACO;167;Açaí, polpa, com xarope de guaraná e glucose;6601706;Açaí;Não se aplica;MEDIA;;;;;;;101;;187;;;;;;;;"derivado/preparação (polpa, xarope); nome do TACO tem detalhe que o IBGE não tem (glucose, guarana, polpa, xarope)";
+TACO;168;Açaí, polpa, congelada;6601706;Açaí;Não se aplica;MEDIA;;;;;;;101;;187;;;;;;;;"derivado/preparação (polpa); nome do TACO tem detalhe que o IBGE não tem (congelada, polpa)";
+TACO;489;Açúcar, cristal;6906602;Açúcar;Não se aplica;MEDIA;;24;16;5;2;;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (cristal);
+TACO;491;Açúcar, refinado;6906602;Açúcar;Não se aplica;MEDIA;;24;16;5;2;;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (refinado);
+TACO;280;Bacalhau, salgado, refogado;7270401;Bacalhau;Refogado(a);MEDIA;;20;;;;;110;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (salgado);
+TACO;522;Baião de dois, arroz e feijão-de-corda;8503501;Baião de dois;Não se aplica;MEDIA;;21;10,5;5,3;;55;95;111;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (arroz, corda, feijao);
+TACO;176;Banana, doce em barra;6801101;Banana (ouro, prata, d´água, da terra, etc.);Não se aplica;MEDIA;;;;;;;;;;;75;16;;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (barra, doce)";
+TACO;179;Banana, nanica, crua;6801101;Banana (ouro, prata, d´água, da terra, etc.);Cru(a);MEDIA;;;;;;;;;;26;75;16;;;;;nome do TACO tem detalhe que o IBGE não tem (nanica);
+TACO;86;Batata, baroa, cozida;6400802;Batata (não especificada);Cozido(a);MEDIA;;30;15;7,5;;60;80;80;;;140;16;;;;;nome do TACO tem detalhe que o IBGE não tem (baroa);
+TACO;87;Batata, baroa, crua;6400802;Batata (não especificada);Cru(a);MEDIA;;30;;;;;;;;;140;;;;;;nome do TACO tem detalhe que o IBGE não tem (baroa);
+TACO;94;Batata, inglesa, sauté;6400101;Batata-inglesa;Não se aplica;MEDIA;;30;;;;;;;;;140;;;;;;nome do TACO tem detalhe que o IBGE não tem (saute);
+TACO;446;Bebida láctea, pêssego;6803701;Pêssego;Não se aplica;MEDIA;;;;;;;;;;;60;15;;;;;"palavra principal do TACO não é a do IBGE; derivado/preparação (bebida); nome do TACO tem detalhe que o IBGE não tem (bebida, lactea)";
+TACO;8;Biscoito, doce, maisena;8002301;Biscoito doce;Não se aplica;MEDIA;;;;;;;17;;17;;5;;17;;;;nome do TACO tem detalhe que o IBGE não tem (maisena);
+TACO;9;Biscoito, doce, recheado com chocolate;8004801;Biscoito recheado;Não se aplica;MEDIA;;;;;;;;;;;13;;17;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (chocolate, doce)";
+TACO;10;Biscoito, doce, recheado com morango;8004801;Biscoito recheado;Não se aplica;MEDIA;;;;;;;;;;;13;;17;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (doce, morango)";
+TACO;11;Biscoito, doce, wafer, recheado de chocolate;8004801;Biscoito recheado;Não se aplica;MEDIA;;;;;;;;;;;13;;17;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (chocolate, doce, wafer)";
+TACO;12;Biscoito, doce, wafer, recheado de morango;8004801;Biscoito recheado;Não se aplica;MEDIA;;;;;;;;;;;13;;17;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (doce, morango, wafer)";
+TACO;99;Biscoito, polvilho doce;8002212;Biscoito de polvilho;Não se aplica;MEDIA;;;;;;;;;;;3;;;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (doce)";
+TACO;13;Biscoito, salgado, cream cracker;8002201;Biscoito salgado;Não se aplica;MEDIA;;;;;;;;;;;5;;17;;;;nome do TACO tem detalhe que o IBGE não tem (cracker, cream);
+TACO;525;Bolinho de arroz;6300101;Arroz (polido, parboilizado);Não se aplica;MEDIA;;25;12,5;6,3;3,1;45;100;85;100;;;;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (bolinho)";
+TACO;15;Bolo, pronto, aipim;8002701;Bolo de aipim;Não se aplica;MEDIA;;;;;;;;;;80;;80;;;;;nome do TACO tem detalhe que o IBGE não tem (pronto);
+TACO;16;Bolo, pronto, chocolate;8003801;Bolo de chocolate;Não se aplica;MEDIA;;;;;;;;;;60;;60;;;;;nome do TACO tem detalhe que o IBGE não tem (pronto);
+TACO;17;Bolo, pronto, coco;8004101;Bolo de coco;Não se aplica;MEDIA;;;;;;;;;;60;;60;;;;;nome do TACO tem detalhe que o IBGE não tem (pronto);
+TACO;18;Bolo, pronto, milho;8002601;Bolo de milho;Não se aplica;MEDIA;;;;;;;;;;60;;60;;;;;nome do TACO tem detalhe que o IBGE não tem (pronto);
+TACO;468;Café, infusão 10%;8501302;Café;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (infusao);
+TACO;508;Café, pó, torrado;8501302;Café;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;"derivado/preparação (po); nome do TACO tem detalhe que o IBGE não tem (po, torrado)";
+TACO;187;Caju, polpa, congelada;6804401;Caju;Não se aplica;MEDIA;;;;;;;;;;;90;;;;;;"derivado/preparação (polpa); nome do TACO tem detalhe que o IBGE não tem (congelada, polpa)";
+TACO;188;Caju, suco concentrado, envasado;6804401;Caju;Não se aplica;MEDIA;;;;;;;;;;;90;;;;;;"derivado/preparação (suco); nome do TACO tem detalhe que o IBGE não tem (concentrado, suco)";
+TACO;324;Caldo de carne, tablete;8503202;Caldo de carne;Não se aplica;MEDIA;;20;10;;;40;130;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (tablete);
+TACO;284;Camarão, Rio Grande, grande, cozido;7260101;Camarão;Cozido(a);MEDIA;;20;;;;35;70;35;35;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (grande, rio);
+TACO;285;Camarão, Rio Grande, grande, cru;7260101;Camarão;Cru(a);MEDIA;;20;;;;;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (grande, rio);
+TACO;286;Camarão, Sete Barbas, sem cabeça, com casca, frito;7260101;Camarão;Frito(a);MEDIA;;20;;;;35;70;35;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (barba, cabeca, casca, sete);
+TACO;20;Canjica, com leite integral;8501903;Canjica;Não se aplica;MEDIA;;25;;;;50;120;120;180;25;;25;;;;;"derivado/preparação (leite); nome do TACO tem detalhe que o IBGE não tem (integral, leite)";
+TACO;326;Carne, bovina, acém, moído, cozido;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (acem, moido);
+TACO;327;Carne, bovina, acém, moído, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (acem, moido);
+TACO;328;Carne, bovina, acém, sem gordura, cozido;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (acem);
+TACO;329;Carne, bovina, acém, sem gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (acem);
+TACO;330;Carne, bovina, almôndegas, cruas;7109101;Carne bovina;Não se aplica;MEDIA;;;;;;70;140;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (almondega);
+TACO;331;Carne, bovina, almôndegas, fritas;7109101;Carne bovina;Não se aplica;MEDIA;;;;;;70;140;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (almondega);
+TACO;332;Carne, bovina, bucho, cozido;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (bucho);
+TACO;333;Carne, bovina, bucho, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (bucho);
+TACO;334;Carne, bovina, capa de contra-filé, com gordura, crua;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (capa, contrafile);
+TACO;335;Carne, bovina, capa de contra-filé, com gordura, grelhada;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (capa, contrafile);
+TACO;336;Carne, bovina, capa de contra-filé, sem gordura, crua;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (capa, contrafile);
+TACO;337;Carne, bovina, capa de contra-filé, sem gordura, grelhada;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (capa, contrafile);
+TACO;338;Carne, bovina, charque, cozido;8100102;Carne de charque;Cozido(a);MEDIA;;18;;;;28;56;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (bovina);
+TACO;343;Carne, bovina, contra-filé, com gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (contrafile);
+TACO;344;Carne, bovina, contra-filé, com gordura, grelhado;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (contrafile);
+TACO;345;Carne, bovina, contra-filé, sem gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (contrafile);
+TACO;346;Carne, bovina, contra-filé, sem gordura, grelhado;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (contrafile);
+TACO;340;Carne, bovina, contra-filé, à milanesa;7109101;Carne bovina;Não se aplica;MEDIA;;;;;;70;140;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (contrafile, milanesa);
+TACO;349;Carne, bovina, coxão duro, sem gordura, cozido;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (coxao, duro);
+TACO;350;Carne, bovina, coxão duro, sem gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (coxao, duro);
+TACO;351;Carne, bovina, coxão mole, sem gordura, cozido;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (coxao, mole);
+TACO;352;Carne, bovina, coxão mole, sem gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (coxao, mole);
+TACO;353;Carne, bovina, cupim, assado;7109101;Carne bovina;Assado(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (cupim);
+TACO;354;Carne, bovina, cupim, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (cupim);
+TACO;357;Carne, bovina, filé mingnon, sem gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (file, mingnon);
+TACO;358;Carne, bovina, filé mingnon, sem gordura, grelhado;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (file, mingnon);
+TACO;359;Carne, bovina, flanco, sem gordura, cozido;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (flanco);
+TACO;360;Carne, bovina, flanco, sem gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (flanco);
+TACO;361;Carne, bovina, fraldinha, com gordura, cozida;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (fraldinha);
+TACO;362;Carne, bovina, fraldinha, com gordura, crua;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (fraldinha);
+TACO;355;Carne, bovina, fígado, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (figado);
+TACO;356;Carne, bovina, fígado, grelhado;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (figado);
+TACO;363;Carne, bovina, lagarto, cozido;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (lagarto);
+TACO;364;Carne, bovina, lagarto, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (lagarto);
+TACO;365;Carne, bovina, língua, cozida;7102701;Língua bovina;Cozido(a);MEDIA;;;;;;;;;;;;;;;100;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (carne)";
+TACO;367;Carne, bovina, maminha, crua;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (maminha);
+TACO;368;Carne, bovina, maminha, grelhada;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (maminha);
+TACO;369;Carne, bovina, miolo de alcatra, sem gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (alcatra, miolo);
+TACO;370;Carne, bovina, miolo de alcatra, sem gordura, grelhado;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (alcatra, miolo);
+TACO;371;Carne, bovina, músculo, sem gordura, cozido;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (musculo);
+TACO;372;Carne, bovina, músculo, sem gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (musculo);
+TACO;373;Carne, bovina, paleta, com gordura, crua;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (paleta);
+TACO;374;Carne, bovina, paleta, sem gordura, cozida;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (paleta);
+TACO;375;Carne, bovina, paleta, sem gordura, crua;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (paleta);
+TACO;376;Carne, bovina, patinho, sem gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (patinho);
+TACO;377;Carne, bovina, patinho, sem gordura, grelhado;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (patinho);
+TACO;378;Carne, bovina, peito, sem gordura, cozido;7109101;Carne bovina;Cozido(a);MEDIA;;30;;;;70;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (peito);
+TACO;379;Carne, bovina, peito, sem gordura, cru;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (peito);
+TACO;380;Carne, bovina, picanha, com gordura, crua;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (picanha);
+TACO;381;Carne, bovina, picanha, com gordura, grelhada;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (picanha);
+TACO;382;Carne, bovina, picanha, sem gordura, crua;7109101;Carne bovina;Cru(a);MEDIA;;;;;;;140;70;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (picanha);
+TACO;383;Carne, bovina, picanha, sem gordura, grelhada;7109101;Carne bovina;Grelhado(a)/brasa/churrasco;MEDIA;;;;;;70;;;;;;;;;100;;nome do TACO tem detalhe que o IBGE não tem (picanha);
+TACO;384;Carne, bovina, seca, cozida;8100101;Carne seca;Cozido(a);MEDIA;;18;;;;28;56;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (bovina);
+TACO;583;Castanha-de-caju, torrada, salgada;6600801;Castanha de caju;Não se aplica;MEDIA;;;;;;;40;;;;2,5;;40;;;;nome do TACO tem detalhe que o IBGE não tem (salgada, torrada);
+TACO;21;Cereais, milho, flocos, com sal;6502102;Flocos de cereais;Não se aplica;MEDIA;;4;2;;;8;;;30;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (milho);
+TACO;22;Cereais, milho, flocos, sem sal;6502102;Flocos de cereais;Não se aplica;MEDIA;;4;2;;;8;;;30;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (milho);
+TACO;23;Cereais, mingau, milho, infantil;6500614;Mingau de milho;Não se aplica;MEDIA;;37;;;;55;110;;115;;;;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (cereai, infantil)";
+TACO;25;Cereal matinal, milho;8501402;Milho cozido;Não se aplica;MEDIA;;24;;;;60;120;48;;;100;50;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (cereal, matinal)";
+TACO;26;Cereal matinal, milho, açúcar;6906602;Açúcar;Não se aplica;MEDIA;;24;16;5;2;;;;;;;;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (cereal, matinal, milho)";
+TACO;517;Chantilly, spray, com gordura vegetal;7901101;Chantilly;Não se aplica;MEDIA;;25;;;;;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (spray, vegetal);
+TACO;527;Charuto, de repolho;6700901;Repolho;Não se aplica;MEDIA;;20;;;;45;;;;;;;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (charuto)";
+TACO;492;Chocolate, ao leite;8507601;Chocolate;Não se aplica;MEDIA;;;6,3;;;;;;;;170;6,3;;;;;"derivado/preparação (leite); nome do TACO tem detalhe que o IBGE não tem (ao, leite)";
+TACO;493;Chocolate, ao leite, com castanha do Pará;6600701;Castanha-do-pará;Não se aplica;MEDIA;;;;;;;;;;;4;;40;;;;"palavra principal do TACO não é a do IBGE; derivado/preparação (leite); nome do TACO tem detalhe que o IBGE não tem (ao, chocolate, leite)";
+TACO;494;Chocolate, ao leite, dietético;8507601;Chocolate;Não se aplica;MEDIA;;;6,3;;;;;;;;170;6,3;;;;;"derivado/preparação (leite); nome do TACO tem detalhe que o IBGE não tem (ao, dietetico, leite)";
+TACO;495;Chocolate, meio amargo;8507601;Chocolate;Não se aplica;MEDIA;;;6,3;;;;;;;;170;6,3;;;;;nome do TACO tem detalhe que o IBGE não tem (amargo, meio);
+TACO;472;Chá, erva-doce, infusão 5%;8206301;Chá (preto, camomila, erva cidreira, capim limão, etc.);Não se aplica;MEDIA;;;;;;;;;200;;240;;;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (doce, infusao)";
+TACO;473;Chá, mate, infusão 5%;8206301;Chá (preto, camomila, erva cidreira, capim limão, etc.);Não se aplica;MEDIA;;;;;;;;;200;;240;;;;;;nome do TACO tem detalhe que o IBGE não tem (infusao, mate);
+TACO;474;Chá, preto, infusão 5%;8206301;Chá (preto, camomila, erva cidreira, capim limão, etc.);Não se aplica;MEDIA;;;;;;;;;200;;240;;;;;;nome do TACO tem detalhe que o IBGE não tem (infusao);
+TACO;496;Cocada branca;6903101;Cocada;Não se aplica;MEDIA;;50;30;;;;;;;;70;;;;;;nome do TACO tem detalhe que o IBGE não tem (branca);
+TACO;114;Coentro, folhas desidratadas;7002601;Coentro;Não se aplica;MEDIA;;8;;;;;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (desidratada, folha);
+TACO;115;Couve, manteiga, crua;6700501;Couve;Cru(a);MEDIA;;20;;5;;42;84;42;;;;;;;;;"derivado/preparação (manteiga); nome do TACO tem detalhe que o IBGE não tem (manteiga)";
+TACO;116;Couve, manteiga, refogada;6700501;Couve;Refogado(a);MEDIA;;20;10;5;;42;84;42;84;;;;;;;;"derivado/preparação (manteiga); nome do TACO tem detalhe que o IBGE não tem (manteiga)";
+TACO;27;Creme de arroz, pó;6500101;Creme de arroz;Não se aplica;MEDIA;;;;;;;110;;115;;;;;;;;"derivado/preparação (po); nome do TACO tem detalhe que o IBGE não tem (po)";
+TACO;28;Creme de milho, pó;6500804;Creme de milho;Não se aplica;MEDIA;;33;27;13,5;;67;110;;;;;;;;;;"derivado/preparação (po); nome do TACO tem detalhe que o IBGE não tem (po)";
+TACO;193;Cupuaçu, polpa, congelada;6807301;Cupuaçu;Não se aplica;MEDIA;;20;;;;;;;;;;;;;;;"derivado/preparação (polpa); nome do TACO tem detalhe que o IBGE não tem (congelada, polpa)";
+TACO;29;Curau, milho verde;8501904;Curau;Não se aplica;MEDIA;;35;;;;;;;;;;150;;;;;nome do TACO tem detalhe que o IBGE não tem (milho, verde);
+TACO;30;Curau, milho verde, mistura para;8501904;Curau;Não se aplica;MEDIA;;35;;;;;;;;;;150;;;;;"derivado/preparação (mistura); nome do TACO tem detalhe que o IBGE não tem (milho, mistura, verde)";
+TACO;530;Cuxá, molho;6701906;Cuxá;Não se aplica;MEDIA;;20;;5;;42;;;;;;;;;;;"derivado/preparação (molho); nome do TACO tem detalhe que o IBGE não tem (molho)";
+TACO;497;Doce, de abóbora, cremoso;6703901;Abóbora;Não se aplica;MEDIA;;36;;;;;;;;;;;;;;;"palavra principal do TACO não é a do IBGE; derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (cremoso, doce)";
+TACO;498;Doce, de leite, cremoso;7903101;Leite com sabor;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;"palavra principal do TACO não é a do IBGE; derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (cremoso, doce)";
+TACO;119;Espinafre, Nova Zelândia, cru;6700701;Espinafre;Cru(a);MEDIA;;25;;;;;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (nova, zelandia);
+TACO;120;Espinafre, Nova Zelândia, refogado;6700701;Espinafre;Refogado(a);MEDIA;;25;12,5;;;;;50;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (nova, zelandia);
+TACO;31;Farinha, de arroz, enriquecida;6300101;Arroz (polido, parboilizado);Não se aplica;MEDIA;;25;12,5;6,3;3,1;45;100;85;100;;;;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (enriquecida, farinha)";
+TACO;122;Farinha, de mandioca, torrada;6501401;Farinha de mandioca;Não se aplica;MEDIA;;16;10;5;3;33;110;;148;;;;23;;;;nome do TACO tem detalhe que o IBGE não tem (torrada);
+TACO;33;Farinha, de milho, amarela;6500603;Farinha de milho;Não se aplica;MEDIA;;12;6;3;;24;48;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (amarela);
+TACO;36;Farinha, láctea, de cereais;6502001;Farinha láctea;Não se aplica;MEDIA;;20;10;;;40;80;;41,7;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (cereai);
+TACO;534;Feijão tropeiro mineiro;8506101;Feijão tropeiro;Não se aplica;MEDIA;;17;;;;35;140;70;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (mineiro);
+TACO;195;Figo, enlatado, em calda;6802901;Figo;Não se aplica;MEDIA;;;;;;;;;;;55;;;;;;nome do TACO tem detalhe que o IBGE não tem (calda, enlatado);
+TACO;124;Fécula, de mandioca;6400601;Mandioca;Não se aplica;MEDIA;;;;;;60;;;;;;100;;;;;"palavra principal do TACO não é a do IBGE; derivado/preparação (fecula); nome do TACO tem detalhe que o IBGE não tem (fecula)";
+TACO;512;Gelatina, sabores variados, pó;6901701;Gelatina de qualquer sabor;Não se aplica;MEDIA;;25;12,5;;;50;;;110;;110;25;;;;;"derivado/preparação (po); nome do TACO tem detalhe que o IBGE não tem (po, sabore, variado)";
+TACO;499;Geléia, mocotó, natural;6901101;Geleia de mocotó;Não se aplica;MEDIA;;;;;;;;;;;200;34;;;;;nome do TACO tem detalhe que o IBGE não tem (natural);
+TACO;500;Glicose de milho;8501402;Milho cozido;Não se aplica;MEDIA;;24;;;;60;120;48;;;100;50;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (glicose)";
+TACO;198;Goiaba, doce em pasta;6804201;Goiaba;Não se aplica;MEDIA;;;;;;;;;;;170;42,5;;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (doce, pasta)";
+TACO;199;Goiaba, doce, cascão;6804201;Goiaba;Não se aplica;MEDIA;;;;;;;;;;;170;42,5;;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (cascao, doce)";
+TACO;202;Graviola, polpa, congelada;6805001;Graviola;Não se aplica;MEDIA;;;;;;;;;;;227;56,75;;;;;"derivado/preparação (polpa); nome do TACO tem detalhe que o IBGE não tem (congelada, polpa)";
+TACO;449;Iogurte, natural, desnatado;7901204;Iogurte natural;Não se aplica;MEDIA;;15;;;;;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (desnatado);
+TACO;450;Iogurte, sabor morango;7901201;Iogurte de qualquer sabor;Não se aplica;MEDIA;;15;;;;;;;200;;;;;;;;"ambíguo: Morango; nome do TACO tem detalhe que o IBGE não tem (morango)";
+TACO;451;Iogurte, sabor pêssego;6803701;Pêssego;Não se aplica;MEDIA;;;;;;;;;;;60;15;;;;;"palavra principal do TACO não é a do IBGE; derivado/preparação (iogurte); nome do TACO tem detalhe que o IBGE não tem (iogurte)";
+TACO;209;Laranja, baía, suco;8500407;Suco de laranja;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (baia);
+TACO;211;Laranja, da terra, suco;8500407;Suco de laranja;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (terra);
+TACO;213;Laranja, lima, suco;8500407;Suco de laranja;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (lima);
+TACO;215;Laranja, pêra, suco;8500407;Suco de laranja;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (pera);
+TACO;217;Laranja, valência, suco;8500407;Suco de laranja;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (valencia);
+TACO;454;Leite, de vaca, achocolatado;7903102;Leite achocolatado;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (vaca);
+TACO;455;Leite, de vaca, desnatado, pó;7903601;Leite de vaca desnatado;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;"ambíguo: Leite em pó desnatado; derivado/preparação (po); nome do TACO tem detalhe que o IBGE não tem (po)";
+TACO;456;Leite, de vaca, integral, pó;7900101;Leite de vaca integral;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;"ambíguo: Leite em pó integral; derivado/preparação (po); nome do TACO tem detalhe que o IBGE não tem (po)";
+TACO;218;Limão, cravo, suco;6802001;Limão (comum, galego, etc.);Não se aplica;MEDIA;;;;;;;;;;16,8;84;16,8;;;;;"derivado/preparação (suco); nome do TACO tem detalhe que o IBGE não tem (cravo, suco)";
+TACO;219;Limão, galego, suco;6802001;Limão (comum, galego, etc.);Não se aplica;MEDIA;;;;;;;;;;16,8;84;16,8;;;;;"derivado/preparação (suco); nome do TACO tem detalhe que o IBGE não tem (suco)";
+TACO;422;Lingüiça, porco, frita;8102204;Linguiça (suína, bovina, mista, etc.);Frito(a);MEDIA;;22;;;;36;72;36;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (porco);
+TACO;537;Macarrão, molho bolognesa;6503401;Macarrão;Não se aplica;MEDIA;;25;;;;50;110;110;;;;;;;;;"derivado/preparação (molho); nome do TACO tem detalhe que o IBGE não tem (bolognesa, molho)";
+TACO;40;Macarrão, trigo, cru;6503401;Macarrão;Cru(a);MEDIA;;25;;;;50;110;110;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (trigo);
+TACO;41;Macarrão, trigo, cru, com ovos;6503401;Macarrão;Cru(a);MEDIA;;25;;;;50;110;110;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (ovo, trigo);
+TACO;519;Maionese, tradicional com ovos;7004301;Maionese (molho);Não se aplica;MEDIA;;27;17;6;3;50;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (ovo, tradicional);
+TACO;227;Mamão verde, doce em calda, drenado;6803101;Mamão;Não se aplica;MEDIA;;40;;;;70;140;;;170;310;120;;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (calda, doce, verde)";
+TACO;224;Mamão, doce em calda, drenado;6803101;Mamão;Não se aplica;MEDIA;;40;;;;70;140;;;170;310;120;;;;;"derivado/preparação (doce); nome do TACO tem detalhe que o IBGE não tem (calda, doce)";
+TACO;131;Mandioca, farofa, temperada;8502201;Farofa;Não se aplica;MEDIA;;15;10;5;2,5;45;58;58;58;;;;;;;;"ambíguo: Mandioca; palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (mandioca, temperada)";
+TACO;230;Manga, polpa, congelada;6803201;Manga;Não se aplica;MEDIA;;22;;;;44;;;;22;140;22;;;;;"derivado/preparação (polpa); nome do TACO tem detalhe que o IBGE não tem (congelada, polpa)";
+TACO;233;Maracujá, polpa, congelada;6803301;Maracujá;Não se aplica;MEDIA;;;;;;;;;;;45;;;;;;"derivado/preparação (polpa); nome do TACO tem detalhe que o IBGE não tem (congelada, polpa)";
+TACO;234;Maracujá, suco concentrado, envasado;8500414;Suco de maracujá;Não se aplica;MEDIA;;;;;;;;;200;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (concentrado);
+TACO;263;Margarina, com óleo hidrogenado, com sal (65% de lipídeos);7901602;Margarina com ou sem sal;Não se aplica;MEDIA;;32;23;8;4;64;64;;155;32;;;;;;;nome do TACO tem detalhe que o IBGE não tem (hidrogenado, lipideo, oleo);
+TACO;264;Margarina, com óleo hidrogenado, sem sal (80% de lipídeos);7901602;Margarina com ou sem sal;Não se aplica;MEDIA;;32;23;8;4;64;64;;155;32;;;;;;;nome do TACO tem detalhe que o IBGE não tem (hidrogenado, lipideo, oleo);
+TACO;265;Margarina, com óleo interesterificado, com sal (65%de lipídeos);7901602;Margarina com ou sem sal;Não se aplica;MEDIA;;32;23;8;4;64;64;;155;32;;;;;;;nome do TACO tem detalhe que o IBGE não tem (interesterificado, lipideo, oleo);
+TACO;266;Margarina, com óleo interesterificado, sem sal (65% de lipídeos);7901602;Margarina com ou sem sal;Não se aplica;MEDIA;;32;23;8;4;64;64;;155;32;;;;;;;nome do TACO tem detalhe que o IBGE não tem (interesterificado, lipideo, oleo);
+TACO;502;Maria mole, coco queimado;6903001;Maria mole;Não se aplica;MEDIA;;;;;;;;;;;;90;;;;;nome do TACO tem detalhe que o IBGE não tem (coco, queimado);
+TACO;504;Mel, de abelha;6901602;Mel;Não se aplica;MEDIA;;15;9;3;2;30;;;200;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (abelha);
+TACO;45;Milho, verde, enlatado, drenado;8501402;Milho cozido;Não se aplica;MEDIA;;24;;;;60;120;48;;;100;50;;;;;nome do TACO tem detalhe que o IBGE não tem (enlatado, verde);
+TACO;46;Mingau tradicional, pó;8502301;Mingau (fubá, aveia, farinha, etc.);Não se aplica;MEDIA;;37;27;;;55;110;;115;;;;;;;;"derivado/preparação (po); nome do TACO tem detalhe que o IBGE não tem (po, tradicional)";
+TACO;135;Mostarda, folha, crua;6700801;Mostarda (verdura);Cru(a);MEDIA;;45;;;;;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (folha);
+TACO;481;Omelete, de queijo;8506501;Omelete;Não se aplica;MEDIA;;15;7,5;;;45;;45;;10;65;25;;;;;"derivado/preparação (queijo); nome do TACO tem detalhe que o IBGE não tem (queijo)";
+TACO;483;Ovo, de galinha, clara, cozida/10minutos;7803301;Ovo de galinha;Cozido(a);MEDIA;;15;;;;45;;;;;;;;;;;"derivado/preparação (clara); nome do TACO tem detalhe que o IBGE não tem (10minuto, clara)";
+TACO;484;Ovo, de galinha, gema, cozida/10minutos;7803301;Ovo de galinha;Cozido(a);MEDIA;;15;;;;45;;;;;;;;;;;"derivado/preparação (gema); nome do TACO tem detalhe que o IBGE não tem (10minuto, gema)";
+TACO;485;Ovo, de galinha, inteiro, cozido/10minutos;7803301;Ovo de galinha;Cozido(a);MEDIA;;15;;;;45;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (10minuto, inteiro);
+TACO;487;Ovo, de galinha, inteiro, frito;7803301;Ovo de galinha;Frito(a);MEDIA;;15;;;;45;;45;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (inteiro);
+TACO;138;Palmito, juçara, em conserva;7700501;Palmito em conserva;Não se aplica;MEDIA;;15;;;;30;60;30;;;100;;;;;;nome do TACO tem detalhe que o IBGE não tem (jucara);
+TACO;139;Palmito, pupunha, em conserva;7700501;Palmito em conserva;Não se aplica;MEDIA;;15;;;;30;60;30;;;100;;;;;;nome do TACO tem detalhe que o IBGE não tem (pupunha);
+TACO;47;Pamonha, barra para cozimento, pré-cozida;6905101;Pamonha;Não se aplica;MEDIA;;;;;;;;;;40;160;40;;;;;nome do TACO tem detalhe que o IBGE não tem (barra, cozimento, pre);
+TACO;574;Paçoca, amendoim;6903203;Paçoca;Não se aplica;MEDIA;;50;;;;100;;;;;30;;;;;;nome do TACO tem detalhe que o IBGE não tem (amendoim);
+TACO;61;Pipoca, com óleo de soja, sem sal;8400301;Óleo de soja;Não se aplica;MEDIA;;8;;2;1;;32;;;;;;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (pipoca)";
+TACO;248;Pitanga, polpa, congelada;6806801;Pitanga;Não se aplica;MEDIA;;;;;;;;;;;10;;;;;;"derivado/preparação (polpa); nome do TACO tem detalhe que o IBGE não tem (congelada, polpa)";
+TACO;62;Polenta, pré-cozida;8500218;Polenta;Não se aplica;MEDIA;;35;17,5;;;60;150;150;;;;150;;;;;nome do TACO tem detalhe que o IBGE não tem (pre);
+TACO;435;Porco, pernil, assado;7106301;Pernil;Assado(a);MEDIA;;;;;;;;;;;;;;;100;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (porco)";
+TACO;51;Pão, milho, forma;8001101;Pão de milho;Não se aplica;MEDIA;;;;;;;;;;35;70;;;;;;nome do TACO tem detalhe que o IBGE não tem (forma);
+TACO;52;Pão, trigo, forma, integral;8001401;Pão integral;Não se aplica;MEDIA;;;;;;;;;;25;;;;;;;nome do TACO tem detalhe que o IBGE não tem (forma, trigo);
+TACO;575;Pé-de-moleque, amendoim;6903202;Pé de moleque;Não se aplica;MEDIA;;;;;;;;;;;17;;;;;;nome do TACO tem detalhe que o IBGE não tem (amendoim);
+TACO;245;Pêssego, enlatado, em calda;6803701;Pêssego;Não se aplica;MEDIA;;;;;;;;;;;60;15;;;;;nome do TACO tem detalhe que o IBGE não tem (calda, enlatado);
+TACO;458;Queijo, minas, frescal;7902001;Queijo de minas;Não se aplica;MEDIA;;;;;;;;;;45;;;;;;;nome do TACO tem detalhe que o IBGE não tem (frescal);
+TACO;459;Queijo, minas, meia cura;7902001;Queijo de minas;Não se aplica;MEDIA;;;;;;;;;;45;;;;;;;nome do TACO tem detalhe que o IBGE não tem (cura, meia);
+TACO;463;Queijo, petit suisse, morango;6805201;Morango;Não se aplica;MEDIA;;;;;;;;;120;;12;;;;;;"palavra principal do TACO não é a do IBGE; derivado/preparação (queijo); nome do TACO tem detalhe que o IBGE não tem (petit, queijo, suisse)";
+TACO;465;Queijo, requeijão, cremoso;7902902;Queijo cremoso;Não se aplica;MEDIA;;30;15;;;60;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (requeijao);
+TACO;479;Refrigerante, tipo laranja;6801801;Laranja (pera, seleta, lima, da terra, etc.);Não se aplica;MEDIA;;;;;;;;;;18;180;18;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (refrigerante)";
+TACO;480;Refrigerante, tipo limão;6802001;Limão (comum, galego, etc.);Não se aplica;MEDIA;;;;;;;;;;16,8;84;16,8;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (refrigerante)";
+TACO;149;Repolho, branco, cru;6700901;Repolho;Cru(a);MEDIA;;10;5;2,5;;25;50;25;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (branco);
+TACO;150;Repolho, roxo, cru;6700901;Repolho;Cru(a);MEDIA;;10;5;2,5;;25;50;25;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (roxo);
+TACO;151;Repolho, roxo, refogado;6700901;Repolho;Refogado(a);MEDIA;;20;5;2,5;;45;50;45;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (roxo);
+TACO;540;Salada, de legumes, com maionese;8500802;Salada de maionese;Não se aplica;MEDIA;;38;19;9,5;;70;90;90;90;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (legume);
+TACO;542;Salpicão, de frango;8504801;Salpicão;Não se aplica;MEDIA;;25;;6,3;;40;50;50;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (frango);
+TACO;319;Sardinha, conserva em óleo;7703002;Sardinha em conserva;Não se aplica;MEDIA;;16;10;;;32;;;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (oleo);
+TACO;579;Soja, queijo (tofu);7903402;Tofu;Não se aplica;MEDIA;;;;;;;;;;20;;;;;;;"palavra principal do TACO não é a do IBGE; derivado/preparação (queijo); nome do TACO tem detalhe que o IBGE não tem (queijo, soja)";
+TACO;252;Tangerina, Poncã, suco;6802201;Tangerina;Não se aplica;MEDIA;;;;;;;;;;;135;;;;;;"derivado/preparação (suco); nome do TACO tem detalhe que o IBGE não tem (ponca, suco)";
+TACO;158;Tomate, extrato;6705101;Tomate;Não se aplica;MEDIA;;30;15;7,5;;60;120;60;;15;100;15;;;;;nome do TACO tem detalhe que o IBGE não tem (extrato);
+TACO;159;Tomate, molho industrializado;7004801;Molho de tomate;Não se aplica;MEDIA;;20;17;8,5;;45;80;45;;;;;;;;;nome do TACO tem detalhe que o IBGE não tem (industrializado);
+TACO;160;Tomate, purê;6705101;Tomate;Não se aplica;MEDIA;;30;15;7,5;;60;120;60;;15;100;15;;;;;"derivado/preparação (pure); nome do TACO tem detalhe que o IBGE não tem (pure)";
+TACO;161;Tomate, salada;6705101;Tomate;Não se aplica;MEDIA;;30;15;7,5;;60;120;60;;15;100;15;;;;;"derivado/preparação (salada); nome do TACO tem detalhe que o IBGE não tem (salada)";
+TACO;63;Torrada, pão francês;8001901;Torrada de qualquer pão;Não se aplica;MEDIA;;;;;;;;;;;8;;;;;;nome do TACO tem detalhe que o IBGE não tem (france);
+TACO;255;Umbu, polpa, congelada;6807101;Umbu;Não se aplica;MEDIA;;;;;;;;;;;33,33;;;;;;"derivado/preparação (polpa); nome do TACO tem detalhe que o IBGE não tem (congelada, polpa)";
+TACO;258;Uva, suco concentrado, envasado;6803901;Uva;Não se aplica;MEDIA;;;;;;;;;;;8;;170;;;;"derivado/preparação (suco); nome do TACO tem detalhe que o IBGE não tem (concentrado, suco)";
+TACO;270;Óleo, de milho;8501402;Milho cozido;Não se aplica;MEDIA;;24;;;;60;120;48;;;100;50;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (oleo)";
+TACO;271;Óleo, de pequi;6806701;Pequi;Não se aplica;MEDIA;;;;;;;;;;;3,75;;;;;;"palavra principal do TACO não é a do IBGE; nome do TACO tem detalhe que o IBGE não tem (oleo)";

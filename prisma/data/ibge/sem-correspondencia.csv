@@ -1,0 +1,331 @@
+﻿origem;chave;alimento;motivo
+CUSTOM;custom-albumina;Albumina;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-bcaa-em-pó;BCAA em Pó;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-barra-de-proteína-bold;Barra de Proteína Bold;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-caseína;Caseína;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-chia;Chia;sem equivalente na tabela do IBGE
+CUSTOM;custom-clara-de-ovo;Clara de Ovo;sem equivalente na tabela do IBGE
+CUSTOM;custom-creatina;Creatina;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-dextrose;Dextrose;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-glutamina-em-pó;Glutamina em Pó;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-hipercalórico-genérico-;Hipercalórico (Genérico);suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-maltodextrina;Maltodextrina;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-massa-de-crepioca;Massa de Crepioca;sem equivalente na tabela do IBGE
+CUSTOM;custom-pasta-de-amendoim;Pasta de Amendoim;sem equivalente na tabela do IBGE
+CUSTOM;custom-peito-de-frango-fatiado;Peito de Frango Fatiado;sem equivalente na tabela do IBGE
+CUSTOM;custom-pão-sírio;Pão Sírio;sem equivalente na tabela do IBGE
+CUSTOM;custom-queijo-cottage-tradicional;Queijo Cottage Tradicional;sem equivalente na tabela do IBGE
+CUSTOM;custom-queijo-cottage-zero-lactose;Queijo Cottage Zero Lactose;sem equivalente na tabela do IBGE
+CUSTOM;custom-rap10;Rap10;sem equivalente na tabela do IBGE
+CUSTOM;custom-refrigerante-zero;Refrigerante Zero;sem equivalente na tabela do IBGE
+CUSTOM;custom-suco-clight-zero;Suco Clight/Zero;sem equivalente na tabela do IBGE
+CUSTOM;custom-whey-protein-concentrado;Whey Protein Concentrado;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-whey-protein-hidrolisado;Whey Protein Hidrolisado;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-whey-protein-isolado;Whey Protein Isolado;suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-wrap-integral;Wrap Integral;sem equivalente na tabela do IBGE
+CUSTOM;custom-yopro-15g-bebida-láctea-;YoPRO 15g (Bebida Láctea);suplemento/produto de marca: o IBGE não tem
+CUSTOM;custom-yopro-25g-bebida-láctea-;YoPRO 25g (Bebida Láctea);suplemento/produto de marca: o IBGE não tem
+TACO;1;Arroz, integral, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;2;Arroz, integral, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;3;Arroz, tipo 1, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;4;Arroz, tipo 1, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;5;Arroz, tipo 2, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;6;Arroz, tipo 2, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;7;Aveia, flocos, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;14;Bolo, mistura para;não achei alimento equivalente no IBGE
+TACO;19;Canjica, branca, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;24;Cereais, mistura para vitamina, trigo, cevada e aveia;não achei alimento equivalente no IBGE
+TACO;32;Farinha, de centeio, integral;não achei alimento equivalente no IBGE
+TACO;34;Farinha, de rosca;não achei alimento equivalente no IBGE
+TACO;35;Farinha, de trigo;não achei alimento equivalente no IBGE
+TACO;37;Lasanha, massa fresca, cozida;não achei alimento equivalente no IBGE
+TACO;38;Lasanha, massa fresca, crua;não achei alimento equivalente no IBGE
+TACO;42;Milho, amido, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;43;Milho, fubá, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;44;Milho, verde, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;48;Pão, aveia, forma;não achei alimento equivalente no IBGE
+TACO;49;Pão, de soja;não achei alimento equivalente no IBGE
+TACO;50;Pão, glúten, forma;não achei alimento equivalente no IBGE
+TACO;53;Pão, trigo, francês;não achei alimento equivalente no IBGE
+TACO;54;Pão, trigo, sovado;não achei alimento equivalente no IBGE
+TACO;55;Pastel, de carne, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;56;Pastel, de carne, frito;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;57;Pastel, de queijo, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;58;Pastel, de queijo, frito;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;59;Pastel, massa, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;60;Pastel, massa, frita;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;67;Abóbora, moranga, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;76;Aipo, cru;não achei alimento equivalente no IBGE
+TACO;77;Alface, americana, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;78;Alface, crespa, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;79;Alface, lisa, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;80;Alface, roxa, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;81;Alfavaca, crua;não achei alimento equivalente no IBGE
+TACO;82;Alho, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;83;Alho-poró, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;90;Batata, frita, tipo chips, industrializada;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;92;Batata, inglesa, crua;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;103;Cará, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;104;Caruru, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;105;Catalonha, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;106;Catalonha, refogada;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;108;Cebolinha, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;121;Farinha, de mandioca, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;123;Farinha, de puba;não achei alimento equivalente no IBGE
+TACO;125;Feijão, broto, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;128;Jurubeba, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;133;Manjericão, cru;não achei alimento equivalente no IBGE
+TACO;136;Nhoque, batata, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;137;Nabo, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;140;Pão, de queijo, assado;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;141;Pão, de queijo, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;142;Pepino, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;143;Pimentão, amarelo, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;144;Pimentão, verde, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;145;Pimentão, vermelho, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;146;Polvilho, doce;não achei alimento equivalente no IBGE
+TACO;152;Rúcula, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;153;Salsa, crua;não achei alimento equivalente no IBGE
+TACO;154;Seleta de legumes, enlatada;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;157;Tomate, com semente, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;163;Abacate, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;164;Abacaxi, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;166;Abiu, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;169;Acerola, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;172;Ameixa, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;174;Atemóia, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;177;Banana, figo, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;178;Banana, maçã, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;181;Banana, pacova, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;183;Cacau, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;184;Cajá-Manga, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;185;Cajá, polpa, congelada;não achei alimento equivalente no IBGE
+TACO;186;Caju, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;189;Caqui, chocolate, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;190;Carambola, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;191;Ciriguela, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;192;Cupuaçu, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;194;Figo, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;196;Fruta-pão, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;197;Goiaba, branca, com casca, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;200;Goiaba, vermelha, com casca, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;201;Graviola, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;203;Jabuticaba, crua;não achei alimento equivalente no IBGE
+TACO;204;Jaca, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;205;Jambo, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;206;Jamelão, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;207;Kiwi, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;208;Laranja, baía, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;210;Laranja, da terra, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;212;Laranja, lima, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;214;Laranja, pêra, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;216;Laranja, valência, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;220;Limão, tahiti, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;221;Maçã, Argentina, com casca, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;222;Maçã, Fuji, com casca, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;223;Macaúba, crua;não achei alimento equivalente no IBGE
+TACO;225;Mamão, Formosa, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;226;Mamão, Papaia, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;228;Manga, Haden, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;229;Manga, Palmer, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;231;Manga, Tommy Atkins, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;232;Maracujá, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;235;Melancia, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;236;Melão, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;237;Mexerica, Murcote, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;238;Mexerica, Rio, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;239;Morango, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;240;Nêspera, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;241;Pequi, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;242;Pêra, Park, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;243;Pêra, Williams, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;244;Pêssego, Aurora, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;246;Pinha, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;247;Pitanga, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;249;Romã, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;250;Tamarindo, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;251;Tangerina, Poncã, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;253;Tucumã, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;254;Umbu, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;256;Uva, Itália, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;257;Uva, Rubi, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;259;Azeite, de dendê;não achei alimento equivalente no IBGE
+TACO;267;Óleo, de babaçu;não achei alimento equivalente no IBGE
+TACO;268;Óleo, de canola;não achei alimento equivalente no IBGE
+TACO;269;Óleo, de girassol;não achei alimento equivalente no IBGE
+TACO;273;Abadejo, filé, congelado, assado;não achei alimento equivalente no IBGE
+TACO;274;Abadejo, filé, congelado,cozido;não achei alimento equivalente no IBGE
+TACO;275;Abadejo, filé, congelado, cru;não achei alimento equivalente no IBGE
+TACO;276;Abadejo, filé, congelado, grelhado;não achei alimento equivalente no IBGE
+TACO;278;Atum, fresco, cru;não achei alimento equivalente no IBGE
+TACO;279;Bacalhau, salgado, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;281;Cação, posta, com farinha de trigo, frita;não achei alimento equivalente no IBGE
+TACO;282;Cação, posta, cozida;não achei alimento equivalente no IBGE
+TACO;283;Cação, posta, crua;não achei alimento equivalente no IBGE
+TACO;287;Caranguejo, cozido;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;288;Corimba, cru;não achei alimento equivalente no IBGE
+TACO;289;Corimbatá, assado;não achei alimento equivalente no IBGE
+TACO;290;Corimbatá, cozido;não achei alimento equivalente no IBGE
+TACO;291;Corvina de água doce, crua;não achei alimento equivalente no IBGE
+TACO;292;Corvina do mar, crua;não achei alimento equivalente no IBGE
+TACO;293;Corvina grande, assada;não achei alimento equivalente no IBGE
+TACO;294;Corvina grande, cozida;não achei alimento equivalente no IBGE
+TACO;295;Dourada de água doce, fresca;não achei alimento equivalente no IBGE
+TACO;296;Lambari, congelado, cru;não achei alimento equivalente no IBGE
+TACO;297;Lambari, congelado, frito;não achei alimento equivalente no IBGE
+TACO;298;Lambari, fresco, cru;não achei alimento equivalente no IBGE
+TACO;299;Manjuba, com farinha de trigo, frita;não achei alimento equivalente no IBGE
+TACO;300;Manjuba, frita;não achei alimento equivalente no IBGE
+TACO;301;Merluza, filé, assado;não achei alimento equivalente no IBGE
+TACO;302;Merluza, filé, cru;não achei alimento equivalente no IBGE
+TACO;303;Merluza, filé, frito;não achei alimento equivalente no IBGE
+TACO;304;Pescada, branca, crua;não achei alimento equivalente no IBGE
+TACO;305;Pescada, branca, frita;não achei alimento equivalente no IBGE
+TACO;306;Pescada, filé, com farinha de trigo, frito;não achei alimento equivalente no IBGE
+TACO;307;Pescada, filé, cru;não achei alimento equivalente no IBGE
+TACO;308;Pescada, filé, frito;não achei alimento equivalente no IBGE
+TACO;309;Pescada, filé, molho escabeche;não achei alimento equivalente no IBGE
+TACO;310;Pescadinha, crua;não achei alimento equivalente no IBGE
+TACO;311;Pintado, assado;não achei alimento equivalente no IBGE
+TACO;312;Pintado, cru;não achei alimento equivalente no IBGE
+TACO;313;Pintado, grelhado;não achei alimento equivalente no IBGE
+TACO;314;Porquinho, cru;não achei alimento equivalente no IBGE
+TACO;315;Salmão, filé, com pele, fresco,  grelhado;não achei alimento equivalente no IBGE
+TACO;316;Salmão, sem pele, fresco, cru;não achei alimento equivalente no IBGE
+TACO;317;Salmão, sem pele, fresco, grelhado;não achei alimento equivalente no IBGE
+TACO;318;Sardinha, assada;não achei alimento equivalente no IBGE
+TACO;320;Sardinha, frita;não achei alimento equivalente no IBGE
+TACO;321;Sardinha, inteira, crua;não achei alimento equivalente no IBGE
+TACO;322;Tucunaré, filé, congelado, cru;não achei alimento equivalente no IBGE
+TACO;323;Apresuntado;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;325;Caldo de galinha, tablete;não achei alimento equivalente no IBGE
+TACO;339;Carne, bovina, charque, cru;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;341;Carne, bovina, contra-filé de costela, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;342;Carne, bovina, contra-filé de costela, grelhado;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;347;Carne, bovina, costela, assada;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;348;Carne, bovina, costela, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;366;Carne, bovina, língua, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;385;Carne, bovina, seca, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;386;Coxinha de frango, frita;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;387;Croquete, de carne, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;388;Croquete, de carne, frito;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;389;Empada de frango, pré-cozida, assada;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;390;Empada, de frango, pré-cozida;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;391;Frango, asa, com pele, crua;não achei alimento equivalente no IBGE
+TACO;392;Frango, caipira, inteiro, com pele, cozido;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;393;Frango, caipira, inteiro, sem pele, cozido;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;394;Frango, coração, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;395;Frango, coração, grelhado;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;396;Frango, coxa, com pele, assada;não achei alimento equivalente no IBGE
+TACO;397;Frango, coxa, com pele, crua;não achei alimento equivalente no IBGE
+TACO;398;Frango, coxa, sem pele, cozida;não achei alimento equivalente no IBGE
+TACO;399;Frango, coxa, sem pele, crua;não achei alimento equivalente no IBGE
+TACO;400;Frango, fígado, cru;não achei alimento equivalente no IBGE
+TACO;401;Frango, filé, à milanesa;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;402;Frango, inteiro, com pele, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;403;Frango, inteiro, sem pele, assado;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;404;Frango, inteiro, sem pele, cozido;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;405;Frango, inteiro, sem pele, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;406;Frango, peito, com pele, assado;não achei alimento equivalente no IBGE
+TACO;407;Frango, peito, com pele, cru;não achei alimento equivalente no IBGE
+TACO;408;Frango, peito, sem pele, cozido;não achei alimento equivalente no IBGE
+TACO;409;Frango, peito, sem pele, cru;não achei alimento equivalente no IBGE
+TACO;410;Frango, peito, sem pele, grelhado;não achei alimento equivalente no IBGE
+TACO;411;Frango, sobrecoxa, com pele, assada;não achei alimento equivalente no IBGE
+TACO;412;Frango, sobrecoxa, com pele, crua;não achei alimento equivalente no IBGE
+TACO;413;Frango, sobrecoxa, sem pele, assada;não achei alimento equivalente no IBGE
+TACO;414;Frango, sobrecoxa, sem pele, crua;não achei alimento equivalente no IBGE
+TACO;415;Hambúrguer, bovino, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;416;Hambúrguer, bovino, frito;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;417;Hambúrguer, bovino, grelhado;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;418;Lingüiça, frango, crua;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;419;Lingüiça, frango, frita;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;420;Lingüiça, frango, grelhada;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;421;Lingüiça, porco, crua;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;423;Lingüiça, porco, grelhada;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;424;Mortadela;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;425;Peru, congelado, assado;não achei alimento equivalente no IBGE
+TACO;426;Peru, congelado, cru;não achei alimento equivalente no IBGE
+TACO;427;Porco, bisteca, crua;não achei alimento equivalente no IBGE
+TACO;428;Porco, bisteca, frita;não achei alimento equivalente no IBGE
+TACO;429;Porco, bisteca, grelhada;não achei alimento equivalente no IBGE
+TACO;430;Porco, costela, assada;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;431;Porco, costela, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;432;Porco, lombo, assado;não achei alimento equivalente no IBGE
+TACO;433;Porco, lombo, cru;não achei alimento equivalente no IBGE
+TACO;434;Porco, orelha, salgada, crua;não achei alimento equivalente no IBGE
+TACO;436;Porco, pernil, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;437;Porco, rabo, salgado, cru;não achei alimento equivalente no IBGE
+TACO;438;Presunto, com capa de gordura;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;439;Presunto, sem capa de gordura;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;440;Quibe, assado;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;441;Quibe, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;442;Quibe, frito;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;443;Salame;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;444;Toucinho, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;445;Toucinho, frito;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;460;Queijo, mozarela;não achei alimento equivalente no IBGE
+TACO;461;Queijo, parmesão;não achei alimento equivalente no IBGE
+TACO;462;Queijo, pasteurizado;não achei alimento equivalente no IBGE
+TACO;467;Bebida isotônica, sabores variados;não achei alimento equivalente no IBGE
+TACO;469;Cana, aguardente 1;não achei alimento equivalente no IBGE
+TACO;471;Cerveja, pilsen 2;não achei alimento equivalente no IBGE
+TACO;476;Refrigerante, tipo água tônica;não achei alimento equivalente no IBGE
+TACO;477;Refrigerante, tipo cola;não achei alimento equivalente no IBGE
+TACO;478;Refrigerante, tipo guaraná;não achei alimento equivalente no IBGE
+TACO;482;Ovo, de codorna, inteiro, cru;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;486;Ovo, de galinha, inteiro, cru;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;509;Capuccino, pó;não achei alimento equivalente no IBGE
+TACO;510;Fermento em pó, químico;não achei alimento equivalente no IBGE
+TACO;511;Fermento, biológico, levedura, tablete;não achei alimento equivalente no IBGE
+TACO;513;Shoyu;não achei alimento equivalente no IBGE
+TACO;514;Tempero a base de sal;não achei alimento equivalente no IBGE
+TACO;523;Barreado;não achei alimento equivalente no IBGE
+TACO;524;Bife à cavalo, com contra filé;não achei alimento equivalente no IBGE
+TACO;526;Camarão à baiana;o IBGE só tem medidas que o app não usa (ex.: prato, copo)
+TACO;528;Cuscuz, de milho, cozido com sal;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;531;Dobradinha;não achei alimento equivalente no IBGE
+TACO;532;Estrogonofe de carne;não achei alimento equivalente no IBGE
+TACO;533;Estrogonofe de frango;não achei alimento equivalente no IBGE
+TACO;535;L;não achei alimento equivalente no IBGE
+TACO;536;Frango, com açafrão;não achei alimento equivalente no IBGE
+TACO;541;Salada, de legumes, cozida no vapor;não achei alimento equivalente no IBGE
+TACO;543;Sarapatel;não achei alimento equivalente no IBGE
+TACO;544;Tabule;não achei alimento equivalente no IBGE
+TACO;545;Tacacá;não achei alimento equivalente no IBGE
+TACO;546;Tapioca, com manteiga;não achei alimento equivalente no IBGE
+TACO;547;Tucupi, com pimenta-de-cheiro;não achei alimento equivalente no IBGE
+TACO;550;Virado à paulista;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;552;Amendoim, grão, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;554;Ervilha, em vagem;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;555;Ervilha, enlatada, drenada;não achei alimento equivalente no IBGE
+TACO;556;Feijão, carioca, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;557;Feijão, carioca, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;558;Feijão, fradinho, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;559;Feijão, fradinho, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;560;Feijão, jalo, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;561;Feijão, jalo, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;562;Feijão, preto, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;563;Feijão, preto, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;564;Feijão, rajado, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;565;Feijão, rajado, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;566;Feijão, rosinha, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;567;Feijão, rosinha, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;568;Feijão, roxo, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;569;Feijão, roxo, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;570;Grão-de-bico, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;571;Guandu, cru;não achei alimento equivalente no IBGE
+TACO;572;Lentilha, cozida;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;573;Lentilha, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;576;Soja, farinha;não achei alimento equivalente no IBGE
+TACO;577;Soja, extrato solúvel, natural, fluido;não achei alimento equivalente no IBGE
+TACO;578;Soja, extrato solúvel, pó;não achei alimento equivalente no IBGE
+TACO;580;Tremoço, cru;não achei alimento equivalente no IBGE
+TACO;581;Tremoço, em conserva;não achei alimento equivalente no IBGE
+TACO;584;Castanha-do-Brasil, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;585;Coco, cru;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;586;Farinha, de mesocarpo de babaçu, crua;não achei alimento equivalente no IBGE
+TACO;587;Gergelim, semente;não achei alimento equivalente no IBGE
+TACO;589;Pinhão, cozido;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;590;Pupunha, cozida;o IBGE não tem esse preparo (não misturo cru com cozido)
+TACO;591;Noz, crua;o IBGE não tem esse preparo (não misturo cru com cozido)
