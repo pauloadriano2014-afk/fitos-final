@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { attachItemMeta, exposeItemMeta } from '@/lib/foodMeasures';
+import { attachDayScheme, saveDayScheme } from '@/lib/dayScheme';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +40,8 @@ export async function GET(
     // pra montar a dieta, e sem as medidas a conta "4 colheres = X g" cairia em pesos genéricos.
     await attachItemMeta(diets);
     exposeItemMeta(diets);
+    // 🏷️ nomes das abas de dia de cada dieta (o app do aluno usa esta rota): campo novo `dayScheme`, ignorado por app antigo
+    await attachDayScheme(diets);
 
     const baseDiets     = diets.filter(d => !d.isStrategy);
     const strategies    = diets.filter(d => d.isStrategy);
@@ -179,6 +182,9 @@ export async function POST(
         meals: { include: { items: true } },
       },
     });
+
+    // 🏷️ estratégia copiada de uma dieta herda os nomes das abas dela
+    if (copyFromDietId) await saveDayScheme(strategy.id, undefined, copyFromDietId);
 
     return NextResponse.json(strategy, { status: 201 });
 

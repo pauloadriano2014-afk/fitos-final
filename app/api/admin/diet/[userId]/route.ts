@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { attachItemMeta } from '@/lib/foodMeasures';
+import { attachDayScheme } from '@/lib/dayScheme';
 
 export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
@@ -39,6 +40,7 @@ export async function GET(req: Request, { params }: { params: { userId: string }
       return NextResponse.json({ error: 'Nenhuma dieta encontrada' }, { status: 404 });
     }
     await attachItemMeta(diet);
+    await attachDayScheme(diet);
 
     // ─── FORMATAR ITEM ────────────────────────────────────────────────────────
     const formatItem = (item: any) => ({
@@ -112,6 +114,7 @@ export async function GET(req: Request, { params }: { params: { userId: string }
       waterIntake:  diet.waterIntake,
       generalNotes: diet.generalNotes,
       meals:        formattedMeals,
+      dayScheme:    diet.dayScheme ?? null,
     });
 
   } catch (error) {

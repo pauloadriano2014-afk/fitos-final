@@ -124,6 +124,15 @@ model ProfessionalProfile {
   createdAt DateTime @default(now())
 }
 
+// 🏷️ (30 set 2026) Nomes das abas de dia da dieta (Treino, Treino + Cardio, Só Cardio, Descanso) que o coach
+// personaliza ("Opção 1", "Carbo Alto", "Sábado"...). Uma linha por dieta (base ou estratégia). Só os NOMES: os
+// tipos internos de dia não mudam, então o app do aluno antigo continua funcionando com os nomes de sempre.
+model DietDayScheme {
+  dietId    String   @id
+  scheme    Json
+  updatedAt DateTime @updatedAt
+}
+
 model FoodItemMeta {
   foodItemId String   @id
   foodItem   FoodItem @relation(fields: [foodItemId], references: [id], onDelete: Cascade)

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { attachItemMeta } from '@/lib/foodMeasures';
+import { attachDayScheme } from '@/lib/dayScheme';
 
 export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
@@ -102,6 +103,8 @@ function formatDiet(diet: any, isFromStrategy = false) {
     waterIntake:  diet.waterIntake,
     generalNotes: diet.generalNotes,
     meals:        formattedMeals,
+    // 🏷️ nomes personalizados das abas de dia (null = nomes de sempre)
+    dayScheme:    diet.dayScheme ?? null,
 
     // 🔥 Campos de estratégia — o app do aluno usa para mostrar o banner
     isStrategy:        isFromStrategy,
@@ -148,6 +151,7 @@ export async function GET(req: Request, { params }: { params: { userId: string }
     if (activeStrategy) {
       // Retorna a estratégia com flag para o app mostrar o banner
       await attachItemMeta(activeStrategy);
+      await attachDayScheme(activeStrategy);
       return NextResponse.json(formatDiet(activeStrategy, true));
     }
 
@@ -159,6 +163,7 @@ export async function GET(req: Request, { params }: { params: { userId: string }
     }
 
     await attachItemMeta(baseDiet);
+    await attachDayScheme(baseDiet);
     return NextResponse.json(formatDiet(baseDiet, false));
 
   } catch (error) {

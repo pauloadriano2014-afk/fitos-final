@@ -7,6 +7,7 @@ import prisma from '@/lib/prisma';
 import { randomUUID } from 'crypto';
 import { requireAuth, isMasterId } from '@/lib/auth';
 import { saveItemMetas, type ItemMetaInput } from '@/lib/foodMeasures';
+import { saveDayScheme } from '@/lib/dayScheme';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 
 
@@ -27,6 +28,8 @@ export async function POST(req: Request) {
             // notificar em toda edição). Vem marcado só quando o app manda
             // notifyStudent:true de propósito (toggle "avisar aluno" ligado).
             notifyStudent,
+            // 🏷️ nomes personalizados das abas de dia (undefined = não mexer: herda o esquema da versão anterior)
+            dayScheme,
         } = body;
 
         if (!userId || userId === '[object Object]' || userId === 'undefined') {
@@ -114,6 +117,7 @@ export async function POST(req: Request) {
             });
 
             await saveItemMetas(metaQueue);
+            await saveDayScheme(updatedStrategy.id, dayScheme, updatedStrategy.id);
             console.log(`✅ ESTRATÉGIA ATUALIZADA: ${strategyId} (aluno ${userId})`);
 
             if (notifyStudent) {
@@ -139,6 +143,12 @@ export async function POST(req: Request) {
         const existingBaseDietsCount = notifyStudent
             ? await prisma.diet.count({ where: { userId, isStrategy: false } })
             : 0;
+
+        // 🏷️ versão base anterior (de onde herdar os nomes das abas se o app não mandar `dayScheme`)
+        const previousBase = await prisma.diet.findFirst({
+            where: { userId: String(userId), isActive: true, isStrategy: false },
+            select: { id: true },
+        });
 
         // ─── SALVANDO A DIETA BASE — fluxo original (cria nova versão) ───────────
         const newDiet = await prisma.$transaction(async (tx) => {
@@ -169,6 +179,7 @@ export async function POST(req: Request) {
         });
 
         await saveItemMetas(metaQueue);
+        await saveDayScheme(newDiet.id, dayScheme, previousBase?.id ?? null);
         console.log(`✅ DIETA SALVA: ${userId}`);
 
         if (notifyStudent) {
