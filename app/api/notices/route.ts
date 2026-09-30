@@ -3,6 +3,8 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach, canAccessStudent } from '@/lib/auth';
 import { sendPushToUsers } from '@/app/utils/sendNotification';
 
+const NOTICE_HISTORY_LIMIT = 20;
+
 // 🔥 POST: Criar um novo aviso e disparar Push Notifications
 export async function POST(req: Request) {
   try {
@@ -83,6 +85,20 @@ export async function GET(req: Request) {
     }
 
     if (!user || !user.coachId) return NextResponse.json([]);
+
+    // 🔔 (30 set 2026) HISTÓRICO pro sininho: com ?history=1 devolve os últimos
+    // avisos do coach (ativos ou não -- cada aviso novo desativa o anterior, então
+    // "ativo" só diz qual é o mais recente, não se ele ainda vale). Sem o
+    // parâmetro o comportamento é o de sempre (só o último ativo), então o PWA
+    // com cache antigo e as builds antigas seguem funcionando.
+    if (searchParams.get('history') === '1') {
+      const history = await prisma.notice.findMany({
+        where: { coachId: user.coachId },
+        orderBy: { date: 'desc' },
+        take: NOTICE_HISTORY_LIMIT,
+      });
+      return NextResponse.json(history);
+    }
 
     // Pega o último aviso ativo deste coach específico
     const notices = await prisma.notice.findMany({
