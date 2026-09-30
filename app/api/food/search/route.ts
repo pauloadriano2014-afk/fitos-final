@@ -42,17 +42,23 @@ export async function GET(req: Request) {
 
     const teamId = MASTER_IDS.includes(coachId) ? MASTER_TEAM : (coachId || null);
 
-    const where: any = {
-      isActive: true,
-      AND: [
-        {
-          OR: [
-            { source: 'TACO', teamId: null },
-            { source: 'CUSTOM', teamId: teamId ?? MASTER_TEAM },
-          ]
-        },
-      ],
-    };
+    // 📊 (1 out 2026) Aba "IBGE" do seletor de alimentos: Tabela de Composição Nutricional do IBGE (POF 2008-2009), importada pra
+    // esta mesma tabela com source = 'IBGE'. Só aparece quando a busca pede `source=IBGE`: a busca de sempre (TACO + alimentos do
+    // time), a voz e a IA de dieta continuam enxergando só TACO e CUSTOM.
+    const isIbge = sourceFilter === 'IBGE';
+    const where: any = isIbge
+      ? { isActive: true, AND: [{ source: 'IBGE', teamId: null }] }
+      : {
+          isActive: true,
+          AND: [
+            {
+              OR: [
+                { source: 'TACO', teamId: null },
+                { source: 'CUSTOM', teamId: teamId ?? MASTER_TEAM },
+              ]
+            },
+          ],
+        };
 
     if (idsList.length) {
       where.AND.push({ id: { in: idsList } });
@@ -72,7 +78,7 @@ export async function GET(req: Request) {
       where.AND.push({ source: 'CUSTOM' });
     }
 
-    if (favoritesOnly) {
+    if (favoritesOnly && !isIbge) {
       where.AND.push({ isFavorite: true });
     }
 
