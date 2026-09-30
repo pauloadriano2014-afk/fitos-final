@@ -24,7 +24,7 @@ preparo e de medida conferidos contra os quadros oficiais do próprio PDF.
 
 ## Como importar
 
-    npx prisma db push                                   # 1x: cria as tabelas novas (3 no total)
+    npx prisma db push                                   # 1x: cria as tabelas novas (4 no total)
     npx tsx scripts/ibge-medidas/importar.ts             # simulação (não grava)
     npx tsx scripts/ibge-medidas/importar.ts --aplicar   # grava
 
