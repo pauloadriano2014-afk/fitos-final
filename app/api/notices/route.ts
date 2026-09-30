@@ -77,7 +77,7 @@ export async function GET(req: Request) {
     // Descobre de qual coach é este aluno
     const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { coachId: true }
+        select: { coachId: true, createdAt: true }
     });
 
     if (!canAccessStudent(auth.user, userId, user?.coachId)) {
@@ -86,6 +86,11 @@ export async function GET(req: Request) {
 
     if (!user || !user.coachId) return NextResponse.json([]);
 
+    // 🔔 (30 set 2026) O aluno só enxerga avisos enviados DEPOIS que a conta dele
+    // foi criada -- quem entra hoje não recebe no sino o que o coach mandou meses
+    // antes de ele existir (nem os avisos de teste antigos). Vale pros dois modos.
+    const sinceJoined = user.createdAt ? { date: { gte: user.createdAt } } : {};
+
     // 🔔 (30 set 2026) HISTÓRICO pro sininho: com ?history=1 devolve os últimos
     // avisos do coach (ativos ou não -- cada aviso novo desativa o anterior, então
     // "ativo" só diz qual é o mais recente, não se ele ainda vale). Sem o
@@ -93,7 +98,7 @@ export async function GET(req: Request) {
     // com cache antigo e as builds antigas seguem funcionando.
     if (searchParams.get('history') === '1') {
       const history = await prisma.notice.findMany({
-        where: { coachId: user.coachId },
+        where: { coachId: user.coachId, ...sinceJoined },
         orderBy: { date: 'desc' },
         take: NOTICE_HISTORY_LIMIT,
       });
@@ -102,7 +107,7 @@ export async function GET(req: Request) {
 
     // Pega o último aviso ativo deste coach específico
     const notices = await prisma.notice.findMany({
-      where: { coachId: user.coachId, active: true },
+      where: { coachId: user.coachId, active: true, ...sinceJoined },
       orderBy: { date: 'desc' },
       take: 1
     });
