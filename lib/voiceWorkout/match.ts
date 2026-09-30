@@ -104,12 +104,16 @@ function lev1(a: string, b: string): boolean {
   return edits + (a.length - i) + (b.length - j) <= 1;
 }
 
-function tokEq(a: string, b: string): boolean {
-  if (a === b) return true;
-  if (/^\d+$/.test(a) || /^\d+$/.test(b)) return false; // números só casam exatos (45 != 30)
-  if (a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a))) return true; // extensor/extensora
-  if (a.length >= 6 && b.length >= 6 && lev1(a, b)) return true;
-  return false;
+// 1 = palavra idêntica; 0.85 = parecida (prefixo ou 1 letra de diferença, típico
+// de erro de transcrição); 0 = diferente. Parecida vale MENOS que idêntica de
+// propósito: "adutora" e "abdutora" são exercícios opostos e diferem por 1 letra.
+const FUZZY = 0.85;
+function tokSim(a: string, b: string): number {
+  if (a === b) return 1;
+  if (/^\d+$/.test(a) || /^\d+$/.test(b)) return 0; // números só casam exatos (45 != 30)
+  if (a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a))) return FUZZY; // extensor/extensora
+  if (a.length >= 6 && b.length >= 6 && lev1(a, b)) return FUZZY;
+  return 0;
 }
 
 export function buildIndex(items: LibItem[], adminId: string): LibraryIndex {
@@ -144,13 +148,16 @@ function score(index: LibraryIndex, qTokens: string[], cTokens: string[]): { sco
 
   const used = new Set<number>();
   for (const q of qTokens) {
+    let bestI = -1, bestSim = 0;
     for (let i = 0; i < cTokens.length; i++) {
-      if (!used.has(i) && tokEq(q, cTokens[i])) {
-        used.add(i);
-        qHit += weight(index, q);
-        cHit += weight(index, cTokens[i]);
-        break;
-      }
+      if (used.has(i)) continue;
+      const sim = tokSim(q, cTokens[i]);
+      if (sim > bestSim) { bestSim = sim; bestI = i; }
+    }
+    if (bestI >= 0) {
+      used.add(bestI);
+      qHit += weight(index, q) * bestSim;
+      cHit += weight(index, cTokens[bestI]) * bestSim;
     }
   }
   const coverage = qHit / qTotal;   // quanto do que o coach disse aparece no nome
@@ -181,7 +188,7 @@ export function matchExercise(spoken: string, index: LibraryIndex): MatchResult 
       return { e, s: exact ? 1 : s, coverage, exact };
     })
     .filter((r) => r.s >= 0.3)
-    .sort((a, b) => (b.s - a.s) || (Number(b.e.own) - Number(a.e.own)) || a.e.item.name.localeCompare(b.e.item.name));
+    .sort((a, b) => (Number(b.exact) - Number(a.exact)) || (b.s - a.s) || (Number(b.e.own) - Number(a.e.own)) || a.e.item.name.localeCompare(b.e.item.name));
 
   if (!scored.length) return { status: 'NONE', best: null, candidates: [] };
 

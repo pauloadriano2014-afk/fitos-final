@@ -12,9 +12,9 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rateLimit';
-import { buildIndex, matchExercise } from '@/lib/voiceWorkout/match';
+import { buildIndex } from '@/lib/voiceWorkout/match';
+import { buildReviewItems } from '@/lib/voiceWorkout/pipeline';
 import { extractWorkout } from '@/lib/voiceWorkout/extract';
-import type { AssumedField, Block } from '@/lib/voiceWorkout/normalize';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -70,31 +70,7 @@ export async function POST(req: Request) {
     const { usage } = extracted;
     console.info(`[treino-por-voz] model=${usage.model} fallback=${usage.usedFallback} in=${usage.inputTokens} out=${usage.outputTokens} ms=${usage.ms} exercicios=${extracted.parsed.exercises.length}`);
 
-    const items = extracted.parsed.exercises.map((ex, i) => {
-      const m = matchExercise(ex.spoken, index);
-      let blocks: Block[] = ex.blocks;
-      let assumed: Array<AssumedField | 'cardio'> = ex.assumed;
-      const warnings = [...ex.warnings];
-
-      // Cardio no app é "minutos + kcal alvo + intensidade", não séries x reps.
-      if (m.best && String(m.best.category).toUpperCase() === 'CARDIO') {
-        blocks = [{ sets: '20', reps: '200', restTime: '0', technique: 'Moderada', load: '' }];
-        assumed = ['cardio'];
-        warnings.push('Cardio entrou com valores padrão (20 min, 200 kcal, Moderada) — ajuste depois.');
-      }
-
-      return {
-        key: `${i}`,
-        spoken: ex.spoken,
-        status: m.status,
-        match: m.best,
-        candidates: m.candidates,
-        blocks,
-        assumed,
-        observation: ex.observation,
-        warnings,
-      };
-    });
+    const items = buildReviewItems(extracted.parsed.exercises, index);
 
     return NextResponse.json({
       ok: true,

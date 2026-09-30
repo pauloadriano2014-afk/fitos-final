@@ -3,3 +3,5 @@ node_modules
 .env
 dist
 build
+# saída das avaliações (scripts/voz-eval)
+scripts/voz-eval/out/

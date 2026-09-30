@@ -14,7 +14,7 @@ export const FALLBACK_MODEL = 'claude-sonnet-5-5';
 
 const TOOL_NAME = 'registrar_treino';
 
-const SYSTEM_PROMPT = `Você transforma a descrição FALADA de um treino de musculação (português do Brasil) em dados estruturados, chamando a ferramenta ${TOOL_NAME}.
+export const SYSTEM_PROMPT = `Você transforma a descrição FALADA de um treino de musculação (português do Brasil) em dados estruturados, chamando a ferramenta ${TOOL_NAME}.
 
 REGRAS
 1. Um item em "exercicios" para cada exercício citado, na ordem em que foram ditos. Nunca invente exercícios e nunca junte dois exercícios em um item.
@@ -41,7 +41,7 @@ REGRAS
 
 const TECH_ENUM = [...TECH_KEYS, 'OUTRA'];
 
-const TOOL = {
+export const TOOL = {
   name: TOOL_NAME,
   description: 'Registra o treino descrito pelo coach, um item por exercício, na ordem falada.',
   input_schema: {
@@ -94,9 +94,13 @@ export type ExtractResult = {
   usage: ExtractUsage;
 };
 
+// Haiku aceita forçar a ferramenta e temperatura 0; os modelos maiores (Sonnet
+// 5.5, Opus 5.5...) não aceitam tool_choice forçado (400).
+const isHaikuModel = (model: string) => model.startsWith('claude-haiku');
+
 async function callModel(client: Anthropic, model: string, text: string, forced: boolean) {
   const t0 = Date.now();
-  const isHaiku = model === PRIMARY_MODEL;
+  const isHaiku = isHaikuModel(model);
   const resp = await client.messages.create({
     model,
     max_tokens: isHaiku ? 3000 : 6000,
@@ -118,10 +122,19 @@ async function callModel(client: Anthropic, model: string, text: string, forced:
   };
 }
 
-export async function extractWorkout(text: string): Promise<ExtractResult> {
+function makeClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY não configurada no servidor.');
-  const client = new Anthropic({ apiKey, timeout: 40_000, maxRetries: 1 });
+  return new Anthropic({ apiKey, timeout: 40_000, maxRetries: 1 });
+}
+
+/** Uma chamada só, com o modelo pedido, sem tentativa reserva. Usada pela avaliação (scripts/voz-eval). */
+export async function extractOnce(text: string, model: string) {
+  return callModel(makeClient(), model, text, isHaikuModel(model));
+}
+
+export async function extractWorkout(text: string): Promise<ExtractResult> {
+  const client = makeClient();
 
   const attempts: Array<{ model: string; forced: boolean }> = [
     { model: PRIMARY_MODEL, forced: true },
