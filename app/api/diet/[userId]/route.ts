@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { attachItemMeta } from '@/lib/foodMeasures';
 
 export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
@@ -43,6 +44,10 @@ const formatItem = (item: any) => ({
   p:                   item.protein,
   c:                   item.carbs,
   f:                   item.fats,
+  // 🥄 (30 set 2026) alimento do catálogo + medidas vigentes quando a dieta foi salva (null nas dietas
+  // antigas). Com isso a conta "4 colheres = X g" dá o MESMO resultado ao reabrir e no app do aluno.
+  foodId:              item.__foodId ?? null,
+  portions:            item.__portions ?? null,
 });
 
 // ─── FORMATAR REFEIÇÃO ────────────────────────────────────────────────────────
@@ -142,6 +147,7 @@ export async function GET(req: Request, { params }: { params: { userId: string }
 
     if (activeStrategy) {
       // Retorna a estratégia com flag para o app mostrar o banner
+      await attachItemMeta(activeStrategy);
       return NextResponse.json(formatDiet(activeStrategy, true));
     }
 
@@ -152,6 +158,7 @@ export async function GET(req: Request, { params }: { params: { userId: string }
       return NextResponse.json({ error: 'Nenhuma dieta encontrada' }, { status: 404 });
     }
 
+    await attachItemMeta(baseDiet);
     return NextResponse.json(formatDiet(baseDiet, false));
 
   } catch (error) {

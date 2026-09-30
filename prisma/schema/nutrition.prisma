@@ -69,6 +69,47 @@ model FoodItem {
   calories            Float?
 
   substitutionGroupId String?
+
+  // 🥄 (30 set 2026) Metadados do item salvos à parte (foodId do catálogo + medidas vigentes
+  // quando a dieta foi salva). É uma relação VIRTUAL: não adiciona coluna nenhuma em FoodItem,
+  // então as leituras de dieta que já existem não dependem de a tabela nova existir.
+  meta                FoodItemMeta?
+}
+
+// 🥄 (30 set 2026) MEDIDAS CASEIRAS por alimento -- quanto pesa (ou mede) UMA colher de sopa, UMA
+// escumadeira, UM bife médio... daquele alimento. Antes as medidas ficavam num arquivo dentro do
+// app (foodPortions.js), só pra ~100 alimentos e sem como o coach/nutri cadastrar as dele.
+//   scope  = 'GLOBAL' (vale pra todos) ou o teamId de quem ajustou (sobrepõe SÓ pra ele; um coach
+//            ou nutri nunca altera a medida do outro).
+//   source = MANUAL (arquivo antigo do app / time master), IBGE (Tabela de Medidas Referidas da POF
+//            2008-2009, depois de revisada) ou COACH (ajuste do profissional).
+// Precedência na hora de usar: COACH do time > GLOBAL manual > GLOBAL IBGE. Ver lib/foodMeasures.ts.
+model FoodPortion {
+  id            String   @id @default(uuid())
+  foodId        String
+  scope         String   @default("GLOBAL")
+  unit          String
+  grams         Float
+  isDefault     Boolean  @default(false)
+  defaultAmount Float?
+  source        String   @default("MANUAL")
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([foodId, scope, unit])
+  @@index([foodId])
+  @@index([scope])
+}
+
+model FoodItemMeta {
+  foodItemId String   @id
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
+  foodId     String?
+  portions   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([foodId])
 }
 
 model SubstitutionGroup {

@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { attachItemMeta } from '@/lib/foodMeasures';
 
 export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
@@ -37,6 +38,7 @@ export async function GET(req: Request, { params }: { params: { userId: string }
     if (!diet) {
       return NextResponse.json({ error: 'Nenhuma dieta encontrada' }, { status: 404 });
     }
+    await attachItemMeta(diet);
 
     // ─── FORMATAR ITEM ────────────────────────────────────────────────────────
     const formatItem = (item: any) => ({
@@ -50,6 +52,8 @@ export async function GET(req: Request, { params }: { params: { userId: string }
       p:                   item.protein,
       c:                   item.carbs,
       f:                   item.fats,
+      foodId:              item.__foodId ?? null,      // 🥄 ver app/api/diet/[userId]/route.ts
+      portions:            item.__portions ?? null,
     });
 
     // ─── FORMATAR REFEIÇÃO ────────────────────────────────────────────────────

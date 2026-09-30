@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { portionsForFoods } from '@/lib/foodMeasures';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,22 +105,31 @@ export async function GET(req: Request) {
       prisma.food.count({ where }),
     ]);
 
-    const formatted = foods.map(f => ({
-      id:               f.id,
-      source:           f.source,
-      name:             f.name,
-      category:         f.category,
-      subcategory:      f.subcategory ?? f.category,
-      base_unit:        f.baseUnit,
-      calories_per_100: f.kcal,
-      p:                f.protein,
-      c:                f.carbs,
-      f:                f.fat,
-      fiber:            f.fiber ?? 0,
-      isLactoseFree:    f.isLactoseFree ?? false,
-      conversionFactor: f.conversionFactor ?? 1,
-      isFavorite:       f.isFavorite ?? false,
-    }));
+    // 🥄 (30 set 2026) Medidas caseiras de cada alimento (as do time de quem busca sobrepõem as globais).
+    // Se a tabela ainda não existe no banco, cai nas medidas antigas do app -- a busca nunca falha por isso.
+    const portionMap = await portionsForFoods(foods.map(f => ({ id: f.id, name: f.name })), teamId);
+
+    const formatted = foods.map(f => {
+      const pm = portionMap.get(f.id);
+      return {
+        id:               f.id,
+        source:           f.source,
+        name:             f.name,
+        category:         f.category,
+        subcategory:      f.subcategory ?? f.category,
+        base_unit:        f.baseUnit,
+        calories_per_100: f.kcal,
+        p:                f.protein,
+        c:                f.carbs,
+        f:                f.fat,
+        fiber:            f.fiber ?? 0,
+        isLactoseFree:    f.isLactoseFree ?? false,
+        conversionFactor: f.conversionFactor ?? 1,
+        isFavorite:       f.isFavorite ?? false,
+        portions:         pm?.portions ?? {},
+        defaultPortion:   pm?.defaultPortion ?? null,
+      };
+    });
 
     return NextResponse.json({
       foods: formatted,

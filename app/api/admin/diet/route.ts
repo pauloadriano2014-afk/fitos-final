@@ -4,7 +4,9 @@
 //     desativar tudo, que é o que causava o bug de "salva mas não persiste"
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { randomUUID } from 'crypto';
 import { requireAuth, isMasterId } from '@/lib/auth';
+import { saveItemMetas, type ItemMetaInput } from '@/lib/foodMeasures';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 
 
@@ -44,6 +46,10 @@ export async function POST(req: Request) {
             }
         }
 
+        // 🥄 (30 set 2026) Cada item nasce com id nosso, pra gravar à parte (FoodItemMeta) o alimento do
+        // catálogo e as medidas vigentes -- sem depender da ordem em que o banco devolve os itens.
+        const metaQueue: ItemMetaInput[] = [];
+
         const buildMealsCreate = (mealsList: any[]) =>
             (mealsList || []).map((meal: any, mIndex: number) => ({
                 name:               meal.name    || 'Refeição',
@@ -57,7 +63,10 @@ export async function POST(req: Request) {
                 items: {
                     create: (meal.items || []).map((item: any) => {
                         const groupId = item.groupId || item.substitutionGroupId;
+                        const id = randomUUID();
+                        metaQueue.push({ foodItemId: id, foodId: item.foodId, portions: item.portions });
                         return {
+                            id,
                             name:                item.name || 'Alimento',
                             amount:              Number(item.amount)           || 0,
                             unit:                item.unit || 'g',
@@ -104,6 +113,7 @@ export async function POST(req: Request) {
                 });
             });
 
+            await saveItemMetas(metaQueue);
             console.log(`✅ ESTRATÉGIA ATUALIZADA: ${strategyId} (aluno ${userId})`);
 
             if (notifyStudent) {
@@ -158,6 +168,7 @@ export async function POST(req: Request) {
             });
         });
 
+        await saveItemMetas(metaQueue);
         console.log(`✅ DIETA SALVA: ${userId}`);
 
         if (notifyStudent) {
