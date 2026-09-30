@@ -26,6 +26,13 @@ const WHISPER_HINT =
   'stiff, supino reto, rosca direta, elevação pélvica, panturrilha. Séries, repetições, descanso de 60 segundos, ' +
   'drop set, rest pause, bi-set, tri-set, GVT, método 21, cluster, TUT, na última série.';
 
+// (30 set 2026) Mesma transcrição serve a dieta por voz: com context=dieta o
+// Whisper recebe o vocabulário de alimentos em vez do de treino.
+const WHISPER_HINT_DIETA =
+  'Plano alimentar. Café da manhã, lanche da manhã, almoço, lanche da tarde, pré-treino, pós-treino, jantar, ceia. ' +
+  'Pão integral, ovos mexidos, queijo minas, arroz, feijão, frango grelhado, patinho, batata doce, aveia, whey protein, ' +
+  'pasta de amendoim, azeite, iogurte, banana, tapioca. Gramas, fatias, colheres de sopa, xícara, ou.';
+
 function extFrom(name: string, mime: string): string {
   const fromName = (name.split('.').pop() || '').toLowerCase();
   if (ALLOWED_EXT.includes(fromName)) return fromName;
@@ -68,6 +75,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Áudio muito grande. Grave até 3 minutos por vez.' }, { status: 413 });
     }
 
+    const isDiet = String(form.get('context') || '') === 'dieta';
     const ext = extFrom(file.name || '', file.type || '');
     if (!ext) {
       return NextResponse.json({ error: 'Formato de áudio não suportado.' }, { status: 415 });
@@ -84,10 +92,10 @@ export async function POST(req: Request) {
       file: upload,
       model: 'whisper-1',
       language: 'pt',
-      prompt: WHISPER_HINT,
+      prompt: isDiet ? WHISPER_HINT_DIETA : WHISPER_HINT,
       temperature: 0,
     });
-    console.info(`[treino-por-voz] transcricao bytes=${file.size} ms=${Date.now() - t0}`);
+    console.info(`[${isDiet ? 'dieta' : 'treino'}-por-voz] transcricao bytes=${file.size} ms=${Date.now() - t0}`);
 
     const text = String(r.text || '').replace(/\s+/g, ' ').trim();
     if (!text) {

@@ -50,7 +50,7 @@ export type LibraryIndex = {
   n: number;
 };
 
-const STOP = new Set([
+export const STOP = new Set([
   'de', 'da', 'do', 'das', 'dos', 'no', 'na', 'nos', 'nas', 'com', 'c', 'em', 'o', 'a', 'os', 'as',
   'e', 'ao', 'pra', 'para', 'um', 'uma', 'por', 'pelo', 'pela', 'tipo', 'exercicio',
 ]);
@@ -79,19 +79,19 @@ function canon(s: string): string {
   return n.replace(/\s+/g, ' ').trim();
 }
 
-function stem(w: string): string {
+export function stem(w: string): string {
   if (/^\d+$/.test(w)) return w;
   if (w.length > 5 && w.endsWith('es')) return w.slice(0, -2);
   if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
   return w;
 }
 
-function tokenize(s: string): string[] {
+export function tokenize(s: string): string[] {
   return canon(s).split(' ').filter((w) => w && !STOP.has(w)).map(stem);
 }
 
 // distância de edição <= 1 (typo simples de transcrição)
-function lev1(a: string, b: string): boolean {
+export function lev1(a: string, b: string): boolean {
   if (Math.abs(a.length - b.length) > 1) return false;
   let i = 0, j = 0, edits = 0;
   while (i < a.length && j < b.length) {
@@ -107,8 +107,8 @@ function lev1(a: string, b: string): boolean {
 // 1 = palavra idêntica; 0.85 = parecida (prefixo ou 1 letra de diferença, típico
 // de erro de transcrição); 0 = diferente. Parecida vale MENOS que idêntica de
 // propósito: "adutora" e "abdutora" são exercícios opostos e diferem por 1 letra.
-const FUZZY = 0.85;
-function tokSim(a: string, b: string): number {
+export const FUZZY = 0.85;
+export function tokSim(a: string, b: string): number {
   if (a === b) return 1;
   if (/^\d+$/.test(a) || /^\d+$/.test(b)) return 0; // números só casam exatos (45 != 30)
   if (a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a))) return FUZZY; // extensor/extensora
