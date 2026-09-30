@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { attachItemMeta, exposeItemMeta } from '@/lib/foodMeasures';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,11 @@ export async function GET(
         },
       },
     });
+
+    // 🥄 (30 set 2026) junta foodId + medidas de cada item (1 consulta): o app do aluno usa ESTA rota
+    // pra montar a dieta, e sem as medidas a conta "4 colheres = X g" cairia em pesos genéricos.
+    await attachItemMeta(diets);
+    exposeItemMeta(diets);
 
     const baseDiets     = diets.filter(d => !d.isStrategy);
     const strategies    = diets.filter(d => d.isStrategy);

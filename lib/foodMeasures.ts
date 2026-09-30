@@ -45,7 +45,7 @@ export const MEASURE_KEYS = Object.keys(MEASURES) as MeasureKey[];
 export const STORED_MEASURE_KEYS = MEASURE_KEYS.filter((k) => k !== 'g' && k !== 'ml');
 
 const strip = (s: string) =>
-  String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 const ALIASES: Array<[RegExp, MeasureKey]> = [
   [/^(g|gr|grama|gramas)$/, 'g'],
@@ -222,19 +222,31 @@ export async function loadItemMeta(itemIds: string[]): Promise<Map<string, ItemM
   return map;
 }
 
-/** Junta foodId/medidas nos itens crus de uma dieta (Diet.meals[].items[]) antes de formatar. Nunca lança. */
-export async function attachItemMeta(diet: any): Promise<void> {
+/** Junta foodId/medidas nos itens crus de uma ou várias dietas (Diet.meals[].items[]) com UMA consulta. Nunca lança. */
+export async function attachItemMeta(dietOrDiets: any): Promise<void> {
   try {
+    const diets: any[] = Array.isArray(dietOrDiets) ? dietOrDiets : [dietOrDiets];
     const ids: string[] = [];
-    for (const m of diet?.meals ?? []) for (const it of m.items ?? []) if (it?.id) ids.push(it.id);
+    for (const d of diets) for (const m of d?.meals ?? []) for (const it of m.items ?? []) if (it?.id) ids.push(it.id);
     const meta = await loadItemMeta(ids);
     if (!meta.size) return;
-    for (const m of diet.meals) for (const it of m.items ?? []) {
+    for (const d of diets) for (const m of d?.meals ?? []) for (const it of m.items ?? []) {
       const x = meta.get(it.id);
       if (x) { it.__foodId = x.foodId; it.__portions = x.portions; }
     }
   } catch (e) {
     warnOnce('attachItemMeta', e);
+  }
+}
+
+/** Rotas que devolvem o item CRU do banco: troca os campos internos (__foodId/__portions) por foodId/portions. */
+export function exposeItemMeta(dietOrDiets: any): void {
+  const diets: any[] = Array.isArray(dietOrDiets) ? dietOrDiets : [dietOrDiets];
+  for (const d of diets) for (const m of d?.meals ?? []) for (const it of m.items ?? []) {
+    it.foodId = it.__foodId ?? null;
+    it.portions = it.__portions ?? null;
+    delete it.__foodId;
+    delete it.__portions;
   }
 }
 
