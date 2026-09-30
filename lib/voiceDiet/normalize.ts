@@ -3,7 +3,7 @@
 // LIMPAS: nome/horário no padrão do app, quantidades nas unidades do app, e os
 // alimentos "ou" agrupados como substitutos. Nada aqui escolhe alimento do
 // catálogo (isso é do match.ts) nem completa porções (isso é do app).
-import { normalizeQuantity, type Assumed } from './units';
+import { normalizeQuantity, type Assumed, type AppUnit } from './units';
 import { resolveMealName, normalizeTime, defaultTimeFor } from './names';
 
 export type RawFood = {
@@ -21,7 +21,7 @@ export type NormalizedFood = {
   spoken: string;
   prep: string | null;
   amount: number | null;
-  unit: 'g' | 'ml' | 'unid' | 'colher' | 'fatia' | 'xícara' | null;
+  unit: AppUnit | null;
   assumed: Assumed[];
   unitNote: string;
   alternative: boolean;      // "ou": opção no lugar do alimento anterior
@@ -45,7 +45,7 @@ function cleanText(v: unknown, max: number): string {
   return v.replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
-export function normalizeDiet(raw: RawDiet | null | undefined): { meals: NormalizedMeal[]; warnings: string[] } | null {
+export function normalizeDiet(raw: RawDiet | null | undefined, opts: { native?: boolean } = {}): { meals: NormalizedMeal[]; warnings: string[] } | null {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.refeicoes)) return null;
 
   const meals: NormalizedMeal[] = [];
@@ -58,7 +58,7 @@ export function normalizeDiet(raw: RawDiet | null | undefined): { meals: Normali
     for (const rf of rawFoods) {
       const spoken = cleanText(rf?.nome_falado, 80);
       if (!spoken) continue;
-      const q = normalizeQuantity(rf?.quantidade, rf?.unidade);
+      const q = normalizeQuantity(rf?.quantidade, rf?.unidade, opts);
       const prev = foods[foods.length - 1];
       const alternative = rf?.ou_anterior === true && !!prev;
       const groupIndex = alternative ? prev.groupIndex : groupCounter++;

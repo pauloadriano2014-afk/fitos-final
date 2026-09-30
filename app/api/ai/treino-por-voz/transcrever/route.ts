@@ -31,7 +31,8 @@ const WHISPER_HINT =
 const WHISPER_HINT_DIETA =
   'Plano alimentar. Café da manhã, lanche da manhã, almoço, lanche da tarde, pré-treino, pós-treino, jantar, ceia. ' +
   'Pão integral, ovos mexidos, queijo minas, arroz, feijão, frango grelhado, patinho, batata doce, aveia, whey protein, ' +
-  'pasta de amendoim, azeite, iogurte, banana, tapioca. Gramas, fatias, colheres de sopa, xícara, ou.';
+  'pasta de amendoim, azeite, iogurte, banana, tapioca. Gramas, fatias, colheres de sopa, de sobremesa, de chá, de café, de servir, ' +
+  'escumadeira, concha, bife pequeno, bife médio, bife grande, pedaço, copo, scoop, punhado, xícara, ou.';
 
 function extFrom(name: string, mime: string): string {
   const fromName = (name.split('.').pop() || '').toLowerCase();

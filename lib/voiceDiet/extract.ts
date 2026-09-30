@@ -24,8 +24,11 @@ REGRAS
 4. "quantidade" (número) e "unidade":
    - "70 gramas" ou "70g" -> 70 e g; "200 ml" -> 200 e ml;
    - "2 fatias de pão" -> 2 e fatia; "3 ovos" -> 3 e unidade; "uma banana" -> 1 e unidade;
-   - "duas colheres de sopa" -> 2 e colher_sopa; "colher de chá" -> colher_cha; "meia xícara" -> 0.5 e xicara;
-   - "um copo" -> 1 e copo; "um scoop de whey" -> 1 e scoop; "um punhado" -> 1 e punhado; "uma concha" -> 1 e concha; "uma porção" -> porcao.
+   - "duas colheres de sopa" -> 2 e colher_sopa; "colher de sobremesa" -> colher_sobremesa; "colher de chá" -> colher_cha; "colher de café" -> colher_cafe;
+     "colher de servir" ou "colher de arroz" -> colher_servir; "meia xícara" -> 0.5 e xicara;
+   - "uma escumadeira de feijão" -> 1 e escumadeira; "uma concha" -> 1 e concha;
+   - "um bife pequeno/médio/grande" -> 1 e bife_p/bife_m/bife_g; "um bife" (sem tamanho) -> 1 e bife; "um pedaço" -> 1 e pedaco;
+   - "um copo" -> 1 e copo; "um scoop de whey" -> 1 e scoop; "um punhado" -> 1 e punhado; "uma porção" -> porcao.
    - "meio/meia" = 0.5; "uma e meia" = 1.5; números por extenso viram dígitos.
    - Se NÃO disseram a quantidade, omita "quantidade" e "unidade". Não chute.
 5. "preparo": o modo de preparo dito para AQUELE alimento (mexido, cozido, grelhado, assado, frito, cru, refogado...). Omita se não disseram. Não repita o preparo em "nome_falado".
@@ -76,6 +79,7 @@ export const TOOL = {
 
 export type ExtractUsage = { model: string; inputTokens: number; outputTokens: number; ms: number; usedFallback: boolean };
 export type ExtractResult = { parsed: NonNullable<ReturnType<typeof normalizeDiet>>; usage: ExtractUsage };
+export type ExtractOptions = { native?: boolean };
 
 const isHaikuModel = (model: string) => model.startsWith('claude-haiku');
 
@@ -113,7 +117,7 @@ export async function extractOnce(text: string, model: string) {
   return callModel(makeClient(), model, text, isHaikuModel(model));
 }
 
-export async function extractDiet(text: string): Promise<ExtractResult> {
+export async function extractDiet(text: string, opts: ExtractOptions = {}): Promise<ExtractResult> {
   const client = makeClient();
   const attempts: Array<{ model: string; forced: boolean }> = [
     { model: PRIMARY_MODEL, forced: true },
@@ -125,7 +129,7 @@ export async function extractDiet(text: string): Promise<ExtractResult> {
     const { model, forced } = attempts[i];
     try {
       const r = await callModel(client, model, text, forced);
-      const parsed = normalizeDiet(r.input);
+      const parsed = normalizeDiet(r.input, opts);
       if (parsed && parsed.meals.length > 0) {
         return { parsed, usage: { model, inputTokens: r.inputTokens, outputTokens: r.outputTokens, ms: r.ms, usedFallback: i > 0 } };
       }

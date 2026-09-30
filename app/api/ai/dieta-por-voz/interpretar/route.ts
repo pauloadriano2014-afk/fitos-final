@@ -14,7 +14,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { buildFoodIndex } from '@/lib/voiceDiet/match';
-import { buildDietReview } from '@/lib/voiceDiet/pipeline';
+import { buildDietReview, attachPortions } from '@/lib/voiceDiet/pipeline';
 import { extractDiet } from '@/lib/voiceDiet/extract';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +40,10 @@ export async function POST(req: Request) {
     const favoriteIds: string[] = Array.isArray(body?.favoriteFoodIds)
       ? body.favoriteFoodIds.filter((x: unknown) => typeof x === 'string').slice(0, MAX_FAVORITES)
       : [];
+
+    // O app novo manda `measures: true` = entende colher de chá/servir, concha, escumadeira, bife P/M/G...
+    // como unidade. Sem isso (app antigo), essas unidades continuam virando gramas com uma nota.
+    const native = body?.measures === true;
 
     if (!canActAsCoach(auth.user, adminId)) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
@@ -76,7 +80,7 @@ export async function POST(req: Request) {
 
     let extracted;
     try {
-      extracted = await extractDiet(text);
+      extracted = await extractDiet(text, { native });
     } catch (e: any) {
       console.error('[dieta-por-voz/interpretar] falha na IA:', e?.message || e);
       return NextResponse.json({ error: 'Não consegui interpretar agora. Tente de novo em instantes.' }, { status: 502 });
@@ -87,6 +91,7 @@ export async function POST(req: Request) {
     console.info(`[dieta-por-voz] model=${usage.model} fallback=${usage.usedFallback} in=${usage.inputTokens} out=${usage.outputTokens} ms=${usage.ms} refeicoes=${extracted.parsed.meals.length} alimentos=${foodsCount}`);
 
     const meals = buildDietReview(extracted.parsed.meals, index);
+    await attachPortions(meals, teamId);
 
     return NextResponse.json({ ok: true, text, meals, warnings: extracted.parsed.warnings });
   } catch (error: any) {
