@@ -1,0 +1,190 @@
+{
+ "fonte": "TACO - Tabela Brasileira de Composição de Alimentos, 4ª edição revisada e ampliada (NEPA/Unicamp, 2011), Tabela 1. Conferido contra o PDF: 589 alimentos casados por nome; 573 idênticos.",
+ "nomes": [
+  {
+   "de": "L",
+   "para": "Feijoada",
+   "motivo": "a planilha-fonte tem \"L\" no lugar do nome; os valores (116,9 kcal, P 8,7, C 11,6, G 6,5, fibra 5,1) são os da Feijoada no livro"
+  },
+  {
+   "de": "Cana, aguardente 1",
+   "para": "Cana, aguardente",
+   "motivo": "o \"1\" é o número da nota de rodapé do livro"
+  },
+  {
+   "de": "Cerveja, pilsen 2",
+   "para": "Cerveja, pilsen",
+   "motivo": "o \"2\" é o número da nota de rodapé do livro"
+  }
+ ],
+ "valores": [
+  {
+   "nome": "Pão, aveia, forma",
+   "tipo": "arredondamento",
+   "campos": {
+    "protein": {
+     "de": 12.3,
+     "para": 12.4
+    }
+   }
+  },
+  {
+   "nome": "Catalonha, refogada",
+   "tipo": "arredondamento",
+   "campos": {
+    "protein": {
+     "de": 1.9,
+     "para": 2.0
+    },
+    "fiber": {
+     "de": 3.6,
+     "para": 3.7
+    }
+   }
+  },
+  {
+   "nome": "Cebolinha, crua",
+   "tipo": "arredondamento",
+   "campos": {
+    "fat": {
+     "de": 0.3,
+     "para": 0.4
+    },
+    "fiber": {
+     "de": 3.5,
+     "para": 3.6
+    }
+   }
+  },
+  {
+   "nome": "Palmito, juçara, em conserva",
+   "tipo": "arredondamento",
+   "campos": {
+    "fiber": {
+     "de": 3.1,
+     "para": 3.2
+    }
+   }
+  },
+  {
+   "nome": "Palmito, pupunha, em conserva",
+   "tipo": "arredondamento",
+   "campos": {
+    "fiber": {
+     "de": 2.5,
+     "para": 2.6
+    }
+   }
+  },
+  {
+   "nome": "Pimentão, verde, cru",
+   "tipo": "arredondamento",
+   "campos": {
+    "fat": {
+     "de": 0.1,
+     "para": 0.2
+    }
+   }
+  },
+  {
+   "nome": "Figo, enlatado, em calda",
+   "tipo": "arredondamento",
+   "campos": {
+    "fat": {
+     "de": 0.1,
+     "para": 0.2
+    }
+   }
+  },
+  {
+   "nome": "Melão, cru",
+   "tipo": "arredondamento",
+   "campos": {
+    "fiber": {
+     "de": 0.2,
+     "para": 0.3
+    }
+   }
+  },
+  {
+   "nome": "Manjuba, com farinha de trigo, frita",
+   "tipo": "arredondamento",
+   "campos": {
+    "protein": {
+     "de": 23.4,
+     "para": 23.5
+    }
+   }
+  },
+  {
+   "nome": "Pescada, filé, cru",
+   "tipo": "arredondamento",
+   "campos": {
+    "protein": {
+     "de": 16.6,
+     "para": 16.7
+    }
+   }
+  },
+  {
+   "nome": "Sardinha, inteira, crua",
+   "tipo": "arredondamento",
+   "campos": {
+    "fat": {
+     "de": 2.6,
+     "para": 2.7
+    }
+   }
+  },
+  {
+   "nome": "Apresuntado",
+   "tipo": "arredondamento",
+   "campos": {
+    "protein": {
+     "de": 13.4,
+     "para": 13.5
+    }
+   }
+  },
+  {
+   "nome": "Carne, bovina, capa de contra-filé, sem gordura, grelhada",
+   "tipo": "arredondamento",
+   "campos": {
+    "fat": {
+     "de": 9.9,
+     "para": 10.0
+    }
+   }
+  },
+  {
+   "nome": "Carne, bovina, contra-filé, com gordura, cru",
+   "tipo": "arredondamento",
+   "campos": {
+    "protein": {
+     "de": 21.1,
+     "para": 21.2
+    }
+   }
+  },
+  {
+   "nome": "Carne, bovina, picanha, sem gordura, crua",
+   "tipo": "arredondamento",
+   "campos": {
+    "protein": {
+     "de": 21.2,
+     "para": 21.3
+    }
+   }
+  },
+  {
+   "nome": "Salada, de legumes, cozida no vapor",
+   "tipo": "valor diferente",
+   "campos": {
+    "fiber": {
+     "de": 0.0,
+     "para": 2.5
+    }
+   }
+  }
+ ]
+}

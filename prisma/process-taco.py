@@ -117,6 +117,22 @@ for row in ws.iter_rows(min_row=4, values_only=True):
         'isFavorite': name in FAVORITES,
     })
 
+# Correções conferidas contra o livro (TACO 4ª ed. impressa): nomes com número de nota de rodapé / "L" no lugar de "Feijoada" e
+# valores que diferem do livro. Lista e motivo em scripts/taco-correcoes/correcoes.json (mesma lista que aplicar.ts grava no banco).
+CORR_PATH = os.path.join(os.path.dirname(__file__), '..', 'scripts', 'taco-correcoes', 'correcoes.json')
+if os.path.exists(CORR_PATH):
+    corr = json.load(open(CORR_PATH, encoding='utf-8'))
+    ren = {c['de']: c['para'] for c in corr['nomes']}
+    byname = {f['name']: f for f in foods}
+    for f in foods:
+        if f['name'] in ren: f['name'] = ren[f['name']]
+    FMAP = {'protein': 'p', 'fat': 'f', 'carbs': 'c', 'fiber': 'fiber', 'kcal': 'kcal'}
+    for v in corr['valores']:
+        f = next((x for x in foods if x['name'] == v['nome']), None)
+        if not f: continue
+        for k, x in v['campos'].items():
+            if FMAP.get(k): f[FMAP[k]] = x['para']
+
 with open(OUT_PATH, 'w', encoding='utf-8') as f:
     json.dump(foods, f, ensure_ascii=False, indent=2)
 

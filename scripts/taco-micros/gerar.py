@@ -45,11 +45,14 @@ for r in ag.iter_rows(min_row=5, values_only=True):
     if isinstance(r[0], (int, float)): agrows[int(r[0])] = r
 def norm(x):
     return re.sub(r'\s+', ' ', unicodedata.normalize('NFD', x).encode('ascii', 'ignore').decode().lower()).strip()
+# nomes corrigidos contra o livro ("L" -> "Feijoada", números de nota de rodapé): scripts/taco-correcoes/correcoes.json
+_CORR = os.path.join(ROOT, 'scripts', 'taco-correcoes', 'correcoes.json')
+REN = {c['de']: c['para'] for c in json.load(open(_CORR, encoding='utf-8'))['nomes']} if os.path.exists(_CORR) else {}
 kcal_by_name = {}
 foods = []
 for r in main.iter_rows(min_row=4, values_only=True):
     if not isinstance(r[0], (int, float)) or not isinstance(r[1], str): continue
-    tid = int(r[0]); name = re.sub(r'\s+', ' ', r[1]).strip()
+    tid = int(r[0]); name = re.sub(r'\s+', ' ', r[1]).strip(); name = REN.get(name, name)
     vals = [parse(r[c]) for _, c in FIELDS]
     # Vitamina A (RAE): se a TACO não traz RAE mas traz RETINOL numérico (>0) -- leite, ovo, queijo, manteiga --
     # usa o retinol (em alimentos de origem animal ele é praticamente todo o RAE). Retinol "NA"/"Tr" sem RAE = sem dado.

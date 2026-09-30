@@ -521,7 +521,7 @@
     "name": "Pão, aveia, forma",
     "category": "Cereais e derivados",
     "kcal": 343.1,
-    "p": 12.3,
+    "p": 12.4,
     "f": 5.7,
     "c": 59.6,
     "fiber": 6.0,
@@ -1159,10 +1159,10 @@
     "name": "Catalonha, refogada",
     "category": "Verduras, hortaliças e derivados",
     "kcal": 63.4,
-    "p": 1.9,
+    "p": 2.0,
     "f": 4.8,
     "c": 4.8,
-    "fiber": 3.6,
+    "fiber": 3.7,
     "isFavorite": false
   },
   {
@@ -1182,9 +1182,9 @@
     "category": "Verduras, hortaliças e derivados",
     "kcal": 19.5,
     "p": 1.9,
-    "f": 0.3,
+    "f": 0.4,
     "c": 3.4,
-    "fiber": 3.5,
+    "fiber": 3.6,
     "isFavorite": false
   },
   {
@@ -1514,7 +1514,7 @@
     "p": 1.8,
     "f": 0.4,
     "c": 4.3,
-    "fiber": 3.1,
+    "fiber": 3.2,
     "isFavorite": false
   },
   {
@@ -1525,7 +1525,7 @@
     "p": 2.5,
     "f": 0.5,
     "c": 5.5,
-    "fiber": 2.5,
+    "fiber": 2.6,
     "isFavorite": false
   },
   {
@@ -1578,7 +1578,7 @@
     "category": "Verduras, hortaliças e derivados",
     "kcal": 21.3,
     "p": 1.1,
-    "f": 0.1,
+    "f": 0.2,
     "c": 4.9,
     "fiber": 2.6,
     "isFavorite": true
@@ -2139,7 +2139,7 @@
     "category": "Frutas e derivados",
     "kcal": 184.4,
     "p": 0.6,
-    "f": 0.1,
+    "f": 0.2,
     "c": 50.3,
     "fiber": 2.0,
     "isFavorite": false
@@ -2592,7 +2592,7 @@
     "p": 0.7,
     "f": 0.0,
     "c": 7.5,
-    "fiber": 0.2,
+    "fiber": 0.3,
     "isFavorite": false
   },
   {
@@ -3282,7 +3282,7 @@
     "name": "Manjuba, com farinha de trigo, frita",
     "category": "Pescados e frutos do mar",
     "kcal": 343.6,
-    "p": 23.4,
+    "p": 23.5,
     "f": 22.6,
     "c": 10.2,
     "fiber": 0.4,
@@ -3370,7 +3370,7 @@
     "name": "Pescada, filé, cru",
     "category": "Pescados e frutos do mar",
     "kcal": 107.2,
-    "p": 16.6,
+    "p": 16.7,
     "f": 4.0,
     "c": 0.0,
     "fiber": 0.0,
@@ -3525,7 +3525,7 @@
     "category": "Pescados e frutos do mar",
     "kcal": 113.9,
     "p": 21.1,
-    "f": 2.6,
+    "f": 2.7,
     "c": 0.0,
     "fiber": 0.0,
     "isFavorite": false
@@ -3546,7 +3546,7 @@
     "name": "Apresuntado",
     "category": "Carnes e derivados",
     "kcal": 128.9,
-    "p": 13.4,
+    "p": 13.5,
     "f": 6.7,
     "c": 2.9,
     "fiber": 0.0,
@@ -3701,7 +3701,7 @@
     "category": "Carnes e derivados",
     "kcal": 239.4,
     "p": 35.1,
-    "f": 9.9,
+    "f": 10.0,
     "c": -0.0,
     "fiber": 0.0,
     "isFavorite": false
@@ -3766,7 +3766,7 @@
     "name": "Carne, bovina, contra-filé, com gordura, cru",
     "category": "Carnes e derivados",
     "kcal": 205.9,
-    "p": 21.1,
+    "p": 21.2,
     "f": 12.8,
     "c": 0.0,
     "fiber": 0.0,
@@ -4195,7 +4195,7 @@
     "name": "Carne, bovina, picanha, sem gordura, crua",
     "category": "Carnes e derivados",
     "kcal": 133.5,
-    "p": 21.2,
+    "p": 21.3,
     "f": 4.7,
     "c": 0.0,
     "fiber": 0.0,
@@ -5149,7 +5149,7 @@
   },
   {
     "id": 469,
-    "name": "Cana, aguardente 1",
+    "name": "Cana, aguardente",
     "category": "Bebidas (alcoólicas e não alcoólicas)",
     "kcal": 215.7,
     "p": 0.0,
@@ -5171,7 +5171,7 @@
   },
   {
     "id": 471,
-    "name": "Cerveja, pilsen 2",
+    "name": "Cerveja, pilsen",
     "category": "Bebidas (alcoólicas e não alcoólicas)",
     "kcal": 40.7,
     "p": 0.6,
@@ -5875,7 +5875,7 @@
   },
   {
     "id": 535,
-    "name": "L",
+    "name": "Feijoada",
     "category": "Alimentos preparados",
     "kcal": 116.9,
     "p": 8.7,
@@ -5947,7 +5947,7 @@
     "p": 2.0,
     "f": 0.3,
     "c": 7.1,
-    "fiber": 0.0,
+    "fiber": 2.5,
     "isFavorite": false
   },
   {
