@@ -37,6 +37,14 @@ vão para `errors.jsonl` e nunca viram nota zero.
 - **US$/treino** e **US$/100 treinos**: custo medido pelas contagens de tokens da API.
 - Divergências por caso ficam em `resumo.md` para auditar quem errou o quê.
 
+## Histórico de aprovação
+
+- **Casos e resultados esperados (34, `CASOS.md`)**: revisados e aprovados pelo Paulo em 30/09/2026,
+  já com o padrão do método 21 = 21 repetições. Se os casos mudarem, revise de novo antes de comparar
+  números com rodadas antigas.
+- **Rodada paga**: ainda não executada quando este arquivo foi escrito (o ambiente onde o código foi
+  escrito não tinha as chaves de API). O primeiro resultado real é o piloto do passo 3.
+
 ## Limitações honestas
 
 - Só **1 dos 34 casos é fala real** (a do Paulo, `c31`); os outros 33 foram escritos por Claude
