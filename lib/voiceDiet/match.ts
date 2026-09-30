@@ -51,7 +51,7 @@ export type FoodCandidate = {
 export type MatchStatus = 'SURE' | 'CHOOSE' | 'NONE';
 export type MatchResult = { status: MatchStatus; best: FoodCandidate | null; candidates: FoodCandidate[] };
 
-export type Prep = 'cooked' | 'grilled' | 'roasted' | 'raw' | 'fried' | 'other';
+export type Prep = 'cooked' | 'prepared' | 'grilled' | 'roasted' | 'raw' | 'fried' | 'other';
 
 type Entry = { row: FoodRow; tokens: string[]; key: string; own: boolean; prep: Prep; student: boolean };
 export type FoodIndex = { entries: Entry[]; df: Map<string, number>; n: number; favorites: Set<string> };
@@ -60,6 +60,7 @@ export type FoodIndex = { entries: Entry[]; df: Map<string, number>; n: number; 
 export function prepOfName(name: string): Prep {
   const n = norm(name);
   if (/\bcozid|\bcozinh/.test(n)) return 'cooked';
+  if (/\bmexid|\brefogad|\bsaute/.test(n)) return 'prepared';   // já é comida pronta, mas não é "cozido" literal
   if (/\bgrelhad/.test(n)) return 'grilled';
   if (/\bassad/.test(n)) return 'roasted';
   if (/\bfrit/.test(n)) return 'fried';
@@ -160,8 +161,9 @@ const B_STUDENT = 0.15;
 const B_FAVORITE = 0.04;
 const B_OWN = 0.05;
 const B_HEAD = 0.05;
+const B_WORD = 0.10;   // o nome do catálogo tem o preparo falado ("Ovos Mexidos", "Frango Desfiado")
 
-const COOKED_LIKE: Prep[] = ['cooked', 'grilled', 'roasted'];
+const COOKED_LIKE: Prep[] = ['cooked', 'prepared', 'grilled', 'roasted'];
 
 /**
  * Regra do coach: SEMPRE cozido. "Cozido" aqui vale para qualquer preparo pronto
@@ -175,6 +177,7 @@ function prepBonus(entry: Prep, want: Prep | null): number {
     return 0;
   }
   if (entry === want) return 0.08;
+  if (want === 'cooked' && COOKED_LIKE.includes(entry)) return 0.03;   // pediu cozido: grelhado/assado/mexido também servem, um pouco menos
   if (entry === 'raw' && want !== 'raw') return -0.06;
   if (entry === 'fried' && want !== 'fried') return -0.06;
   return 0;
@@ -215,13 +218,19 @@ const baseKeyOf = (tokens: string[]) => tokens.filter((t) => !PREP_TOKEN.test(t)
 
 export function matchFood(spoken: string, prepSpoken: unknown, ix: FoodIndex): FoodMatch {
   const prepClass = prepFromSpoken(prepSpoken);
-  const unknownPrep = typeof prepSpoken === 'string' && prepSpoken.trim() && !prepClass ? prepSpoken.trim() : null;
+  const prepText = typeof prepSpoken === 'string' ? prepSpoken.trim() : '';
+  const prepTokens = prepText ? tokenize(prepText) : [];
+  // Preparo fora das classes padrão (mexido, desfiado, refogado...) pode fazer parte do NOME do
+  // alimento no catálogo ("Ovos Mexidos"): nesse caso ele vale como parte do que foi dito.
+  const wordTokens = prepClass ? [] : prepTokens;
 
   // Palavra de preparo que sobrou no nome ("ovo mexido") não pode contar como parte do alimento.
   const variants = queryVariants(spoken)
     .map((v) => tokenize(v).filter((t) => !(PREP_WORDS.has(t) && !ix.df.has(t))))
     .filter((t) => t.length);
-  if (!variants.length) return { status: 'NONE', best: null, candidates: [], unknownPrep };
+  if (!variants.length) return { status: 'NONE', best: null, candidates: [], unknownPrep: null };
+  // "frango grelhado" / "ovos mexidos" inteiros, pra reconhecer o nome igual ao do catálogo
+  const combined = prepTokens.length ? variants.map((q) => [...q, ...prepTokens]) : [];
 
   const scored = ix.entries.map((e) => {
     let best = { score: 0, coverage: 0 };
@@ -233,6 +242,13 @@ export function matchFood(spoken: string, prepSpoken: unknown, ix: FoodIndex): F
       if (q.join(' ') === e.key) exact = true;
       if (q[0] === e.tokens[0]) head = true;      // a palavra principal ("queijo", "ovo") abre o nome
     }
+    for (const q of combined) if (q.join(' ') === e.key) exact = true;
+    let withWord = false;
+    if (wordTokens.length) {
+      for (const q of variants) {
+        if (textScore(ix, [...q, ...wordTokens], e.tokens).coverage >= 0.999) withWord = true;
+      }
+    }
     const student = e.student;
     const text = exact ? 1 : best.score;
     const rank = text
@@ -240,12 +256,17 @@ export function matchFood(spoken: string, prepSpoken: unknown, ix: FoodIndex): F
       + (e.row.isFavorite ? B_FAVORITE : 0)
       + (e.own ? B_OWN : 0)
       + (head ? B_HEAD : 0)
+      + (withWord ? B_WORD : 0)
       + prepBonus(e.prep, prepClass);
-    return { e, text, coverage: exact ? 1 : best.coverage, exact, head, student, rank };
+    return { e, text, coverage: exact ? 1 : best.coverage, exact, head, withWord, student, rank };
   })
   .filter((r) => r.text >= 0.3)
   // notas iguais até a 2ª casa empatam -> ordem alfabética (estável e previsível)
   .sort((a, b) => (Number(b.exact) - Number(a.exact)) || (q2(b.rank) - q2(a.rank)) || a.e.row.name.localeCompare(b.e.row.name));
+
+  // o preparo falado só é "desconhecido" se NENHUM alimento do catálogo o tem no nome
+  const anyWord = wordTokens.length > 0 && scored.some((r) => r.withWord);
+  const unknownPrep = wordTokens.length > 0 && !anyWord ? prepText : null;
 
   if (!scored.length) return { status: 'NONE', best: null, candidates: [], unknownPrep };
 
@@ -260,8 +281,10 @@ export function matchFood(spoken: string, prepSpoken: unknown, ix: FoodIndex): F
 
   const top = scored[0];
 
-  // Só considera "certeza" quando o coach disse tudo que aparece no nome do alimento.
-  const pool = scored.filter((r) => r.coverage >= 0.999);
+  // Só considera "certeza" quando o coach disse tudo que aparece no nome do alimento
+  // (e, se disse um preparo que existe no nome de algum alimento, só entre esses).
+  let pool = scored.filter((r) => r.coverage >= 0.999);
+  if (anyWord) pool = pool.filter((r) => r.withWord);
   if (!pool.length) return done(top.text >= 0.55 ? 'CHOOSE' : 'NONE', top.text >= 0.55 ? top : null);
 
   // 1) "Do Aluno" vem primeiro: se o aluno marcou algo que bate com o que foi dito, é isso.
@@ -274,7 +297,8 @@ export function matchFood(spoken: string, prepSpoken: unknown, ix: FoodIndex): F
   }
 
   // 2) O coach falou o nome igual ao do catálogo.
-  if (top.exact) return done('SURE', top);
+  const exactRow = pool.find((r) => r.exact);
+  if (exactRow) return done('SURE', exactRow);
 
   // 3) Cadastrados pelo coach > favoritos > o resto. Se a camada tem UMA opção clara, é ela;
   //    se o texto de outra opção fora dela casa bem melhor, o coach confere.
