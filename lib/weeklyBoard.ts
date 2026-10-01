@@ -3,7 +3,7 @@
 // uma "auto-avaliação" do próprio coach (respondeu quantos? cobrou quantos? falou com quantos?). Só leitura; recebe o `db` (Prisma) pra testar.
 import { MASTER_IDS } from '@/lib/masterIds';
 import { answersView, isDueStudentForWeek, needsAttention, weekLabel, weekRange, addDays, evaluatedWeekStart } from '@/lib/weeklyFeedback';
-import { describeFacts, type FactLine, type WeeklyFacts } from '@/lib/weeklyFacts';
+import { brtYmd, describeFacts, type FactLine, type WeeklyFacts } from '@/lib/weeklyFacts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const NUDGE_TYPE = 'WEEKLY_NUDGE';
@@ -47,7 +47,7 @@ export async function loadWeeklyBoard(db: any, o: { adminId: string; weekStart: 
       where: { userId: { in: ids }, weekStart },
       select: { id: true, userId: true, questions: true, answers: true, score: true, flags: true, facts: true, channel: true, sourceText: true, coachSeenAt: true, coachReply: true, coachReplyAt: true, createdAt: true },
     }),
-    db.workoutHistory.findMany({ where: { userId: { in: ids }, date: { gte: range.start, lt: range.end } }, select: { userId: true } }),
+    db.workoutHistory.findMany({ where: { userId: { in: ids }, date: { gte: range.start, lt: range.end } }, select: { id: true, userId: true, day: true, date: true } }),
     db.anamnese.findMany({ where: { userId: { in: ids } }, orderBy: { createdAt: 'desc' }, select: { userId: true, frequencia: true } }).catch(() => []),
     db.studentAlert.findMany({ where: { userId: { in: ids }, type: 'EXERCISE_NOTE', isRead: false }, select: { userId: true } }).catch(() => []),
     db.studentAlert.findMany({ where: { userId: { in: ids }, type: NUDGE_TYPE, createdAt: { gte: nudgeFrom, lt: nudgeTo } }, orderBy: { createdAt: 'desc' }, select: { userId: true, createdAt: true } }).catch(() => []),
@@ -55,7 +55,13 @@ export async function loadWeeklyBoard(db: any, o: { adminId: string; weekStart: 
   ]);
 
   const fbBy = new Map<string, any>(feedbacks.map((f) => [f.userId, f]));
-  const doneBy = new Map<string, number>(); histories.forEach((h) => doneBy.set(h.userId, (doneBy.get(h.userId) || 0) + 1));
+  // o mesmo treino (mesma letra, mesmo dia) finalizado mais de uma vez conta UMA vez (duplicatas antigas de toques repetidos no "finalizar")
+  const doneBy = new Map<string, number>(); const seenDone = new Set<string>();
+  histories.forEach((h, i) => {
+    const key = h.day && h.date ? `${h.userId}|${brtYmd(h.date)}|${h.day}` : `${h.userId}|id|${h.id ?? i}`;
+    if (seenDone.has(key)) return;
+    seenDone.add(key); doneBy.set(h.userId, (doneBy.get(h.userId) || 0) + 1);
+  });
   const freqBy = new Map<string, number>(); anamneses.forEach((a) => { if (!freqBy.has(a.userId) && Number(a.frequencia) > 0) freqBy.set(a.userId, Number(a.frequencia)); });
   const notesBy = new Map<string, number>(); notes.forEach((a) => notesBy.set(a.userId, (notesBy.get(a.userId) || 0) + 1));
   const setBy = new Map<string, any>(sets.map((x) => [x.userId, x]));

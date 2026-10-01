@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
-import { COACH_REPLY_TYPE } from '@/lib/coachReplies';
+import { COACH_REPLY_TYPE, registerCoachContact } from '@/lib/coachReplies';
 
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -58,6 +58,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             if (student) {
                 sendPushToUser(student, title, reply.slice(0, 120), { type: 'coach_reply', replyId: replyRow.id }).catch(() => {});
             }
+            await registerCoachContact(prisma, existingAlert.userId);   // responder = falar com o aluno
             return NextResponse.json({ ...updatedAlert, replied: true });
         }
 

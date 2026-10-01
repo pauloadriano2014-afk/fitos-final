@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
-import { COACH_REPLY_TYPE } from '@/lib/coachReplies';
+import { COACH_REPLY_TYPE, registerCoachContact } from '@/lib/coachReplies';
 import { weekLabel } from '@/lib/weeklyFeedback';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +40,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         },
       });
       sendPushToUser(student, title, reply.slice(0, 120), { type: 'coach_reply' }).catch(() => {});
+      await registerCoachContact(prisma, fb.userId, now);   // responder = falar com o aluno
     }
     return NextResponse.json({ success: true, coachSeenAt: updated.coachSeenAt, coachReplyAt: updated.coachReplyAt ?? null });
   } catch (error) {

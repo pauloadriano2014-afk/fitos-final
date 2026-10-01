@@ -179,7 +179,15 @@ model WorkoutHistory {
   coachReply         String?    @db.Text
   coachReplyAt       DateTime?
 
+  // 🔒 (1 out 2026) Chave de IDEMPOTÊNCIA da finalização do treino: o app manda uma chave fixa por sessão de treino (workoutId + dia + hora em
+  // que o cronômetro começou), então "SALVAR E FINALIZAR" tocado várias vezes (internet lenta) ou reenviado depois de uma falha grava UM treino só
+  // (um XP, um aviso para o coach, uma contagem). O índice único garante isso mesmo com dois pedidos chegando no mesmo instante.
+  // Registros antigos ficam null (o Postgres não considera null igual a null no índice único).
+  clientKey        String?
+
   details          ExerciseHistory[]
+
+  @@unique([userId, clientKey])
 }
 
 model ExerciseHistory {

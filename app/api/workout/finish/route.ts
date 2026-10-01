@@ -7,6 +7,7 @@ import { requireAuth, canAccessStudent } from '@/lib/auth';
 // 🔥 IMPORTAMOS O CÉREBRO DA NOSSA IA 🔥
 import { analyzeWorkoutEvolution } from '@/app/utils/analyzeEvolution';
 import { sendPushToUser } from '@/app/utils/sendNotification';
+import { autoClientKey, cleanDay, cleanWorkoutId, findExistingFinish, isUniqueViolation, sanitizeClientKey } from '@/lib/finishWorkout';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,75 +33,108 @@ export async function POST(req: Request) {
         return parseFloat(strVal) || 0;
     };
 
+    const exercises: any[] = Array.isArray(exercisesData) ? exercisesData : [];
+
+    // 🔒 (1 out 2026) NÃO DUPLICAR: o mesmo treino finalizado várias vezes (internet lenta + vários toques, ou reenvio depois de falha) grava UM só.
+    // Ver lib/finishWorkout.ts. Mesma chave = devolve o resultado do que já foi gravado, sem XP, sem aviso ao coach, sem nova contagem.
+    const now = new Date();
+    const dayClean = cleanDay(day);
+    const workoutIdClean = cleanWorkoutId(workoutId);
+    const providedKey = sanitizeClientKey(body.clientKey);
+    const clientKey = providedKey ?? autoClientKey({ workoutId: workoutIdClean, day: dayClean, workoutName, now });
+    const finishLookup = { userId, clientKey, auto: !providedKey, workoutId: workoutIdClean, day: dayClean, workoutName: String(workoutName || ''), now };
+
+    const duplicateResponse = async (existing: { id: string; xpEarned: number }) => {
+        const current = await prisma.user.findUnique({ where: { id: userId }, select: { currentXP: true } });
+        return NextResponse.json({ success: true, duplicate: true, xpGained: existing.xpEarned, newTotalXP: current?.currentXP ?? 0 });
+    };
+
+    const already = await findExistingFinish(prisma, finishLookup);
+    if (already) return duplicateResponse(already);
+
     let xpBase = 150; 
     let xpBonus = 0;
     
     // Calcula XP Bonus (Lógica simplificada para garantir funcionamento)
-    if (exercisesData && exercisesData.length > 0) {
-        xpBonus = exercisesData.length * 5; // 5 XP por exercício feito
+    if (exercises.length > 0) {
+        xpBonus = exercises.length * 5; // 5 XP por exercício feito
     }
 
     const totalXp = xpBase + xpBonus;
 
-    // Salva Histórico
+    // Salva Histórico + XP do aluno JUNTOS (uma transação: se um falhar, o outro não fica pela metade, e uma nova tentativa com a mesma chave
+    // não perde o XP). O índice único (userId, clientKey) segura dois pedidos idênticos chegando no mesmo instante.
     // 🔥 (17 set 2026) `include: { details: true }` — precisamos do id de volta
     // pra poder linkar o push de "comentário no exercício" direto pra essa
     // observação específica (ver bloco de notificação mais abaixo).
-    const workoutHistoryRecord = await prisma.workoutHistory.create({
-        data: {
-            userId,
-            name: workoutName,
-            // 🔥 (1 out 2026) qual dia/ficha foi feito -- o feedback da semana usa pra dizer "faltou o Treino C"
-            day: day ? String(day).trim().toUpperCase().slice(0, 40) : null,
-            workoutId: workoutId ? String(workoutId).slice(0, 80) : null,
-            xpEarned: totalXp,
-            duration: duration || 0,
-            rpe: rpe ? Number(rpe) : null,
-            feedback: feedback || null,
-            details: {
-                create: exercisesData.flatMap((ex: any) => {
-                    // Pega a última série válida para registrar a carga final
-                    const lastSet = ex.sets && ex.sets.length > 0 ? ex.sets[ex.sets.length - 1] : null;
-                    
-                    // 🔥 Observação do aluno por exercício (opcional). Salva
-                    // repetida em cada série do mesmo jeito que exerciseName já
-                    // é -- na leitura (WorkoutLogCard.js) só olhamos a primeira
-                    // ocorrência não-vazia por exercício.
-                    const noteClean = ex.note ? String(ex.note).trim().slice(0, 500) : '';
+    let workoutHistoryRecord: any;
+    let user: any;
+    try {
+        [workoutHistoryRecord, user] = await prisma.$transaction([
+            prisma.workoutHistory.create({
+                data: {
+                    userId,
+                    name: workoutName,
+                    // 🔥 (1 out 2026) qual dia/ficha foi feito -- o feedback da semana usa pra dizer "faltou o Treino C"
+                    day: dayClean,
+                    workoutId: workoutIdClean,
+                    clientKey,
+                    xpEarned: totalXp,
+                    duration: duration || 0,
+                    rpe: rpe ? Number(rpe) : null,
+                    feedback: feedback || null,
+                    details: {
+                        create: exercises.flatMap((ex: any) => {
+                            // Pega a última série válida para registrar a carga final
+                            const sets: any[] = Array.isArray(ex.sets) ? ex.sets : [];
 
-                    return ex.sets.map((s: any) => ({
-                        exerciseId: ex.exerciseId,
-                        exerciseName: ex.name,
-                        setNumber: s.index,
-                        weight: cleanWeight(s.weight), // <--- USO DA FUNÇÃO DE LIMPEZA
-                        reps: String(s.reps || "0"),
-                        note: noteClean || null,
-                    }));
-                })
-            }
-        },
-        include: { details: true }
-    });
+                            // 🔥 Observação do aluno por exercício (opcional). Salva
+                            // repetida em cada série do mesmo jeito que exerciseName já
+                            // é -- na leitura (WorkoutLogCard.js) só olhamos a primeira
+                            // ocorrência não-vazia por exercício.
+                            const noteClean = ex.note ? String(ex.note).trim().slice(0, 500) : '';
 
-    // Atualiza XP do Usuário e resgata dados do Treinador para Notificação
-    const user = await prisma.user.update({
-        where: { id: userId },
-        data: { 
-            currentXP: { increment: totalXp } 
-        },
-        include: {
-            // 🔥 Também busca a assinatura de Web Push — sem isso o coach que
-            // acessa pelo navegador (PWA) nunca recebia esse aviso.
-            // 🔥 (20 set 2026) `id: true` — SEM isso, sendPushToUser(user.coach, ...)
-            // recebia um objeto sem `id`, então a busca das assinaturas na tabela
-            // WebPushSubscription (getWebPushSubscriptions(user?.id)) sempre voltava
-            // vazia — o push do app nativo (pushToken) ia normal, mas o Web Push
-            // (PWA/navegador) NUNCA disparava nesse fluxo específico de "treino
-            // finalizado". Esse arquivo não fazia parte da leva de rotas corrigida
-            // em 19/09 (é o único que ficou de fora).
-            coach: { select: { id: true, pushToken: true, webPushSubscription: true } }
+                            return sets.map((s: any) => ({
+                                exerciseId: ex.exerciseId,
+                                exerciseName: ex.name,
+                                setNumber: s.index,
+                                weight: cleanWeight(s.weight), // <--- USO DA FUNÇÃO DE LIMPEZA
+                                reps: String(s.reps || "0"),
+                                note: noteClean || null,
+                            }));
+                        })
+                    }
+                },
+                include: { details: true }
+            }),
+            // Atualiza XP do Usuário e resgata dados do Treinador para Notificação
+            prisma.user.update({
+                where: { id: userId },
+                data: { 
+                    currentXP: { increment: totalXp } 
+                },
+                include: {
+                    // 🔥 Também busca a assinatura de Web Push — sem isso o coach que
+                    // acessa pelo navegador (PWA) nunca recebia esse aviso.
+                    // 🔥 (20 set 2026) `id: true` — SEM isso, sendPushToUser(user.coach, ...)
+                    // recebia um objeto sem `id`, então a busca das assinaturas na tabela
+                    // WebPushSubscription (getWebPushSubscriptions(user?.id)) sempre voltava
+                    // vazia — o push do app nativo (pushToken) ia normal, mas o Web Push
+                    // (PWA/navegador) NUNCA disparava nesse fluxo específico de "treino
+                    // finalizado". Esse arquivo não fazia parte da leva de rotas corrigida
+                    // em 19/09 (é o único que ficou de fora).
+                    coach: { select: { id: true, pushToken: true, webPushSubscription: true } }
+                }
+            }),
+        ]);
+    } catch (e: any) {
+        // dois pedidos iguais chegaram juntos: o outro gravou primeiro -> devolve o resultado dele (sem gravar de novo)
+        if (isUniqueViolation(e)) {
+            const first = await findExistingFinish(prisma, { ...finishLookup, auto: false });
+            if (first) return duplicateResponse(first);
         }
-    });
+        throw e;
+    }
 
     // 🔥 GATILHO SILENCIOSO DA IA 🔥
     // Roda a verificação de Estagnação em background. Se achar problema, salva no banco!
@@ -115,7 +149,7 @@ export async function POST(req: Request) {
         const feedbackClean = feedback ? String(feedback).trim() : '';
         // 🔥 Primeira observação não-vazia (mesma regra de leitura do
         // WorkoutLogCard.js: só a primeira ocorrência por exercício importa).
-        const noteDetail = workoutHistoryRecord.details.find((d) => d.note);
+        const noteDetail = workoutHistoryRecord.details.find((d: any) => d.note);
 
         // 🔥 (20 set 2026) Pedido do Paulo: notificação só com nome + primeiro
         // sobrenome do aluno (não o nome completo), sem "esmagou" e mostrando

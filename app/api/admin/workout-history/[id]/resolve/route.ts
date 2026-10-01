@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
+import { registerCoachContact } from '@/lib/coachReplies';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,6 +83,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     sendPushToUser(workoutHistory.user, pushTitle, pushBody, pushData).catch(() => {});
+    if (replyClean) await registerCoachContact(prisma, workoutHistory.userId, now);   // responder = falar com o aluno
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

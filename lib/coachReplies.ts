@@ -15,6 +15,19 @@ export const COACH_REPLY_TYPE = 'COACH_REPLY';
 const MAX_REPLIES = 20;
 const QUOTE_MAX = 140;
 
+/**
+ * 💬 (1 out 2026) Responder o aluno conta como "falei com ele": atualiza a data do último contato (a mesma que o coach marcava na mão em
+ * "registrar contato hoje"). Assim o "contato há N dias" e o aviso de contato atrasado do aluno acompanham as respostas, sem dupla marcação.
+ * Só RESPOSTA conta (texto enviado ao aluno); "marcar como visto" não. Nunca lança erro: a resposta já foi gravada e enviada.
+ */
+export async function registerCoachContact(db: any, studentId: string, now: Date = new Date()): Promise<void> {
+  try {
+    await db.user.update({ where: { id: studentId }, data: { lastContactDate: now } });
+  } catch (e: any) {
+    console.error('[coachReplies] não consegui registrar o contato:', e?.message || e);
+  }
+}
+
 export type ReplyItem = {
   id: string;
   kind: 'REPLY';
