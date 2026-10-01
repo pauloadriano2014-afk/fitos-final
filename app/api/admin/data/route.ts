@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
-import { withExerciseNotes, loadRecentExerciseNotes } from '@/lib/dashboardFeed';
+import { withExerciseNotes, loadRecentExerciseNotes, loadRecentWeeklyFeedbacks } from '@/lib/dashboardFeed';
 
 export const dynamic = 'force-dynamic';
 
@@ -174,6 +174,8 @@ export async function GET(req: Request) {
 
     // 💬 observações enviadas na hora (durante o treino) e ainda não resolvidas -- aparecem no feed ao lado dos treinos concluídos
     const recentNotes = await loadRecentExerciseNotes(prisma, logsWhere.user);
+    // 💜 feedbacks da semana ainda não vistos pelo coach (aba FEED)
+    const recentWeekly = await loadRecentWeeklyFeedbacks(prisma, logsWhere.user);
 
     // 🔒 4. BIBLIOTECA DE EXERCÍCIOS
     // - Parceiros e Adri herdam os exercícios básicos do Paulo para não recadastrar do zero
@@ -207,6 +209,7 @@ export async function GET(req: Request) {
         inactiveUsers,
         recentLogs, 
         recentNotes,
+        recentWeekly,
         exercises,
         requesterRole: requester.role,
     });

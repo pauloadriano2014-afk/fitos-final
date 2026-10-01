@@ -44,3 +44,28 @@ export async function loadRecentExerciseNotes(db: any, userWhere: any, take = 30
     return [];
   }
 }
+
+/**
+ * 💜 Feedbacks da semana que os alunos responderam nos últimos 14 dias e o coach ainda não viu: entram no FEED ao lado dos treinos.
+ * `excerpt` = o que mais importa ler de relance (a dor/dificuldade contada, ou o pedido de ajuste). Falha (tabela ainda não criada) = lista vazia.
+ */
+export async function loadRecentWeeklyFeedbacks(db: any, userWhere: any, now: Date = new Date(), take = 15) {
+  try {
+    const since = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const rows = await db.weeklyFeedback.findMany({
+      where: { createdAt: { gte: since }, coachSeenAt: null, user: userWhere },
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: { id: true, userId: true, weekStart: true, createdAt: true, score: true, flags: true, answers: true, user: { select: { id: true, name: true, photoUrl: true, coachId: true } } },
+    });
+    return rows.map((r: any) => {
+      const a = (r.answers && typeof r.answers === 'object' ? r.answers : {}) as Record<string, any>;
+      const pick = [a.difficulty_text, a.limitation_text, a.protocol].find((t) => typeof t === 'string' && t.trim());
+      const { answers, ...rest } = r;
+      return { ...rest, excerpt: pick ? String(pick).trim().slice(0, 140) : null };
+    });
+  } catch (e: any) {
+    if (!/does not exist|P2021|P2022/i.test(String(e?.code || '') + String(e?.message || ''))) console.error('[dashboardFeed] feedbacks da semana indisponíveis:', e?.message || e);
+    return [];
+  }
+}

@@ -287,3 +287,32 @@ model FormResponse {
   @@index([userId])
   @@index([templateId])
 }
+
+// 💜 (1 out 2026) FEEDBACK DA SEMANA -- o mini-questionário que o time fazia por WhatsApp (treinos, desempenho, dificuldade, disposição,
+// protocolo, dedicação 0-10) agora é respondido no app, toda segunda-feira, sobre a semana que passou (segunda a domingo).
+// Uma resposta por aluno por semana (weekStart = a segunda-feira da semana AVALIADA, "AAAA-MM-DD", horário de Brasília).
+// `questions` guarda as perguntas como foram feitas (as perguntas extras mudam conforme a anamnese do aluno), `answers` as respostas por id,
+// `score` é a dedicação (0-10) e `flags` os alertas calculados (dor, baixa aderência, pouca energia...) pro coach priorizar.
+// A resposta do coach vira um aviso no sino do aluno (StudentAlert COACH_REPLY, ver lib/coachReplies.ts); `coachSeenAt` = o coach já viu.
+model WeeklyFeedback {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coachId   String?
+
+  weekStart String
+  questions Json
+  answers   Json
+  score     Int?
+  flags     String[] @default([])
+
+  coachSeenAt  DateTime?
+  coachReply   String?   @db.Text
+  coachReplyAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, weekStart])
+  @@index([coachId, weekStart])
+}

@@ -18,6 +18,7 @@ model User {
   gender            String?
   aiLogs            AiLog[]
   dailyCheckins     DailyCheckin[]
+  weeklyFeedbacks   WeeklyFeedback[]   // 💜 feedback semanal do aluno (ver tracking.prisma)
   dietFeedbacks     DietFeedback[]
   dietMealLogs      DietMealLog[]
   npsRequested      Boolean  @default(false)
