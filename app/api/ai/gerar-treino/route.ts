@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import prisma from '@/lib/prisma';
 import OpenAI from 'openai';
 import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
+import { canUseAiBuilder, aiBuilderLocked } from '@/lib/aiAccess';
 // 🔥 (21 set 2026) Migrado do @google/generative-ai (descontinuado pelo
 // Google) pro @google/genai (SDK atual, com suporte a cache explícito).
 // getOrCreateGeminiCache cuida de criar/reaproveitar o cache do banco de
@@ -20,6 +21,8 @@ export async function POST(req: NextRequest) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
+    // 🔒 Montagem por IA só pro time master (a criação por voz continua liberada pros parceiros).
+    if (!canUseAiBuilder(auth.user)) return aiBuilderLocked();
 
     const body = await req.json();
     const { userId, adminId, cycleConfig } = body;

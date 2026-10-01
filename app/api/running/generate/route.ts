@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { canUseAiBuilder, aiBuilderLocked } from '@/lib/aiAccess';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -12,9 +13,10 @@ export async function POST(req: NextRequest) {
   try {
     const { userId } = await req.json();
 
-    // 🔒 Só o coach dono do aluno (ou o time master) pode gerar o protocolo dele.
+    // 🔒 Só o coach dono do aluno (ou o time master) pode gerar o protocolo dele -- e a montagem por IA é do time master.
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
+    if (!canUseAiBuilder(auth.user)) return aiBuilderLocked();
     const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
     if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });

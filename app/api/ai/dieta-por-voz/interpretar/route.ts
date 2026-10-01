@@ -8,10 +8,11 @@
 //   CONFERE e só então adiciona ao dia aberto.
 //
 // A transcrição do áudio é a mesma rota do treino (/api/ai/treino-por-voz/transcrever,
-// com context=dieta). Só masters por enquanto; a trava é aqui no servidor.
+// com context=dieta). Coach ativo (ADMIN/COACH); a trava é aqui no servidor.
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
+import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { buildFoodIndex } from '@/lib/voiceDiet/match';
 import { buildDietReview, attachPortions } from '@/lib/voiceDiet/pipeline';
@@ -28,9 +29,8 @@ export async function POST(req: Request) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    if (!isMasterId(auth.user.id)) {
-      return NextResponse.json({ error: 'Recurso disponível apenas para o time master.' }, { status: 403 });
-    }
+    // 🎙️ Liberado pra todo coach ativo (antes era só master): é o coach quem dita e confere; limites por hora abaixo.
+    if (!(await isActiveCoach(prisma, auth.user))) return coachOnly();
 
     const body = await req.json().catch(() => ({}));
     const adminId: string = body?.adminId || auth.user.id;

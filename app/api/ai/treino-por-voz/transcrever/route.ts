@@ -6,11 +6,13 @@
 // ("leg press 45", "Smith") é onde qualquer transcrição erra, então o coach
 // corrige na hora em vez de descobrir o erro depois no treino.
 //
-// Só masters. O áudio não é gravado em lugar nenhum: vai pra transcrição e é
+// Coach ativo (ADMIN/COACH). O áudio não é gravado em lugar nenhum: vai pra transcrição e é
 // descartado.
 import { NextResponse } from 'next/server';
 import OpenAI, { toFile } from 'openai';
-import { requireAuth, isMasterId } from '@/lib/auth';
+import prisma from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth';
+import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
 import { checkRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
@@ -50,9 +52,8 @@ export async function POST(req: Request) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    if (!isMasterId(auth.user.id)) {
-      return NextResponse.json({ error: 'Recurso disponível apenas para o time master.' }, { status: 403 });
-    }
+    // 🎙️ Liberado pra todo coach ativo (antes era só master): é o coach quem dita e confere; limites por hora abaixo.
+    if (!(await isActiveCoach(prisma, auth.user))) return coachOnly();
 
     const rl = checkRateLimit(`voz-transcrever:${auth.user.id}`, { max: 40, windowMs: 60 * 60 * 1000 });
     if (!rl.allowed) {

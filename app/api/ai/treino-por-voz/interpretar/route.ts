@@ -6,11 +6,11 @@
 //   fala -> IA extrai a estrutura -> este código casa com a biblioteca do coach
 //   -> normaliza blocos/padrões -> o coach CONFERE e só então adiciona ao dia.
 //
-// Só masters (Paulo/Adri) por enquanto. A trava é aqui no servidor, não só no
-// botão do app.
+// Liberado pra todo coach ativo (ADMIN/COACH); a trava é aqui no servidor, não só no botão do app.
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
+import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { buildIndex } from '@/lib/voiceWorkout/match';
 import { buildReviewItems } from '@/lib/voiceWorkout/pipeline';
@@ -25,9 +25,8 @@ export async function POST(req: Request) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    if (!isMasterId(auth.user.id)) {
-      return NextResponse.json({ error: 'Recurso disponível apenas para o time master.' }, { status: 403 });
-    }
+    // 🎙️ Liberado pra todo coach ativo (antes era só master): é o coach quem dita e confere; limites por hora abaixo.
+    if (!(await isActiveCoach(prisma, auth.user))) return coachOnly();
 
     const body = await req.json().catch(() => ({}));
     const adminId: string = body?.adminId || auth.user.id;

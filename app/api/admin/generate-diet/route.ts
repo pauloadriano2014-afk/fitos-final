@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import OpenAI       from 'openai';
 import Anthropic    from '@anthropic-ai/sdk';
 import { requireAuth, isMasterId } from '@/lib/auth';
+import { canUseAiBuilder, aiBuilderLocked } from '@/lib/aiAccess';
 import prisma from '@/lib/prisma';
 import { geminiClient } from '@/lib/geminiCache';
 
@@ -798,6 +799,8 @@ export async function POST(req: Request) {
     try {
         const auth = requireAuth(req);
         if ('response' in auth) return auth.response;
+        // 🔒 Montagem por IA só pro time master (a criação por voz continua liberada pros parceiros).
+        if (!canUseAiBuilder(auth.user)) return aiBuilderLocked();
 
         const { anamnese, dayType = 'TREINO', provider = 'anthropic', birthDate, gender, macrosOverride, customInstruction = '' } = await req.json();
 
