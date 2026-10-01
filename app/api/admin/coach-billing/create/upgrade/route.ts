@@ -2,7 +2,7 @@
 // Calcula crédito proporcional e gera cobrança da diferença para upgrade de plano
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { BILLING_PLANS, calcProportionalCredit, calcBillingEnd } from '@/config/coachBillingPlans';
+import { BILLING_PLANS, calcProportionalCredit, calcBillingEnd, resolveOfferedPlanKey } from '@/config/coachBillingPlans';
 import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -24,7 +24,10 @@ async function asaasFetch(path: string, options: RequestInit = {}) {
 
 export async function POST(req: Request) {
     try {
-        const { coachId, newBillingPlan, paymentMethod = 'UNDEFINED', dryRun = false } = await req.json();
+        const body = await req.json();
+        const { coachId, paymentMethod = 'UNDEFINED', dryRun = false } = body;
+        // plano antigo de lançamento (*_LAUNCH) não é mais oferecido: vira o plano normal equivalente
+        const newBillingPlan = resolveOfferedPlanKey(body.newBillingPlan);
 
         // 🔒 (28 set 2026) Upgrade agora pode ser feito pelo PRÓPRIO coach (tela
         // de recurso bloqueado no app) OU pelo time master, igual já
@@ -50,7 +53,7 @@ export async function POST(req: Request) {
                 id:true, name:true, email:true,
                 coachAsaasId:true, coachBillingPlan:true, coachPlan:true,
                 coachBillingStart:true, coachBillingEnd:true,
-                coachBillingStatus:true,
+                coachBillingStatus:true, coachBillingPaidValue:true,
             } as any,
         });
         if (!coach) return NextResponse.json({ error: 'Coach não encontrado.' }, { status: 404 });
@@ -62,10 +65,8 @@ export async function POST(req: Request) {
         // sozinho pelo app (o time master continua com passe livre, igual
         // sempre teve, pra casos especiais combinados na mão).
         if (isSelfService) {
-            if (newPlan.isPromo) {
-                return NextResponse.json({ error: 'Esse plano promocional não está disponível pra upgrade. Fale com a Elite Fit.' }, { status: 400 });
-            }
-            if (currentPlan && newPlan.monthlyPrice < currentPlan.monthlyPrice) {
+            // "para baixo" = degrau ou tipo mais barato (baseMonthly). Mudar só o CICLO (ex: mensal -> anual) pode, e o crédito proporcional cobre a diferença.
+            if (currentPlan && newPlan.baseMonthly < currentPlan.baseMonthly) {
                 return NextResponse.json({ error: 'Downgrade de plano não é feito por aqui ainda. Fale com a Elite Fit pra ajustar seu plano.' }, { status: 400 });
             }
         }
@@ -102,7 +103,11 @@ export async function POST(req: Request) {
             const now = new Date();
             totalDays     = Math.round((billingEnd.getTime() - billingStart.getTime()) / (1000 * 3600 * 24));
             daysRemaining = Math.max(0, Math.round((billingEnd.getTime() - now.getTime()) / (1000 * 3600 * 24)));
-            credit        = calcProportionalCredit(currentPlan.totalPrice, totalDays, daysRemaining);
+            // O crédito é do que ele REALMENTE pagou nesse período (coachBillingPaidValue, gravado pelo webhook): quem entrou com 30% de desconto
+            // da promoção não ganha crédito calculado em cima do preço cheio. Sem esse registro (coach de antes), usa o preço do plano, como sempre.
+            const paid = Number((coach as any).coachBillingPaidValue);
+            const totalPaid = Number.isFinite(paid) && paid > 0 ? paid : currentPlan.totalPrice;
+            credit        = calcProportionalCredit(totalPaid, totalDays, daysRemaining);
         }
 
         // Valor a cobrar = novo plano - crédito (mínimo R$5, pra nunca gerar
@@ -169,7 +174,6 @@ export async function POST(req: Request) {
                 coachBillingEnd:    newEnd,
                 coachAsaasChargeId: charge.id,
                 coachPlan:          newPlan.coachType,
-                isLaunchPromo:      false,
             } as any,
         });
 

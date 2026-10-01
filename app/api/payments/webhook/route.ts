@@ -6,6 +6,8 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
+import { markCoachPaid } from '@/lib/coachPayments';
+import { releasePromo } from '@/lib/launchPromo';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 
 export const dynamic = 'force-dynamic';
@@ -378,6 +380,8 @@ async function handleCoachCheckoutEvent(event: string, externalRef: string, chec
                 accountStatus: 'ACTIVE',
             } as any,
         });
+        // 1º pagamento (a promoção NÃO vale pelo cartão recorrente: ela é do pagamento do período) e valor pago neste ciclo
+        await markCoachPaid(prisma, coachId, { paidValue: Number(subscription.value), promoConfirmed: false });
 
         const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { id: true, pushToken: true, webPushSubscription: true } });
         if (coach) {
@@ -456,6 +460,7 @@ async function handleCoachSubscriptionRenewal(event: string, payment: any, local
                 accountStatus: 'ACTIVE',
             } as any,
         });
+        await markCoachPaid(prisma, localSub.userId, { paidValue: Number(payment?.value ?? localSub.value), promoConfirmed: false });
         await prisma.subscription.update({ where: { id: localSub.id }, data: { nextDueDate: billingEnd } });
 
         const coach = await prisma.user.findUnique({ where: { id: localSub.userId }, select: { id: true, pushToken: true, webPushSubscription: true } });
@@ -484,11 +489,13 @@ async function handleCoachSubscriptionRenewal(event: string, payment: any, local
 
 // ─── COACH ───────────────────────────────────────────────────────────────────
 async function handleCoachPayment(event: string, payment: any, externalRef: string) {
-    // externalRef formato: "coach:{coachId}:{billingPlan}" ou "coach:{coachId}:upgrade:{billingPlan}"
+    // externalRef formato: "coach:{coachId}:{billingPlan}" | "coach:{coachId}:{billingPlan}:promo" (cobrança da promoção de lançamento)
+    // | "coach:{coachId}:upgrade:{billingPlan}"
     const parts      = externalRef.split(':');
     const coachId    = parts[1];
     const isUpgrade  = parts[2] === 'upgrade';
     const billingPlan = isUpgrade ? parts[3] : parts[2];
+    const isPromoCharge = !isUpgrade && parts[3] === 'promo';
 
     if (!coachId) return NextResponse.json({ received: true });
 
@@ -511,6 +518,13 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
         }
 
         await prisma.user.update({ where: { id: coachId }, data: updateData });
+
+        // Valor realmente pago neste período (base do crédito de um upgrade), 1º pagamento e, se foi a cobrança da promoção, a vaga vira USADA.
+        // No upgrade o período novo vale o preço cheio do plano novo (crédito + diferença).
+        await markCoachPaid(prisma, coachId, {
+            paidValue: isUpgrade && plan ? plan.totalPrice : Number(payment?.value),
+            promoConfirmed: isPromoCharge,
+        });
 
         // Push para o coach
         const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { id: true, pushToken: true, webPushSubscription: true, name: true } });
@@ -535,6 +549,8 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
             where: { id: coachId },
             data:  { coachBillingStatus: 'CANCELLED', accountStatus: 'REJECTED' } as any,
         });
+        // cobrança da promoção apagada/estornada: devolve a vaga
+        if (isPromoCharge) await releasePromo(prisma, coachId);
         await notifyCoachBillingIssue(coachId, '❌ Assinatura cancelada', 'Sua assinatura ELITE FIT foi cancelada.');
         console.log(`❌ Coach ${coachId} billing cancelado`);
     }

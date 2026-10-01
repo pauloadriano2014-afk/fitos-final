@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { findOrCreateCustomer, createCheckoutSession } from '@/lib/asaas';
-import { BILLING_PLANS, getRecurrenceValue } from '@/config/coachBillingPlans';
+import { BILLING_PLANS, getRecurrenceValue, resolveOfferedPlanKey } from '@/config/coachBillingPlans';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
 
 const DEFAULT_COACH_ID = 'paulo'; // fase 1: coach único (dono da plataforma)
@@ -66,6 +66,8 @@ export async function POST(req: NextRequest) {
     if (!billingPlan || !BILLING_PLANS[billingPlan]) {
       billingPlan = inferBillingPlan(coach);
     }
+    // plano antigo de lançamento (*_LAUNCH): a recorrência cobra o plano normal equivalente (a promoção vale só no pagamento do 1º período)
+    billingPlan = resolveOfferedPlanKey(billingPlan);
     const plan = BILLING_PLANS[billingPlan];
     if (!plan) {
       return NextResponse.json({ error: `Plano não reconhecido: ${billingPlan}` }, { status: 400 });

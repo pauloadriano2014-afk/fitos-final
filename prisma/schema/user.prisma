@@ -44,7 +44,15 @@ model User {
   // coach-requests) — usado pra bloquear o acesso quando coachBillingStatus
   // ainda está em "TRIAL" e essa data já passou sem nenhum plano pago criado.
   trialEndsAt         DateTime?
+  // 🔥 Promoção de lançamento (lib/launchPromo.ts): isLaunchPromo = vaga USADA (pagamento promocional confirmado); launchPromoStatus
+  // 'RESERVED' (gerou a cobrança promocional e ainda não pagou: segura a vaga até launchPromoReservedUntil) ou 'CONFIRMED'.
   isLaunchPromo       Boolean   @default(false)
+  launchPromoStatus        String?
+  launchPromoReservedUntil DateTime?
+  // 1º período pago de verdade (null = nunca pagou: único caso que pode receber a promoção) e quanto foi efetivamente pago no período atual
+  // (base do crédito proporcional do upgrade: quem pagou com desconto não ganha crédito do preço cheio).
+  coachFirstPaidAt      DateTime?
+  coachBillingPaidValue Float?
   onboardingCompleted Boolean   @default(false)
   onboardingStep      Int       @default(0)
   aiCheckinPrompt     String?   @db.Text
