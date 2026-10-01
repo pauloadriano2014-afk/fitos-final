@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { evaluatedWeekStart, isDueStudent, isMissingTable, weekLabel } from '@/lib/weeklyFeedback';
 import { ensureQuestionSet } from '@/lib/weeklyQuestionSet';
+import { feedbackAiOptions } from '@/lib/aiAccess';
 import { buildWhatsAppText, normalizeBrPhone } from '@/lib/weeklyWhatsApp';
 import { NUDGE_TYPE, NUDGE_COOLDOWN_MS } from '@/lib/weeklyBoard';
 
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
       throw e;
     }
 
-    const set = await ensureQuestionSet(prisma, student, { weekStart, now, ai: { timeoutMs: 8000, maxRetries: 0 } });
+    const set = await ensureQuestionSet(prisma, student, { weekStart, now, ai: await feedbackAiOptions(prisma, student.coachId, { timeoutMs: 8000, maxRetries: 0 }) });
     const text = buildWhatsAppText({ name: student.name, weekLabel: weekLabel(weekStart), intro: set.intro, questions: set.questions });
 
     // conta como cobrança (sem empilhar: uma por 12 h), mas o texto sai sempre

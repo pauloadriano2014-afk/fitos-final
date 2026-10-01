@@ -46,6 +46,8 @@ export type FactsInput = {
   diet: { enabled: boolean; mealLogs: Array<{ date: string; status: string }>; daily: Array<{ date: string; adherence?: string | null; note?: string | null }> } | null;
   limitations?: string[] | null;
   sleepQuality?: string | null;
+  /** campos da anamnese que viram perguntas de acompanhamento (ver TOPIC_ORDER) */
+  anamnese?: { stressLevel?: number | string | null; stressEating?: boolean | null; nightBinge?: string | null; pmsSymptoms?: string[] | null; waterIntake?: string | null } | null;
 };
 
 // ─── saída ────────────────────────────────────────────────────────────────────────────────────────
@@ -66,7 +68,7 @@ export type WeeklyFacts = {
   notes: Array<{ kind: 'EXERCISE' | 'WORKOUT'; exercise: string | null; text: string; weekday: string; handled: boolean }>;
   diet: { enabled: boolean; hasData: boolean; loggedDays: number; meals: number; followed: number; substituted: number; skipped: number; free: number; dayYes: number; dayPartial: number; dayNo: number; notes: string[] };
   checkin: { status: CheckinStatus; dueDate: string | null; daysLate: number };
-  profile: { limitations: string[]; poorSleep: boolean };
+  profile: { limitations: string[]; poorSleep: boolean; /** temas da anamnese elegíveis (stress, eating, cycle, water) */ topics: string[] };
 };
 
 const NO_LIMITATION = /^(nenhum|nenhuma|n[aã]o|sem|nada|n\/a)/i;
@@ -87,6 +89,20 @@ export function resolveSessionDay(s: SessionIn, planDayExercises: Record<string,
   }
   if (!best || tie || bestN < Math.max(1, Math.ceil(ids.size * 0.5))) return null;
   return best;
+}
+
+/** Temas da anamnese que podem virar pergunta de acompanhamento. A ordem define o rodízio (ver weeklyQuestions.ts): cada tema é perguntado a cada 2 semanas. */
+export const TOPIC_ORDER = ['stress', 'eating', 'cycle', 'water'] as const;
+export type Topic = (typeof TOPIC_ORDER)[number];
+
+export function eligibleTopics(a: FactsInput['anamnese']): Topic[] {
+  if (!a) return [];
+  const out: Topic[] = [];
+  if (Number(a.stressLevel) >= 4) out.push('stress');                                             // estresse 4-5 (escala 1 a 5)
+  if (a.stressEating === true || ['sometimes', 'often'].includes(String(a.nightBinge || ''))) out.push('eating');   // come por ansiedade / à noite
+  if ((a.pmsSymptoms || []).some((x) => x && !/^sem sintomas/i.test(String(x)))) out.push('cycle'); // TPM com sintomas
+  if (/^(menos de 1l|1 a 1,5l)/i.test(String(a.waterIntake || '').trim())) out.push('water');     // pouca água
+  return out;
 }
 
 export function computeFacts(input: FactsInput): WeeklyFacts {
@@ -168,7 +184,7 @@ export function computeFacts(input: FactsInput): WeeklyFacts {
     v: 1, weekStart,
     training: { planned, plannedSource, partialWeek, done: unique.length, weekdays, doneDays, missingDays, avgRpe },
     notes, diet, checkin: { status, dueDate, daysLate },
-    profile: { limitations, poorSleep: !!input.sleepQuality && POOR_SLEEP.test(String(input.sleepQuality)) },
+    profile: { limitations, poorSleep: !!input.sleepQuality && POOR_SLEEP.test(String(input.sleepQuality)), topics: eligibleTopics(input.anamnese) },
   };
 }
 

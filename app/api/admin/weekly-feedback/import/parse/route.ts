@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { ensureQuestionSet } from '@/lib/weeklyQuestionSet';
+import { feedbackAiOptions } from '@/lib/aiAccess';
 import { checkPendingStudent } from '@/lib/weeklyImport';
 import { parseWhatsAppReply, cleanSource, requiredMissing, MAX_SOURCE } from '@/lib/weeklyReplyParse';
 
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     const pending = await checkPendingStudent(prisma, student, now);
     if (!pending.ok) return NextResponse.json({ error: pending.error }, { status: pending.status });
 
-    const set = await ensureQuestionSet(prisma, student, { weekStart: pending.weekStart, now, ai: { timeoutMs: 8000, maxRetries: 0 } });
+    const set = await ensureQuestionSet(prisma, student, { weekStart: pending.weekStart, now, ai: await feedbackAiOptions(prisma, student.coachId, { timeoutMs: 8000, maxRetries: 0 }) });
     const parsed = await parseWhatsAppReply({ questions: set.questions, text });
 
     if (parsed.ai) {

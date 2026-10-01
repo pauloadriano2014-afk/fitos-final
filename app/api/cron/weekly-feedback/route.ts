@@ -9,6 +9,7 @@ import prisma from '@/lib/prisma';
 import { sendPushToUser, sendPushToUsers } from '@/app/utils/sendNotification';
 import { runWeeklyTask, prepareQuestionSets } from '@/lib/weeklyCron';
 import { ensureQuestionSet } from '@/lib/weeklyQuestionSet';
+import { feedbackAiOptions } from '@/lib/aiAccess';
 import { isMissingTable } from '@/lib/weeklyFeedback';
 
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ async function handle(req: Request) {
       db: prisma, sendToUsers: sendPushToUsers, sendToUser: sendPushToUser,
       // segunda: deixa as perguntas de cada aluno prontas (dados reais + IA) antes do push; o que não der tempo é montado na 1ª abertura do card
       prepareQuestions: (students, weekStart, now) => prepareQuestionSets(students, weekStart, now, {
-        ensure: (s) => ensureQuestionSet(prisma, s, { weekStart, now, ai: { timeoutMs: 15000, maxRetries: 1 } }),
+        ensure: async (s) => ensureQuestionSet(prisma, s, { weekStart, now, ai: await feedbackAiOptions(prisma, s.coachId, { timeoutMs: 15000, maxRetries: 1 }) }),
       }),
     });
     return NextResponse.json({ ok: true, ...result });

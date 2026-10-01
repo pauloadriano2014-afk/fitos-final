@@ -59,7 +59,7 @@ export async function loadWeeklyFacts(db: any, student: { id: string; dietModule
     aux(db.studentAlert.findMany({ where: { userId: student.id, type: 'EXERCISE_NOTE', createdAt: { gte: range.start, lt: range.end } }, select: { exerciseName: true, message: true, createdAt: true, isRead: true } }), []),
     aux(db.checkIn.findFirst({ where: { userId: student.id }, orderBy: { date: 'desc' }, select: { date: true } }), 'ERR'),
     aux(db.user.findUnique({ where: { id: student.id }, select: { nextCheckInDate: true, disableCheckIn: true, createdAt: true, dietModule: true } }), null),
-    aux(db.anamnese.findFirst({ where: { userId: student.id }, orderBy: { createdAt: 'desc' }, select: { limitacoes: true, sleepQuality: true, frequencia: true } }), null),
+    aux(db.anamnese.findFirst({ where: { userId: student.id }, orderBy: { createdAt: 'desc' }, select: { limitacoes: true, sleepQuality: true, frequencia: true, stressLevel: true, stressEating: true, nightBinge: true, pmsSymptoms: true, waterIntake: true } }), null),
     student.dietModule ? aux(db.dietMealLog.findMany({ where: { userId: student.id, date: { gte: weekStart, lte: endYmd } }, select: { date: true, status: true } }), null) : Promise.resolve(null),
     student.dietModule ? aux(db.dailyCheckin.findMany({ where: { studentId: student.id, date: { gte: weekStart, lte: endYmd } }, select: { date: true, dietAdherence: true, dietNote: true } }), null) : Promise.resolve(null),
   ]);
@@ -99,6 +99,6 @@ export async function loadWeeklyFacts(db: any, student: { id: string; dietModule
     weekStart, now, planDays, planDayExercises, declaredFreq: anamnese?.frequencia ?? null, partialWeek, sessions, notes,
     checkin: userRow && lastCheckIn !== 'ERR' ? { disabled: !!userRow.disableCheckIn, nextCheckInDate: userRow.nextCheckInDate, hasAny: !!lastCheckIn, accountCreatedAt: userRow.createdAt } : null,
     diet: student.dietModule ? { enabled: true, mealLogs: mealLogs || [], daily: (daily || []).map((x: any) => ({ date: x.date, adherence: x.dietAdherence, note: x.dietNote })) } : null,
-    limitations: anamnese?.limitacoes, sleepQuality: anamnese?.sleepQuality,
+    limitations: anamnese?.limitacoes, sleepQuality: anamnese?.sleepQuality, anamnese,
   });
 }

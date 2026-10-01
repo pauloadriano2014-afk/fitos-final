@@ -11,6 +11,7 @@ import {
   validateAnswers, deriveSummary, evaluatedWeekStart, weekLabel, isDueStudent, isMissingTable, shortName, FLAG_LABELS, type Flag,
 } from '@/lib/weeklyFeedback';
 import { ensureQuestionSet } from '@/lib/weeklyQuestionSet';
+import { feedbackAiOptions } from '@/lib/aiAccess';
 import { objectiveSignals } from '@/lib/weeklyFacts';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ export const dynamic = 'force-dynamic';
 const studentSelect = { id: true, name: true, coachId: true, createdAt: true, active: true, accountStatus: true, role: true, dietModule: true } as const;
 
 // Na 1ª abertura da semana o conjunto pode precisar de alguns segundos (dados + IA); o cron de segunda já costuma deixá-lo pronto.
+// A IA só entra pra aluno de coach master ou do plano Elite (feedbackAiOptions); os demais recebem as perguntas por regras.
 const AI_ON_DEMAND = { timeoutMs: 7000, maxRetries: 0 };
 
 export async function GET(req: Request) {
@@ -44,7 +46,7 @@ export async function GET(req: Request) {
     }
     if (existing) return NextResponse.json({ ...base, due: false, answered: true, answeredAt: existing.createdAt });
     if (!isDueStudent(student, now)) return NextResponse.json({ ...base, due: false, answered: false });
-    const set = await ensureQuestionSet(prisma, student, { weekStart, now, ai: AI_ON_DEMAND });
+    const set = await ensureQuestionSet(prisma, student, { weekStart, now, ai: await feedbackAiOptions(prisma, student.coachId, AI_ON_DEMAND) });
     return NextResponse.json({ ...base, due: true, answered: false, questions: set.questions, intro: set.intro });
   } catch (error) {
     console.error('Erro GET weekly-feedback:', error);
@@ -68,7 +70,7 @@ export async function POST(req: Request) {
     if (weekStart !== evaluatedWeekStart(now)) return NextResponse.json({ error: 'Essa semana não está mais aberta para feedback.' }, { status: 400 });
     if (!isDueStudent(student, now)) return NextResponse.json({ error: 'Não há feedback para você nesta semana.' }, { status: 400 });
 
-    const set = await ensureQuestionSet(prisma, student, { weekStart, now, ai: AI_ON_DEMAND });
+    const set = await ensureQuestionSet(prisma, student, { weekStart, now, ai: await feedbackAiOptions(prisma, student.coachId, AI_ON_DEMAND) });
     const questions = set.questions;
     const v = validateAnswers(questions, answers);
     if (!v.ok) return NextResponse.json({ error: v.error, field: v.field }, { status: 400 });

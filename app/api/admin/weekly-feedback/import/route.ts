@@ -8,6 +8,7 @@ import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { validateAnswers, deriveSummary, evaluatedWeekStart } from '@/lib/weeklyFeedback';
 import { objectiveSignals } from '@/lib/weeklyFacts';
 import { ensureQuestionSet } from '@/lib/weeklyQuestionSet';
+import { feedbackAiOptions } from '@/lib/aiAccess';
 import { checkPendingStudent } from '@/lib/weeklyImport';
 import { cleanSource } from '@/lib/weeklyReplyParse';
 
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
     const pending = await checkPendingStudent(prisma, student, now);
     if (!pending.ok) return NextResponse.json({ error: pending.error }, { status: pending.status });
 
-    const set = await ensureQuestionSet(prisma, student, { weekStart, now, ai: { timeoutMs: 8000, maxRetries: 0 } });
+    const set = await ensureQuestionSet(prisma, student, { weekStart, now, ai: await feedbackAiOptions(prisma, student.coachId, { timeoutMs: 8000, maxRetries: 0 }) });
     const v = validateAnswers(set.questions, answers);
     if (!v.ok) return NextResponse.json({ error: v.error, field: v.field }, { status: 400 });
     const { score, flags } = deriveSummary(v.clean, objectiveSignals(set.facts));

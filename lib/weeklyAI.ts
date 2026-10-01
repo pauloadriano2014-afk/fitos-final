@@ -122,7 +122,8 @@ export async function refineWithAI(o: { name?: string | null; facts: WeeklyFacts
     const model = opt.model || WEEKLY_AI_MODEL;
     const payload = {
       aluno: firstNameOf(o.name),
-      fatos: o.facts,
+      // os temas da anamnese (estresse, ciclo, comer por ansiedade...) servem só às regras locais: não vão pro provedor da IA
+      fatos: { ...o.facts, profile: { limitations: o.facts.profile.limitations, poorSleep: o.facts.profile.poorSleep } },
       perguntas_para_reescrever: o.questions.filter((q) => REWRITABLE_IDS.includes(q.id)).map((q) => ({ id: q.id, texto_atual: q.label })),
     };
     const res: any = await client.messages.create({

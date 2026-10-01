@@ -9,9 +9,37 @@
 //   - dieta: além da nota 0-10, pergunta o que mais atrapalhou (mesmo quem não marca refeição no diário)
 // Os números e datas dos textos vêm sempre dos fatos (código). A IA (lib/weeklyAI.ts) só reescreve o jeito de perguntar.
 import { buildQuestions, type Question, type QuestionContext } from '@/lib/weeklyFeedback';
-import { hasPlanGap, missingDaysText, trainingSentence, ddmm, type WeeklyFacts } from '@/lib/weeklyFacts';
+import { hasPlanGap, missingDaysText, trainingSentence, ddmm, diffDays, TOPIC_ORDER, type Topic, type WeeklyFacts } from '@/lib/weeklyFacts';
 
 export type WeeklyQuestionContext = QuestionContext & { facts?: WeeklyFacts | null };
+
+/** Total de perguntas extras (limitação, dieta, sono e temas da anamnese) que cabem em uma semana, pra o formulário não crescer demais. */
+export const MAX_EXTRAS = 5;
+const MAX_TOPICS_PER_WEEK = 2;
+
+const TOPIC_QUESTIONS: Record<Topic, Question> = {
+  stress: { id: 'topic_stress', kind: 'choice', label: '🧠 Como foi o seu nível de estresse nessa semana?', options: [
+    { value: 'LESS', label: 'Menos que de costume' }, { value: 'SAME', label: 'Igual' }, { value: 'MORE', label: 'Mais que de costume' },
+  ], textWhen: { values: ['MORE'], label: 'O que pesou mais? (opcional)', required: false } },
+  eating: { id: 'topic_eating', kind: 'choice', label: '🌙 Teve episódios de comer por ansiedade ou à noite nessa semana?', options: [
+    { value: 'NO', label: 'Não' }, { value: 'FEW', label: '1 ou 2 vezes' }, { value: 'MANY', label: 'Várias vezes' },
+  ], textWhen: { values: ['FEW', 'MANY'], label: 'O que aconteceu antes? (opcional)', required: false } },
+  cycle: { id: 'topic_cycle', kind: 'choice', label: '🌸 O ciclo ou a TPM atrapalharam o treino ou a dieta nessa semana?', options: [
+    { value: 'NO', label: 'Não' }, { value: 'LITTLE', label: 'Um pouco' }, { value: 'MUCH', label: 'Bastante' }, { value: 'NA', label: 'Não se aplica nessa semana' },
+  ], textWhen: { values: ['LITTLE', 'MUCH'], label: 'Em que ajudaria? (opcional)', required: false } },
+  water: { id: 'topic_water', kind: 'choice', label: '💧 Conseguiu beber a água do seu plano nessa semana?', options: [
+    { value: 'YES', label: 'Sim, todos os dias' }, { value: 'MOST', label: 'Na maioria dos dias' }, { value: 'LITTLE', label: 'Pouco' },
+  ] },
+};
+
+/**
+ * Temas da anamnese perguntados NESSA semana: cada tema elegível aparece a cada 2 semanas (os de índice par numa, os ímpares na outra) e no máximo
+ * MAX_TOPICS_PER_WEEK por semana, pra o aluno não ver a mesma pergunta toda segunda. Determinístico (depende só da semana).
+ */
+export function topicsForWeek(weekStart: string, eligible: string[]): Topic[] {
+  const parity = (Math.floor(diffDays('1970-01-05', weekStart) / 7)) % 2;   // 1970-01-05 foi uma segunda-feira
+  return TOPIC_ORDER.filter((t, i) => eligible.includes(t) && i % 2 === parity).slice(0, MAX_TOPICS_PER_WEEK);
+}
 
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
@@ -67,6 +95,15 @@ export function buildWeeklyQuestions(ctx: WeeklyQuestionContext = {}): Question[
       ],
       textWhen: { values: ['FORGOT', 'NOTIME', 'UNCOMFORTABLE', 'TECH', 'OTHER'], label: 'Quer contar mais? (opcional)', required: false },
     });
+  }
+
+  // ── temas da anamnese (estresse, comer por ansiedade, TPM, água): rodízio, sem passar de MAX_EXTRAS extras no total ──
+  const extrasNow = qs.filter((q) => ['limitation', 'diet', 'diet_issue', 'sleep'].includes(q.id)).length;
+  const room = Math.max(0, MAX_EXTRAS - extrasNow);
+  const topics = topicsForWeek(facts.weekStart, facts.profile.topics || []).slice(0, room);
+  if (topics.length) {
+    const i = qs.findIndex((q) => q.id === 'effort');
+    qs.splice(i >= 0 ? i : qs.length, 0, ...topics.map((t) => TOPIC_QUESTIONS[t]));
   }
 
   // ── dieta: o que o diário mostra (quando ele marca) ──
