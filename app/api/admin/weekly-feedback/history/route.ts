@@ -1,5 +1,6 @@
 // app/api/admin/weekly-feedback/history/route.ts
-// GET ?adminId=&weeks=8 -> adesão do feedback da semana nas últimas semanas (quantos deviam responder x quantos responderam)
+// GET ?adminId=&weeks=4 -> adesão do feedback da semana nas últimas semanas (quantos deviam responder x quantos responderam)
+// GET ?adminId=&month=2026-09 -> o mesmo, mas das semanas que tocam aquele mês (a resposta traz também a lista de meses que dá para escolher)
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
@@ -24,7 +25,7 @@ export async function GET(req: Request) {
     }
 
     try {
-      return NextResponse.json({ available: true, ...(await loadAdherenceHistory(prisma, { adminId, now: new Date(), weeks: searchParams.get('weeks') })) });
+      return NextResponse.json({ available: true, ...(await loadAdherenceHistory(prisma, { adminId, now: new Date(), weeks: searchParams.get('weeks'), month: searchParams.get('month') })) });
     } catch (e) {
       if (isMissingTable(e)) return NextResponse.json({ available: false, weeks: [] });
       throw e;

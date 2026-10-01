@@ -18,6 +18,12 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const ymdOf = (t: Date) => `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
 const parseYmd = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
 
+/** Ano e mês (1-12) de hoje no horário de Brasília. */
+export function brtYearMonth(now: Date): { year: number; month: number } {
+  const t = new Date(now.getTime() - BRT_OFFSET_MS);
+  return { year: t.getUTCFullYear(), month: t.getUTCMonth() + 1 };
+}
+
 /** Segunda-feira ("AAAA-MM-DD") da semana, no horário de Brasília, que contém o instante `now`. */
 export function mondayOf(now: Date): string {
   const t = new Date(now.getTime() - BRT_OFFSET_MS);          // relógio de Brasília lido como UTC
