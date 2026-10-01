@@ -30,8 +30,11 @@ export async function POST(req: Request) {
             inviteCode, plan,
             accountType = 'STUDENT',
             cpf, instagram,
-            coachPlan = 'PERSONAL', // ← v2: PERSONAL | NUTRICIONISTA | ELITE
+            coachPlan: coachPlanBody, // ← v2: PERSONAL | NUTRICIONISTA | ELITE
         } = body;
+        // 🐛 (1 out 2026) versões antigas do app mandavam o plano do coach em `plan` (e não em `coachPlan`), então todo coach entrava como PERSONAL.
+        // Aceita os dois; no fluxo de coach `plan` só pode ser um plano de coach (a validação abaixo derruba qualquer outro valor).
+        const coachPlan = coachPlanBody ?? (accountType === 'COACH' ? plan : undefined) ?? 'PERSONAL';
 
         if (!email || !password || !name) {
             return NextResponse.json({ error: 'E-mail, senha e nome são obrigatórios.' }, { status: 400 });
