@@ -29,7 +29,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const now = new Date();
     const data: any = { coachSeenAt: fb.coachSeenAt || now };
     if (reply) { data.coachReply = reply; data.coachReplyAt = now; }
-    const updated = await prisma.weeklyFeedback.update({ where: { id: fb.id }, data });
+    const updated = await prisma.weeklyFeedback.update({ where: { id: fb.id }, data, select: { coachSeenAt: true, coachReplyAt: true } });
 
     if (reply && student) {
       const title = '💬 Seu coach respondeu seu feedback da semana';

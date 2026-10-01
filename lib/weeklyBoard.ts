@@ -17,6 +17,8 @@ export type BoardRow = {
   workoutsDone: number; plannedPerWeek: number | null; daysSinceContact: number | null; openNotes: number; nudgedAt: string | null;
   /** "Dados da semana" (treinos x plano, observações, dieta, check-in) prontos pro coach ler; vazio se ainda não foram levantados */
   factsView: FactLine[]; questionSource: 'AI' | 'RULES' | null;
+  /** de onde veio a resposta: o aluno no app, ou o coach transcrevendo o que ele mandou no WhatsApp (com a mensagem original) */
+  channel: 'APP' | 'WHATSAPP'; sourceText: string | null;
 };
 
 const pct = (num: number, den: number) => (den > 0 ? Math.round((100 * num) / den) : null);
@@ -41,7 +43,10 @@ export async function loadWeeklyBoard(db: any, o: { adminId: string; weekStart: 
   if (ids.length === 0) return { ...empty, rows: [] as BoardRow[], totals: { students: 0, answered: 0, pending: 0, attention: 0, awaitingReply: 0, nudged: 0, contacted7d: 0 }, coach: { repliedPct: null, nudgedPct: null, contactedPct: null } };
 
   const [feedbacks, histories, anamneses, notes, nudges, sets]: any[][] = await Promise.all([
-    db.weeklyFeedback.findMany({ where: { userId: { in: ids }, weekStart } }),
+    db.weeklyFeedback.findMany({
+      where: { userId: { in: ids }, weekStart },
+      select: { id: true, userId: true, questions: true, answers: true, score: true, flags: true, facts: true, channel: true, sourceText: true, coachSeenAt: true, coachReply: true, coachReplyAt: true, createdAt: true },
+    }),
     db.workoutHistory.findMany({ where: { userId: { in: ids }, date: { gte: range.start, lt: range.end } }, select: { userId: true } }),
     db.anamnese.findMany({ where: { userId: { in: ids } }, orderBy: { createdAt: 'desc' }, select: { userId: true, frequencia: true } }).catch(() => []),
     db.studentAlert.findMany({ where: { userId: { in: ids }, type: 'EXERCISE_NOTE', isRead: false }, select: { userId: true } }).catch(() => []),
@@ -73,6 +78,7 @@ export async function loadWeeklyBoard(db: any, o: { adminId: string; weekStart: 
       plannedPerWeek: facts ? facts.training.planned ?? null : freqBy.get(u.id) ?? null,
       daysSinceContact: contact, openNotes: notesBy.get(u.id) || 0, nudgedAt: iso(nudgeBy.get(u.id)),
       factsView: describeFacts(facts), questionSource: qset ? (qset.source === 'AI' ? 'AI' : 'RULES') : null,
+      channel: f?.channel === 'WHATSAPP' ? 'WHATSAPP' : 'APP', sourceText: f?.channel === 'WHATSAPP' ? f.sourceText || null : null,
     };
   });
 

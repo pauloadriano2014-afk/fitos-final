@@ -310,6 +310,11 @@ model WeeklyFeedback {
   // dieta, check-in) -- o coach vê ao lado do que o aluno respondeu. Ver lib/weeklyFacts.ts.
   facts     Json?
 
+  // 🔥 (1 out 2026) Por onde a resposta chegou. null = o aluno respondeu no app. "WHATSAPP" = o coach colou a resposta que o aluno mandou
+  // no WhatsApp e a IA preencheu o formulário (o coach conferiu antes de salvar); `sourceText` guarda a mensagem original do aluno.
+  channel    String?
+  sourceText String? @db.Text
+
   coachSeenAt  DateTime?
   coachReply   String?   @db.Text
   coachReplyAt DateTime?

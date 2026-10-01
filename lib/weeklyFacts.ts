@@ -196,6 +196,12 @@ export function trainingSentence(f: WeeklyFacts): string {
 /** Treinou menos de 60% do plano ativo (só quando dá pra comparar). */
 export const isLowLogged = (f: WeeklyFacts | null | undefined) => !!f && f.training.plannedSource === 'PLAN' && !!f.training.planned && !f.training.partialWeek && f.training.done / f.training.planned < 0.6;
 
+/** Sinais objetivos (dos registros, não do que o aluno respondeu) que viram alerta: poucos treinos registrados e check-in atrasado. */
+export const objectiveSignals = (f: WeeklyFacts | null | undefined) => ({
+  lowLogged: isLowLogged(f),
+  checkinLate: !!f && (f.checkin.status === 'LATE' || f.checkin.status === 'NEVER'),
+});
+
 /** Dá pra comparar o que ele registrou com o plano dele? */
 export const hasPlanGap = (f: WeeklyFacts | null | undefined) => !!f && f.training.plannedSource === 'PLAN' && !!f.training.planned && !f.training.partialWeek && f.training.done < f.training.planned;
 

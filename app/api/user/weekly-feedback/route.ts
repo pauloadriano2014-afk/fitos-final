@@ -11,7 +11,7 @@ import {
   validateAnswers, deriveSummary, evaluatedWeekStart, weekLabel, isDueStudent, isMissingTable, shortName, FLAG_LABELS, type Flag,
 } from '@/lib/weeklyFeedback';
 import { ensureQuestionSet } from '@/lib/weeklyQuestionSet';
-import { isLowLogged } from '@/lib/weeklyFacts';
+import { objectiveSignals } from '@/lib/weeklyFacts';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,10 +72,7 @@ export async function POST(req: Request) {
     const questions = set.questions;
     const v = validateAnswers(questions, answers);
     if (!v.ok) return NextResponse.json({ error: v.error, field: v.field }, { status: 400 });
-    const { score, flags } = deriveSummary(v.clean, {
-      lowLogged: isLowLogged(set.facts),
-      checkinLate: !!set.facts && (set.facts.checkin.status === 'LATE' || set.facts.checkin.status === 'NEVER'),
-    });
+    const { score, flags } = deriveSummary(v.clean, objectiveSignals(set.facts));
 
     let existing: any = null;
     try {
@@ -90,15 +87,15 @@ export async function POST(req: Request) {
     let row: any;
     let created = false;
     if (existing) {
-      row = await prisma.weeklyFeedback.update({ where: { id: existing.id }, data });
+      row = await prisma.weeklyFeedback.update({ where: { id: existing.id }, data, select: { id: true } });
     } else {
       try {
-        row = await prisma.weeklyFeedback.create({ data: { userId, coachId: student.coachId || null, weekStart, ...data } });
+        row = await prisma.weeklyFeedback.create({ data: { userId, coachId: student.coachId || null, weekStart, ...data }, select: { id: true } });
         created = true;
       } catch (e: any) {
         if (e?.code !== 'P2002') throw e;   // duas respostas ao mesmo tempo: a segunda vira atualização
         const again: any = await prisma.weeklyFeedback.findUnique({ where: { userId_weekStart: { userId, weekStart } }, select: { id: true } });
-        row = await prisma.weeklyFeedback.update({ where: { id: again.id }, data });
+        row = await prisma.weeklyFeedback.update({ where: { id: again.id }, data, select: { id: true } });
       }
     }
 

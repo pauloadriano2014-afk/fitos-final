@@ -77,7 +77,7 @@ export async function runWeeklyTask(task: string, deps: CronDeps): Promise<any> 
   }
   const weekStart = evaluatedWeekStart(now);
   const due = await dueStudents(db, weekStart);
-  const feedbacks: any[] = due.length ? await db.weeklyFeedback.findMany({ where: { userId: { in: due.map((u) => u.id) }, weekStart } }) : [];
+  const feedbacks: any[] = due.length ? await db.weeklyFeedback.findMany({ where: { userId: { in: due.map((u) => u.id) }, weekStart }, select: { userId: true, flags: true, coachSeenAt: true, coachReplyAt: true } }) : [];
   const answeredIds = new Set(feedbacks.map((f) => f.userId));
 
   if (task === 'students' || task === 'reminder') {

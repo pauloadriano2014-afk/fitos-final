@@ -4,6 +4,9 @@
 // Mesmo formato do mini-questionário que a equipe já mandava ("💜 FEEDBACK DA SEMANA — PA ELITE"). Funções puras.
 import type { Question } from '@/lib/weeklyFeedback';
 
+/** Endereço do app (PWA) pra o aluno responder direto, sem digitar nada no WhatsApp. */
+export const APP_URL = process.env.APP_WEB_URL || 'https://fit-os-frontend.onrender.com';
+
 const squash = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
@@ -37,6 +40,8 @@ export function buildWhatsAppText(o: { name?: string | null; weekLabel: string; 
     else if (q.kind === 'scale') lines.push(`   ➜ nota de ${q.min ?? 0} a ${q.max ?? 10}`);
     lines.push('');
   });
-  lines.push('Pode responder com o número de cada pergunta, tá? 😉', 'E não esquece de registrar suas cargas no app. 📲');
+  lines.push('Pode responder com o número de cada pergunta, tá? 😉');
+  lines.push('Se preferir, responde direto no app (é rapidinho, as perguntas já estão lá):', `${APP_URL}/app/inicio`, '');
+  lines.push('E não esquece de registrar suas cargas no app. 📲');
   return lines.join('\n');
 }
