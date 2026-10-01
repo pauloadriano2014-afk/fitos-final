@@ -1,17 +1,49 @@
 // lib/weeklyCron.ts
 // ⏰ (1 out 2026) Tarefas agendadas do feedback da semana (chamadas por app/api/cron/weekly-feedback, que um Cron Job do Render aciona):
-//   students -- segunda de manhã: push pros alunos que ainda não responderam a semana que passou
+//   students -- segunda de manhã: MONTA as perguntas de cada aluno (dados reais da semana + IA) e manda o push pra quem ainda não respondeu
 //   reminder -- lembrete (ex.: quarta à noite) só pra quem continua sem responder
 //   coaches  -- resumo pro coach (ex.: terça de manhã): quantos responderam, com alerta, aguardando a resposta dele
 // Recebem `db` e `send` (sendPushToUser/sendPushToUsers) por parâmetro pra testar sem rede.
 import { evaluatedWeekStart, isDueStudentForWeek, needsAttention } from '@/lib/weeklyFeedback';
 
+export type PrepareReport = { total: number; ready: number; ai: number; rules: number; skipped: number };
+
 export type CronDeps = {
   db: any;
   sendToUsers: (users: any[], title: string, body: string, data?: any) => Promise<any>;
   sendToUser: (user: any, title: string, body: string, data?: any) => Promise<any>;
+  /** monta (e guarda) as perguntas da semana dos alunos pendentes antes do push; quem não der tempo é montado na 1ª abertura do card */
+  prepareQuestions?: (students: any[], weekStart: string, now: Date) => Promise<PrepareReport>;
   now?: Date;
 };
+
+/**
+ * Monta o conjunto de perguntas de cada aluno, algumas por vez, dentro de um orçamento de tempo (o resto fica pra 1ª abertura do card).
+ * `ensure` é injetável pra testar sem banco nem IA.
+ */
+export async function prepareQuestionSets(
+  students: any[], weekStart: string, now: Date,
+  o: { ensure: (student: any) => Promise<{ source: 'AI' | 'RULES' }>; budgetMs?: number; concurrency?: number },
+): Promise<PrepareReport> {
+  const deadline = Date.now() + (o.budgetMs ?? 50_000);
+  const queue = [...students];
+  const report: PrepareReport = { total: students.length, ready: 0, ai: 0, rules: 0, skipped: 0 };
+  const worker = async () => {
+    for (let s = queue.shift(); s; s = queue.shift()) {
+      if (Date.now() > deadline) { report.skipped++; continue; }
+      try {
+        const set = await o.ensure(s);
+        report.ready++;
+        if (set.source === 'AI') report.ai++; else report.rules++;
+      } catch (e: any) {
+        report.skipped++;
+        console.warn('[weeklyCron] não montou as perguntas de', s?.id, e?.message || e);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, o.concurrency ?? 4) }, worker));
+  return report;
+}
 
 const TEXT = {
   students: { title: '💜 Feedback da semana', body: 'Leva 1 minuto: conta pra gente como foi sua semana de treino.' },
@@ -21,7 +53,7 @@ const TEXT = {
 async function dueStudents(db: any, weekStart: string) {
   const users: any[] = await db.user.findMany({
     where: { role: 'USER', coachId: { not: null } },
-    select: { id: true, name: true, coachId: true, pushToken: true, createdAt: true, active: true, accountStatus: true, role: true },
+    select: { id: true, name: true, coachId: true, pushToken: true, createdAt: true, active: true, accountStatus: true, role: true, dietModule: true },
   });
   return users.filter((u) => isDueStudentForWeek(u, weekStart));
 }
@@ -51,8 +83,14 @@ export async function runWeeklyTask(task: string, deps: CronDeps): Promise<any> 
   if (task === 'students' || task === 'reminder') {
     const pending = due.filter((u) => !answeredIds.has(u.id));
     const t = TEXT[task];
+    // segunda: as perguntas já ficam prontas (com IA) antes do aluno abrir o card
+    let prepared: PrepareReport | undefined;
+    if (task === 'students' && pending.length && deps.prepareQuestions) {
+      try { prepared = await deps.prepareQuestions(pending, weekStart, now); }
+      catch (e: any) { console.warn('[weeklyCron] falhou ao montar as perguntas; o push sai mesmo assim:', e?.message || e); }   // o aluno monta na 1ª abertura do card
+    }
     if (pending.length) await deps.sendToUsers(pending, t.title, t.body, { type: 'weekly_feedback_due' });
-    return { task, weekStart, students: due.length, notified: pending.length };
+    return { task, weekStart, students: due.length, notified: pending.length, ...(prepared ? { prepared } : {}) };
   }
 
   if (task === 'coaches') {

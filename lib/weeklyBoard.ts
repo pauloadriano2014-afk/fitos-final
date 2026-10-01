@@ -3,6 +3,7 @@
 // uma "auto-avaliação" do próprio coach (respondeu quantos? cobrou quantos? falou com quantos?). Só leitura; recebe o `db` (Prisma) pra testar.
 import { MASTER_IDS } from '@/lib/masterIds';
 import { answersView, isDueStudentForWeek, needsAttention, weekLabel, weekRange, addDays, evaluatedWeekStart } from '@/lib/weeklyFeedback';
+import { describeFacts, type FactLine, type WeeklyFacts } from '@/lib/weeklyFacts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const NUDGE_TYPE = 'WEEKLY_NUDGE';
@@ -14,6 +15,8 @@ export type BoardRow = {
   view: ReturnType<typeof answersView>;
   coachSeenAt: string | null; coachReply: string | null; coachReplyAt: string | null; awaitingReply: boolean;
   workoutsDone: number; plannedPerWeek: number | null; daysSinceContact: number | null; openNotes: number; nudgedAt: string | null;
+  /** "Dados da semana" (treinos x plano, observações, dieta, check-in) prontos pro coach ler; vazio se ainda não foram levantados */
+  factsView: FactLine[]; questionSource: 'AI' | 'RULES' | null;
 };
 
 const pct = (num: number, den: number) => (den > 0 ? Math.round((100 * num) / den) : null);
@@ -37,18 +40,20 @@ export async function loadWeeklyBoard(db: any, o: { adminId: string; weekStart: 
   const empty = { weekStart, weekLabel: weekLabel(weekStart), prevWeek: addDays(weekStart, -7), nextWeek: weekStart < evaluatedWeekStart(now) ? addDays(weekStart, 7) : null };
   if (ids.length === 0) return { ...empty, rows: [] as BoardRow[], totals: { students: 0, answered: 0, pending: 0, attention: 0, awaitingReply: 0, nudged: 0, contacted7d: 0 }, coach: { repliedPct: null, nudgedPct: null, contactedPct: null } };
 
-  const [feedbacks, histories, anamneses, notes, nudges]: any[][] = await Promise.all([
+  const [feedbacks, histories, anamneses, notes, nudges, sets]: any[][] = await Promise.all([
     db.weeklyFeedback.findMany({ where: { userId: { in: ids }, weekStart } }),
     db.workoutHistory.findMany({ where: { userId: { in: ids }, date: { gte: range.start, lt: range.end } }, select: { userId: true } }),
     db.anamnese.findMany({ where: { userId: { in: ids } }, orderBy: { createdAt: 'desc' }, select: { userId: true, frequencia: true } }).catch(() => []),
     db.studentAlert.findMany({ where: { userId: { in: ids }, type: 'EXERCISE_NOTE', isRead: false }, select: { userId: true } }).catch(() => []),
     db.studentAlert.findMany({ where: { userId: { in: ids }, type: NUDGE_TYPE, createdAt: { gte: nudgeFrom, lt: nudgeTo } }, orderBy: { createdAt: 'desc' }, select: { userId: true, createdAt: true } }).catch(() => []),
+    db.weeklyQuestionSet.findMany({ where: { userId: { in: ids }, weekStart }, select: { userId: true, facts: true, source: true } }).catch(() => []),
   ]);
 
   const fbBy = new Map<string, any>(feedbacks.map((f) => [f.userId, f]));
   const doneBy = new Map<string, number>(); histories.forEach((h) => doneBy.set(h.userId, (doneBy.get(h.userId) || 0) + 1));
   const freqBy = new Map<string, number>(); anamneses.forEach((a) => { if (!freqBy.has(a.userId) && Number(a.frequencia) > 0) freqBy.set(a.userId, Number(a.frequencia)); });
   const notesBy = new Map<string, number>(); notes.forEach((a) => notesBy.set(a.userId, (notesBy.get(a.userId) || 0) + 1));
+  const setBy = new Map<string, any>(sets.map((x) => [x.userId, x]));
   const nudgeBy = new Map<string, any>(); nudges.forEach((n) => { if (!nudgeBy.has(n.userId)) nudgeBy.set(n.userId, n.createdAt); });
 
   const rows: BoardRow[] = students.map((u) => {
@@ -56,13 +61,18 @@ export async function loadWeeklyBoard(db: any, o: { adminId: string; weekStart: 
     const flags: string[] = f?.flags || [];
     const answered = !!f;
     const contact = u.lastContactDate ? Math.floor((now.getTime() - new Date(u.lastContactDate).getTime()) / DAY_MS) : null;
+    const qset = setBy.get(u.id);
+    const facts: WeeklyFacts | null = (f?.facts as WeeklyFacts) || (qset?.facts as WeeklyFacts) || null;   // o que o aluno respondeu "congela" os fatos daquele momento
     return {
       studentId: u.id, name: u.name || 'Aluno', photoUrl: u.photoUrl || null, coachId: u.coachId || null,
       answered, feedbackId: f?.id || null, answeredAt: iso(f?.createdAt), score: f?.score ?? null, flags, attention: answered && needsAttention(flags),
       view: answered ? answersView(f.questions, f.answers) : [],
       coachSeenAt: iso(f?.coachSeenAt), coachReply: f?.coachReply || null, coachReplyAt: iso(f?.coachReplyAt),
       awaitingReply: answered && !f.coachSeenAt && !f.coachReplyAt,
-      workoutsDone: doneBy.get(u.id) || 0, plannedPerWeek: freqBy.get(u.id) ?? null, daysSinceContact: contact, openNotes: notesBy.get(u.id) || 0, nudgedAt: iso(nudgeBy.get(u.id)),
+      workoutsDone: facts ? facts.training.done : doneBy.get(u.id) || 0,
+      plannedPerWeek: facts ? facts.training.planned ?? null : freqBy.get(u.id) ?? null,
+      daysSinceContact: contact, openNotes: notesBy.get(u.id) || 0, nudgedAt: iso(nudgeBy.get(u.id)),
+      factsView: describeFacts(facts), questionSource: qset ? (qset.source === 'AI' ? 'AI' : 'RULES') : null,
     };
   });
 

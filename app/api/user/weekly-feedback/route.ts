@@ -1,26 +1,24 @@
 // app/api/user/weekly-feedback/route.ts
 // 💜 Feedback da semana, lado do ALUNO (ver lib/weeklyFeedback.ts).
-//   GET  ?userId=            -> { available, due, answered, weekStart, weekLabel, questions? }   (o card da Início decide se aparece)
+//   GET  ?userId=            -> { available, due, answered, weekStart, weekLabel, questions?, intro? }   (o card da Início decide se aparece)
 //   POST { userId, weekStart, answers } -> grava a resposta (uma por semana; refazer enquanto o coach não viu) e avisa o coach por push
+// As perguntas vêm do conjunto montado pra ESSA semana (lib/weeklyQuestionSet.ts): dados reais do aluno + refino da IA, guardado na 1ª vez.
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 import {
-  buildQuestions, validateAnswers, deriveSummary, evaluatedWeekStart, weekLabel, isDueStudent, isMissingTable, shortName, FLAG_LABELS, type Flag,
+  validateAnswers, deriveSummary, evaluatedWeekStart, weekLabel, isDueStudent, isMissingTable, shortName, FLAG_LABELS, type Flag,
 } from '@/lib/weeklyFeedback';
+import { ensureQuestionSet } from '@/lib/weeklyQuestionSet';
+import { isLowLogged } from '@/lib/weeklyFacts';
 
 export const dynamic = 'force-dynamic';
 
 const studentSelect = { id: true, name: true, coachId: true, createdAt: true, active: true, accountStatus: true, role: true, dietModule: true } as const;
 
-async function questionsFor(student: any) {
-  let anamnese: any = null;
-  try {
-    anamnese = await prisma.anamnese.findFirst({ where: { userId: student.id }, orderBy: { createdAt: 'desc' }, select: { limitacoes: true, sleepQuality: true } });
-  } catch { /* sem anamnese: só as perguntas de sempre */ }
-  return buildQuestions({ limitations: anamnese?.limitacoes, sleepQuality: anamnese?.sleepQuality, dietModule: student.dietModule });
-}
+// Na 1ª abertura da semana o conjunto pode precisar de alguns segundos (dados + IA); o cron de segunda já costuma deixá-lo pronto.
+const AI_ON_DEMAND = { timeoutMs: 7000, maxRetries: 0 };
 
 export async function GET(req: Request) {
   try {
@@ -46,7 +44,8 @@ export async function GET(req: Request) {
     }
     if (existing) return NextResponse.json({ ...base, due: false, answered: true, answeredAt: existing.createdAt });
     if (!isDueStudent(student, now)) return NextResponse.json({ ...base, due: false, answered: false });
-    return NextResponse.json({ ...base, due: true, answered: false, questions: await questionsFor(student) });
+    const set = await ensureQuestionSet(prisma, student, { weekStart, now, ai: AI_ON_DEMAND });
+    return NextResponse.json({ ...base, due: true, answered: false, questions: set.questions, intro: set.intro });
   } catch (error) {
     console.error('Erro GET weekly-feedback:', error);
     return NextResponse.json({ available: false });
@@ -69,10 +68,14 @@ export async function POST(req: Request) {
     if (weekStart !== evaluatedWeekStart(now)) return NextResponse.json({ error: 'Essa semana não está mais aberta para feedback.' }, { status: 400 });
     if (!isDueStudent(student, now)) return NextResponse.json({ error: 'Não há feedback para você nesta semana.' }, { status: 400 });
 
-    const questions = await questionsFor(student);
+    const set = await ensureQuestionSet(prisma, student, { weekStart, now, ai: AI_ON_DEMAND });
+    const questions = set.questions;
     const v = validateAnswers(questions, answers);
     if (!v.ok) return NextResponse.json({ error: v.error, field: v.field }, { status: 400 });
-    const { score, flags } = deriveSummary(v.clean);
+    const { score, flags } = deriveSummary(v.clean, {
+      lowLogged: isLowLogged(set.facts),
+      checkinLate: !!set.facts && (set.facts.checkin.status === 'LATE' || set.facts.checkin.status === 'NEVER'),
+    });
 
     let existing: any = null;
     try {
@@ -83,7 +86,7 @@ export async function POST(req: Request) {
     }
     if (existing?.coachSeenAt) return NextResponse.json({ error: 'Seu coach já viu esse feedback.' }, { status: 409 });
 
-    const data = { questions: questions as any, answers: v.clean as any, score, flags };
+    const data = { questions: questions as any, answers: v.clean as any, score, flags, ...(set.facts ? { facts: set.facts as any } : {}) };
     let row: any;
     let created = false;
     if (existing) {
@@ -103,7 +106,7 @@ export async function POST(req: Request) {
     if (created && student.coachId) {
       const coach = await prisma.user.findUnique({ where: { id: student.coachId }, select: { id: true, pushToken: true } }).catch(() => null);
       if (coach) {
-        const alerts = flags.filter((f) => f === 'PAIN' || f === 'LOW_ADHERENCE').map((f) => FLAG_LABELS[f as Flag]);
+        const alerts = flags.filter((f) => f === 'PAIN' || f === 'LOW_ADHERENCE' || f === 'LOW_LOGGED').map((f) => FLAG_LABELS[f as Flag]);
         const body = `${score !== null ? `Dedicação ${score}/10` : 'Respondeu'}${alerts.length ? ` · ⚠ ${alerts.join(', ').toLowerCase()}` : ''}`;
         sendPushToUser(coach, `💜 ${shortName(student.name)} respondeu o feedback da semana`, body, { type: 'weekly_feedback', studentId: userId, feedbackId: row.id }).catch(() => {});
       }

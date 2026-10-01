@@ -19,6 +19,7 @@ model User {
   aiLogs            AiLog[]
   dailyCheckins     DailyCheckin[]
   weeklyFeedbacks   WeeklyFeedback[]   // 💜 feedback semanal do aluno (ver tracking.prisma)
+  weeklyQuestionSets WeeklyQuestionSet[] // perguntas do feedback semanal já montadas (ver tracking.prisma)
   dietFeedbacks     DietFeedback[]
   dietMealLogs      DietMealLog[]
   npsRequested      Boolean  @default(false)

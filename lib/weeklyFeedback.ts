@@ -70,6 +70,10 @@ export type QuestionContext = {
   limitations?: string[] | null;
   dietModule?: boolean | null;
   sleepQuality?: string | null;
+  /** quantas perguntas extras (da anamnese) entram -- 2 por padrão; o modo "com dados da semana" usa mais */
+  extrasLimit?: number;
+  /** além da nota da dieta (0-10), pergunta o que mais atrapalhou */
+  dietIssue?: boolean;
 };
 
 const NO_LIMITATION = /^(nenhum|nenhuma|n[aã]o|sem|nada|n\/a)/i;
@@ -102,6 +106,12 @@ export function buildQuestions(ctx: QuestionContext = {}): Question[] {
   }
   if (ctx.dietModule) {
     extras.push({ id: 'diet', kind: 'scale', min: 0, max: 10, label: '🍽️ Dieta: de 0 a 10, quanto você seguiu o plano alimentar?' });
+    if (ctx.dietIssue) {
+      extras.push({ id: 'diet_issue', kind: 'choice', label: '🥗 O que mais atrapalhou a dieta nessa semana?', options: [
+        { value: 'NONE', label: 'Nada, segui bem' }, { value: 'OUT', label: 'Refeições fora de casa / eventos' }, { value: 'HUNGER', label: 'Fome ou ansiedade' },
+        { value: 'TIME', label: 'Falta de tempo / rotina' }, { value: 'DISLIKE', label: 'Enjoei ou não gosto de algo do plano' }, { value: 'OTHER', label: 'Outro motivo' },
+      ], textWhen: { values: ['OUT', 'HUNGER', 'TIME', 'DISLIKE', 'OTHER'], label: 'Quer contar mais? (opcional)', required: false } });
+    }
   }
   if (ctx.sleepQuality && POOR_SLEEP.test(String(ctx.sleepQuality))) {
     extras.push({ id: 'sleep', kind: 'choice', label: '😴 Como foi seu sono essa semana?', options: [
@@ -109,7 +119,7 @@ export function buildQuestions(ctx: QuestionContext = {}): Question[] {
     ] });
   }
 
-  return [...base, ...extras.slice(0, 2), { id: 'effort', kind: 'scale', min: 0, max: 10, label: '⭐ De 0 a 10, como você avalia sua dedicação essa semana?' }];
+  return [...base, ...extras.slice(0, ctx.extrasLimit ?? 2), { id: 'effort', kind: 'scale', min: 0, max: 10, label: '⭐ De 0 a 10, como você avalia sua dedicação essa semana?' }];
 }
 
 // ─── validação e resumo ───────────────────────────────────────────────────────────────────────────
@@ -147,23 +157,30 @@ export function validateAnswers(questions: Question[], raw: unknown): { ok: true
   return { ok: true, clean };
 }
 
-export type Flag = 'PAIN' | 'LOW_ADHERENCE' | 'LOW_ENERGY' | 'LOW_EFFORT' | 'REGRESSED' | 'ADJUST';
+export type Flag = 'PAIN' | 'LOW_ADHERENCE' | 'LOW_ENERGY' | 'LOW_EFFORT' | 'REGRESSED' | 'ADJUST' | 'LOW_LOGGED' | 'CHECKIN_LATE' | 'MOTIVATION';
 export const FLAG_LABELS: Record<Flag, string> = {
   PAIN: 'Dor / desconforto', LOW_ADHERENCE: 'Treinou pouco', LOW_ENERGY: 'Pouca energia', LOW_EFFORT: 'Dedicação baixa', REGRESSED: 'Regrediu nas cargas', ADJUST: 'Pediu ajuste',
+  LOW_LOGGED: 'Registrou poucos treinos', CHECKIN_LATE: 'Check-in atrasado', MOTIVATION: 'Desmotivação',
 };
 /** Alertas que merecem o coach olhar primeiro. */
-export const ATTENTION_FLAGS: Flag[] = ['PAIN', 'LOW_ADHERENCE', 'LOW_ENERGY', 'LOW_EFFORT'];
+export const ATTENTION_FLAGS: Flag[] = ['PAIN', 'LOW_ADHERENCE', 'LOW_ENERGY', 'LOW_EFFORT', 'LOW_LOGGED'];
 
-export function deriveSummary(answers: Answers): { score: number | null; flags: Flag[] } {
+/** Sinais objetivos (calculados dos registros, não do que o aluno respondeu) que também viram alerta. */
+export type ObjectiveSignals = { lowLogged?: boolean; checkinLate?: boolean };
+
+export function deriveSummary(answers: Answers, signals: ObjectiveSignals = {}): { score: number | null; flags: Flag[] } {
   const flags: Flag[] = [];
   const a = answers;
-  if (a.difficulty === 'YES' || a.limitation === 'MUCH') flags.push('PAIN');
+  if (a.difficulty === 'YES' || a.limitation === 'MUCH' || a.training_gap === 'PAIN') flags.push('PAIN');
   if (a.trained === 'PART' || a.trained === 'LITTLE') flags.push('LOW_ADHERENCE');
   if (a.energy === 'BAD') flags.push('LOW_ENERGY');
   const score = typeof a.effort === 'number' ? a.effort : null;
   if (score !== null && score <= 4) flags.push('LOW_EFFORT');
   if (a.performance === 'WORSE') flags.push('REGRESSED');
   if (typeof a.protocol === 'string' && a.protocol.trim()) flags.push('ADJUST');
+  if (signals.lowLogged) flags.push('LOW_LOGGED');
+  if (signals.checkinLate) flags.push('CHECKIN_LATE');
+  if (a.training_gap === 'MOTIV') flags.push('MOTIVATION');
   return { score, flags };
 }
 

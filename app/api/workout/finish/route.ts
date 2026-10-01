@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, workoutName, day, exercisesData, duration, rpe, feedback } = body;
+    const { userId, workoutName, day, workoutId, exercisesData, duration, rpe, feedback } = body;
 
     if (!userId) return NextResponse.json({ error: "User ID missing" }, { status: 400 });
 
@@ -50,6 +50,9 @@ export async function POST(req: Request) {
         data: {
             userId,
             name: workoutName,
+            // 🔥 (1 out 2026) qual dia/ficha foi feito -- o feedback da semana usa pra dizer "faltou o Treino C"
+            day: day ? String(day).trim().toUpperCase().slice(0, 40) : null,
+            workoutId: workoutId ? String(workoutId).slice(0, 80) : null,
             xpEarned: totalXp,
             duration: duration || 0,
             rpe: rpe ? Number(rpe) : null,

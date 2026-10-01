@@ -165,6 +165,13 @@ model WorkoutHistory {
   rpe              Int?
   feedback         String?
 
+  // 🔥 (1 out 2026) Qual treino/dia foi feito (letra do dia: "A", "B"...) e de qual
+  // ficha (Workout.id, sem @relation de propósito: a ficha pode ser apagada depois).
+  // O feedback da semana usa isso pra dizer "faltou o Treino C" em vez de só contar.
+  // Registros antigos ficam null (o servidor deduz o dia pelos exercícios feitos).
+  day              String?
+  workoutId        String?
+
   // 🔥 (17 set 2026) Resolver/responder o feedback final do treino — o coach
   // marca que já viu/tratou e opcionalmente deixa uma resposta, que dispara
   // um push de volta pro aluno (ver /api/admin/workout-history/[id]/resolve).

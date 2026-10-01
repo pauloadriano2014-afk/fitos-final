@@ -306,6 +306,10 @@ model WeeklyFeedback {
   score     Int?
   flags     String[] @default([])
 
+  // 🔥 (1 out 2026) Os dados REAIS da semana no momento das perguntas (treinos registrados x plano, observações,
+  // dieta, check-in) -- o coach vê ao lado do que o aluno respondeu. Ver lib/weeklyFacts.ts.
+  facts     Json?
+
   coachSeenAt  DateTime?
   coachReply   String?   @db.Text
   coachReplyAt DateTime?
@@ -315,4 +319,26 @@ model WeeklyFeedback {
 
   @@unique([userId, weekStart])
   @@index([coachId, weekStart])
+}
+
+// 🔥 (1 out 2026) As perguntas do feedback da semana JÁ MONTADAS para um aluno (antes de ele responder).
+// São geradas uma vez por aluno/semana -- pelo cron de segunda ou na primeira vez que o aluno abre o card -- a partir dos
+// dados reais da semana (lib/weeklyFacts.ts) e, se disponível, refinadas pela IA (lib/weeklyAI.ts). `source` = 'AI' | 'RULES'.
+// Quando o aluno responde, o servidor valida contra ESTE conjunto (e não contra uma montagem nova), então o que ele viu é o que vale.
+model WeeklyQuestionSet {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  weekStart String
+  questions Json
+  intro     String?  @db.Text
+  facts     Json?
+  source    String   @default("RULES")
+  model     String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, weekStart])
+  @@index([weekStart])
 }
