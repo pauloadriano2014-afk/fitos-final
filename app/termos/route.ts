@@ -1,8 +1,25 @@
 // app/termos/route.ts
 import { NextResponse } from 'next/server';
 
-export async function GET() {
-  const html = `
+// 🍎 (2 out 2026) O link "Termos de Uso" do app abre esta página. No app de iPhone (Apple 3.1.1) não pode haver nada que fale de compra/pagamento
+// por outros meios: o app do iOS abre com ?plataforma=ios e recebe a versão SEM a seção de assinaturas e pagamentos. Quem abre sem o parâmetro
+// (web, Android, builds antigas) vê o texto completo, agora com um aviso de que o app do iPhone não tem contratação nem pagamento.
+export const dynamic = 'force-dynamic';
+
+const SECTION_7_FULL_NOTE = `<p><strong>Aplicativo para iPhone (iOS):</strong> não há contratação, assinatura nem pagamento no aplicativo para iPhone. As regras desta seção valem para os demais canais de acesso (web e Android).</p>`;
+
+const SECTION_7_IOS = `
+      <h2>7. Acesso ao Serviço</h2>
+      <p>O acesso ao ELITE FIT neste aplicativo é liberado pelo seu coach ou profissional responsável. O aplicativo para iPhone (iOS) não oferece contratação, assinatura nem pagamento de planos ou serviços. Dúvidas sobre o seu acesso podem ser enviadas pelos canais de contato ao final destes Termos.</p>
+`;
+
+const isIosApp = (req: Request) => {
+  try { return (new URL(req.url).searchParams.get('plataforma') || '').toLowerCase() === 'ios'; } catch { return false; }
+};
+
+export async function GET(req: Request) {
+  const ios = isIosApp(req);
+  let html = `
   <!DOCTYPE html>
   <html lang="pt-BR">
   <head>
@@ -56,6 +73,7 @@ export async function GET() {
       </ul>
 
       <h2>7. Assinaturas, Pagamentos e Cancelamento</h2>
+      ${SECTION_7_FULL_NOTE}
       <ul>
         <li>Planos pagos são cobrados no ciclo contratado (mensal, trimestral, semestral ou anual, conforme o plano escolhido) através do nosso processador de pagamentos Asaas, via PIX, boleto ou cartão de crédito.</li>
         <li>Quando o pagamento recorrente automático é ativado, a cobrança do ciclo seguinte ocorre automaticamente na data de vencimento, salvo cancelamento prévio pelo usuário.</li>
@@ -97,9 +115,18 @@ export async function GET() {
   </html>
   `;
 
+  if (ios) {
+    // a seção inteira (do título 7 até o título 8) vira a versão sem pagamento
+    const start = html.indexOf('<h2>7. Assinaturas, Pagamentos e Cancelamento</h2>');
+    const end = html.indexOf('<h2>8. Uso de Inteligência Artificial</h2>');
+    if (start !== -1 && end > start) html = html.slice(0, start) + SECTION_7_IOS.trim() + '\n\n      ' + html.slice(end);
+    html = html.replace('em caso de inadimplência, uso indevido do conteúdo', 'em caso de uso indevido do conteúdo');
+  }
+
   return new NextResponse(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
     },
   });
 }
