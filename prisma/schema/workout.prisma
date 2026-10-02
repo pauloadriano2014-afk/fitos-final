@@ -56,7 +56,29 @@ model Workout {
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercises WorkoutExercise[]
+  shares    WorkoutShare[]
   createdAt DateTime  @default(now())
+}
+
+// 🔗 (2 out 2026) LINK DO TREINO EM PÁGINA: o coach cria um endereço (elitefitapp.com.br/t/?c=<code>) que mostra o treino do aluno numa página
+// pública, sem app e sem login. Cada link tem as escolhas do coach: mostrar (ou não) o nome do aluno, quais dias aparecem (vazio = todos) e a
+// validade (null = não expira). Pode ser desativado a qualquer momento (revokedAt). O conteúdo é SEMPRE o treino atual (não é uma cópia).
+// Tabela nova: só adiciona (rodar `npx prisma db push` ANTES de publicar o backend).
+model WorkoutShare {
+  id           String    @id @default(uuid())
+  code         String    @unique
+  workoutId    String
+  workout      Workout   @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  createdById  String?
+  showName     Boolean   @default(false)
+  days         String[]  @default([])
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  viewCount    Int       @default(0)
+  lastViewedAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([workoutId])
 }
 
 model WorkoutExercise {
