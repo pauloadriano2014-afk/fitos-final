@@ -217,7 +217,8 @@ export function buildPublicWorkout(input: PublicInput) {
 
       const firstReps = blocks[0]?.reps || '';
       const varying = blocks.some((b) => b.reps !== firstReps);
-      const summary = cardio ? `${total} minutos · ${firstReps || '?'} kcal` : varying ? `${total} séries totais` : `${total} séries × ${firstReps || '?'} reps`;
+      const repsLabel = !firstReps ? '?' : /^\d+(?:\s*[-–/]\s*\d+)*$/.test(firstReps) ? `${firstReps} reps` : firstReps;   // "10" -> "10 reps"; "30s" e "Falha" ficam como o coach escreveu
+      const summary = cardio ? `${total} minutos · ${firstReps || '?'} kcal` : varying ? `${total} séries totais` : `${total} séries × ${repsLabel}`;
       const rest = blocks.find((b) => b.restTime)?.restTime || null;
       const subIds: any[] = Array.isArray(r.substitutes) && r.substitutes.length ? r.substitutes : r.substituteId ? [r.substituteId] : [];   // `substituteId` = formato antigo (um só)
       const subs = subIds.map((id: any) => input.substituteNames?.[String(id)]).filter(Boolean).slice(0, 3) as string[];
