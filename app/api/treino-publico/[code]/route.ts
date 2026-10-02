@@ -1,12 +1,12 @@
 // app/api/treino-publico/[code]/route.ts
 // 🔗 (2 out 2026) PÁGINA PÚBLICA DO TREINO: lida por elitefitapp.com.br/t/?c=<code>. SEM login: quem tem o código vê o treino, nas escolhas que o coach
-// fez ao criar o link (nome do aluno sim/não, dias, validade). Só sai o que o aluno já vê no app (lib/workoutShare.ts: buildPublicWorkout).
+// fez ao criar o link (nome sim/não, dias, validade). O link aponta para o treino salvo de um aluno OU para um treino avulso do coach. Só sai o que o aluno já vê no app (lib/workoutShare.ts: buildPublicWorkout).
 // Link inexistente = 404; desativado ou vencido = 410. Limite de pedidos por IP contra tentativa de adivinhar códigos.
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
-import { isValidShareCode, shareStatus, buildPublicWorkout, MASTER_TEAM_ID } from '@/lib/workoutShare';
+import { isValidShareCode, shareStatus, buildPublicWorkout, MASTER_TEAM_ID, parseQuickData, quickExerciseIds, quickRows, quickSubstituteNames } from '@/lib/workoutShare';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,23 +33,50 @@ export async function GET(req: Request, { params }: { params: { code: string } }
     if (status === 'REVOKED') return reply({ error: 'revoked' }, 410);
     if (status === 'EXPIRED') return reply({ error: 'expired', expiredAt: share.expiresAt ? new Date(share.expiresAt).toISOString() : null }, 410);
 
-    const workout = await prisma.workout.findUnique({
-      where: { id: share.workoutId },
-      include: { exercises: { include: { exercise: true }, orderBy: { order: 'asc' } } },
-    });
-    if (!workout) return reply({ error: 'not_found' }, 404);
+    // 1) as linhas do treino, de onde quer que venham (treino de aluno ou treino avulso do coach)
+    let rows: any[] = [];
+    let workoutName = 'Treino';
+    let studentName: string | null = null;
+    let coachId: string | null = null;
+    let subNamesFallback: Record<string, string> = {};
 
-    const [student, subs, techs] = await Promise.all([
-      prisma.user.findUnique({ where: { id: workout.userId }, select: { name: true, coachId: true } }),
+    if (share.quickWorkoutId) {
+      const quick = await prisma.quickWorkout.findUnique({ where: { id: share.quickWorkoutId } });
+      if (!quick) return reply({ error: 'not_found' }, 404);
+      const parsedQuick = parseQuickData(quick.data);
+      const days = parsedQuick.ok ? parsedQuick.days : {};
+      const exs = await prisma.exercise.findMany({ where: { id: { in: quickExerciseIds(days) } }, select: { id: true, name: true, category: true, videoUrl: true } });
+      const catalog: Record<string, any> = {};
+      exs.forEach((e: any) => { catalog[e.id] = e; });
+      rows = quickRows(days, catalog);
+      subNamesFallback = quickSubstituteNames(days);
+      exs.forEach((e: any) => { subNamesFallback[e.id] = e.name; });
+      workoutName = quick.name;
+      coachId = quick.coachId;
+    } else {
+      const workout = share.workoutId ? await prisma.workout.findUnique({
+        where: { id: share.workoutId },
+        include: { exercises: { include: { exercise: true }, orderBy: { order: 'asc' } } },
+      }) : null;
+      if (!workout) return reply({ error: 'not_found' }, 404);
+      const student = await prisma.user.findUnique({ where: { id: workout.userId }, select: { name: true, coachId: true } });
+      rows = workout.exercises;
+      workoutName = workout.name;
+      studentName = student?.name || null;
+      coachId = student?.coachId || null;
+    }
+
+    // 2) nomes das trocas e técnicas personalizadas citadas nos blocos (o app guarda o id dentro do JSON da coluna `technique`)
+    const [subs, techs] = await Promise.all([
       (async () => {
-        const ids = Array.from(new Set(workout.exercises.flatMap((e: any) => [...(Array.isArray(e.substitutes) ? e.substitutes : []), ...(e.substituteId ? [e.substituteId] : [])]))) as string[];
-        if (!ids.length) return [] as { id: string; name: string }[];
-        return prisma.exercise.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
+        const ids = Array.from(new Set(rows.flatMap((e: any) => [...(Array.isArray(e.substitutes) ? e.substitutes : []), ...(e.substituteId ? [e.substituteId] : [])]))) as string[];
+        const missing = ids.filter((id) => !subNamesFallback[id]);
+        if (!missing.length) return [] as { id: string; name: string }[];
+        return prisma.exercise.findMany({ where: { id: { in: missing } }, select: { id: true, name: true } });
       })(),
       (async () => {
-        // técnicas personalizadas citadas nos blocos (o app guarda o id dentro do JSON da coluna `technique`)
         const ids = new Set<string>();
-        workout.exercises.forEach((e: any) => {
+        rows.forEach((e: any) => {
           if (e.customTechniqueId) ids.add(String(e.customTechniqueId));
           if (typeof e.technique === 'string' && e.technique.trim().startsWith('{')) {
             try { const p = JSON.parse(e.technique); (Array.isArray(p?.b) ? p.b : []).forEach((b: any) => { if (b?.customTechniqueId) ids.add(String(b.customTechniqueId)); }); } catch { /* ignora */ }
@@ -60,7 +87,6 @@ export async function GET(req: Request, { params }: { params: { code: string } }
       })(),
     ]);
 
-    const coachId = student?.coachId || null;
     const coach = coachId ? await prisma.user.findUnique({ where: { id: coachId }, select: { name: true, brandLogoUrl: true, brandLogoSize: true } }) : null;
 
     // vídeos das técnicas do sistema: do time do coach, com herança do time master (mesmo critério do app)
@@ -70,15 +96,15 @@ export async function GET(req: Request, { params }: { params: { code: string } }
     sysRows.filter((r: any) => r.teamId === MASTER_TEAM_ID).forEach((r: any) => { systemVideos[r.key] = r.videoUrl; });
     sysRows.filter((r: any) => r.teamId !== MASTER_TEAM_ID).forEach((r: any) => { systemVideos[r.key] = r.videoUrl; });
 
-    const substituteNames: Record<string, string> = {};
+    const substituteNames: Record<string, string> = { ...subNamesFallback };
     (subs as any[]).forEach((s) => { substituteNames[s.id] = s.name; });
 
     const payload = buildPublicWorkout({
-      workoutName: workout.name,
-      rows: workout.exercises,
+      workoutName,
+      rows,
       substituteNames,
-      share: { showName: share.showName, days: share.days || [], expiresAt: share.expiresAt },
-      studentName: student?.name || null,
+      share: { code: share.code, showName: share.showName, displayName: share.displayName, days: share.days || [], expiresAt: share.expiresAt },
+      studentName,
       coach,
       customTechniques: techs as any[],
       systemVideos,

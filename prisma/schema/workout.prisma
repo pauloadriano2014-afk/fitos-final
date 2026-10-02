@@ -67,10 +67,14 @@ model Workout {
 model WorkoutShare {
   id           String    @id @default(uuid())
   code         String    @unique
-  workoutId    String
-  workout      Workout   @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  // O link aponta para UM destes dois: o treino salvo de um aluno (workoutId) ou um treino AVULSO do coach (quickWorkoutId).
+  workoutId    String?
+  workout      Workout?  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  quickWorkoutId String?
+  quickWorkout   QuickWorkout? @relation(fields: [quickWorkoutId], references: [id], onDelete: Cascade)
   createdById  String?
   showName     Boolean   @default(false)
+  displayName  String?   // nome livre que o coach digitou para aparecer na página ("Treino de ..."); vazio = 1º nome do aluno (treino de aluno)
   days         String[]  @default([])
   expiresAt    DateTime?
   revokedAt    DateTime?
@@ -79,6 +83,24 @@ model WorkoutShare {
   createdAt    DateTime  @default(now())
 
   @@index([workoutId])
+  @@index([quickWorkoutId])
+}
+
+// 🔗 (2 out 2026) TREINO AVULSO: treino do coach que NÃO é de nenhum aluno (montado do zero ou importado de uma base / de um aluno) só para
+// virar um link de página (ver WorkoutShare). Mesmo formato dos templates: `data` = JSON {"A":[exercícios do editor], "B":[...]}.
+// Fica separado de propósito: não aparece em Meus Templates, nem nas telas, contagens e feed dos alunos.
+// Tabela nova: só adiciona (rodar `npx prisma db push` ANTES de publicar o backend).
+model QuickWorkout {
+  id        String   @id @default(uuid())
+  coachId   String
+  coach     User     @relation("CoachQuickWorkouts", fields: [coachId], references: [id], onDelete: Cascade)
+  name      String
+  data      String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  shares    WorkoutShare[]
+
+  @@index([coachId])
 }
 
 model WorkoutExercise {

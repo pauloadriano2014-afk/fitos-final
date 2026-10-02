@@ -4,11 +4,13 @@
 //   - GET /api/treino-publico/[code]                -> a página pública (elitefitapp.com.br/t/?c=<code>) lê o treino por aqui, sem login
 // Tudo o que sai para a página pública passa por buildPublicWorkout: só o que o aluno já vê no app (exercícios, séries, descanso, técnicas,
 // "COACH AVISA", vídeos) -- nunca e-mail, telefone, ids de pessoas, cargas, histórico, avaliação ou anamnese.
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import { SYSTEM_TECHNIQUES } from './techniqueGuide';
 
 export const SHARE_CODE_LENGTH = 12;
 export const MAX_EXPIRY_DAYS = 365;
+export const MAX_EXPIRY_HOURS = MAX_EXPIRY_DAYS * 24;
+export const MAX_DISPLAY_NAME = 40;
 export const MASTER_TEAM_ID = 'MASTER_TEAM';
 
 const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';   // 62 símbolos
@@ -29,19 +31,38 @@ export function generateShareCode(length = SHARE_CODE_LENGTH): string {
 export const isValidShareCode = (code: unknown): code is string => typeof code === 'string' && /^[A-Za-z0-9]{10,24}$/.test(code);
 
 // ─────────────────────────── escolhas do coach ───────────────────────────
-export type ShareOptions = { showName: boolean; days: string[]; expiresInDays: number | null };
+export type ShareOptions = { showName: boolean; displayName: string | null; days: string[]; expiresInHours: number | null };
+
+/** Nome livre da página: sem quebras de linha/controle, espaços normalizados, até 40 caracteres. Vazio = null. */
+export function cleanDisplayName(raw: unknown): string | null {
+  const t = String(raw == null ? '' : raw).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return t ? t : null;
+}
 
 export function parseShareOptions(body: any, availableDays: string[]): { ok: true; value: ShareOptions } | { ok: false; error: string } {
   const b = body && typeof body === 'object' ? body : {};
   if (b.showName !== undefined && typeof b.showName !== 'boolean') return { ok: false, error: 'showName deve ser verdadeiro ou falso.' };
 
-  // validade: obrigatória e explícita (null = sem validade), para nunca criar um link eterno por descuido
-  if (!('expiresInDays' in b)) return { ok: false, error: 'Informe a validade (expiresInDays): um número de dias ou null para não expirar.' };
-  let expiresInDays: number | null = null;
-  if (b.expiresInDays !== null) {
-    const n = Number(b.expiresInDays);
-    if (!Number.isInteger(n) || n < 1 || n > MAX_EXPIRY_DAYS) return { ok: false, error: `A validade deve ser de 1 a ${MAX_EXPIRY_DAYS} dias, ou null para não expirar.` };
-    expiresInDays = n;
+  // validade: obrigatória e explícita (null = sem validade), para nunca criar um link eterno por descuido.
+  // `expiresInHours` (1 a 8760) ou `expiresInDays` (1 a 365, formato antigo); se vierem os dois, vale o das horas.
+  if (!('expiresInHours' in b) && !('expiresInDays' in b)) return { ok: false, error: 'Informe a validade (expiresInHours ou expiresInDays): um número ou null para não expirar.' };
+  let expiresInHours: number | null = null;
+  const useHours = 'expiresInHours' in b;
+  const rawExp = useHours ? b.expiresInHours : b.expiresInDays;
+  if (rawExp !== null) {
+    const n = Number(rawExp);
+    const max = useHours ? MAX_EXPIRY_HOURS : MAX_EXPIRY_DAYS;
+    if (!Number.isInteger(n) || n < 1 || n > max) return { ok: false, error: useHours ? `A validade deve ser de 1 a ${MAX_EXPIRY_HOURS} horas, ou null para não expirar.` : `A validade deve ser de 1 a ${MAX_EXPIRY_DAYS} dias, ou null para não expirar.` };
+    expiresInHours = useHours ? n : n * 24;
+  }
+
+  // nome que aparece na página (só vale com showName)
+  let displayName: string | null = null;
+  if (b.displayName !== undefined && b.displayName !== null) {
+    if (typeof b.displayName !== 'string') return { ok: false, error: 'O nome deve ser um texto.' };
+    const raw = b.displayName.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (raw.length > MAX_DISPLAY_NAME) return { ok: false, error: `O nome pode ter até ${MAX_DISPLAY_NAME} caracteres.` };
+    displayName = b.showName === true ? cleanDisplayName(raw) : null;
   }
 
   // dias: vazio/ausente = todos
@@ -53,11 +74,11 @@ export function parseShareOptions(body: any, availableDays: string[]): { ok: tru
     if (unknown.length) return { ok: false, error: `Este treino não tem o(s) dia(s): ${unknown.join(', ')}.` };
     days = wanted.length === availableDays.length ? [] : wanted;   // todos os dias marcados = "todos" (inclui dias criados depois)
   }
-  return { ok: true, value: { showName: b.showName === true, days, expiresInDays } };
+  return { ok: true, value: { showName: b.showName === true, displayName, days, expiresInHours } };
 }
 
-export const computeExpiresAt = (expiresInDays: number | null, now: Date = new Date()): Date | null =>
-  expiresInDays == null ? null : new Date(now.getTime() + expiresInDays * 24 * 60 * 60 * 1000);
+export const computeExpiresAt = (expiresInHours: number | null, now: Date = new Date()): Date | null =>
+  expiresInHours == null ? null : new Date(now.getTime() + expiresInHours * 60 * 60 * 1000);
 
 export type ShareStatus = 'ACTIVE' | 'EXPIRED' | 'REVOKED';
 export function shareStatus(share: { revokedAt?: Date | string | null; expiresAt?: Date | string | null }, now: Date = new Date()): ShareStatus {
@@ -156,7 +177,7 @@ export type PublicInput = {
   workoutName: string;
   rows: any[];                                                // WorkoutExercise com `exercise`, já ordenadas por `order`
   substituteNames?: Record<string, string>;                    // id do exercício -> nome (para "pode trocar por")
-  share: { showName: boolean; days: string[]; expiresAt: Date | string | null };
+  share: { code?: string; showName: boolean; displayName?: string | null; days: string[]; expiresAt: Date | string | null };
   studentName?: string | null;
   coach?: { name?: string | null; brandLogoUrl?: string | null; brandLogoSize?: number | null } | null;
   customTechniques?: CustomTechniqueRow[];
@@ -164,6 +185,12 @@ export type PublicInput = {
 };
 
 const customKey = (id: string) => `C:${id}`;
+
+/** Código opaco do exercício na página (guarda a marcação de "feito" no aparelho do aluno). Vem do dia + exercício do catálogo + posição entre repetidos,
+ *  e NÃO do id da linha (o app recria as linhas a cada salvar), então sobrevive a edições do coach. O código do link entra no cálculo: não vaza id nenhum. */
+export function exerciseKey(shareCode: string, day: string, exerciseId: unknown, occurrence: number): string {
+  return createHash('sha256').update(`${shareCode}|${day}|${String(exerciseId == null ? '' : exerciseId)}|${occurrence}`).digest('hex').slice(0, 12);
+}
 const stepsOf = (steps: any): string[] | null => {
   if (!Array.isArray(steps)) return null;
   const out = steps.map((s) => (typeof s === 'string' ? s : s && typeof s.text === 'string' ? s.text : s && typeof s.title === 'string' ? s.title : '')).map((s) => s.trim().slice(0, 300)).filter(Boolean).slice(0, 12);
@@ -175,6 +202,7 @@ export function buildPublicWorkout(input: PublicInput) {
   const sysVideos = input.systemVideos || {};
   const usedTech = new Set<string>();
 
+  const shareCode = String(input.share.code || '');
   const allDays: string[] = [];
   for (const r of input.rows) { const d = String(r?.day == null ? '' : r.day); if (!allDays.includes(d)) allDays.push(d); }
   const wanted = input.share.days && input.share.days.length ? allDays.filter((d) => input.share.days.includes(d)) : allDays;
@@ -182,6 +210,7 @@ export function buildPublicWorkout(input: PublicInput) {
   const days = wanted.map((day) => {
     const dayRows = input.rows.filter((r) => String(r?.day == null ? '' : r.day) === day);
     const bySection: Record<SectionKey, any[]> = { MOBILIDADE: [], MUSCULACAO: [], CARDIO: [] };
+    const seen: Record<string, number> = {};
 
     dayRows.forEach((r) => {
       const ex = r.exercise || {};
@@ -223,7 +252,10 @@ export function buildPublicWorkout(input: PublicInput) {
       const subIds: any[] = Array.isArray(r.substitutes) && r.substitutes.length ? r.substitutes : r.substituteId ? [r.substituteId] : [];   // `substituteId` = formato antigo (um só)
       const subs = subIds.map((id: any) => input.substituteNames?.[String(id)]).filter(Boolean).slice(0, 3) as string[];
 
+      const exId = String(r.exerciseId == null ? name : r.exerciseId);
+      seen[exId] = (seen[exId] || 0) + 1;
       bySection[sectionOf(ex.category)].push({
+        key: exerciseKey(shareCode, day, exId, seen[exId]),
         name,
         cardio,
         video: parseVideoRef(ex.videoUrl),
@@ -255,10 +287,107 @@ export function buildPublicWorkout(input: PublicInput) {
   const coach = input.coach || null;
   return {
     workout: { name: String(input.workoutName || 'Treino').trim().slice(0, 120) },
-    student: input.share.showName ? firstName(input.studentName) || null : null,
+    student: input.share.showName ? cleanDisplayName(input.share.displayName) || firstName(input.studentName) || null : null,
     coach: coach ? { name: coach.name ? String(coach.name).trim().slice(0, 80) : null, brandLogoUrl: coach.brandLogoUrl || null, brandLogoSize: coach.brandLogoSize || null } : null,
     expiresAt: input.share.expiresAt ? new Date(input.share.expiresAt).toISOString() : null,
     days,
     techniques,
   };
+}
+
+// ─────────────────────────── treino AVULSO (QuickWorkout) ───────────────────────────
+// O editor do app guarda o treino avulso como nos templates: JSON {"A":[exercício do editor...], "B":[...]}. Aqui validamos esse JSON ao salvar e o
+// transformamos nas mesmas "linhas" do treino de aluno, para a página pública usar o mesmo código (buildPublicWorkout) nos dois casos.
+export const MAX_QUICK_DATA_CHARS = 500_000;
+export const MAX_QUICK_DAYS = 14;
+export const MAX_QUICK_PER_DAY = 100;
+export const MAX_QUICK_TOTAL = 400;
+export const MAX_QUICK_NAME = 80;
+
+export type QuickDays = Record<string, any[]>;
+
+export function parseQuickData(data: unknown): { ok: true; days: QuickDays } | { ok: false; error: string } {
+  if (typeof data !== 'string' || !data.trim()) return { ok: false, error: 'O treino está vazio.' };
+  if (data.length > MAX_QUICK_DATA_CHARS) return { ok: false, error: 'O treino é grande demais.' };
+  let parsed: any;
+  try { parsed = JSON.parse(data); } catch { return { ok: false, error: 'O treino está em um formato inválido.' }; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false, error: 'O treino está em um formato inválido.' };
+  const keys = Object.keys(parsed);
+  if (keys.length === 0 || keys.length > MAX_QUICK_DAYS) return { ok: false, error: `O treino deve ter de 1 a ${MAX_QUICK_DAYS} dias.` };
+  const days: QuickDays = {};
+  let total = 0;
+  for (const k of keys) {
+    const day = String(k).trim();
+    if (!day || day.length > 40 || day in days) return { ok: false, error: 'Nome de dia inválido.' };
+    const list = parsed[k];
+    if (!Array.isArray(list)) return { ok: false, error: 'O treino está em um formato inválido.' };
+    if (list.length > MAX_QUICK_PER_DAY) return { ok: false, error: `Cada dia pode ter até ${MAX_QUICK_PER_DAY} exercícios.` };
+    for (const ex of list) {
+      if (!ex || typeof ex !== 'object' || ex.exerciseId == null || String(ex.exerciseId).trim() === '') return { ok: false, error: 'Há um exercício sem identificação.' };
+      total += 1;
+    }
+    days[day] = list;
+  }
+  if (total === 0) return { ok: false, error: 'Adicione pelo menos um exercício.' };
+  if (total > MAX_QUICK_TOTAL) return { ok: false, error: `O treino pode ter até ${MAX_QUICK_TOTAL} exercícios.` };
+  return { ok: true, days };
+}
+
+/** Dias que têm exercício, na ordem do treino (é o que o coach pode escolher mostrar). */
+export const quickAvailableDays = (days: QuickDays): string[] => Object.keys(days).filter((d) => (days[d] || []).length > 0);
+
+const subIdsOf = (ex: any): string[] => {
+  const ids: string[] = [];
+  (Array.isArray(ex?.substitutes) ? ex.substitutes : []).forEach((s: any) => { const id = s && typeof s === 'object' ? (s.id ?? s.exerciseId) : s; if (id != null && String(id)) ids.push(String(id)); });
+  if (!ids.length && ex?.substitute && ex.substitute.id != null) ids.push(String(ex.substitute.id));
+  return ids;
+};
+
+/** Ids de exercícios do catálogo que o treino cita (os principais e as trocas), para buscar nome/categoria/vídeo no banco. */
+export function quickExerciseIds(days: QuickDays): string[] {
+  const out = new Set<string>();
+  Object.values(days).forEach((list) => list.forEach((ex) => { out.add(String(ex.exerciseId)); subIdsOf(ex).forEach((id) => out.add(id)); }));
+  return Array.from(out);
+}
+
+/** Nomes das trocas que vieram escritos no próprio JSON (usados quando o exercício não está mais no catálogo). */
+export function quickSubstituteNames(days: QuickDays): Record<string, string> {
+  const out: Record<string, string> = {};
+  Object.values(days).forEach((list) => list.forEach((ex) => {
+    (Array.isArray(ex?.substitutes) ? ex.substitutes : []).forEach((s: any) => { if (s && typeof s === 'object' && (s.id ?? s.exerciseId) != null && typeof s.name === 'string' && s.name.trim()) out[String(s.id ?? s.exerciseId)] = s.name.trim().slice(0, 120); });
+  }));
+  return out;
+}
+
+export type CatalogExercise = { name?: string | null; category?: string | null; videoUrl?: string | null };
+
+/** Linhas no formato do treino de aluno (day, order, exerciseId, technique {"b","t","o"}, exercise{name,category,videoUrl}). O catálogo do banco manda; o JSON só cobre exercício apagado. */
+export function quickRows(days: QuickDays, catalog: Record<string, CatalogExercise | undefined>): any[] {
+  const rows: any[] = [];
+  let order = 0;
+  Object.keys(days).forEach((day) => {
+    (days[day] || []).forEach((ex) => {
+      const id = String(ex.exerciseId);
+      const cat = catalog[id];
+      const rawBlocks = Array.isArray(ex.blocks) && ex.blocks.length ? ex.blocks.slice(0, 30) : [{ sets: '3', reps: '10', restTime: '60', technique: '' }];
+      const first = rawBlocks[0] || {};
+      const obs = typeof ex.observation === 'string' ? ex.observation : '';
+      rows.push({
+        day: String(day).trim(),
+        order: order++,
+        exerciseId: id,
+        title: null,
+        sets: parseInt(String(first.sets), 10) || 3,
+        reps: String(first.reps == null ? '12' : first.reps),
+        restTime: parseInt(String(first.restTime), 10) || 0,
+        technique: JSON.stringify({ t: first.technique || '', b: rawBlocks, o: obs }),
+        observation: obs,
+        substitutes: subIdsOf(ex),
+        exercise: cat && cat.name
+          ? { name: cat.name, category: cat.category || ex.category || '', videoUrl: cat.videoUrl || null }
+          : { name: String(ex.title || ex.name || 'Exercício'), category: String(ex.category || ''), videoUrl: typeof ex.videoUrl === 'string' ? ex.videoUrl : null },
+      });
+    });
+  });
+  return rows;
 }
