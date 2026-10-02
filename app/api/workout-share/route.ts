@@ -1,7 +1,7 @@
 // app/api/workout-share/route.ts
 // 🔗 (2 out 2026) LINK DO TREINO EM PÁGINA -- lado do COACH (precisa de login):
 //   POST   { workoutId, showName?, days?, expiresInDays }  cria um link  -> { share }
-//   GET    ?workoutId=...                                  lista os links daquele treino
+//   GET    ?workoutId=...                                  lista os links daquele treino + os dias que o treino salvo tem -> { shares, days }
 //   DELETE ?code=... (ou { code })                         desativa um link (some na hora, o endereço deixa de abrir)
 // A página que o aluno abre é a rota pública /api/treino-publico/[code]. Regras em lib/workoutShare.ts.
 import { NextResponse } from 'next/server';
@@ -87,7 +87,11 @@ export async function GET(req: Request) {
     const found = await loadWorkoutForCoach(auth, workoutId);
     if ('error' in found) return found.error;
     const shares = await prisma.workoutShare.findMany({ where: { workoutId }, orderBy: { createdAt: 'desc' }, take: 50 });
-    return NextResponse.json({ shares: shares.map(publicShare) });
+    // dias que o treino SALVO tem hoje (a tela do coach oferece só esses na escolha de dias), na ordem da primeira aparição
+    const dayRows = await prisma.workoutExercise.findMany({ where: { workoutId }, select: { day: true }, orderBy: { order: 'asc' } });
+    const days: string[] = [];
+    dayRows.forEach((r: any) => { const d = String(r.day); if (!days.includes(d)) days.push(d); });
+    return NextResponse.json({ shares: shares.map(publicShare), days });
   } catch (error) {
     console.error('Erro GET workout-share:', error);
     return NextResponse.json({ error: 'Erro ao listar os links.' }, { status: 500 });
