@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     await prisma.studentAlert.create({
       data: { userId: studentId, coachId: student.coachId || undefined, type: NUDGE_TYPE, title: 'Cobrança de feedback da semana', message: '', isRead: true },
     });
-    sendPushToUser(student, '💜 Seu coach está esperando seu feedback', 'Leva 1 minuto: conta como foi sua semana de treino.', { type: 'weekly_feedback_due' }).catch(() => {});
+    sendPushToUser(student, 'Seu coach está esperando seu feedback', 'Leva 1 minuto: conta como foi sua semana de treino.', { type: 'weekly_feedback_due' }).catch(() => {});
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Erro POST nudge weekly-feedback:', error);

@@ -1,7 +1,7 @@
 // lib/weeklyWhatsApp.ts
 // 💬 (1 out 2026) "Reforço" pelo WhatsApp: quando o aluno não responde o feedback no app, o coach toca num botão e abre o WhatsApp dele já com
 // uma mensagem pronta -- saudação + o MESMO questionário da semana (com as perguntas personalizadas) -- pro aluno responder por lá.
-// Mesmo formato do mini-questionário que a equipe já mandava ("💜 FEEDBACK DA SEMANA — PA ELITE"). Funções puras.
+// Mesmo formato do mini-questionário que a equipe já mandava ("FEEDBACK DA SEMANA — PA ELITE"). Funções puras.
 import type { Question } from '@/lib/weeklyFeedback';
 
 /** Endereço do app (PWA) pra o aluno responder direto, sem digitar nada no WhatsApp. */
@@ -28,9 +28,9 @@ export function normalizeBrPhone(raw: unknown): string | null {
 
 export function buildWhatsAppText(o: { name?: string | null; weekLabel: string; intro?: string | null; questions: Question[] }): string {
   const lines: string[] = [];
-  lines.push(`Oi, ${firstName(o.name)}! Tudo bem? 💜`, '');
+  lines.push(`Oi, ${firstName(o.name)}! Tudo bem?`, '');
   lines.push(`Passando para saber como foi a sua semana (${o.weekLabel}). Como ainda não vi o seu feedback no app, deixo aqui para você responder por aqui mesmo, rapidinho:`, '');
-  lines.push('💜 FEEDBACK DA SEMANA — PA ELITE');
+  lines.push('FEEDBACK DA SEMANA — PA ELITE');
   if (o.intro) lines.push('', squash(o.intro));
   lines.push('');
   o.questions.forEach((q, i) => {

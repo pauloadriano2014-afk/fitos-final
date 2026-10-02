@@ -88,7 +88,7 @@ export function buildWeeklyQuestions(ctx: WeeklyQuestionContext = {}): Question[
       ? '📸 Ainda não recebemos as suas fotos do check-in. O que aconteceu?'
       : `📸 Seu check-in com fotos estava marcado para ${c.dueDate ? ddmm(c.dueDate) : 'esta semana'} e ainda não chegou. O que aconteceu?`;
     qs.splice(at('energy') + 1, 0, {
-      id: 'checkin_missed', kind: 'choice', label, hint: 'Se puder, envie as fotos hoje: o seu coach precisa delas para ajustar o seu plano. 💜',
+      id: 'checkin_missed', kind: 'choice', label, hint: 'Se puder, envie as fotos hoje: o seu coach precisa delas para ajustar o seu plano.',
       options: [
         { value: 'FORGOT', label: 'Esqueci' }, { value: 'NOTIME', label: 'Sem tempo' }, { value: 'UNCOMFORTABLE', label: 'Não me sinto confortável' },
         { value: 'TECH', label: 'Dificuldade no app / nas fotos' }, { value: 'WILLSEND', label: 'Vou enviar hoje' }, { value: 'OTHER', label: 'Outro motivo' },

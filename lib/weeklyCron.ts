@@ -46,7 +46,7 @@ export async function prepareQuestionSets(
 }
 
 const TEXT = {
-  students: { title: '💜 Feedback da semana', body: 'Leva 1 minuto: conta pra gente como foi sua semana de treino.' },
+  students: { title: 'Feedback da semana', body: 'Leva 1 minuto: conta pra gente como foi sua semana de treino.' },
   reminder: { title: '⏰ Ainda dá tempo do feedback da semana', body: 'Seu coach quer saber como foi sua semana. Leva 1 minuto.' },
 };
 

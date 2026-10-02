@@ -107,7 +107,7 @@ export async function POST(req: Request) {
       if (coach) {
         const alerts = flags.filter((f) => f === 'PAIN' || f === 'LOW_ADHERENCE' || f === 'LOW_LOGGED').map((f) => FLAG_LABELS[f as Flag]);
         const body = `${score !== null ? `Dedicação ${score}/10` : 'Respondeu'}${alerts.length ? ` · ⚠ ${alerts.join(', ').toLowerCase()}` : ''}`;
-        sendPushToUser(coach, `💜 ${shortName(student.name)} respondeu o feedback da semana`, body, { type: 'weekly_feedback', studentId: userId, feedbackId: row.id }).catch(() => {});
+        sendPushToUser(coach, `${shortName(student.name)} respondeu o feedback da semana`, body, { type: 'weekly_feedback', studentId: userId, feedbackId: row.id }).catch(() => {});
       }
     }
     return NextResponse.json({ success: true, id: row.id });
