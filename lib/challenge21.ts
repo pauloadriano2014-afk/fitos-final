@@ -163,6 +163,7 @@ export interface ChallengeSummary {
   week: 1 | 2 | 3;
   weekTheme: { title: string; desc: string };
   today: null | { date: string; dayIndex: number; missions: DayMission[]; score: DayScore };
+  yesterday: null | { date: string; dayIndex: number; missions: DayMission[]; score: DayScore };   // ontem ainda pode ser ajustado (ex.: o sono)
   days: DaySummary[];
   streak: number;                            // dias cumpridos seguidos até hoje (hoje em andamento não quebra)
   bestStreak: number;
@@ -183,6 +184,7 @@ export function summarize(input: SummaryInput): ChallengeSummary {
   const days: DaySummary[] = [];
   let points = 0, validDays = 0, fullDays = 0, run = 0, best = 0, streak = 0;
   let todayDetail: ChallengeSummary['today'] = null;
+  let yesterdayDetail: ChallengeSummary['yesterday'] = null;
 
   for (let d = 1; d <= CHALLENGE_DAYS; d++) {
     const date = addDays(startDate, d - 1);
@@ -198,6 +200,7 @@ export function summarize(input: SummaryInput): ChallengeSummary {
     const status: DayStatus = isToday ? 'TODAY' : sc.full ? 'FULL' : sc.valid ? 'VALID' : sc.done > 0 ? 'PARTIAL' : 'MISSED';
     days.push({ dayIndex: d, date, status, done: sc.done, total: sc.total, points: sc.points, full: sc.full, valid: sc.valid });
     if (isToday) todayDetail = { date, dayIndex: d, missions, score: sc };
+    if (date === addDays(today, -1)) yesterdayDetail = { date, dayIndex: d, missions, score: sc };
   }
   streak = run;
 
@@ -209,7 +212,7 @@ export function summarize(input: SummaryInput): ChallengeSummary {
 
   return {
     state, startDate, endDate: addDays(startDate, CHALLENGE_DAYS - 1), dayIndex, daysToStart: dayIndex < 1 ? Math.max(0, diffDays(today, startDate)) : 0,
-    week: wk, weekTheme: WEEK_THEMES[wk], today: todayDetail, days, streak, bestStreak: best, validDays, fullDays, points,
+    week: wk, weekTheme: WEEK_THEMES[wk], today: todayDetail, yesterday: dayIndex <= CHALLENGE_DAYS ? yesterdayDetail : null, days, streak, bestStreak: best, validDays, fullDays, points,
     milestones: MILESTONES.map((m) => ({ ...m, reached: validDays >= m.days })),
     workoutsThisWeek, weeklyWorkoutsGoal: input.weeklyWorkouts ?? null,
   };
