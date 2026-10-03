@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
 
+// (3 out 2026) a rota lê `request.url`: sem isto o build tentava gerar a página estática e logava um erro falso a cada deploy.
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
