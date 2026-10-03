@@ -25,11 +25,11 @@ import {
 import { saveItemMetas, legacyFor } from '@/lib/foodMeasures';
 import { saveDayScheme } from '@/lib/dayScheme';
 import { sendPushToUser } from '@/app/utils/sendNotification';
+import { isAutoPlan, type AutoPlanKind } from '@/lib/autoPlanKinds';
 
 // ─── PLANOS COM MONTAGEM AUTOMÁTICA ──────────────────────────────────────────
-export type AutoPlanKind = 'FICHA_8S' | 'CHALLENGE_21';
-export const AUTO_PLANS: AutoPlanKind[] = ['FICHA_8S', 'CHALLENGE_21'];
-export const isAutoPlan = (plan?: string | null): plan is AutoPlanKind => !!plan && (AUTO_PLANS as string[]).includes(plan);
+export { AUTO_PLANS, isAutoPlan } from '@/lib/autoPlanKinds';
+export type { AutoPlanKind } from '@/lib/autoPlanKinds';
 
 export const MAX_ATTEMPTS = 3;
 const STALE_RUNNING_MS = 10 * 60 * 1000;   // corrida "rodando" há mais que isso = o servidor caiu no meio
@@ -440,10 +440,11 @@ async function doWorkouts(ctx: Ctx): Promise<string[]> {
       return res.body;
     });
 
-    // janela da fase: fases em sequência a partir do dia da entrega; a última termina no último dia do plano
+    // janela da fase: fases em sequência a partir do dia da entrega. O app compara por DIA (início = começo do dia, fim = fim do dia), então a fase
+    // termina no ÚLTIMO dia dela (início + dias - 1) e a próxima começa no dia seguinte: sem dia em que as duas aparecem juntas e sem dia sem treino.
     const offset = spec.phases.slice(0, i).reduce((s, p) => s + p.days, 0);
     const startDate = new Date(baseDate.getTime() + offset * DAY_MS);
-    const endDate = new Date(baseDate.getTime() + (offset + phase.days) * DAY_MS - 1000);
+    const endDate = new Date(baseDate.getTime() + (offset + phase.days - 1) * DAY_MS);
     const name = spec.phases.length > 1 ? `${spec.title} · ${phase.label}` : `${spec.title}`;
 
     const workoutId = await prisma.$transaction(async (tx) => {

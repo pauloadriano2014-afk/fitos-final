@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { signAuthToken } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
+import { isAutoPlan } from '@/lib/autoPlanKinds';
 
 
 const PAULO_EMAIL = 'paulo_adriano2014@live.com';
@@ -143,6 +144,9 @@ export async function POST(req: Request) {
                 role:    'USER',
                 coachId: coachId,
                 plan:    plan || 'PREMIUM',
+                // 🤖 (3 out 2026) Planos com montagem automática (ficha 8 semanas / desafio 21 dias): o plano só nasce depois da anamnese. Quem fecha o
+                // app no meio dela fica "pendente" e a home mostra o banner pra terminar (a gravação da anamnese desliga o campo).
+                ...(isAutoPlan(plan) ? { anamnesePendente: true } : {}),
             } as any,
         });
 
