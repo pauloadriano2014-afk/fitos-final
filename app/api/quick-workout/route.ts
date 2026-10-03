@@ -26,6 +26,8 @@ const linkSummary = (s: any) => ({
   status: shareStatus(s),
   expiresAt: iso(s.expiresAt),
   viewCount: s.viewCount || 0,
+  lastViewedAt: iso(s.lastViewedAt),
+  doneCount: s.doneCount || 0,
   createdAt: iso(s.createdAt),
 });
 
@@ -45,6 +47,7 @@ function summary(q: any) {
     activeLinks: links.filter((l) => l.status === 'ACTIVE').length,
     totalLinks: links.length,
     views: links.reduce((n, l) => n + l.viewCount, 0),
+    done: links.reduce((n, l) => n + l.doneCount, 0),
     links: links.slice(0, 10),
   };
 }
@@ -67,7 +70,7 @@ export async function GET(req: Request) {
       where: { coachId: auth.user.id },
       orderBy: { updatedAt: 'desc' },
       take: MAX_QUICK_PER_COACH,
-      include: { shares: { select: { code: true, displayName: true, expiresAt: true, revokedAt: true, viewCount: true, createdAt: true } } },
+      include: { shares: { select: { code: true, displayName: true, expiresAt: true, revokedAt: true, viewCount: true, lastViewedAt: true, doneCount: true, createdAt: true } } },
     });
     return NextResponse.json({ items: rows.map(summary) });
   } catch (error) {

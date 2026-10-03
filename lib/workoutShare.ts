@@ -31,7 +31,7 @@ export function generateShareCode(length = SHARE_CODE_LENGTH): string {
 export const isValidShareCode = (code: unknown): code is string => typeof code === 'string' && /^[A-Za-z0-9]{10,24}$/.test(code);
 
 // ─────────────────────────── escolhas do coach ───────────────────────────
-export type ShareOptions = { showName: boolean; displayName: string | null; days: string[]; expiresInHours: number | null };
+export type ShareOptions = { showName: boolean; displayName: string | null; days: string[]; expiresInHours: number | null; notifyOpen: boolean; notifyDone: boolean };
 
 /** Nome livre da página: sem quebras de linha/controle, espaços normalizados, até 40 caracteres. Vazio = null. */
 export function cleanDisplayName(raw: unknown): string | null {
@@ -42,6 +42,7 @@ export function cleanDisplayName(raw: unknown): string | null {
 export function parseShareOptions(body: any, availableDays: string[]): { ok: true; value: ShareOptions } | { ok: false; error: string } {
   const b = body && typeof body === 'object' ? body : {};
   if (b.showName !== undefined && typeof b.showName !== 'boolean') return { ok: false, error: 'showName deve ser verdadeiro ou falso.' };
+  for (const k of ['notifyOpen', 'notifyDone']) if (b[k] !== undefined && typeof b[k] !== 'boolean') return { ok: false, error: `${k} deve ser verdadeiro ou falso.` };
 
   // validade: obrigatória e explícita (null = sem validade), para nunca criar um link eterno por descuido.
   // `expiresInHours` (1 a 8760) ou `expiresInDays` (1 a 365, formato antigo); se vierem os dois, vale o das horas.
@@ -74,7 +75,7 @@ export function parseShareOptions(body: any, availableDays: string[]): { ok: tru
     if (unknown.length) return { ok: false, error: `Este treino não tem o(s) dia(s): ${unknown.join(', ')}.` };
     days = wanted.length === availableDays.length ? [] : wanted;   // todos os dias marcados = "todos" (inclui dias criados depois)
   }
-  return { ok: true, value: { showName: b.showName === true, displayName, days, expiresInHours } };
+  return { ok: true, value: { showName: b.showName === true, displayName, days, expiresInHours, notifyOpen: b.notifyOpen === true, notifyDone: b.notifyDone === true } };
 }
 
 export const computeExpiresAt = (expiresInHours: number | null, now: Date = new Date()): Date | null =>
@@ -177,7 +178,7 @@ export type PublicInput = {
   workoutName: string;
   rows: any[];                                                // WorkoutExercise com `exercise`, já ordenadas por `order`
   substituteNames?: Record<string, string>;                    // id do exercício -> nome (para "pode trocar por")
-  share: { code?: string; showName: boolean; displayName?: string | null; days: string[]; expiresAt: Date | string | null };
+  share: { code?: string; showName: boolean; displayName?: string | null; days: string[]; expiresAt: Date | string | null; notifyDone?: boolean | null };
   studentName?: string | null;
   coach?: { name?: string | null; brandLogoUrl?: string | null; brandLogoSize?: number | null } | null;
   customTechniques?: CustomTechniqueRow[];
@@ -290,6 +291,7 @@ export function buildPublicWorkout(input: PublicInput) {
     student: input.share.showName ? cleanDisplayName(input.share.displayName) || firstName(input.studentName) || null : null,
     coach: coach ? { name: coach.name ? String(coach.name).trim().slice(0, 80) : null, brandLogoUrl: coach.brandLogoUrl || null, brandLogoSize: coach.brandLogoSize || null } : null,
     expiresAt: input.share.expiresAt ? new Date(input.share.expiresAt).toISOString() : null,
+    notifyDone: input.share.notifyDone === true,          // a página só manda o "concluí" quando o coach ligou o aviso neste link
     days,
     techniques,
   };
@@ -390,4 +392,55 @@ export function quickRows(days: QuickDays, catalog: Record<string, CatalogExerci
     });
   });
   return rows;
+}
+
+// ─────────────────────────── renovar, mensagem do WhatsApp e avisos ───────────────────────────
+export const MAX_SHARE_MESSAGE = 600;
+export const MAX_DONE_PER_SHARE = 500;
+export const VID_RE = /^[0-9a-f]{16,32}$/;
+
+/** PATCH do coach: soma `extendHours` ao tempo que falta (ou a partir de agora, se o link já venceu). */
+export function parseRenewBody(body: any): { ok: true; code: string; extendHours: number } | { ok: false; error: string } {
+  const b = body && typeof body === 'object' ? body : {};
+  if (!isValidShareCode(b.code)) return { ok: false, error: 'Código inválido.' };
+  const n = Number(b.extendHours);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_EXPIRY_HOURS) return { ok: false, error: `Informe de 1 a ${MAX_EXPIRY_HOURS} horas para somar.` };
+  return { ok: true, code: b.code, extendHours: n };
+}
+
+export function renewExpiry(current: Date | string | null | undefined, extendHours: number, now: Date = new Date()): { ok: true; expiresAt: Date } | { ok: false; error: string } {
+  if (!current) return { ok: false, error: 'Este link não tem validade para renovar.' };
+  const cur = new Date(current).getTime();
+  const base = Math.max(now.getTime(), Number.isNaN(cur) ? 0 : cur);
+  const next = base + extendHours * 60 * 60 * 1000;
+  if (next - now.getTime() > MAX_EXPIRY_HOURS * 60 * 60 * 1000) return { ok: false, error: `A validade total não pode passar de ${MAX_EXPIRY_DAYS} dias.` };
+  return { ok: true, expiresAt: new Date(next) };
+}
+
+/** Texto do WhatsApp do coach: até 600 caracteres, sem caracteres de controle (menos quebra de linha). Vazio = volta ao texto padrão do app (null). */
+export function cleanShareMessage(raw: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (raw === null || raw === undefined) return { ok: true, value: null };
+  if (typeof raw !== 'string') return { ok: false, error: 'A mensagem deve ser um texto.' };
+  const t = raw.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  if (t.length > MAX_SHARE_MESSAGE) return { ok: false, error: `A mensagem pode ter até ${MAX_SHARE_MESSAGE} caracteres.` };
+  return { ok: true, value: t || null };
+}
+
+/** Corpo do aviso de conclusão (rota pública): `vid` = id aleatório do navegador; `day` = o dia do treino concluído. */
+export function parseDoneBody(body: any): { ok: true; vid: string; day: string } | { ok: false; error: string } {
+  const b = body && typeof body === 'object' ? body : {};
+  if (typeof b.vid !== 'string' || !VID_RE.test(b.vid)) return { ok: false, error: 'vid inválido.' };
+  const day = typeof b.day === 'string' ? b.day.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+  if (!day || day.length > 40) return { ok: false, error: 'day inválido.' };
+  return { ok: true, vid: b.vid, day };
+}
+
+export const dayLabel = (day: string) => (/^[A-Za-z]$/.test(day) ? `Treino ${day.toUpperCase()}` : day);
+
+/** Textos do push para o coach. `who` = o nome que a pessoa vê no link (ou vazio: "Alguém"). */
+export function openPushText(who: string | null | undefined, workoutName: string) {
+  return { title: '👀 Treino aberto', body: `${who || 'Alguém'} abriu “${String(workoutName || 'Treino').slice(0, 80)}”` };
+}
+export function donePushText(who: string | null | undefined, day: string, workoutName: string) {
+  return { title: '💪 Treino concluído', body: `${who || 'Alguém'} concluiu o ${dayLabel(day)} de “${String(workoutName || 'Treino').slice(0, 80)}”` };
 }

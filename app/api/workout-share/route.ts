@@ -3,13 +3,14 @@
 // ou para um treino AVULSO do coach (quickWorkoutId, ver /api/quick-workout):
 //   POST   { workoutId | quickWorkoutId, showName?, displayName?, days?, expiresInHours | expiresInDays }   cria um link  -> { share }
 //   GET    ?workoutId=... | ?quickWorkoutId=...   lista os links daquele treino + os dias que ele tem hoje -> { shares, days }
+//   PATCH  { code, extendHours }                   renova: soma horas ao tempo que falta (ou a partir de agora, se já venceu) -> { share }
 //   DELETE ?code=... (ou { code })                desativa um link (some na hora, o endereço deixa de abrir)
 // A página que o aluno abre é a rota pública /api/treino-publico/[code]. Regras em lib/workoutShare.ts.
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rateLimit';
-import { generateShareCode, parseShareOptions, computeExpiresAt, shareStatus, isValidShareCode, parseQuickData, quickAvailableDays } from '@/lib/workoutShare';
+import { generateShareCode, parseShareOptions, computeExpiresAt, shareStatus, isValidShareCode, parseQuickData, quickAvailableDays, parseRenewBody, renewExpiry } from '@/lib/workoutShare';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,10 @@ const publicShare = (s: any) => ({
   viewCount: s.viewCount || 0,
   lastViewedAt: s.lastViewedAt ? new Date(s.lastViewedAt).toISOString() : null,
   createdAt: s.createdAt ? new Date(s.createdAt).toISOString() : null,
+  notifyOpen: !!s.notifyOpen,
+  notifyDone: !!s.notifyDone,
+  doneCount: s.doneCount || 0,
+  lastDoneAt: s.lastDoneAt ? new Date(s.lastDoneAt).toISOString() : null,
 });
 
 type Target = { kind: 'workout'; id: string } | { kind: 'quick'; id: string };
@@ -85,12 +90,12 @@ export async function POST(req: Request) {
     const existing = await prisma.workoutShare.count({ where: { ...whereShare(target), revokedAt: null } });
     if (existing >= MAX_LINKS_PER_WORKOUT) return NextResponse.json({ error: `Este treino já tem ${MAX_LINKS_PER_WORKOUT} links ativos. Desative algum antes de criar outro.` }, { status: 400 });
 
-    const { showName, displayName, days, expiresInHours } = parsed.value;
+    const { showName, displayName, days, expiresInHours, notifyOpen, notifyDone } = parsed.value;
     let share: any = null;
     for (let attempt = 0; attempt < 5 && !share; attempt++) {                       // código repetido é raríssimo; tenta de novo
       try {
         share = await prisma.workoutShare.create({
-          data: { code: generateShareCode(), ...whereShare(target), createdById: auth.user.id, showName, displayName, days, expiresAt: computeExpiresAt(expiresInHours) },
+          data: { code: generateShareCode(), ...whereShare(target), createdById: auth.user.id, showName, displayName, days, notifyOpen, notifyDone, expiresAt: computeExpiresAt(expiresInHours) },
         });
       } catch (e: any) { if (e?.code !== 'P2002') throw e; }
     }
@@ -116,6 +121,32 @@ export async function GET(req: Request) {
   } catch (error) {
     console.error('Erro GET workout-share:', error);
     return NextResponse.json({ error: 'Erro ao listar os links.' }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const auth = requireAuth(req);
+    if ('response' in auth) return auth.response;
+    const parsed = parseRenewBody(await req.json().catch(() => ({})));
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    if (!checkRateLimit(`wshare-renew:${auth.user.id}`, { max: 120, windowMs: 60 * 60 * 1000 }).allowed) return NextResponse.json({ error: 'Muitas renovações em pouco tempo. Tente de novo em alguns minutos.' }, { status: 429 });
+
+    const share = await prisma.workoutShare.findUnique({ where: { code: parsed.code } });
+    if (!share) return NextResponse.json({ error: 'Link não encontrado.' }, { status: 404 });
+    const target: Target | null = share.quickWorkoutId ? { kind: 'quick', id: share.quickWorkoutId } : share.workoutId ? { kind: 'workout', id: share.workoutId } : null;
+    if (!target) return NextResponse.json({ error: 'Link não encontrado.' }, { status: 404 });
+    const found = await loadTarget(auth, target);
+    if ('error' in found) return found.error;
+
+    if (share.revokedAt) return NextResponse.json({ error: 'Este link foi desativado e não pode ser renovado. Crie um novo.' }, { status: 400 });
+    const renewed = renewExpiry(share.expiresAt, parsed.extendHours);
+    if (!renewed.ok) return NextResponse.json({ error: renewed.error }, { status: 400 });
+    const updated = await prisma.workoutShare.update({ where: { code: parsed.code }, data: { expiresAt: renewed.expiresAt } });
+    return NextResponse.json({ share: publicShare(updated) });
+  } catch (error) {
+    console.error('Erro PATCH workout-share:', error);
+    return NextResponse.json({ error: 'Erro ao renovar o link.' }, { status: 500 });
   }
 }
 

@@ -6,7 +6,8 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
-import { isValidShareCode, shareStatus, buildPublicWorkout, MASTER_TEAM_ID, parseQuickData, quickExerciseIds, quickRows, quickSubstituteNames } from '@/lib/workoutShare';
+import { isValidShareCode, shareStatus, buildPublicWorkout, MASTER_TEAM_ID, parseQuickData, quickExerciseIds, quickRows, quickSubstituteNames, openPushText } from '@/lib/workoutShare';
+import { pushToShareCreator, whoSees } from '@/lib/workoutShareNotify';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,15 +104,25 @@ export async function GET(req: Request, { params }: { params: { code: string } }
       workoutName,
       rows,
       substituteNames,
-      share: { code: share.code, showName: share.showName, displayName: share.displayName, days: share.days || [], expiresAt: share.expiresAt },
+      share: { code: share.code, showName: share.showName, displayName: share.displayName, days: share.days || [], expiresAt: share.expiresAt, notifyDone: !!share.notifyDone },
       studentName,
       coach,
       customTechniques: techs as any[],
       systemVideos,
     });
 
-    // conta a visualização sem atrasar nem derrubar a resposta
-    prisma.workoutShare.update({ where: { code }, data: { viewCount: { increment: 1 }, lastViewedAt: new Date() } }).catch(() => {});
+    // conta a visualização sem atrasar nem derrubar a resposta. `?preview=1` = o próprio coach conferindo o link: não conta e não avisa ninguém.
+    // Na 1ª visualização de verdade (o contador chega a 1 -- a conta é atômica no banco, então nunca avisa duas vezes) o coach recebe o push.
+    if (new URL(req.url).searchParams.get('preview') !== '1') {
+      prisma.workoutShare.update({ where: { code }, data: { viewCount: { increment: 1 }, lastViewedAt: new Date() } })
+        .then((u: any) => {
+          if (share.notifyOpen && u && u.viewCount === 1) {
+            const text = openPushText(whoSees(share, studentName), workoutName);
+            return pushToShareCreator(share, text.title, text.body, { type: 'workout_link_opened', code, workoutId: share.workoutId || undefined, quickWorkoutId: share.quickWorkoutId || undefined });
+          }
+        })
+        .catch(() => {});
+    }
 
     return reply({ ok: true, ...payload });
   } catch (error) {

@@ -81,9 +81,29 @@ model WorkoutShare {
   viewCount    Int       @default(0)
   lastViewedAt DateTime?
   createdAt    DateTime  @default(now())
+  // Avisos ao coach (push): `notifyOpen` = na 1ª vez que abrirem o link; `notifyDone` = quando alguém concluir um dia do treino.
+  notifyOpen   Boolean   @default(false)
+  notifyDone   Boolean   @default(false)
+  doneCount    Int       @default(0)       // conclusões já recebidas (cada pessoa conta uma vez por dia de treino)
+  lastDoneAt   DateTime?
+  dones        WorkoutShareDone[]
 
   @@index([workoutId])
   @@index([quickWorkoutId])
+}
+
+// 🔗 Conclusão de um dia de treino numa página pública. `vid` é um id aleatório do NAVEGADOR de quem treinou (não identifica a pessoa): serve só para
+// contar cada pessoa uma vez por dia de treino. Vem de uma rota pública, por isso há limites (lib/workoutShare.ts) e o apagar do link leva tudo junto.
+model WorkoutShareDone {
+  id        String       @id @default(uuid())
+  shareId   String
+  share     WorkoutShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  vid       String
+  day       String
+  createdAt DateTime     @default(now())
+
+  @@unique([shareId, vid, day])
+  @@index([shareId])
 }
 
 // 🔗 (2 out 2026) TREINO AVULSO: treino do coach que NÃO é de nenhum aluno (montado do zero ou importado de uma base / de um aluno) só para
