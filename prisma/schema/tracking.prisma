@@ -67,6 +67,9 @@ model Anamnese {
   budget             String?
   preworkoutStrategy String?
 
+  // 🎯 (3 out 2026) Área do corpo que o aluno da FICHA 8 SEMANAS quer melhorar (Glúteos, Peito, Costas...). Vazio = corpo todo / perda de peso.
+  focoPrincipal      String?
+
   waterIntake  String?
   alcoholFreq  String?
   coffeePerDay String?

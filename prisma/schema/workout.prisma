@@ -309,3 +309,30 @@ model SystemTechniqueVideo {
 
   @@unique([key, teamId]) // 🔥 Agora a exclusividade é a combinação da técnica com o time
 }
+
+// 🤖 (3 out 2026) PLANO AUTOMÁTICO: quando o aluno de um plano com montagem automática (FICHA_8S, CHALLENGE_21) termina a anamnese, o servidor monta
+// o treino e a dieta dele sozinho (lib/autoPlan.ts). Uma linha por aluno guarda o ESTADO dessa montagem: o app do aluno acompanha o progresso,
+// o servidor retoma de onde parou se cair no meio (deploy, falha da IA) e o coach vê o que foi gerado e quanto custou.
+model AutoPlanRun {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  plan       String                       // FICHA_8S | CHALLENGE_21 (o plano do aluno quando começou)
+  status     String   @default("PENDING") // PENDING | RUNNING | DONE | FAILED | MANUAL (coach precisa montar à mão)
+  step       String?                      // o que está sendo feito agora (WORKOUT | DIET | SAVING | DONE)
+  attempts   Int      @default(0)
+  error      String?  @db.Text
+
+  workoutIds String[] @default([])        // treinos criados (um por fase)
+  dietId     String?
+  summary    Json?                        // fases, macros, custo estimado, pontos de atenção para o coach revisar
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}

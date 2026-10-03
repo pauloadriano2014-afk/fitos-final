@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { startAutoPlan } from '@/lib/autoPlan';
 
 // 🔥 FIX (12/set/2026): corrige o erro comum de digitar a altura em metros
 // (ex.: "1.74") em vez de centímetros (ex.: "174") no campo ALTURA (CM) da
@@ -33,6 +34,11 @@ export async function POST(req: Request) {
 
       // ── TREINO ────────────────────────────────────────────────────────────
       trainFasted,
+      // 🐛 (3 out 2026) o app sempre mandou preworkoutStrategy (ceia pré-treino x pré-treino rápido de quem treina logo ao acordar), mas esta rota
+      // nunca gravava -- a IA da dieta lia sempre "vazio". Agora grava.
+      preworkoutStrategy,
+      // 🎯 (3 out 2026) Área do corpo que o aluno da FICHA 8 SEMANAS quer melhorar (a periodização gira em torno dela).
+      focoPrincipal,
 
       // ── SAÚDE METABÓLICA ──────────────────────────────────────────────────
       healthConditions, healthConditionsObs,
@@ -87,8 +93,7 @@ export async function POST(req: Request) {
       ? parseFloat((pesoNum / (alturaM * alturaM)).toFixed(2))
       : (imc ? parseFloat(imc) : null);
 
-    const novaAnamnese = await prisma.anamnese.create({
-      data: {
+    const anamneseData: any = {
         // ── OBRIGATÓRIOS ────────────────────────────────────────────────────
         userId,
         peso:           pesoNum,
@@ -107,6 +112,7 @@ export async function POST(req: Request) {
 
         // ── TREINO ──────────────────────────────────────────────────────────
         trainFasted: typeof trainFasted === 'boolean' ? trainFasted : null,
+        preworkoutStrategy: typeof preworkoutStrategy === 'string' && preworkoutStrategy ? preworkoutStrategy.slice(0, 60) : null,
 
         // ── SAÚDE METABÓLICA ────────────────────────────────────────────────
         healthConditions:     Array.isArray(healthConditions)     ? healthConditions     : [],
@@ -166,14 +172,31 @@ export async function POST(req: Request) {
         supplements:     supplements     || null,
         extraNotes:      extraNotes      || null,
         favoriteFoodIds: Array.isArray(favoriteFoodIds) ? favoriteFoodIds : [],
-      },
-    });
+    };
+
+    // O foco só vai junto quando veio preenchido; se o banco ainda não tem a coluna (deploy antes do `prisma db push`), grava sem ele em vez de falhar.
+    const foco = typeof focoPrincipal === 'string' && focoPrincipal.trim() ? focoPrincipal.trim().slice(0, 60) : null;
+    let novaAnamnese;
+    try {
+      novaAnamnese = await prisma.anamnese.create({ data: foco ? { ...anamneseData, focoPrincipal: foco } : anamneseData });
+    } catch (e: any) {
+      if (foco && /focoPrincipal/i.test(String(e?.message || ''))) novaAnamnese = await prisma.anamnese.create({ data: anamneseData });
+      else throw e;
+    }
 
     // 🔥 DESTRAVAMENTO DE ELITE: Tira a restrição do aluno assim que salva
     await prisma.user.update({
       where: { id: userId },
       data: { anamnesePendente: false }
     });
+
+    // 🤖 (3 out 2026) Aluno de FICHA_8S / CHALLENGE_21: com a anamnese salva, o servidor monta treino + dieta sozinho (em segundo plano).
+    // Qualquer falha aqui NUNCA derruba o salvamento da anamnese: o app do aluno consulta /api/auto-plan/status e a montagem é retomada por lá.
+    try {
+      await startAutoPlan(userId);   // só age em plano com montagem automática; os demais voltam na hora com started:false
+    } catch (e) {
+      console.error('[POST /api/anamnese] plano automático:', e);
+    }
 
     return NextResponse.json(novaAnamnese);
 

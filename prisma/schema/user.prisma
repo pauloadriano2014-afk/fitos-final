@@ -132,6 +132,7 @@ model User {
   createdExercises  Exercise[]          @relation("CoachExercises")
   createdTemplates  WorkoutTemplate[]   @relation("CoachTemplates")
   quickWorkouts     QuickWorkout[]      @relation("CoachQuickWorkouts")
+  autoPlanRuns      AutoPlanRun[]       // montagem automática de treino + dieta (lib/autoPlan.ts)
   shareMessage      String?             @db.Text   // texto do WhatsApp dos links de treino (com {nome}, {treino}, {validade}, {link}); vazio = texto padrão
   createdNotices    Notice[]            @relation("CoachNotices")
   createdContents   Content[]           @relation("CoachContents")
