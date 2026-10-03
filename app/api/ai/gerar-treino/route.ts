@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import OpenAI from 'openai';
 import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
 import { canUseAiBuilder, aiBuilderLocked } from '@/lib/aiAccess';
+import { buildLastLoads, sideValue } from '@/lib/exerciseLoad';
 // 🔥 (21 set 2026) Migrado do @google/generative-ai (descontinuado pelo
 // Google) pro @google/genai (SDK atual, com suporte a cache explícito).
 // getOrCreateGeminiCache cuida de criar/reaproveitar o cache do banco de
@@ -96,13 +97,9 @@ export async function POST(req: NextRequest) {
     }
 
     const history = await prisma.workoutHistory.findMany({ where: { userId }, orderBy: { date: 'desc' }, take: 20, include: { details: true } });
-    const weightMap: Record<string, Record<number, string>> = {};
-    [...history].reverse().forEach((hist) => {
-      hist.details?.forEach((detail: any) => {
-        if (!weightMap[detail.exerciseId]) weightMap[detail.exerciseId] = {};
-        weightMap[detail.exerciseId][detail.setNumber] = detail.weight;
-      });
-    });
+    // ⚖️ (3 out 2026) `weight` do histórico é sempre a carga TOTAL; quando o aluno anotou "cada lado" (perSide) a IA recebe o valor de UM lado + a
+    // unidade, para escrever o `load` do mesmo jeito que o aluno vai ver e digitar (senão o treino pediria "88" a quem treina com "22,5 cada lado").
+    const { weights: weightMap, modes: sideMap } = buildLastLoads(history);
 
     const anamnese = user.anamneses?.[0] || null;
     const previousWorkouts = user.workouts.map((workout, wIdx) => {
@@ -119,7 +116,12 @@ export async function POST(req: NextRequest) {
           exerciseId: ex.exerciseId, name: ex.exercise?.name || 'Exercício',
           target: exTags.target || ex.exercise?.category || '', equipment: exTags.equipment || '',
           mechanic: exTags.mechanic || '', jointRisk: exTags.jointRisk || [],
-          blocks: blocks.map((b: any, idx: number) => ({ ...b, lastWeight: realLoads[idx] ?? realLoads[0] ?? null })),
+          blocks: blocks.map((b: any, idx: number) => {
+            const k = realLoads[idx] !== undefined ? idx : 0;
+            const total = realLoads[k] ?? null;
+            const side = total !== null && (sideMap[ex.exerciseId] || {})[k] === true;
+            return side ? { ...b, lastWeight: sideValue(total), lastWeightUnit: 'cada lado' } : { ...b, lastWeight: total };
+          }),
           observation: ex.observation || '',
         });
       });
@@ -239,7 +241,7 @@ REGRAS:
    - SE não tiver, escolha outro exercício do banco com target semelhante
    - NUNCA invente substitutos fora do banco
    - O substituto deve ser DIFERENTE do exercício principal
-6. PROGRESSÃO: lastWeight +5% a +10%, múltiplos de 2.5kg.
+6. PROGRESSÃO: lastWeight +5% a +10%, múltiplos de 2.5kg. Se o bloco tiver lastWeightUnit="cada lado", lastWeight é a carga de UM lado: mantenha a unidade no load (ex: "22.5kg cada lado"); sem lastWeightUnit, é a carga total (ex: "45kg").
 7. Nº DE BLOCOS = Nº DE SÉRIES (ERRO MAIS COMUM — LEIA COM ATENÇÃO): cada bloco do array "blocks" representa UMA série. A CONFIGURAÇÃO DO CICLO abaixo informa quantas séries cada grupo muscular deve ter (ex: "4 séries"). Você DEVE gerar exatamente essa quantidade de blocos pra CADA exercício daquele grupo — nunca apenas 1 bloco, a menos que a configuração peça 1 série. Todo bloco tem sets="1" (é sempre 1 série por bloco); é a QUANTIDADE de blocos no array que soma as séries totais. Pirâmide = mesma quantidade de blocos, mas com reps/load DIFERENTES entre eles (ex: 12/10/8/6 reps com carga crescente). Exceções com contagem própria: GVT sempre 10 blocos (regra 4), 21 e CLUSTERSET seguem a regra 4.
 8. LIMITAÇÕES: respeite jointRisk.
 9. CARDIO: sets=minutos, reps=kcal, technique=Leve/Moderada/Zona 2/Forte/HIIT.

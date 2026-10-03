@@ -7,6 +7,7 @@ import { requireAuth, canAccessStudent } from '@/lib/auth';
 // 🔥 IMPORTAMOS O CÉREBRO DA NOSSA IA 🔥
 import { analyzeWorkoutEvolution } from '@/app/utils/analyzeEvolution';
 import { sendPushToUser } from '@/app/utils/sendNotification';
+import { cleanWeight, isPerSide } from '@/lib/exerciseLoad';
 import { autoClientKey, cleanDay, cleanWorkoutId, findExistingFinish, isUniqueViolation, sanitizeClientKey } from '@/lib/finishWorkout';
 
 export const dynamic = 'force-dynamic';
@@ -26,12 +27,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
-    // Função auxiliar para limpar peso (troca virgula por ponto e garante numero)
-    const cleanWeight = (val: any) => {
-        if (!val) return 0;
-        const strVal = String(val).replace(',', '.');
-        return parseFloat(strVal) || 0;
-    };
+    // `cleanWeight` (vírgula -> ponto, garante número) e `isPerSide` ficam em lib/exerciseLoad.ts. `weight` é SEMPRE a carga TOTAL; `perSide` só marca que o aluno anotou "cada lado".
 
     const exercises: any[] = Array.isArray(exercisesData) ? exercisesData : [];
 
@@ -98,7 +94,8 @@ export async function POST(req: Request) {
                                 exerciseId: ex.exerciseId,
                                 exerciseName: ex.name,
                                 setNumber: s.index,
-                                weight: cleanWeight(s.weight), // <--- USO DA FUNÇÃO DE LIMPEZA
+                                weight: cleanWeight(s.weight), // <--- USO DA FUNÇÃO DE LIMPEZA (sempre o TOTAL: "20 cada lado" já chega aqui como 40)
+                                perSide: isPerSide(s),         // ⚖️ (3 out 2026) o aluno anotou "cada lado" (só para mostrar do jeito dele)
                                 reps: String(s.reps || "0"),
                                 note: noteClean || null,
                             }));

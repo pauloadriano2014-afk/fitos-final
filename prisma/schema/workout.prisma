@@ -263,7 +263,11 @@ model ExerciseHistory {
   exerciseName     String
 
   setNumber        Int
+  // ⚖️ (3 out 2026) `weight` é SEMPRE a carga TOTAL em kg (soma dos dois lados), como sempre foi: evolução, "Puxar cargas", estagnação, volume e
+  // a IA continuam lendo esse número sem mudar nada. `perSide` só diz COMO o aluno anotou: true = ele digitou o peso de UM lado (ou de um halter)
+  // e o app já gravou o dobro em `weight`. Para mostrar "20 kg cada lado": weight / 2. Registros antigos = false (total).
   weight           Float
+  perSide          Boolean        @default(false)
   reps             String
 
   note             String?  @db.Text

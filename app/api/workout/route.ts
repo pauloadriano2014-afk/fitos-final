@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { Expo } from 'expo-server-sdk';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { buildLastLoads } from '@/lib/exerciseLoad';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 
 const expo = new Expo();
@@ -64,15 +65,9 @@ export async function GET(req: Request) {
             if (name.includes('PERNAS')) { calculatedLastLog = { day: 'C', date: log.date }; break; }
         }
 
-        const lastWeightsMap: any = {};
-        if (history.length > 0) {
-            history.slice().reverse().forEach(h => { 
-                h.details.forEach(d => {
-                    if (!lastWeightsMap[d.exerciseId]) lastWeightsMap[d.exerciseId] = {};
-                    lastWeightsMap[d.exerciseId][d.setNumber] = d.weight;
-                });
-            });
-        }
+        // ⚖️ (3 out 2026) `lastWeights` segue igual (carga TOTAL em kg, por exercício/série). `lastWeightModes` é novo: true = aquela série foi
+        // anotada "cada lado". O app usa só para já abrir o exercício no mesmo modo da última vez (app antigo ignora o campo).
+        const { weights: lastWeightsMap, modes: lastWeightModesMap } = buildLastLoads(history);
 
         // 🔥 TRADUÇÃO DOS SUBSTITUTOS PARA O TREINO ESPECÍFICO 🔥
         const populatedExercises = workout.exercises.map((ex: any) => {
@@ -88,6 +83,7 @@ export async function GET(req: Request) {
             ...workout, 
             exercises: populatedExercises, 
             lastWeights: lastWeightsMap,
+            lastWeightModes: lastWeightModesMap,
             lastLog: calculatedLastLog 
         });
     }
