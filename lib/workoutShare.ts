@@ -170,6 +170,35 @@ const isCardio = (category: unknown, name: unknown) => {
   return c === 'CARDIO' || c === 'AERÓBICO' || c === 'AEROBICO' || /elíptico|eliptico|esteira|bike|bicicleta|escada|caminhada|corrida/i.test(String(name == null ? '' : name));
 };
 
+// ─────────────────────────── BI-SET / TRI-SET (exercícios que se fazem juntos) ───────────────────────────
+// Mesma regra do app (src/utils/groupTechniques.js + DayWorkoutScreen): a técnica do 1º trecho de séries do exercício, se for BISET (2) ou TRISET (3),
+// junta esse exercício com os seguintes da MESMA técnica, em sequência e dentro da mesma seção, até fechar o tamanho do grupo. Grupo que não fecha
+// (ex.: um BI-SET sozinho no fim) não vira grupo: o exercício aparece como um exercício normal, com o seu descanso.
+export const GROUP_SIZES: Record<string, number> = { BISET: 2, TRISET: 3 };
+export type ExerciseGroup = { tech: string; label: string; pos: number; size: number };
+
+/** Marca `group` ({ tech, label, pos, size }) nos exercícios de UMA seção que formam grupo completo; os demais ficam com `group: null`. */
+export function assignGroups<T extends { _gt?: string | null; group?: ExerciseGroup | null }>(items: T[]): T[] {
+  let buf: T[] = [];
+  let tech: string | null = null;
+  const drop = () => { buf = []; tech = null; };                    // grupo incompleto: os itens ficam normais
+  items.forEach((it) => { it.group = null; });
+  items.forEach((it) => {
+    const gt = it._gt || null;
+    const size = gt ? GROUP_SIZES[gt] : 0;
+    if (!gt || !size) { drop(); return; }
+    if (tech && tech !== gt) drop();
+    tech = gt; buf.push(it);
+    if (buf.length === size) {
+      const label = SYSTEM_TECHNIQUES[gt]?.title || gt;
+      buf.forEach((b, pos) => { b.group = { tech: gt, label, pos, size }; });
+      drop();
+    }
+  });
+  items.forEach((it) => { delete it._gt; });
+  return items;
+}
+
 // ─────────────────────────── a página pública ───────────────────────────
 export type PublicTechnique = { title: string; desc: string; steps: string[] | null; video: VideoRef };
 export type CustomTechniqueRow = { id: string; name: string; description?: string | null; steps?: any; videoUrl?: string | null };
@@ -266,8 +295,11 @@ export function buildPublicWorkout(input: PublicInput) {
         techAlerts,
         observation,
         substitutes: subs,
+        _gt: blocks[0]?.techKey && GROUP_SIZES[blocks[0].techKey] ? blocks[0].techKey : null,
+        group: null,
       });
     });
+    SECTION_ORDER.forEach((k) => assignGroups(bySection[k]));
 
     return {
       day,
