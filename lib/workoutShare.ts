@@ -207,6 +207,7 @@ export type PublicInput = {
   workoutName: string;
   rows: any[];                                                // WorkoutExercise com `exercise`, já ordenadas por `order`
   substituteNames?: Record<string, string>;                    // id do exercício -> nome (para "pode trocar por")
+  substituteVideos?: Record<string, string | null | undefined>; // id do exercício -> endereço do vídeo (para o botão de TROCAR mostrar o vídeo do substituto)
   share: { code?: string; showName: boolean; displayName?: string | null; days: string[]; expiresAt: Date | string | null; notifyDone?: boolean | null };
   studentName?: string | null;
   coach?: { name?: string | null; brandLogoUrl?: string | null; brandLogoSize?: number | null } | null;
@@ -284,6 +285,14 @@ export function buildPublicWorkout(input: PublicInput) {
 
       const exId = String(r.exerciseId == null ? name : r.exerciseId);
       seen[exId] = (seen[exId] || 0) + 1;
+      // trocas que a pessoa pode escolher na página: { key, name, video }. `key` é um código (hash) que não expõe nenhum id; a escolha fica só no navegador dela.
+      const swaps: { key: string; name: string; video: VideoRef }[] = [];
+      subIds.forEach((id: any) => {
+        const nm = input.substituteNames?.[String(id)];
+        const key = exerciseKey(shareCode, day, `sub:${exId}:${String(id)}`, 1);
+        if (!nm || swaps.length >= 3 || swaps.some((x) => x.key === key)) return;
+        swaps.push({ key, name: String(nm).trim().slice(0, 120), video: parseVideoRef(input.substituteVideos?.[String(id)]) });
+      });
       bySection[sectionOf(ex.category)].push({
         key: exerciseKey(shareCode, day, exId, seen[exId]),
         name,
@@ -295,6 +304,7 @@ export function buildPublicWorkout(input: PublicInput) {
         techAlerts,
         observation,
         substitutes: subs,
+        swaps,
         _gt: blocks[0]?.techKey && GROUP_SIZES[blocks[0].techKey] ? blocks[0].techKey : null,
         group: null,
       });

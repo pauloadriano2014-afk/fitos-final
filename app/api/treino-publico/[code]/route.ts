@@ -71,9 +71,8 @@ export async function GET(req: Request, { params }: { params: { code: string } }
     const [subs, techs] = await Promise.all([
       (async () => {
         const ids = Array.from(new Set(rows.flatMap((e: any) => [...(Array.isArray(e.substitutes) ? e.substitutes : []), ...(e.substituteId ? [e.substituteId] : [])]))) as string[];
-        const missing = ids.filter((id) => !subNamesFallback[id]);
-        if (!missing.length) return [] as { id: string; name: string }[];
-        return prisma.exercise.findMany({ where: { id: { in: missing } }, select: { id: true, name: true } });
+        if (!ids.length) return [] as { id: string; name: string; videoUrl?: string | null }[];
+        return prisma.exercise.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, videoUrl: true } });      // nome e vídeo de cada troca (o botão TROCAR da página mostra o vídeo do substituto)
       })(),
       (async () => {
         const ids = new Set<string>();
@@ -98,12 +97,14 @@ export async function GET(req: Request, { params }: { params: { code: string } }
     sysRows.filter((r: any) => r.teamId !== MASTER_TEAM_ID).forEach((r: any) => { systemVideos[r.key] = r.videoUrl; });
 
     const substituteNames: Record<string, string> = { ...subNamesFallback };
-    (subs as any[]).forEach((s) => { substituteNames[s.id] = s.name; });
+    const substituteVideos: Record<string, string | null> = {};
+    (subs as any[]).forEach((s) => { substituteNames[s.id] = s.name; substituteVideos[s.id] = s.videoUrl || null; });
 
     const payload = buildPublicWorkout({
       workoutName,
       rows,
       substituteNames,
+      substituteVideos,
       share: { code: share.code, showName: share.showName, displayName: share.displayName, days: share.days || [], expiresAt: share.expiresAt, notifyDone: !!share.notifyDone },
       studentName,
       coach,
