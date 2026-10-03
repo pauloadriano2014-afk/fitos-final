@@ -350,3 +350,21 @@ model WeeklyQuestionSet {
   @@unique([userId, weekStart])
   @@index([weekStart])
 }
+
+// 🔥 (3 out 2026) DESAFIO DE 21 DIAS (plano CHALLENGE_21): missões diárias de emagrecimento (ver lib/challenge21.ts). Uma linha por aluno por dia
+// (dia de Brasília, AAAA-MM-DD) guarda só o que o aluno MARCOU à mão. O que o app registra sozinho (treino finalizado, água, "seguiu o plano")
+// é lido na hora de WorkoutHistory e DailyCheckin, então nunca fica desatualizado.
+model ChallengeCheckin {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date      String                   // AAAA-MM-DD, dia de Brasília
+  done      String[] @default([])    // ids das missões marcadas à mão
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId])
+}
