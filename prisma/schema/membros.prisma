@@ -18,6 +18,7 @@ model Membro {
 
   codigos       MembroCodigo[]
   sessoes       MembroSessao[]
+  registros     MembroRegistro[]
 }
 
 model MembroCodigo {
@@ -47,4 +48,27 @@ model MembroSessao {
   createdAt   DateTime  @default(now())
 
   @@index([membroId])
+}
+
+// 🏋️ (out 2026) FICHA INTERATIVA: o que a pessoa marcou e anotou em cada exercício do treino de um produto (ProdutoDigital.treinoPrograma), por semana.
+// Uma linha por exercício de cada semana (a mesma ficha se repete por 8 semanas). `semana` começa em 1; `treino` e `exercicio` são a posição (começando em 0)
+// dentro do programa do produto. Fica no servidor, então a pessoa continua de onde parou ao trocar de celular. `carga` é o peso (kg) da última série de trabalho.
+model MembroRegistro {
+  id          String   @id @default(uuid())
+  membroId    String
+  membro      Membro   @relation(fields: [membroId], references: [id], onDelete: Cascade)
+
+  produtoId   String
+  semana      Int
+  treino      Int
+  exercicio   Int
+
+  feito       Boolean  @default(false)
+  carga       Float?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([membroId, produtoId, semana, treino, exercicio])
+  @@index([membroId, produtoId])
 }

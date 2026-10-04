@@ -7,6 +7,7 @@
 //   3) Link ou código viram uma SESSÃO (90 dias) que o site guarda no aparelho e manda em `Authorization: Bearer`
 // O que o membro tem liberado vem das vendas pagas (ProdutoVenda) pelo e-mail. Tudo aqui recebe o `db` por parâmetro (testável sem banco).
 import crypto from 'crypto';
+import { lerPrograma } from './membrosTreino';
 
 export const CODE_TTL_MS = 10 * 60 * 1000;
 export const LINK_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -55,6 +56,17 @@ export async function garantirMembro(db: any, p: { email: string; nome?: string 
 /** Compra paga com este e-mail (sem diferenciar maiúsculas): é o que autoriza criar a conta quando a pessoa pede um código. */
 export async function vendaPagaDoEmail(db: any, email: string) {
   return db.produtoVenda.findFirst({ where: { emailCliente: { equals: email, mode: 'insensitive' }, status: 'PAGO' }, orderBy: { createdAt: 'desc' } });
+}
+
+/** Primeira compra paga deste e-mail que inclui o produto (principal ou extra): é dela que vem a data para contar as semanas. */
+export async function vendaPagaComProduto(db: any, email: string, produtoId: string) {
+  const vendas: any[] = await db.produtoVenda.findMany({ where: { emailCliente: { equals: email, mode: 'insensitive' }, status: 'PAGO' }, orderBy: { createdAt: 'asc' } });
+  for (const v of vendas) {
+    let extras: string[] = [];
+    try { const p = v.itensBumpIds ? JSON.parse(v.itensBumpIds) : []; if (Array.isArray(p)) extras = p.map(String); } catch { /* sem extras */ }
+    if ([String(v.produtoId), ...extras].includes(produtoId)) return v;
+  }
+  return null;
 }
 
 // ─── código e link ───────────────────────────────────────────────────────────
@@ -141,7 +153,8 @@ export interface ProdutoDoMembro {
   descricao: string | null;
   capaUrl: string | null;
   comprouEm: string;
-  treinoUrl: string | null;     // treino interativo (página de treino do produto)
+  treinoNoSite: boolean;        // o produto tem treino interativo aqui no site (/treino/?p=<produtoId>)
+  treinoUrl: string | null;     // link antigo do treino interativo (página de treino do app); fica como reserva
   cursoUrl: string | null;      // curso / módulos
   materialUrl: string | null;   // PDF ou link de entrega que o produto já tinha
 }
@@ -162,7 +175,7 @@ export async function produtosDoMembro(db: any, email: string, appUrl: string): 
   }
 
   const [produtos, treinos, cursos]: any[][] = await Promise.all([
-    db.produtoDigital.findMany({ where: { id: { in: [...todosIds] } }, select: { id: true, nome: true, descricao: true, capaUrl: true, linkEntrega: true } }),
+    db.produtoDigital.findMany({ where: { id: { in: [...todosIds] } }, select: { id: true, nome: true, descricao: true, capaUrl: true, linkEntrega: true, treinoPrograma: true } }),
     db.produtoTreinoAcesso.findMany({ where: { vendaId: { in: vendas.map((v) => v.id) } }, select: { vendaId: true, produtoId: true, token: true } }),
     db.produtoCursoAcesso.findMany({ where: { vendaId: { in: vendas.map((v) => v.id) } }, select: { vendaId: true, produtoId: true, token: true } }),
   ]);
@@ -181,6 +194,7 @@ export async function produtosDoMembro(db: any, email: string, appUrl: string): 
       out.push({
         produtoId: pid, vendaId: v.id, nome: p.nome, descricao: p.descricao ?? null, capaUrl: p.capaUrl ?? null,
         comprouEm: new Date(v.paymentDate || v.createdAt).toISOString(),
+        treinoNoSite: !!lerPrograma(p.treinoPrograma),
         treinoUrl: t ? `${base}/ProdutoTreino?token=${t.token}` : null,
         cursoUrl: c ? `${base}/ProdutoCurso?token=${c.token}` : null,
         materialUrl: p.linkEntrega || null,
