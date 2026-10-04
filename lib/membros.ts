@@ -7,7 +7,7 @@
 //   3) Link ou código viram uma SESSÃO (90 dias) que o site guarda no aparelho e manda em `Authorization: Bearer`
 // O que o membro tem liberado vem das vendas pagas (ProdutoVenda) pelo e-mail. Tudo aqui recebe o `db` por parâmetro (testável sem banco).
 import crypto from 'crypto';
-import { lerPrograma } from './membrosTreino';
+import { lerAbas } from './membrosConteudo';
 
 export const CODE_TTL_MS = 10 * 60 * 1000;
 export const LINK_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -172,7 +172,7 @@ export interface ProdutoDoMembro {
   descricao: string | null;
   capaUrl: string | null;
   comprouEm: string;
-  treinoNoSite: boolean;        // o produto tem treino interativo aqui no site (/treino/?p=<produtoId>)
+  noSite: boolean;              // o produto tem conteúdo aqui no site (abas: treino, guias, hábitos...): abre em /p/?p=<produtoId>
   treinoUrl: string | null;     // link antigo do treino interativo (página de treino do app); fica como reserva
   cursoUrl: string | null;      // curso / módulos
   materialUrl: string | null;   // PDF ou link de entrega que o produto já tinha
@@ -194,7 +194,7 @@ export async function produtosDoMembro(db: any, email: string, appUrl: string): 
   }
 
   const [produtos, treinos, cursos]: any[][] = await Promise.all([
-    db.produtoDigital.findMany({ where: { id: { in: [...todosIds] } }, select: { id: true, nome: true, descricao: true, capaUrl: true, linkEntrega: true, treinoPrograma: true } }),
+    db.produtoDigital.findMany({ where: { id: { in: [...todosIds] } }, select: { id: true, nome: true, descricao: true, capaUrl: true, linkEntrega: true, treinoAvulsoId: true, membrosAbas: true } }),
     db.produtoTreinoAcesso.findMany({ where: { vendaId: { in: vendas.map((v) => v.id) } }, select: { vendaId: true, produtoId: true, token: true } }),
     db.produtoCursoAcesso.findMany({ where: { vendaId: { in: vendas.map((v) => v.id) } }, select: { vendaId: true, produtoId: true, token: true } }),
   ]);
@@ -213,7 +213,7 @@ export async function produtosDoMembro(db: any, email: string, appUrl: string): 
       out.push({
         produtoId: pid, vendaId: v.id, nome: p.nome, descricao: p.descricao ?? null, capaUrl: p.capaUrl ?? null,
         comprouEm: new Date(v.paymentDate || v.createdAt).toISOString(),
-        treinoNoSite: !!lerPrograma(p.treinoPrograma),
+        noSite: lerAbas(p.membrosAbas, !!p.treinoAvulsoId).length > 0,
         treinoUrl: t ? `${base}/ProdutoTreino?token=${t.token}` : null,
         cursoUrl: c ? `${base}/ProdutoCurso?token=${c.token}` : null,
         materialUrl: p.linkEntrega || null,

@@ -19,6 +19,9 @@ model Membro {
   codigos       MembroCodigo[]
   sessoes       MembroSessao[]
   registros     MembroRegistro[]
+  habitos       MembroHabito[]
+  medidas       MembroMedida[]
+  fotos         MembroFoto[]
 }
 
 model MembroCodigo {
@@ -50,25 +53,78 @@ model MembroSessao {
   @@index([membroId])
 }
 
-// 🏋️ (out 2026) FICHA INTERATIVA: o que a pessoa marcou e anotou em cada exercício do treino de um produto (ProdutoDigital.treinoPrograma), por semana.
-// Uma linha por exercício de cada semana (a mesma ficha se repete por 8 semanas). `semana` começa em 1; `treino` e `exercicio` são a posição (começando em 0)
-// dentro do programa do produto. Fica no servidor, então a pessoa continua de onde parou ao trocar de celular. `carga` é o peso (kg) da última série de trabalho.
+// 🏋️ (out 2026) ÁREA DE MEMBROS DO PRODUTO: tudo que a pessoa marca e anota dentro de um produto digital. Fica no servidor, então ela continua de onde parou ao trocar de celular.
+// O conteúdo (treino, guias, receitas...) vem do produto (ProdutoDigital.treinoAvulsoId e membrosAbas); aqui só ficam os dados DA PESSOA.
+// `semana` começa em 1 (a contar do dia do pagamento). Tabelas novas: só adicionam (rodar `npx prisma db push` ANTES de publicar o backend).
+
+// Marcação e carga de cada exercício, por semana. `chave` é o código estável do exercício no treino (dia + exercício do catálogo + ocorrência; não muda
+// quando o coach reordena ou edita o treino). `carga` é o peso (kg) da última série de trabalho. `feitoEm` e `cargaEm` alimentam os hábitos automáticos.
 model MembroRegistro {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   membroId    String
-  membro      Membro   @relation(fields: [membroId], references: [id], onDelete: Cascade)
+  membro      Membro    @relation(fields: [membroId], references: [id], onDelete: Cascade)
 
   produtoId   String
   semana      Int
-  treino      Int
-  exercicio   Int
+  chave       String
 
-  feito       Boolean  @default(false)
+  feito       Boolean   @default(false)
   carga       Float?
+  feitoEm     DateTime?
+  cargaEm     DateTime?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  @@unique([membroId, produtoId, semana, treino, exercicio])
+  @@unique([membroId, produtoId, semana, chave])
+  @@index([membroId, produtoId])
+}
+
+// Checklist de hábitos: uma linha por quadradinho marcado (desmarcar apaga a linha). `dia` é 0..6 dentro da semana (0 = o dia do pagamento).
+model MembroHabito {
+  id          String    @id @default(uuid())
+  membroId    String
+  membro      Membro    @relation(fields: [membroId], references: [id], onDelete: Cascade)
+
+  produtoId   String
+  semana      Int
+  dia         Int
+  habito      String
+  createdAt   DateTime  @default(now())
+
+  @@unique([membroId, produtoId, semana, dia, habito])
+  @@index([membroId, produtoId])
+}
+
+// Ficha de medidas: uma linha por momento (início, semana 4, semana 8...). `valores` = { campo: número }.
+model MembroMedida {
+  id          String    @id @default(uuid())
+  membroId    String
+  membro      Membro    @relation(fields: [membroId], references: [id], onDelete: Cascade)
+
+  produtoId   String
+  momento     String
+  data        String?   // AAAA-MM-DD, o dia em que a pessoa se mediu
+  valores     Json
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([membroId, produtoId, momento])
+  @@index([membroId, produtoId])
+}
+
+// Fotos de evolução (PRIVADAS: só a própria pessoa as vê, pelo site de membros, com a sessão dela). A foto fica no banco, já reduzida pelo navegador (JPEG).
+model MembroFoto {
+  id          String    @id @default(uuid())
+  membroId    String
+  membro      Membro    @relation(fields: [membroId], references: [id], onDelete: Cascade)
+
+  produtoId   String
+  momento     String
+  pose        String
+  bytes       Bytes
+  tamanho     Int
+  createdAt   DateTime  @default(now())
+
+  @@unique([membroId, produtoId, momento, pose])
   @@index([membroId, produtoId])
 }

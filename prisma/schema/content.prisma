@@ -181,6 +181,13 @@ model ProdutoDigital {
   treinoPrograma  String?  @db.Text
   treinoAcessos   ProdutoTreinoAcesso[]
 
+  // 🏋️ ÁREA DE MEMBROS (site membros.pauloadrianoteam.com.br): o que a pessoa vê depois de comprar.
+  //  - treinoAvulsoId: id de um Treino Avulso (QuickWorkout), montado na mesma tela "Montar treino"; é o treino da aba Treino (semanas, vídeos, cargas).
+  //  - membrosAbas: JSON das abas, em ordem: [{ id, tipo: treino|guia|habitos|medidas|receitas, titulo, modelo?, conteudo?, ativo? }]. Vazio = só a aba Treino
+  //    (se houver treinoAvulsoId). Ver lib/membrosProduto.ts.
+  treinoAvulsoId  String?
+  membrosAbas     String?  @db.Text
+
   // 🔥 CURSO / ÁREA DE MEMBROS: opcional — se preenchido, quem compra ganha
   // acesso a uma área de membros (sem login, via link mágico) com módulos e
   // aulas em vídeo. Cada módulo tem `liberacaoDias` — quantos dias após a

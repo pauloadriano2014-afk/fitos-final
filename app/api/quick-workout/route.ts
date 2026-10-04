@@ -124,8 +124,9 @@ export async function DELETE(req: Request) {
         include: { shares: { select: { expiresAt: true, revokedAt: true } } },
         take: MAX_QUICK_PER_COACH,
       });
-      // só apaga quem já teve link e hoje não tem nenhum ativo (rascunho sem link e treino com link ativo ficam)
-      const ids = rows.filter((q: any) => q.shares.length > 0 && q.shares.every((s: any) => shareStatus(s) !== 'ACTIVE')).map((q: any) => q.id);
+      // só apaga quem já teve link e hoje não tem nenhum ativo (rascunho sem link e treino com link ativo ficam). Treino ligado a um produto (Área de Membros) nunca é apagado aqui.
+      const emUso = new Set<string>((await prisma.produtoDigital.findMany({ where: { treinoAvulsoId: { in: rows.map((q: any) => q.id) } }, select: { treinoAvulsoId: true } })).map((p: any) => p.treinoAvulsoId));
+      const ids = rows.filter((q: any) => !emUso.has(q.id) && q.shares.length > 0 && q.shares.every((s: any) => shareStatus(s) !== 'ACTIVE')).map((q: any) => q.id);
       if (ids.length) await prisma.quickWorkout.deleteMany({ where: { id: { in: ids }, coachId: auth.user.id } });
       return NextResponse.json({ deleted: ids.length });
     }
@@ -135,6 +136,8 @@ export async function DELETE(req: Request) {
     const existing = await prisma.quickWorkout.findUnique({ where: { id }, select: { id: true, coachId: true } });
     if (!existing) return NextResponse.json({ error: 'Treino avulso não encontrado.' }, { status: 404 });
     if (!canActAsCoach(auth.user, existing.coachId)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    const produto = await prisma.produtoDigital.findFirst({ where: { treinoAvulsoId: id }, select: { nome: true } });
+    if (produto) return NextResponse.json({ error: `Este treino é o treino do produto "${produto.nome}" (Área de Membros). Troque o treino do produto antes de apagar.` }, { status: 409 });
     await prisma.quickWorkout.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {

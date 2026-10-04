@@ -1,6 +1,6 @@
 // app/api/admin/produtos/[id]/treino-preview/route.ts
 // 🔥 PRÉ-VISUALIZAÇÃO SEM CUSTO: gera (ou reaproveita) um link de treino
-// interativo pra esse produto sem precisar de uma compra real. Com a Área de Membros ligada (MEMBROS_URL) o link é o da página nova /treino/ (token assinado de 2h);
+// interativo pra esse produto sem precisar de uma compra real. Com a Área de Membros ligada (MEMBROS_URL) o link é o do site de membros (página /p/, token assinado de 2h, todas as abas do produto);
 // sem ela, é o da página antiga do app (venda TESTE abaixo) — útil pro
 // admin conferir como a página vai ficar enquanto ainda está montando o
 // programa. A "venda" criada aqui tem status TESTE (nunca PAGO/PENDENTE), por
@@ -12,7 +12,7 @@ import crypto from 'crypto';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
 import { gerarTokenPrevia, membrosBaseUrl, PREVIA_TTL_MS } from '@/lib/membros';
-import { lerPrograma } from '@/lib/membrosTreino';
+import { lerAbas } from '@/lib/membrosConteudo';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
         const produto = await prisma.produtoDigital.findUnique({
             where: { id },
-            select: { id: true, treinoPrograma: true, coachId: true },
+            select: { id: true, treinoPrograma: true, coachId: true, treinoAvulsoId: true, membrosAbas: true },
         });
         if (!produto) {
             return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 });
@@ -39,16 +39,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
         }
 
-        if (!produto.treinoPrograma) {
-            return NextResponse.json({ error: 'Configure e salve o programa de treino antes de pré-visualizar.' }, { status: 400 });
+        // 🏋️ Área de Membros (site membros.pauloadrianoteam.com.br): link temporário e assinado, sem venda e sem e-mail. A página abre em "modo prévia" (aviso no topo,
+        // nada do que for marcado é gravado) e mostra TODAS as abas do produto: treino, guias, hábitos, medidas, receitas. Só vale quando o site de membros está ligado
+        // (MEMBROS_URL) e o produto tem alguma aba (um Treino Avulso ligado, ou a lista de abas).
+        const membros = membrosBaseUrl();
+        if (membros && lerAbas(produto.membrosAbas, !!produto.treinoAvulsoId).length > 0) {
+            const url = `${membros}/p/?p=${encodeURIComponent(produto.id)}#previa=${gerarTokenPrevia(produto.id)}`;
+            return NextResponse.json({ url, membros: true, expiraEm: new Date(Date.now() + PREVIA_TTL_MS).toISOString() });
         }
 
-        // 🏋️ Treino na Área de Membros (página /treino/ do site de membros): link temporário e assinado, sem venda e sem e-mail. A página abre em "modo prévia"
-        // (aviso no topo, nada do que for marcado é gravado). Só vale quando o site de membros está ligado (MEMBROS_URL) e o programa é válido.
-        const membros = membrosBaseUrl();
-        if (membros && lerPrograma(produto.treinoPrograma)) {
-            const url = `${membros}/treino/?p=${encodeURIComponent(produto.id)}#previa=${gerarTokenPrevia(produto.id)}`;
-            return NextResponse.json({ url, membros: true, expiraEm: new Date(Date.now() + PREVIA_TTL_MS).toISOString() });
+        // Sem Área de Membros, o caminho antigo: a página de treino do app, com uma "venda de teste".
+        if (!produto.treinoPrograma) {
+            return NextResponse.json({ error: 'Ligue um treino ao produto (Área de membros) ou configure o programa de treino antes de pré-visualizar.' }, { status: 400 });
         }
 
         // Reaproveita a mesma "venda de teste" em pré-visualizações seguintes
