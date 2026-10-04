@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { loadChallenge, isMissingTable } from '@/lib/challenge21Data';
-import { brtDate, canToggle, dayIndexOf, editableDates, isDate } from '@/lib/challenge21';
+import { brtDate, canToggle, dayIndexOf, editableDates, isDate, patternDayOf } from '@/lib/challenge21';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +32,9 @@ export async function POST(req: Request) {
     const date = body.date === undefined ? today : body.date;
     if (!isDate(date) || !editableDates(today).includes(date)) return NextResponse.json({ error: 'Só dá para marcar missões de hoje e de ontem.' }, { status: 400 });
     const idx = dayIndexOf(before.summary.startDate, date);
-    if (!canToggle(idx, { waterMl: before.waterMl }, missionId)) return NextResponse.json({ error: 'Essa missão não pode ser marcada nesse dia.' }, { status: 400 });
+    const sched = before.summary.schedule;
+    const pd = sched && sched.days.length ? patternDayOf(sched.days, idx) : null;
+    if (!canToggle(idx, { waterMl: before.waterMl }, missionId, pd)) return NextResponse.json({ error: 'Essa missão não pode ser marcada nesse dia.' }, { status: 400 });
 
     const row = await prisma.challengeCheckin.findUnique({ where: { userId_date: { userId, date } } });
     const current: string[] = row?.done || [];

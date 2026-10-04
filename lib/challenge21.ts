@@ -7,7 +7,7 @@
 //
 // De onde vem cada missão:
 //   - AUTOMÁTICAS (o aluno não precisa marcar; vêm do que o app já registra):
-//       treino  -> existe um treino finalizado no dia (WorkoutHistory)                       (bônus, não é obrigatória)
+//       treino  -> existe um treino finalizado no dia (WorkoutHistory)                       (dia de treino ou de cardio: obrigatória; sem agenda: bônus)
 //       agua    -> a meta de água do dia foi batida no contador de água da dieta (DailyCheckin.water_ml)
 //       dieta   -> o aluno respondeu "SIM" em "seguiu o plano hoje?" (DailyCheckin.dietAdherence)
 //     A água e a dieta também podem ser marcadas à mão (quem não usa o contador).
@@ -91,6 +91,37 @@ export const DAILY_CHALLENGES: Array<{ title: string; hint: string }> = [
 
 export const challengeOf = (dayIndex: number) => DAILY_CHALLENGES[Math.min(Math.max(dayIndex, 1), CHALLENGE_DAYS) - 1];
 
+// ─── a semana do desafio: 4 treinos (cada um com cardio depois), 2 dias só de cardio e 1 de descanso ───
+export type DayKind = 'TREINO' | 'CARDIO' | 'DESCANSO';
+export interface PatternDay { type: DayKind; tab?: string }
+
+/**
+ * Ordem dos dias da semana a partir das abas do treino do aluno: 2 treinos, 1 cardio, 2 treinos, 1 cardio... e o descanso no fim.
+ * Com 4 treinos + 2 dias de cardio: A, B, cardio, C, D, cardio, descanso. A agenda repete a cada volta (7 dias neste caso).
+ */
+export function weekPattern(strengthTabs: string[], cardioTabs: string[]): PatternDay[] {
+  const out: PatternDay[] = [];
+  let s = 0, c = 0;
+  while (s < strengthTabs.length || c < cardioTabs.length) {
+    for (let k = 0; k < 2 && s < strengthTabs.length; k++) out.push({ type: 'TREINO', tab: strengthTabs[s++] });
+    if (c < cardioTabs.length) out.push({ type: 'CARDIO', tab: cardioTabs[c++] });
+  }
+  out.push({ type: 'DESCANSO' });
+  return out;
+}
+export const patternDayOf = (pattern: PatternDay[], dayIndex: number): PatternDay => pattern[(Math.max(dayIndex, 1) - 1) % pattern.length];
+export const dayLabel = (d?: PatternDay | null): string => (!d ? '' : d.type === 'TREINO' ? `Treino ${d.tab} + cardio` : d.type === 'CARDIO' ? `Dia de cardio (${d.tab})` : 'Dia de descanso');
+export const dayShortLabel = (d?: PatternDay | null): string => (!d ? '' : d.type === 'TREINO' ? `Treino ${d.tab}` : d.type === 'CARDIO' ? 'Cardio' : 'Descanso');
+
+/** Regras do dia de descanso (aparecem no topo da tela nesse dia): dieta, água, movimento e sono. */
+export const REST_DAY_RULES: string[] = [
+  'Hoje é dia de recuperar: sem musculação e sem cardio.',
+  'Siga o cardápio dos dias de cardio. Descanso não é dia de compensar com mais comida.',
+  'Beba a meta de água de hoje: descansar também emagrece.',
+  'Caminhada leve de 20 a 30 minutos e 10 minutos de alongamento.',
+  'Durma 7 horas ou mais: é quando o corpo se recupera.',
+];
+
 // ─── perfil e meta de água ───────────────────────────────────────────────────
 /** Meta de água do dia em ml: 35 ml por kg, arredondada para 250 ml, entre 2 e 4 litros. Sem peso, 2,5 L. */
 export function waterTargetMl(pesoKg?: number | string | null): number {
@@ -102,31 +133,37 @@ export function waterTargetMl(pesoKg?: number | string | null): number {
 const litros = (ml: number) => `${(ml / 1000).toFixed(ml % 1000 === 0 ? 0 : 1).replace('.', ',')} L`;
 
 // ─── as missões de um dia ────────────────────────────────────────────────────
-export function missionsFor(dayIndex: number, profile: Profile): Mission[] {
+export function missionsFor(dayIndex: number, profile: Profile, pd?: PatternDay | null): Mission[] {
   const week = weekOf(Math.min(Math.max(dayIndex, 1), CHALLENGE_DAYS));
   const mv = STEPS_BY_WEEK[week];
   const ch = challengeOf(dayIndex);
+  const rest = pd?.type === 'DESCANSO';
   const list: Mission[] = [
-    { id: 'agua', label: `Beber ${litros(profile.waterMl)} de água`, hint: 'Marca sozinha quando você bate a meta no contador de água da dieta.', points: 10, kind: 'habit', required: true, autoCapable: true, manualAllowed: true },
-    { id: 'dieta', label: 'Seguir o plano alimentar', hint: 'Marca sozinha quando você responde "sim" em "seguiu o plano hoje?" na dieta.', points: 10, kind: 'habit', required: true, autoCapable: true, manualAllowed: true },
-    { id: 'movimento', label: `Caminhar ${mv.steps} passos`, hint: `Ou ${mv.minutes} minutos de movimento: caminhada, bike, dança...`, points: 10, kind: 'habit', required: true, autoCapable: false, manualAllowed: true },
+    { id: 'agua', label: `Beber ${litros(profile.waterMl)} de água`, hint: pd ? 'Marque quando bater a meta de água do dia.' : 'Marca sozinha quando você bate a meta no contador de água da dieta.', points: 10, kind: 'habit', required: true, autoCapable: true, manualAllowed: true },
+    pd
+      ? { id: 'dieta', label: rest ? 'Seguir o cardápio do dia de descanso' : 'Seguir o cardápio do dia', hint: 'Use o cardápio de musculação, de cardio ou de descanso e marque no fim do dia.', points: 10, kind: 'habit', required: true, autoCapable: true, manualAllowed: true }
+      : { id: 'dieta', label: 'Seguir o plano alimentar', hint: 'Marca sozinha quando você responde "sim" em "seguiu o plano hoje?" na dieta.', points: 10, kind: 'habit', required: true, autoCapable: true, manualAllowed: true },
+    rest
+      ? { id: 'movimento', label: 'Caminhar de leve 20 a 30 minutos', hint: 'Mais 10 minutos de alongamento. Recuperar também emagrece.', points: 10, kind: 'habit', required: true, autoCapable: false, manualAllowed: true }
+      : { id: 'movimento', label: `Caminhar ${mv.steps} passos`, hint: `Ou ${mv.minutes} minutos de movimento: caminhada, bike, dança...`, points: 10, kind: 'habit', required: true, autoCapable: false, manualAllowed: true },
     { id: 'sono', label: 'Dormir 7 horas ou mais', hint: 'Marque na manhã seguinte, referente à noite que passou.', points: 10, kind: 'habit', required: true, autoCapable: false, manualAllowed: true },
   ];
   if (week >= 2) list.push({ id: 'acucar', label: 'Sem refrigerante e açúcar adicionado', hint: 'Fruta e adoçante a gente deixa passar. O resto, não.', points: 10, kind: 'habit', required: true, autoCapable: false, manualAllowed: true });
   if (week >= 3) list.push({ id: 'proteina', label: 'Proteína em toda refeição principal', hint: 'Ovos, frango, peixe, carne, iogurte... como está no seu plano.', points: 10, kind: 'habit', required: true, autoCapable: false, manualAllowed: true });
   list.push({ id: 'desafio', label: `Desafio do dia: ${ch.title}`, hint: ch.hint, points: 20, kind: 'daily', required: true, autoCapable: false, manualAllowed: true });
-  list.push({ id: 'treino', label: 'Treinar hoje', hint: 'Bônus: conta sozinho quando você finaliza um treino. Dia de descanso não tem problema.', points: 30, kind: 'workout', required: false, autoCapable: true, manualAllowed: false });
+  if (!pd) list.push({ id: 'treino', label: 'Treinar hoje', hint: 'Bônus: conta sozinho quando você finaliza um treino. Dia de descanso não tem problema.', points: 30, kind: 'workout', required: false, autoCapable: true, manualAllowed: false });
+  else if (!rest) list.push({ id: 'treino', label: pd.type === 'CARDIO' ? `Cardio do dia (aba ${pd.tab})` : `Treino ${pd.tab} + cardio`, hint: 'Conta sozinho quando você finaliza o treino do dia.', points: 30, kind: 'workout', required: true, autoCapable: true, manualAllowed: false });
   return list;
 }
 
 /** Marca o que está feito (à mão ou sozinho). `manual` = ids marcados pelo aluno. */
-export function resolveDay(dayIndex: number, profile: Profile, manual: string[], auto: DayAuto): DayMission[] {
+export function resolveDay(dayIndex: number, profile: Profile, manual: string[], auto: DayAuto, pd?: PatternDay | null): DayMission[] {
   const set = new Set(manual || []);
-  return missionsFor(dayIndex, profile).map((m) => {
+  return missionsFor(dayIndex, profile, pd).map((m) => {
     let isAuto = false;
     if (m.id === 'treino') isAuto = !!auto.workout;
     else if (m.id === 'agua') isAuto = Number(auto.waterMl) >= profile.waterMl;
-    else if (m.id === 'dieta') isAuto = String(auto.dietAdherence || '').toUpperCase() === 'SIM';
+    else if (m.id === 'dieta') isAuto = m.autoCapable && String(auto.dietAdherence || '').toUpperCase() === 'SIM';
     const manualDone = m.manualAllowed && set.has(m.id);
     return { ...m, done: isAuto || manualDone, auto: isAuto };
   });
@@ -143,7 +180,8 @@ export function scoreDay(missions: DayMission[]): DayScore {
 }
 
 export type DayStatus = 'FULL' | 'VALID' | 'PARTIAL' | 'MISSED' | 'TODAY' | 'FUTURE';
-export interface DaySummary { dayIndex: number; date: string; status: DayStatus; done: number; total: number; points: number; full: boolean; valid: boolean }
+export interface DaySummary { dayIndex: number; date: string; status: DayStatus; done: number; total: number; points: number; full: boolean; valid: boolean; type?: DayKind }
+export interface DayDetail { date: string; dayIndex: number; missions: DayMission[]; score: DayScore; type: DayKind | null; tab: string | null; label: string; rules: string[] }
 
 export interface SummaryInput {
   startDate: string;                         // AAAA-MM-DD (dia de Brasília em que o desafio começou)
@@ -152,6 +190,7 @@ export interface SummaryInput {
   manualByDate: Record<string, string[]>;    // missões marcadas à mão, por dia
   autoByDate: Record<string, DayAuto>;       // o que o app registrou sozinho, por dia
   weeklyWorkouts?: number;                   // meta de treinos por semana (só informativo)
+  pattern?: PatternDay[];                    // a semana do aluno (treino / cardio / descanso); sem isso, o desafio funciona como antes
 }
 
 export interface ChallengeSummary {
@@ -162,8 +201,9 @@ export interface ChallengeSummary {
   daysToStart: number;
   week: 1 | 2 | 3;
   weekTheme: { title: string; desc: string };
-  today: null | { date: string; dayIndex: number; missions: DayMission[]; score: DayScore };
-  yesterday: null | { date: string; dayIndex: number; missions: DayMission[]; score: DayScore };   // ontem ainda pode ser ajustado (ex.: o sono)
+  today: null | DayDetail;
+  yesterday: null | DayDetail;   // ontem ainda pode ser ajustado (ex.: o sono)
+  schedule: null | { days: Array<{ type: DayKind; tab?: string; label: string }> };   // a semana: o que fazer em cada dia (repete a cada volta)
   days: DaySummary[];
   streak: number;                            // dias cumpridos seguidos até hoje (hoje em andamento não quebra)
   bestStreak: number;
@@ -185,11 +225,14 @@ export function summarize(input: SummaryInput): ChallengeSummary {
   let points = 0, validDays = 0, fullDays = 0, run = 0, best = 0, streak = 0;
   let todayDetail: ChallengeSummary['today'] = null;
   let yesterdayDetail: ChallengeSummary['yesterday'] = null;
+  const pattern = input.pattern && input.pattern.length ? input.pattern : null;
+  const detailOf = (date: string, d: number, missions: DayMission[], sc: DayScore, pd: PatternDay | null): DayDetail => ({ date, dayIndex: d, missions, score: sc, type: pd?.type ?? null, tab: pd?.tab ?? null, label: dayLabel(pd), rules: pd?.type === 'DESCANSO' ? REST_DAY_RULES : [] });
 
   for (let d = 1; d <= CHALLENGE_DAYS; d++) {
     const date = addDays(startDate, d - 1);
-    if (d > lastDay) { days.push({ dayIndex: d, date, status: 'FUTURE', done: 0, total: 0, points: 0, full: false, valid: false }); continue; }
-    const missions = resolveDay(d, profile, input.manualByDate[date] || [], input.autoByDate[date] || {});
+    if (d > lastDay) { days.push({ dayIndex: d, date, status: 'FUTURE', done: 0, total: 0, points: 0, full: false, valid: false, ...(pattern ? { type: patternDayOf(pattern, d).type } : {}) }); continue; }
+    const pd = pattern ? patternDayOf(pattern, d) : null;
+    const missions = resolveDay(d, profile, input.manualByDate[date] || [], input.autoByDate[date] || {}, pd);
     const sc = scoreDay(missions);
     const isToday = date === today && dayIndex <= CHALLENGE_DAYS;
     points += sc.points;
@@ -198,9 +241,9 @@ export function summarize(input: SummaryInput): ChallengeSummary {
     // sequência: hoje em andamento não quebra (só soma se já está cumprido); dia passado não cumprido zera
     if (sc.valid) { run++; best = Math.max(best, run); } else if (!isToday) { run = 0; }
     const status: DayStatus = isToday ? 'TODAY' : sc.full ? 'FULL' : sc.valid ? 'VALID' : sc.done > 0 ? 'PARTIAL' : 'MISSED';
-    days.push({ dayIndex: d, date, status, done: sc.done, total: sc.total, points: sc.points, full: sc.full, valid: sc.valid });
-    if (isToday) todayDetail = { date, dayIndex: d, missions, score: sc };
-    if (date === addDays(today, -1)) yesterdayDetail = { date, dayIndex: d, missions, score: sc };
+    days.push({ dayIndex: d, date, status, done: sc.done, total: sc.total, points: sc.points, full: sc.full, valid: sc.valid, ...(pd ? { type: pd.type } : {}) });
+    if (isToday) todayDetail = detailOf(date, d, missions, sc, pd);
+    if (date === addDays(today, -1)) yesterdayDetail = detailOf(date, d, missions, sc, pd);
   }
   streak = run;
 
@@ -215,13 +258,14 @@ export function summarize(input: SummaryInput): ChallengeSummary {
     week: wk, weekTheme: WEEK_THEMES[wk], today: todayDetail, yesterday: dayIndex <= CHALLENGE_DAYS ? yesterdayDetail : null, days, streak, bestStreak: best, validDays, fullDays, points,
     milestones: MILESTONES.map((m) => ({ ...m, reached: validDays >= m.days })),
     workoutsThisWeek, weeklyWorkoutsGoal: input.weeklyWorkouts ?? null,
+    schedule: pattern ? { days: pattern.map((p) => ({ type: p.type, ...(p.tab ? { tab: p.tab } : {}), label: dayShortLabel(p) })) } : null,
   };
 }
 
 /** Uma missão pode ser marcada/desmarcada à mão neste dia? (existe, é manual e a data está dentro da janela) */
-export function canToggle(dayIndex: number, profile: Profile, missionId: string): boolean {
+export function canToggle(dayIndex: number, profile: Profile, missionId: string, pd?: PatternDay | null): boolean {
   if (dayIndex < 1 || dayIndex > CHALLENGE_DAYS) return false;
-  const m = missionsFor(dayIndex, profile).find((x) => x.id === missionId);
+  const m = missionsFor(dayIndex, profile, pd).find((x) => x.id === missionId);
   return !!m && m.manualAllowed;
 }
 

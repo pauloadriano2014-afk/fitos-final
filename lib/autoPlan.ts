@@ -18,15 +18,16 @@ import { PAULO_ID } from '@/lib/masterIds';
 import { isMasterId } from '@/lib/auth';
 import { generateWorkoutPlan } from '@/lib/ai/workoutGen';
 import { generateDietDay, allowedFoodIds, type MacrosOverride } from '@/lib/ai/dietGen';
-import { calcWeeklyPlan, calcAge } from '@/lib/macroPlanner';
+import { calcAge } from '@/lib/macroPlanner';
 import {
   MUSCLE_GROUPS, DEFAULT_LIMITATION_RULES, buildPresets, buildDefaultSplit, deriveTrainingEnvironment, dayNeedsCardio,
 } from '@/lib/ai/splitPresets';
 import { saveItemMetas, legacyFor } from '@/lib/foodMeasures';
 import { saveDayScheme } from '@/lib/dayScheme';
 import { sendPushToUser } from '@/app/utils/sendNotification';
-import { isAutoPlan, type AutoPlanKind } from '@/lib/autoPlanKinds';
-import { triage, safeTechniques, SAFE_CARDIO_RULE, checkWorkout, blankLoads, checkDietDay, type Triage } from '@/lib/autoPlanQuality';
+import { isAutoPlan, planNeedsDiet, type AutoPlanKind } from '@/lib/autoPlanKinds';
+import { triage, safeTechniques, SAFE_CARDIO_RULE, checkWorkout, blankLoads, checkDietDay, dietMacros, kcalPlan, LIMITS, type Triage } from '@/lib/autoPlanQuality';
+import { loadTemplates, rankTemplates, inspectTemplate, templateExerciseIds, type TemplateRow, type TemplateStudent, type LibraryExercise, type Env } from '@/lib/workoutTemplates';
 
 // ─── PLANOS COM MONTAGEM AUTOMÁTICA ──────────────────────────────────────────
 export { AUTO_PLANS, isAutoPlan } from '@/lib/autoPlanKinds';
@@ -53,7 +54,10 @@ export interface PlanSpec {
   objective: string;        // o objetivo que vale para o treino e a dieta (o desafio é sempre emagrecimento)
   fatLoss: boolean;
   focus: string | null;     // área do corpo escolhida (só ficha de 8 semanas)
-  freq: number;             // treinos por semana que vamos montar
+  freq: number;             // treinos de musculação por semana que vamos montar
+  cardioDays: number;       // dias só de cardio por semana (desafio: 2)
+  restDays: number;         // dias de descanso por semana (desafio: 1)
+  diet: boolean;            // true = o servidor também monta a dieta pela IA (ficha); false = o aluno usa os cardápios prontos do app (desafio)
   level: Level;
   phases: PhaseSpec[];
 }
@@ -87,10 +91,11 @@ export function planSpec(kind: AutoPlanKind, a: { objetivo?: string | null; nive
   const rawFreq = Number(a.frequencia) || 3;
 
   if (kind === 'CHALLENGE_21') {
-    // Em 21 dias o resultado realista é perda de gordura, não ganho de músculo: sempre emagrecimento, mínimo de 3 treinos na semana.
+    // Em 21 dias o resultado realista é perda de gordura, não ganho de músculo: sempre emagrecimento. A semana é fixa: 4 treinos de musculação (cada um
+    // com cardio depois), 2 dias só de cardio e 1 de descanso. A dieta é o cardápio pronto do app, não a IA.
     return {
       kind, title: 'DESAFIO 21 DIAS', totalDays: 21, objective: 'Emagrecimento', fatLoss: true, focus: null,
-      freq: clamp(rawFreq, 3, 5), level,
+      freq: 4, cardioDays: 2, restDays: 1, diet: false, level,
       phases: [{
         key: 'D21', label: 'Desafio 21 dias', days: 21, cyclePhase: 'EMAGRECIMENTO',
         techniques: level === 'INICIANTE' ? ['BISET'] : ['BISET', 'TRISET'], extraSetsOnFocus: 0,
@@ -113,7 +118,7 @@ export function planSpec(kind: AutoPlanKind, a: { objetivo?: string | null; nive
         { key: 'F1', label: 'Fase 1 · Base e volume', days: 28, cyclePhase: 'HIPERTROFIA', techniques: ['BISET'], extraSetsOnFocus: 0 },
         { key: 'F2', label: 'Fase 2 · Intensificação', days: 28, cyclePhase: beginner ? 'HIPERTROFIA' : 'CHOQUE', techniques: beginner ? ['BISET', 'DROPSET'] : ['DROPSET', 'RESTPAUSE', 'BISET'], extraSetsOnFocus: 1 },
       ];
-  return { kind, title: 'FICHA 8 SEMANAS', totalDays: 56, objective, fatLoss, focus, freq: clamp(rawFreq, 2, 6), level, phases };
+  return { kind, title: 'FICHA 8 SEMANAS', totalDays: 56, objective, fatLoss, focus, freq: clamp(rawFreq, 2, 6), cardioDays: 0, restDays: 0, diet: true, level, phases };
 }
 
 type Group = { id: string; qty: number; sets?: number; rest?: number; autoAdded?: boolean };
@@ -160,7 +165,10 @@ export function buildSplit(spec: PlanSpec, gender?: string | null): Day[] {
 
   if (spec.fatLoss) {
     const seq = FAT_LOSS_SEQUENCES[clamp(spec.freq, 2, 5)].map((l) => (l === 'LAST' ? (fem ? 'Glúteos Foco' : 'Quadríceps Isolado') : l));
-    return ensureCoverage(seq.map((label, i) => ({ id: String(i + 1), name: letters[i], groups: groupsOf(label) })));
+    const strength = ensureCoverage(seq.map((label, i) => ({ id: String(i + 1), name: letters[i], groups: groupsOf(label) })));
+    // dias só de cardio (desafio de 21 dias): 2 exercícios de cardio, em abas depois das de musculação
+    const cardio: Day[] = Array.from({ length: spec.cardioDays || 0 }, (_, i) => ({ id: String(strength.length + i + 1), name: letters[strength.length + i], groups: [{ id: 'CARDIO', qty: 2 }] }));
+    return [...strength, ...cardio];
   }
 
   let days: Day[] = ensureCoverage((buildDefaultSplit(spec.freq, gender) as Day[]).map((d) => ({ ...d, groups: d.groups.map((g) => ({ ...g })) })));
@@ -265,8 +273,8 @@ export function toDietAnamnese(a: any, user: { gender?: string | null; birthDate
 
 /** Macros por aba, com a mesma conta do app do coach (lib/macroPlanner.ts). */
 export function macrosFor(a: any, user: { gender?: string | null; birthDate?: string | null }, spec: PlanSpec): Record<string, MacrosOverride> {
-  const plan = calcWeeklyPlan({ peso: a.peso, altura: a.altura, frequencia: spec.freq, objetivo: spec.objective, gender: user.gender ?? undefined }, user.birthDate, user.gender, null, null);
-  return plan.macrosByDay;
+  // emagrecer: 1.000–1.500 kcal (decisão do coach); melhorar uma área do corpo: cálculo normal do app (ver lib/autoPlanQuality.ts)
+  return dietMacros(a, user, { fatLoss: spec.fatLoss, freq: spec.freq, objective: spec.objective }) as Record<string, MacrosOverride>;
 }
 
 // ─── CONVERSÃO PARA O BANCO (puras) ──────────────────────────────────────────
@@ -281,7 +289,8 @@ export function packWorkoutRows(workoutId: string, exercisesByDay: Record<string
       const blocks = Array.isArray(ex.blocks) && ex.blocks.length ? ex.blocks : [{ sets: '3', reps: '10', technique: '', restTime: '60' }];
       const first = blocks[0];
       const subs: string[] = [];
-      if (ex.substitute?.id) subs.push(String(ex.substitute.id));
+      for (const sub of Array.isArray(ex.substitutes) ? ex.substitutes : []) { const id = String(sub?.id ?? sub?.exerciseId ?? ''); if (id && !subs.includes(id)) subs.push(id); }
+      if (ex.substitute?.id && !subs.includes(String(ex.substitute.id))) subs.push(String(ex.substitute.id));
       rows.push({
         workoutId,
         exerciseId: String(ex.exerciseId),
@@ -338,10 +347,11 @@ export function buildMealsCreate(meals: any[]) {
 }
 
 /** Mensagem amigável para o aluno, por estado. */
-export function studentMessage(status: string, step?: string | null): string {
+export function studentMessage(status: string, step?: string | null, plan?: string | null): string {
+  const withDiet = plan === undefined || plan === null ? true : planNeedsDiet(plan);
   switch (status) {
-    case 'DONE': return 'Seu plano está pronto! Treino e dieta montados para você.';
-    case 'RUNNING': return step === 'SAVING' ? 'Salvando seu plano...' : 'Montando seu treino e sua dieta com base nas suas respostas...';
+    case 'DONE': return withDiet ? 'Seu plano está pronto! Treino e dieta montados para você.' : 'Seu plano está pronto! Seu treino e seus cardápios já estão no app.';
+    case 'RUNNING': return step === 'SAVING' ? 'Salvando seu plano...' : withDiet ? 'Montando seu treino e sua dieta com base nas suas respostas...' : 'Montando seu treino com base nas suas respostas...';
     case 'PENDING': return 'Na fila para montar seu plano...';
     case 'MANUAL': return 'Seu coach vai montar seu plano e te avisa assim que estiver pronto.';
     case 'FAILED': return 'Estamos finalizando seu plano. Você será avisado assim que estiver pronto.';
@@ -458,7 +468,30 @@ interface Ctx {
   baseDate: Date;
   olderWorkoutIds: string[];   // treinos de montagens anteriores deste aluno (arquivados quando a nova fase 1 entra)
   safety: Triage;              // triagem (modo seguro, articulações a evitar)
-  quality: { workout: string[]; diet: string[]; repairs: number };   // o que a conferência consertou (vai pro resumo, o coach vê)
+  quality: { workout: string[]; diet: string[]; repairs: number; templates: Array<{ phase: string; id: string; name: string }> };   // o que a conferência consertou e quais modelos do coach entraram (vai pro resumo)
+  templates?: TemplateRow[];   // modelos do coach para este plano (carregados uma vez por corrida)
+}
+
+/** Procura, nas pastas do coach ("DESAFIO 21 DIAS" / "FICHA 8 SEMANAS"), o modelo que serve para o aluno nesta fase. Sem nenhum que sirva, devolve null (a IA monta). */
+async function fromTemplate(ctx: Ctx, phase: PhaseSpec, phaseNo: number): Promise<{ body: any; id: string; name: string } | null> {
+  const { spec, user, anamnese, adminId } = ctx;
+  if (ctx.templates === undefined) {
+    // falha ao ler os modelos não pode derrubar o plano: segue sem eles (a IA monta)
+    try { ctx.templates = await loadTemplates(prisma, [adminId, PAULO_ID], spec.kind); } catch (e) { console.warn('[autoPlan] modelos do coach indisponíveis:', (e as any)?.message || e); ctx.templates = []; }
+  }
+  if (!ctx.templates.length) return null;
+  const env = deriveTrainingEnvironment(anamnese.equipamentos) as Env;
+  const student: TemplateStudent = { gender: user.gender, level: spec.level, env, fatLoss: spec.fatLoss, focus: spec.focus, phase: phaseNo, phases: spec.phases.length };
+  for (const t of rankTemplates(ctx.templates, spec.kind, student)) {
+    const ids = templateExerciseIds(t.data);
+    const lib = ids.length ? await prisma.exercise.findMany({ where: { id: { in: ids } }, select: { id: true, category: true, tags: true, environments: true } }) : [];
+    const chk = inspectTemplate(t.data, new Map(lib.map((x: any) => [x.id, x as LibraryExercise])), { env, risks: ctx.safety.excludeJointRisk, careful: ctx.safety.conservative.length > 0 });
+    if (!chk.ok) { ctx.quality.workout.push(`${phase.key} · modelo "${t.name}" descartado: ${chk.reason}`); continue; }
+    ctx.quality.workout.push(...chk.notes.map((n) => `${phase.key} · ${n}`));
+    return { body: { workoutModel: 'CARGA', exercisesByDay: chk.byDay, workoutTabs: chk.tabs }, id: t.id, name: t.name };
+  }
+  ctx.quality.workout.push(`${phase.key} · nenhum modelo do coach serviu para este aluno: montado pela IA`);
+  return null;
 }
 
 async function doWorkouts(ctx: Ctx): Promise<string[]> {
@@ -473,7 +506,9 @@ async function doWorkouts(ctx: Ctx): Promise<string[]> {
   for (let i = ids.length; i < spec.phases.length; i++) {
     const phase = spec.phases[i];
     const cycleConfig = buildCycleConfig(spec, phase, anamnese, user.gender, ctx.safety);
-    const r = await withRetry(`treino ${phase.key}`, async () => {
+    const picked = await fromTemplate(ctx, phase, i + 1);
+    if (picked) ctx.quality.templates.push({ phase: phase.key, id: picked.id, name: picked.name });
+    const r = picked ? picked.body : await withRetry(`treino ${phase.key}`, async () => {
       const res = await generateWorkoutPlan({ userId: user.id, adminId, cycleConfig });
       if (res.status === 422 && res.body?.code === 'BANCO_INSUFICIENTE') throw new ManualRequired('BANCO_INSUFICIENTE', res.body.error);
       if (res.status !== 200) throw new Error(res.body?.error || `Falha ao gerar o treino (${res.status}).`);
@@ -490,6 +525,7 @@ async function doWorkouts(ctx: Ctx): Promise<string[]> {
     // sem nenhum treino registrado, a carga que a IA escreveria seria chute: em branco, o aluno acha a dele no primeiro treino
     const hadHistory = await prisma.workoutHistory.findFirst({ where: { userId: user.id }, select: { id: true } });
     if (!hadHistory) r.exercisesByDay = blankLoads(r).exercisesByDay;
+    if (!Object.values<any[]>(r.exercisesByDay || {}).some((l) => l.length)) throw new Error('O treino ficou sem exercícios.');
 
     // janela da fase: fases em sequência a partir do dia da entrega. O app compara por DIA (início = começo do dia, fim = fim do dia), então a fase
     // termina no ÚLTIMO dia dela (início + dias - 1) e a próxima começa no dia seguinte: sem dia em que as duas aparecem juntas e sem dia sem treino.
@@ -618,7 +654,7 @@ export async function executeRun(runId: string): Promise<void> {
     const spec = planSpec(user.plan, anamnese);
 
     // 🛡️ triagem: gestante, menor de 16, IMC fora da faixa, bariátrica, diabetes tipo 1 -> o coach monta (quando o coach manda refazer — force — ele assume)
-    const safety = triage(anamnese, user, spec);
+    const safety = triage(anamnese, user, { fatLoss: spec.fatLoss, diet: spec.diet, freq: spec.freq, objective: spec.objective });
     if (safety.manual && !run.summary?.forced) {
       await runStore.update(run.id, { status: 'MANUAL', step: null, error: safety.manual.code, finishedAt: new Date(), summary: { ...(run.summary || {}), plan: spec.kind, triage: safety.manual, flags: reviewFlags(anamnese, user) } });
       await notifyCoach(user.coachId ?? PAULO_ID, '⚠️ Aluno precisa do seu plano', `${user.name || 'Aluno'} (${spec.title}): ${safety.manual.reason}. Não montei automaticamente: abra o aluno e monte o plano dele.`, { type: 'auto_plan_manual', studentId: user.id });
@@ -627,16 +663,18 @@ export async function executeRun(runId: string): Promise<void> {
 
     const baseDate = run.summary?.baseDate ? new Date(run.summary.baseDate) : new Date();
     const older = await runStore.others(user.id, run.id);
-    const ctx: Ctx = { run, user: user as Ctx['user'], anamnese, spec, adminId, baseDate, olderWorkoutIds: older.flatMap((r) => r.workoutIds || []), safety, quality: { workout: [], diet: [], repairs: 0 } };
+    const ctx: Ctx = { run, user: user as Ctx['user'], anamnese, spec, adminId, baseDate, olderWorkoutIds: older.flatMap((r) => r.workoutIds || []), safety, quality: { workout: [], diet: [], repairs: 0, templates: [] } };
 
     // treino e dieta ao mesmo tempo: o aluno espera pelo mais demorado, não pela soma
-    const [w, d] = await Promise.allSettled([doWorkouts(ctx), doDiet(ctx)]);
+    const [w, d] = await Promise.allSettled([doWorkouts(ctx), spec.diet ? doDiet(ctx) : Promise.resolve(null)]);
 
     const patch: Partial<RunRow> = { step: 'SAVING' };
     const summary: any = { ...(run.summary || {}), baseDate: baseDate.toISOString(), plan: spec.kind, objective: spec.objective, focus: spec.focus, freq: spec.freq, level: spec.level, phases: spec.phases.map((p) => p.label) };
     if (w.status === 'fulfilled') { patch.workoutIds = w.value; summary.workoutDone = true; }
-    if (d.status === 'fulfilled') { patch.dietId = d.value.dietId; summary.dietDone = true; summary.dietCostBrl = d.value.costBrl; summary.macros = d.value.totals; }
+    if (d.status === 'fulfilled' && d.value) { patch.dietId = d.value.dietId; summary.dietDone = true; summary.dietCostBrl = d.value.costBrl; summary.macros = d.value.totals; }
     summary.flags = reviewFlags(anamnese, user);
+    // o desafio usa o cardápio pronto do app (~1.500 kcal): avisa o coach quando isso é um déficit grande para o gasto do aluno
+    if (!spec.diet) { const kp = kcalPlan(anamnese, user, { fatLoss: true, freq: spec.freq, objective: spec.objective }); if (kp.deficit > LIMITS.maxDeficit) summary.flags.push(`Cardápio de cerca de 1.500 kcal para um gasto estimado de ${kp.tdee} kcal (déficit de ${Math.round(kp.deficit * 100)}%)`); }
     summary.safety = { conservative: safety.conservative, excludeJointRisk: safety.excludeJointRisk };
     summary.quality = ctx.quality;
 
@@ -651,9 +689,9 @@ export async function executeRun(runId: string): Promise<void> {
 
     if (w.status === 'fulfilled' && d.status === 'fulfilled') {
       await runStore.update(run.id, { ...patch, summary, status: 'DONE', step: 'DONE', error: null, finishedAt: new Date() });
-      await notifyStudent(user.id, '🎉 Seu plano está pronto!', 'Seu treino e sua dieta já estão no app. Bora começar!', { type: 'auto_plan_ready' });
+      await notifyStudent(user.id, '🎉 Seu plano está pronto!', spec.diet ? 'Seu treino e sua dieta já estão no app. Bora começar!' : 'Seu treino e seus cardápios já estão no app. Bora começar!', { type: 'auto_plan_ready' });
       const flagText = (summary.flags.length ? ` ⚠️ Conferir: ${summary.flags.slice(0, 3).join(' · ')}` : '') + (safety.conservative.length ? ' 🛡️ Plano em modo seguro (técnicas leves, cardio leve).' : '');
-      await notifyCoach(user.coachId, '🤖 Plano automático gerado', `${user.name || 'Aluno'} (${spec.title}) já tem treino e dieta.${flagText}`, { type: 'auto_plan_done', studentId: user.id });
+      await notifyCoach(user.coachId, '🤖 Plano automático gerado', `${user.name || 'Aluno'} (${spec.title}) já tem treino${spec.diet ? ' e dieta' : ''}.${flagText}`, { type: 'auto_plan_done', studentId: user.id });
       return;
     }
 
@@ -731,9 +769,9 @@ export async function getAutoPlanStatus(userId: string, opts: { detail?: boolean
     status: run.status as AutoPlanStatus['status'],
     step: run.step,
     workoutReady: (run.workoutIds || []).length > 0 && !!summary.workoutDone,
-    dietReady: !!run.dietId,
+    dietReady: !!run.dietId || !planNeedsDiet(run.plan),   // plano sem dieta pela IA (desafio): nada a esperar
     attempts: run.attempts,
-    message: studentMessage(run.status, run.step),
+    message: studentMessage(run.status, run.step, run.plan),
     runId: run.id,
   };
   if (opts.detail) { out.summary = summary; out.error = run.error; }

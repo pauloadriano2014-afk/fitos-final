@@ -4,3 +4,6 @@
 export type AutoPlanKind = 'FICHA_8S' | 'CHALLENGE_21';
 export const AUTO_PLANS: AutoPlanKind[] = ['FICHA_8S', 'CHALLENGE_21'];
 export const isAutoPlan = (plan?: string | null): plan is AutoPlanKind => !!plan && (AUTO_PLANS as string[]).includes(plan);
+
+/** Planos em que o servidor também monta uma DIETA personalizada pela IA. O desafio de 21 dias usa os cardápios prontos do app (DietGuideModal). */
+export const planNeedsDiet = (plan?: string | null): boolean => plan === 'FICHA_8S';

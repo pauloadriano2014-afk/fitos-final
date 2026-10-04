@@ -8,7 +8,7 @@
 //                     a biblioteca marca (JOELHO, LOMBAR, OMBRO), sem os exercícios de risco;
 //   3. conferência -> o treino e a dieta que a IA devolveu são checados e consertados (dia vazio, exercício repetido, nº de séries errado, cardio
 //                     que faltou, alimento fora da lista da alergia...). O que não dá pra consertar manda refazer; se continuar errado, vai pro coach.
-import { calcAge } from '@/lib/macroPlanner';
+import { calcAge, calcWeeklyPlan } from '@/lib/macroPlanner';
 
 // ─── LIMITES (um lugar só para ajustar) ──────────────────────────────────────
 export const LIMITS = {
@@ -21,7 +21,13 @@ export const LIMITS = {
   maxKcalDeviation: 0.12,// dieta que fugiu mais que 12% da meta de calorias: refaz
   maxFoodRemoved: 0.2,   // IA usou mais de 20% de alimentos fora da lista: refaz
   minMeals: 3,
+  maxDeficit: 0.4,       // dieta de emagrecer que ficaria mais de 40% abaixo do gasto estimado: coach
 };
+
+// 🥗 Calorias da dieta de EMAGRECER no plano automático: entre 1.000 e 1.500 kcal por dia (decisão do coach). Quem quer ganhar/melhorar músculo mantém o
+// cálculo normal do app (superávit), porque 1.000–1.500 kcal não sustenta hipertrofia.
+export const KCAL_RANGE = { min: 1000, max: 1500 };
+export const LOW_KCAL_MACROS = { prot: 35, carb: 35, fat: 30 };   // % das calorias; com pouca caloria a conta de g/kg estoura o total
 
 const norm = (s: any) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const arr = (v: any): string[] => (Array.isArray(v) ? v.map((x) => String(x)) : []);
@@ -77,7 +83,33 @@ const JOINT_BY_TEXT: Array<[RegExp, string]> = [
   [/ombro|manguito/, 'OMBRO'],
 ];
 
-export function triage(a: any, user: { birthDate?: string | null }, spec: { fatLoss: boolean }): Triage {
+export interface KcalPlan { tdee: number; kcal: { TREINO: number; DESCANSO: number }; deficit: number; clamped: boolean }
+export interface MacroTarget { kcal: number; prot: number; carb: number; fat: number }
+type Who = { gender?: string | null; birthDate?: string | null };
+type KcalSpec = { fatLoss: boolean; freq: number; objective: string };
+type Plan = { tdee: number; macrosByDay: Record<string, MacroTarget> };
+const baseMacros = (a: any, user: Who, spec: KcalSpec, targets: any = null): Plan => calcWeeklyPlan({ peso: a?.peso, altura: a?.altura, frequencia: spec.freq, objetivo: spec.objective, gender: user.gender ?? undefined }, user.birthDate, user.gender, null, targets) as Plan;
+
+/** Calorias das duas abas e o tamanho do déficit em relação ao gasto estimado. Só emagrecimento é limitado a 1.000–1.500 kcal. */
+export function kcalPlan(a: any, user: Who, spec: KcalSpec): KcalPlan {
+  const base = baseMacros(a, user, spec);
+  const calc = { TREINO: base.macrosByDay.TREINO.kcal as number, DESCANSO: base.macrosByDay.DESCANSO.kcal as number };
+  if (!spec.fatLoss) return { tdee: base.tdee, kcal: calc, deficit: 1 - calc.TREINO / base.tdee, clamped: false };
+  const clamp = (k: number) => Math.min(KCAL_RANGE.max, Math.max(KCAL_RANGE.min, k));
+  const treino = clamp(calc.TREINO);
+  const descansoNaFaixa = clamp(calc.DESCANSO);
+  const descanso = Math.min(treino, descansoNaFaixa);   // descanso nunca acima do dia de treino
+  return { tdee: base.tdee, kcal: { TREINO: treino, DESCANSO: descanso }, deficit: 1 - treino / base.tdee, clamped: treino !== calc.TREINO || descansoNaFaixa !== calc.DESCANSO };
+}
+
+/** Metas (kcal + macros) por aba para a dieta: emagrecimento entra na faixa de calorias; os demais objetivos seguem o cálculo do app. */
+export function dietMacros(a: any, user: Who, spec: KcalSpec): Record<string, MacroTarget> {
+  if (!spec.fatLoss) return baseMacros(a, user, spec).macrosByDay;
+  const kp = kcalPlan(a, user, spec);
+  return baseMacros(a, user, spec, { kcalManual: kp.kcal, macros: { mode: 'pct', pct: LOW_KCAL_MACROS } }).macrosByDay;
+}
+
+export function triage(a: any, user: Who, spec: { fatLoss: boolean; diet?: boolean; freq?: number; objective?: string }): Triage {
   const conds = real(a?.healthConditions);
   const meds = real(a?.medications);
   const reasons: Array<{ code: string; reason: string }> = [];
@@ -88,6 +120,10 @@ export function triage(a: any, user: { birthDate?: string | null }, spec: { fatL
   const imc = imcOf(a);
   if (imc !== null && spec.fatLoss && imc < LIMITS.imcLow) reasons.push({ code: 'IMC_BAIXO', reason: `IMC ${imc.toFixed(1)} (abaixo do peso) com objetivo de perder peso` });
   if (imc !== null && imc >= LIMITS.imcHigh) reasons.push({ code: 'OBESIDADE_GRAU_3', reason: `IMC ${imc.toFixed(1)} (obesidade grau III)` });
+  if (spec.fatLoss && spec.diet) {
+    const kp = kcalPlan(a, user, { fatLoss: true, freq: spec.freq ?? 3, objective: spec.objective ?? 'Emagrecimento' });
+    if (kp.deficit > LIMITS.maxDeficit) reasons.push({ code: 'DEFICIT_ALTO', reason: `Gasto estimado de ${kp.tdee} kcal: uma dieta de ${kp.kcal.TREINO} kcal seria um déficit de ${Math.round(kp.deficit * 100)}%` });
+  }
   if (a?.bariatric === true) reasons.push({ code: 'BARIATRICA', reason: 'Cirurgia bariátrica' });
   if (conds.some((c) => /diabetes tipo 1/.test(norm(c)))) reasons.push({ code: 'DIABETES_TIPO_1', reason: 'Diabetes tipo 1' });
 
