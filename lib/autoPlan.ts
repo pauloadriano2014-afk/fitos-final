@@ -17,7 +17,7 @@ import prisma from '@/lib/prisma';
 import { PAULO_ID } from '@/lib/masterIds';
 import { isMasterId } from '@/lib/auth';
 import { generateWorkoutPlan } from '@/lib/ai/workoutGen';
-import { generateDietDay, type MacrosOverride } from '@/lib/ai/dietGen';
+import { generateDietDay, allowedFoodIds, type MacrosOverride } from '@/lib/ai/dietGen';
 import { calcWeeklyPlan, calcAge } from '@/lib/macroPlanner';
 import {
   MUSCLE_GROUPS, DEFAULT_LIMITATION_RULES, buildPresets, buildDefaultSplit, deriveTrainingEnvironment, dayNeedsCardio,
@@ -26,6 +26,7 @@ import { saveItemMetas, legacyFor } from '@/lib/foodMeasures';
 import { saveDayScheme } from '@/lib/dayScheme';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 import { isAutoPlan, type AutoPlanKind } from '@/lib/autoPlanKinds';
+import { triage, safeTechniques, SAFE_CARDIO_RULE, checkWorkout, blankLoads, checkDietDay, type Triage } from '@/lib/autoPlanQuality';
 
 // ─── PLANOS COM MONTAGEM AUTOMÁTICA ──────────────────────────────────────────
 export { AUTO_PLANS, isAutoPlan } from '@/lib/autoPlanKinds';
@@ -125,6 +126,31 @@ const FAT_LOSS_SEQUENCES: Record<number, string[]> = {
   5: ['Superior Geral', 'Pernas Completo', 'Full Body', 'Costas + Ombros', 'LAST'],
 };
 
+// 🛡️ Todo grupo principal precisa aparecer ao menos uma vez na semana. A divisão padrão do app foi feita como PONTO DE PARTIDA para o coach revisar
+// (ex.: mulher em 4 dias sem ombro nem bíceps; homem em 3 dias sem ombro). No plano automático ninguém revisa, então o que faltar entra aqui.
+const REQUIRED_WEEKLY: Array<{ any: string[]; add: string }> = [
+  { any: ['PEITO'], add: 'PEITO' },
+  { any: ['COSTAS_PUXADA', 'COSTAS_REMADA'], add: 'COSTAS_PUXADA' },
+  { any: ['OMBRO_MULTI', 'OMBRO_LATERAL', 'OMBRO_FRONTAL', 'OMBRO_POST'], add: 'OMBRO_LATERAL' },
+  { any: ['BICEPS'], add: 'BICEPS' },
+  { any: ['TRICEPS'], add: 'TRICEPS' },
+  { any: ['QUADRICEPS'], add: 'QUADRICEPS' },
+  { any: ['POSTERIORES', 'GLUTEOS'], add: 'POSTERIORES' },
+];
+const loadOf = (d: Day) => d.groups.filter((g) => g.id !== 'CARDIO' && g.id !== 'MOBILIDADE').reduce((s, g) => s + (g.qty || 0), 0);
+
+/** Acrescenta (2 exercícios) o grupo que ficou de fora da semana ao dia com menos exercícios. Não mexe no que já existe nem no original. */
+export function ensureCoverage(days: Day[]): Day[] {
+  const out = days.map((d) => ({ ...d, groups: d.groups.map((g) => ({ ...g })) }));
+  if (!out.length) return out;
+  for (const req of REQUIRED_WEEKLY) {
+    if (out.some((d) => d.groups.some((g) => req.any.includes(g.id)))) continue;
+    const lightest = out.reduce((best, d) => (loadOf(d) < loadOf(best) ? d : best), out[0]);
+    lightest.groups.push({ id: req.add, qty: 2 });
+  }
+  return out;
+}
+
 /** Divisão de treino da ficha: emagrecimento usa corpo todo/superior/inferior; os demais usam a divisão padrão do app, com foco opcional. */
 export function buildSplit(spec: PlanSpec, gender?: string | null): Day[] {
   const fem = gender === 'Feminino';
@@ -134,10 +160,10 @@ export function buildSplit(spec: PlanSpec, gender?: string | null): Day[] {
 
   if (spec.fatLoss) {
     const seq = FAT_LOSS_SEQUENCES[clamp(spec.freq, 2, 5)].map((l) => (l === 'LAST' ? (fem ? 'Glúteos Foco' : 'Quadríceps Isolado') : l));
-    return seq.map((label, i) => ({ id: String(i + 1), name: letters[i], groups: groupsOf(label) }));
+    return ensureCoverage(seq.map((label, i) => ({ id: String(i + 1), name: letters[i], groups: groupsOf(label) })));
   }
 
-  let days: Day[] = (buildDefaultSplit(spec.freq, gender) as Day[]).map((d) => ({ ...d, groups: d.groups.map((g) => ({ ...g })) }));
+  let days: Day[] = ensureCoverage((buildDefaultSplit(spec.freq, gender) as Day[]).map((d) => ({ ...d, groups: d.groups.map((g) => ({ ...g })) })));
   if (spec.focus) days = applyFocus(days, spec.focus, spec.freq);
   return days;
 }
@@ -157,7 +183,7 @@ export function applyFocus(days: Day[], focus: string, freq: number): Day[] {
 }
 
 /** Configuração do ciclo no formato que a rota/IA do coach já entende (mesmas regras do hook useGerarTreino do app). */
-export function buildCycleConfig(spec: PlanSpec, phase: PhaseSpec, a: any, gender?: string | null) {
+export function buildCycleConfig(spec: PlanSpec, phase: PhaseSpec, a: any, gender?: string | null, safety?: Pick<Triage, 'conservative' | 'excludeJointRisk'>) {
   const baseDays = buildSplit(spec, gender);
   const focusIds = spec.focus ? FOCUS_GROUPS[spec.focus] : [];
   const days = baseDays
@@ -182,18 +208,23 @@ export function buildCycleConfig(spec: PlanSpec, phase: PhaseSpec, a: any, gende
     .filter(Boolean);
 
   const allLimits = [...(a.limitacoes || []), ...(a.cirurgias || [])].map((l: string) => String(l).toLowerCase());
+  // modo seguro (hipertensão, 60+, dor articular...): só a técnica mais calma e cardio leve; as articulações com dor/cirurgia perdem os exercícios de risco
+  const careful = !!safety && safety.conservative.length > 0;
+  const techniques = careful ? (safeTechniques(phase.techniques).length ? safeTechniques(phase.techniques) : ['BISET']) : phase.techniques;
+  const limitationRules = (DEFAULT_LIMITATION_RULES as any[]).filter((rule) => allLimits.some((l: string) => l.includes(rule.trigger.toLowerCase())));
   return {
     selectedAI: AUTO_AI.workout,
     customKey: null,
     phase: phase.cyclePhase,
-    techniques: phase.techniques,
+    techniques,
     techniqueScope: 'CYCLE',
     gender: gender || 'Não informado',
     trainingEnvironment: deriveTrainingEnvironment(a.equipamentos),
     days,
     manualExercisesByDay: {},
-    limitationRules: (DEFAULT_LIMITATION_RULES as any[]).filter((rule) => allLimits.some((l: string) => l.includes(rule.trigger.toLowerCase()))),
+    limitationRules: careful ? [...limitationRules, SAFE_CARDIO_RULE] : limitationRules,
     cardioTarget: ['EMAGRECIMENTO', 'DEFINICAO'].includes(phase.cyclePhase) ? 300 : null,
+    ...(safety && safety.excludeJointRisk.length ? { excludeJointRisk: safety.excludeJointRisk } : {}),
   };
 }
 
@@ -356,11 +387,11 @@ export const runStore = {
   get: (id: string): Promise<RunRow | null> => guarded('get',
     () => db().findUnique({ where: { id } }),
     () => memory.get(id) ?? null),
-  create: (userId: string, plan: string): Promise<RunRow> => guarded('create',
-    () => db().create({ data: { userId, plan } }),
+  create: (userId: string, plan: string, summary: any = null): Promise<RunRow> => guarded('create',
+    () => db().create({ data: { userId, plan, ...(summary ? { summary } : {}) } }),
     () => {
       const now = new Date();
-      const row: RunRow = { id: randomUUID(), userId, plan, status: 'PENDING', step: null, attempts: 0, error: null, workoutIds: [], dietId: null, summary: null, startedAt: null, finishedAt: null, createdAt: now, updatedAt: now };
+      const row: RunRow = { id: randomUUID(), userId, plan, status: 'PENDING', step: null, attempts: 0, error: null, workoutIds: [], dietId: null, summary, startedAt: null, finishedAt: null, createdAt: now, updatedAt: now };
       memory.set(row.id, row);
       return row;
     }),
@@ -398,10 +429,16 @@ export const __resetAutoPlanMemory = () => { memory.clear(); useMemory = false; 
 /** Ajustes que só os testes mexem (espera entre as duas tentativas de uma chamada de IA). */
 export const tuning = { retryDelayMs: 2000 };
 
+/** Não adianta tentar de novo: este aluno precisa do coach (ex.: a biblioteca não tem exercício seguro suficiente para a limitação dele). */
+export class ManualRequired extends Error {
+  constructor(public code: string, message: string) { super(message); this.name = 'ManualRequired'; }
+}
+
 async function withRetry<T>(label: string, fn: () => Promise<T>, tries = 2): Promise<T> {
   let last: any;
   for (let i = 0; i < tries; i++) {
     try { return await fn(); } catch (e: any) {
+      if (e instanceof ManualRequired) throw e;
       last = e;
       console.warn(`[autoPlan] ${label}: tentativa ${i + 1}/${tries} falhou: ${e?.message || e}`);
       if (i < tries - 1) await new Promise((r) => setTimeout(r, tuning.retryDelayMs));
@@ -420,6 +457,8 @@ interface Ctx {
   adminId: string;
   baseDate: Date;
   olderWorkoutIds: string[];   // treinos de montagens anteriores deste aluno (arquivados quando a nova fase 1 entra)
+  safety: Triage;              // triagem (modo seguro, articulações a evitar)
+  quality: { workout: string[]; diet: string[]; repairs: number };   // o que a conferência consertou (vai pro resumo, o coach vê)
 }
 
 async function doWorkouts(ctx: Ctx): Promise<string[]> {
@@ -433,12 +472,24 @@ async function doWorkouts(ctx: Ctx): Promise<string[]> {
   }
   for (let i = ids.length; i < spec.phases.length; i++) {
     const phase = spec.phases[i];
-    const cycleConfig = buildCycleConfig(spec, phase, anamnese, user.gender);
+    const cycleConfig = buildCycleConfig(spec, phase, anamnese, user.gender, ctx.safety);
     const r = await withRetry(`treino ${phase.key}`, async () => {
       const res = await generateWorkoutPlan({ userId: user.id, adminId, cycleConfig });
+      if (res.status === 422 && res.body?.code === 'BANCO_INSUFICIENTE') throw new ManualRequired('BANCO_INSUFICIENTE', res.body.error);
       if (res.status !== 200) throw new Error(res.body?.error || `Falha ao gerar o treino (${res.status}).`);
-      return res.body;
+      // 🛡️ confere o que a IA devolveu (dia vazio, sem cardio, séries erradas...): conserta o que dá, manda refazer o que não dá
+      const ids = [...new Set(Object.values<any[]>(res.body.exercisesByDay || {}).flat().map((e: any) => String(e.exerciseId)))];
+      const lib = ids.length ? await prisma.exercise.findMany({ where: { id: { in: ids } }, select: { id: true, tags: true } }) : [];
+      const meta = Object.fromEntries(lib.map((x: any) => [x.id, { target: x.tags?.target }]));
+      const chk = checkWorkout(cycleConfig as any, res.body, meta);
+      if (chk.blocking.length) throw new Error(`Treino fora do padrão: ${chk.blocking.join('; ')}`);
+      ctx.quality.workout.push(...chk.notes.map((n) => `${phase.key} · ${n}`));
+      ctx.quality.repairs += chk.repairs;
+      return chk.body;
     });
+    // sem nenhum treino registrado, a carga que a IA escreveria seria chute: em branco, o aluno acha a dele no primeiro treino
+    const hadHistory = await prisma.workoutHistory.findFirst({ where: { userId: user.id }, select: { id: true } });
+    if (!hadHistory) r.exercisesByDay = blankLoads(r).exercisesByDay;
 
     // janela da fase: fases em sequência a partir do dia da entrega. O app compara por DIA (início = começo do dia, fim = fim do dia), então a fase
     // termina no ÚLTIMO dia dela (início + dias - 1) e a próxima começa no dia seguinte: sem dia em que as duas aparecem juntas e sem dia sem treino.
@@ -482,11 +533,19 @@ async function doDiet(ctx: Ctx): Promise<{ dietId: string; costBrl: number; tota
   const macrosByDay = macrosFor(anamnese, user, spec);
   const instruction = dietInstruction(spec);
 
+  const allowed = allowedFoodIds(dietAnamnese);
   const results = await Promise.all(AUTO_DIET_DAYS.map((dayType) =>
-    withRetry(`dieta ${dayType}`, () => generateDietDay({
-      anamnese: dietAnamnese, dayType, provider: AUTO_AI.diet, gender: user.gender, birthDate: user.birthDate,
-      macrosOverride: macrosByDay[dayType], customInstruction: instruction,
-    }))));
+    withRetry(`dieta ${dayType}`, async () => {
+      const res = await generateDietDay({
+        anamnese: dietAnamnese, dayType, provider: AUTO_AI.diet, gender: user.gender, birthDate: user.birthDate,
+        macrosOverride: macrosByDay[dayType], customInstruction: instruction,
+      });
+      // 🛡️ confere a aba: alimento fora da lista da alergia/aversão sai; poucas refeições, refeição vazia ou calorias longe da meta mandam refazer
+      const chk = checkDietDay(res.meals || [], macrosByDay[dayType].kcal, allowed);
+      if (chk.blocking.length) throw new Error(`Dieta (${dayType}) fora do padrão: ${chk.blocking.join('; ')}`);
+      ctx.quality.diet.push(...chk.notes.map((n) => `${dayType} · ${n}`));
+      return { ...res, meals: chk.meals };
+    })));
 
   const meals = results.flatMap((r, i) => (r.meals || []).map((m: any) => ({ ...m, dayType: AUTO_DIET_DAYS[i] })));
   if (!meals.length) throw new Error('A IA não gerou refeições.');
@@ -557,9 +616,18 @@ export async function executeRun(runId: string): Promise<void> {
     }
 
     const spec = planSpec(user.plan, anamnese);
+
+    // 🛡️ triagem: gestante, menor de 16, IMC fora da faixa, bariátrica, diabetes tipo 1 -> o coach monta (quando o coach manda refazer — force — ele assume)
+    const safety = triage(anamnese, user, spec);
+    if (safety.manual && !run.summary?.forced) {
+      await runStore.update(run.id, { status: 'MANUAL', step: null, error: safety.manual.code, finishedAt: new Date(), summary: { ...(run.summary || {}), plan: spec.kind, triage: safety.manual, flags: reviewFlags(anamnese, user) } });
+      await notifyCoach(user.coachId ?? PAULO_ID, '⚠️ Aluno precisa do seu plano', `${user.name || 'Aluno'} (${spec.title}): ${safety.manual.reason}. Não montei automaticamente: abra o aluno e monte o plano dele.`, { type: 'auto_plan_manual', studentId: user.id });
+      return;
+    }
+
     const baseDate = run.summary?.baseDate ? new Date(run.summary.baseDate) : new Date();
     const older = await runStore.others(user.id, run.id);
-    const ctx: Ctx = { run, user: user as Ctx['user'], anamnese, spec, adminId, baseDate, olderWorkoutIds: older.flatMap((r) => r.workoutIds || []) };
+    const ctx: Ctx = { run, user: user as Ctx['user'], anamnese, spec, adminId, baseDate, olderWorkoutIds: older.flatMap((r) => r.workoutIds || []), safety, quality: { workout: [], diet: [], repairs: 0 } };
 
     // treino e dieta ao mesmo tempo: o aluno espera pelo mais demorado, não pela soma
     const [w, d] = await Promise.allSettled([doWorkouts(ctx), doDiet(ctx)]);
@@ -569,11 +637,22 @@ export async function executeRun(runId: string): Promise<void> {
     if (w.status === 'fulfilled') { patch.workoutIds = w.value; summary.workoutDone = true; }
     if (d.status === 'fulfilled') { patch.dietId = d.value.dietId; summary.dietDone = true; summary.dietCostBrl = d.value.costBrl; summary.macros = d.value.totals; }
     summary.flags = reviewFlags(anamnese, user);
+    summary.safety = { conservative: safety.conservative, excludeJointRisk: safety.excludeJointRisk };
+    summary.quality = ctx.quality;
+
+    // a biblioteca não tem exercício seguro suficiente para a limitação do aluno: não adianta tentar de novo, o coach monta o treino
+    const needsCoach = [w, d].find((x): x is PromiseRejectedResult => x.status === 'rejected' && x.reason instanceof ManualRequired);
+    if (needsCoach) {
+      const code = (needsCoach.reason as ManualRequired).code;
+      await runStore.update(run.id, { ...patch, summary: { ...summary, triage: { code, reason: needsCoach.reason.message } }, status: 'MANUAL', step: null, error: code, finishedAt: new Date() });
+      await notifyCoach(user.coachId ?? PAULO_ID, '⚠️ Aluno precisa do seu plano', `${user.name || 'Aluno'} (${spec.title}): ${needsCoach.reason.message}. Monte o treino dele no app.`, { type: 'auto_plan_manual', studentId: user.id });
+      return;
+    }
 
     if (w.status === 'fulfilled' && d.status === 'fulfilled') {
       await runStore.update(run.id, { ...patch, summary, status: 'DONE', step: 'DONE', error: null, finishedAt: new Date() });
       await notifyStudent(user.id, '🎉 Seu plano está pronto!', 'Seu treino e sua dieta já estão no app. Bora começar!', { type: 'auto_plan_ready' });
-      const flagText = summary.flags.length ? ` ⚠️ Conferir: ${summary.flags.slice(0, 3).join(' · ')}` : '';
+      const flagText = (summary.flags.length ? ` ⚠️ Conferir: ${summary.flags.slice(0, 3).join(' · ')}` : '') + (safety.conservative.length ? ' 🛡️ Plano em modo seguro (técnicas leves, cardio leve).' : '');
       await notifyCoach(user.coachId, '🤖 Plano automático gerado', `${user.name || 'Aluno'} (${spec.title}) já tem treino e dieta.${flagText}`, { type: 'auto_plan_done', studentId: user.id });
       return;
     }
@@ -613,7 +692,7 @@ export async function startAutoPlan(userId: string, opts: { force?: boolean } = 
     if (last.status === 'PENDING' || last.status === 'FAILED') { schedule(last.id); return { started: true, runId: last.id, reason: 'RETOMADA' }; }
     return { started: false, runId: last.id, reason: `JA_${last.status}` };
   }
-  const run = await runStore.create(userId, user.plan);
+  const run = await runStore.create(userId, user.plan, opts.force ? { forced: true } : null);
   schedule(run.id);
   return { started: true, runId: run.id };
 }

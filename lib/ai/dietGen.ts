@@ -329,7 +329,7 @@ export const FOOD_CATALOG = [
 ];
 
 // ─── FILTRAR CATÁLOGO ─────────────────────────────────────────────────────────
-function filteredCatalog(a: Anamnese): string {
+function filterFoods(a: Anamnese) {
     const al = (a.allergies ?? '').toLowerCase();
     const av = (a.foodAversions ?? '').toLowerCase();
     const bt = (a.bariatricIntolerances ?? []).join(' ').toLowerCase();
@@ -343,7 +343,16 @@ function filteredCatalog(a: Anamnese): string {
         const avWords = av.split(/[,\s]+/).filter(w => w.length > 2);
         if (avWords.some(w => f.n.toLowerCase().includes(w))) return false;
         return true;
-    }).map(f => `${f.id}|${f.n}|k${f.k}|P${f.p}|C${f.c}|G${f.f}|${f.sc}`).join('\n');
+    });
+}
+
+function filteredCatalog(a: Anamnese): string {
+    return filterFoods(a).map(f => `${f.id}|${f.n}|k${f.k}|P${f.p}|C${f.c}|G${f.f}|${f.sc}`).join('\n');
+}
+
+/** IDs do catálogo que a IA PODE usar para este aluno (já sem o que a alergia, a aversão e a bariátrica excluem). Serve para conferir o que ela devolveu. */
+export function allowedFoodIds(a: Anamnese): Set<string> {
+    return new Set(filterFoods(a).map(f => f.id));
 }
 
 // ─── ALIMENTOS FAVORITOS DO ALUNO ──────────────────────────────────────────────
