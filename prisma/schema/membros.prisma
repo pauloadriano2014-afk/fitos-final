@@ -1,0 +1,50 @@
+// prisma/schema/membros.prisma
+// 🔐 (5 out 2026) ÁREA DE MEMBROS (PA ELITE TEAM) — contas de quem compra produtos digitais pela página de vendas.
+// Ficam SEPARADAS da tabela User (alunos e coaches): quem vem do tráfego pago não pode entrar no painel dos coaches, nos limites de plano,
+// nas notificações nem nas cobranças. O que cada membro tem liberado NÃO é gravado aqui: vem das vendas pagas (ProdutoVenda) pelo e-mail,
+// então comprar de novo ou receber um bônus não precisa mexer nesta tabela.
+//
+// Login sem senha: o membro recebe um código de 6 dígitos (ou um link, no e-mail da compra) e troca por uma sessão.
+// Nenhum código, link ou sessão é guardado em texto puro: só o HMAC deles.
+
+model Membro {
+  id            String    @id @default(uuid())
+  email         String    @unique // sempre minúsculo e sem espaços (ver normalizeEmail em lib/membros.ts)
+  nome          String?
+  telefone      String?
+  origem        String    @default("COMPRA") // COMPRA | IMPORTACAO
+  ultimoAcesso  DateTime?
+  createdAt     DateTime  @default(now())
+
+  codigos       MembroCodigo[]
+  sessoes       MembroSessao[]
+}
+
+model MembroCodigo {
+  id          String    @id @default(uuid())
+  membroId    String
+  membro      Membro    @relation(fields: [membroId], references: [id], onDelete: Cascade)
+
+  tipo        String    // CODIGO (6 dígitos, vale 10 minutos) | LINK (enviado no e-mail da compra, vale 14 dias)
+  hash        String    @unique
+  tentativas  Int       @default(0) // erros de digitação: depois de 5 o código morre
+  expiraEm    DateTime
+  usadoEm     DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([membroId, tipo])
+}
+
+model MembroSessao {
+  id          String    @id @default(uuid())
+  membroId    String
+  membro      Membro    @relation(fields: [membroId], references: [id], onDelete: Cascade)
+
+  tokenHash   String    @unique
+  userAgent   String?
+  expiraEm    DateTime
+  ultimoUso   DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  @@index([membroId])
+}

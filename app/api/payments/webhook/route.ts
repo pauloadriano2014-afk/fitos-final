@@ -4,6 +4,7 @@
 // de coach ou aluno foi alterado.
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { criarLinkDeAcesso } from '@/lib/membros';
 import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
 import { markCoachPaid } from '@/lib/coachPayments';
@@ -688,6 +689,14 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
                     cursoLinks.push({ nome: item.nome, url: `${APP_URL}/ProdutoCurso?token=${acesso.token}` });
                 }
 
+                // 🔐 ÁREA DE MEMBROS: link de acesso no e-mail (só quando MEMBROS_URL está configurada). Falhar aqui nunca impede a entrega normal.
+                let membrosLink: string | null = null;
+                try {
+                    membrosLink = await criarLinkDeAcesso(prisma, { email: venda.emailCliente, nome: venda.nomeCliente, telefone: venda.telefoneCliente });
+                } catch (membroError) {
+                    console.error('[produtos][membros] Falhou ao criar o acesso à área de membros:', membroError);
+                }
+
                 await sendProdutoDeliveryEmail({
                     nomeCliente: venda.nomeCliente,
                     emailCliente: venda.emailCliente,
@@ -696,6 +705,7 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
                     itens,
                     treinoLinks,
                     cursoLinks,
+                    membrosLink,
                 });
             } catch (emailError) {
                 console.error('[produtos][email] Falhou ao enviar, mas a venda já foi marcada PAGO:', emailError);
@@ -716,7 +726,8 @@ function buildProdutoEmailHtml(
     itens: { nome: string; linkEntrega: string | null }[],
     acompanharLink: string,
     treinoLinks: { nome: string; url: string }[] = [],
-    cursoLinks: { nome: string; url: string }[] = []
+    cursoLinks: { nome: string; url: string }[] = [],
+    membrosLink: string | null = null
 ): string {
     const firstName = (nomeCliente || 'Atleta').split(' ')[0];
     const itensComLink = itens.filter((i) => i.linkEntrega);
@@ -777,6 +788,21 @@ function buildProdutoEmailHtml(
           .join('')}`
         : '';
 
+    // 🔐 ÁREA DE MEMBROS: botão principal quando o site de membros está ligado (MEMBROS_URL). Os links de cada material seguem abaixo como reserva.
+    const membrosSecao = membrosLink
+        ? `
+      <p style="color:#AAAAAA;font-size:14px;line-height:22px;margin:0 0 10px 0;">
+        Todos os seus materiais ficam reunidos na sua <strong style="color:#FFFFFF;">Área de Membros</strong>, no celular ou no computador, sem criar senha:
+      </p>
+      <a href="${membrosLink}"
+         style="display:block;background-color:#4DE38F;color:#0a0a0a;text-decoration:none;text-align:center;padding:18px;border-radius:12px;font-weight:bold;font-size:15px;letter-spacing:0.5px;margin-bottom:10px;">
+        ENTRAR NA MINHA ÁREA DE MEMBROS
+      </a>
+      <p style="color:#777777;font-size:12px;line-height:18px;margin:0 0 22px 0;">
+        O botão vale uma vez e por 14 dias. Depois, é só entrar com o seu e-mail e pedir um código.
+      </p>`
+        : '';
+
     const whatsappLink = `https://wa.me/${SUPORTE_WHATSAPP}?text=${encodeURIComponent(`Oi! Comprei "${itensComLink[0]?.nome || 'um material'}" e preciso de ajuda com o acesso.`)}`;
 
     return `
@@ -790,6 +816,7 @@ function buildProdutoEmailHtml(
         Você garantiu:
       </p>
       <ul style="margin:0 0 25px 0;padding-left:20px;">${listaItens}</ul>
+      ${membrosSecao}
       ${botoes}
       ${treinoSecao}
       ${cursoSecao}
@@ -817,12 +844,13 @@ async function sendProdutoDeliveryEmail(params: {
     itens: { nome: string; linkEntrega: string | null }[];
     treinoLinks?: { nome: string; url: string }[];
     cursoLinks?: { nome: string; url: string }[];
+    membrosLink?: string | null;
 }) {
     if (!RESEND_API_KEY || !params.emailCliente) return;
 
     const firstName = (params.nomeCliente || 'Atleta').split(' ')[0];
     const acompanharLink = `${APP_URL}/Produto?id=${encodeURIComponent(params.produtoSlug)}&venda=${encodeURIComponent(params.vendaId)}`;
-    const html = buildProdutoEmailHtml(params.nomeCliente, params.itens, acompanharLink, params.treinoLinks || [], params.cursoLinks || []);
+    const html = buildProdutoEmailHtml(params.nomeCliente, params.itens, acompanharLink, params.treinoLinks || [], params.cursoLinks || [], params.membrosLink || null);
 
     const emailRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
