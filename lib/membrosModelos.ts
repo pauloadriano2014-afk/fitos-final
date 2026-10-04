@@ -1390,7 +1390,7 @@ export const MODELOS: Record<string, any> = {
   ]
  },
  "receitas": {
-  "titulo": "30 Receitas Fitness",
+  "titulo": "Receitas Fitness",
   "subtitulo": "Praticidade, sabor e estratégia para sua rotina.",
   "instrucoes": [
    "Escolha receitas de acordo com sua rotina, objetivos e preferências alimentares.",
