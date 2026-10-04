@@ -25,9 +25,10 @@ export async function POST(request: NextRequest, { params }: { params: { token: 
 
         const acesso = await prisma.produtoCursoAcesso.findUnique({
             where: { token },
-            include: { produto: { select: { cursoPrograma: true } } },
+            include: { produto: { select: { cursoPrograma: true } }, venda: { select: { status: true } } },
         });
-        if (!acesso) {
+        // 💸 Compra estornada (reembolso/chargeback): o link deixa de funcionar.
+        if (!acesso || acesso.venda?.status !== 'PAGO') {
             return NextResponse.json({ error: 'Link inválido ou expirado' }, { status: 404 });
         }
 

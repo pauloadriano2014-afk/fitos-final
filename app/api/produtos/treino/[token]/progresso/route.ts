@@ -23,8 +23,9 @@ export async function POST(request: NextRequest, { params }: { params: { token: 
             return NextResponse.json({ error: 'treinoIndex é obrigatório' }, { status: 400 });
         }
 
-        const acesso = await prisma.produtoTreinoAcesso.findUnique({ where: { token } });
-        if (!acesso) {
+        const acesso = await prisma.produtoTreinoAcesso.findUnique({ where: { token }, include: { venda: { select: { status: true } } } });
+        // 💸 Compra estornada (reembolso/chargeback): o link deixa de funcionar.
+        if (!acesso || acesso.venda?.status !== 'PAGO') {
             return NextResponse.json({ error: 'Link inválido ou expirado' }, { status: 404 });
         }
 

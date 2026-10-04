@@ -208,7 +208,7 @@ model ProdutoVenda {
   telefoneCliente String
   cpfCliente      String
 
-  status          String   @default("PENDENTE") // PENDENTE, PAGO
+  status          String   @default("PENDENTE") // PENDENTE, PAGO, ESTORNADO (reembolso ou chargeback: o acesso é revogado)
   valorTotal      Float    // Armazena o valor consolidado final cobrado no Asaas (produto principal + bumps)
   itensBumpIds    String?  @db.Text // JSON.stringify(string[]) — ids dos ProdutoDigital extras comprados junto
 
@@ -222,6 +222,12 @@ model ProdutoVenda {
   // lembrete pra essa venda PENDENTE — evita reenviar toda vez que a rotina
   // de checagem rodar de novo.
   lembreteAbandonoEnviado Boolean @default(false)
+
+  // 🛒 CHECKOUT PRÓPRIO (membros.pauloadrianoteam.com.br/comprar): JSON com o que veio do navegador na hora da compra
+  // ({ fbp, fbc, url, utm: {...}, ip, ua, retiradaHash, retiradaUsada }). Serve para (1) mandar a compra ao Meta pelo servidor
+  // (API de Conversões, com o mesmo eventID do pixel), (2) saber de qual anúncio veio a venda e (3) o login automático logo
+  // depois do pagamento (retirada, uso único). Vendas antigas ficam null.
+  tracking        String?  @db.Text
 
   // 🔥 TREINO INTERATIVO: um acesso por item comprado (principal ou bump) que
   // tiver treinoPrograma configurado.

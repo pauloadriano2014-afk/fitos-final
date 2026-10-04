@@ -23,9 +23,10 @@ const mac = (value: string) => crypto.createHmac('sha256', secret()).update(valu
 export const hashCodigo = (email: string, codigo: string) => mac(`CODIGO:${email}:${codigo}`);   // com o e-mail: o mesmo código de duas pessoas nunca colide
 export const hashLink = (token: string) => mac(`LINK:${token}`);
 export const hashSessao = (token: string) => mac(`SESSAO:${token}`);
+export const hashRetirada = (token: string) => mac(`RETIRADA:${token}`);
 export const gerarCodigo = (): string => String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
 export const gerarToken = (): string => crypto.randomBytes(32).toString('hex');
-const iguais = (a: string, b: string) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+export const iguais = (a: string, b: string) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 /** Endereço do site de membros (sem barra no fim). Vazio = recurso desligado (o e-mail de compra sai como sempre saiu). */
 export const membrosBaseUrl = (): string => String(process.env.MEMBROS_URL || '').trim().replace(/\/+$/, '');

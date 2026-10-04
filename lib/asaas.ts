@@ -76,6 +76,8 @@ export async function createPayment(
     dueDate: string; // 'YYYY-MM-DD'
     description?: string;
     externalReference?: string; // seu paymentId interno
+    // Depois de pagar na fatura da Asaas o cliente volta para o seu site. O domínio precisa estar cadastrado na conta Asaas.
+    callback?: { successUrl: string; autoRedirect?: boolean };
   },
   apiKey?: string
 ) {

@@ -7,6 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { findOrCreateCustomer, createPayment, getPixQrCode } from '@/lib/asaas';
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
+import { isValidEmail, membrosBaseUrl } from '@/lib/membros';
+import { montarTracking } from '@/lib/checkoutTracking';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +19,11 @@ function toDateOnly(d: Date): string {
 
 export async function POST(request: NextRequest) {
     try {
+        // 🔒 Cada pedido cria um cliente e uma cobrança na Asaas: limita por IP para ninguém lotar o painel com pedidos falsos.
+        if (!checkRateLimit(`produtos-comprar:${getClientIp(request)}`, { max: 20, windowMs: 10 * 60 * 1000 }).allowed) {
+            return NextResponse.json({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' }, { status: 429 });
+        }
+
         const body = await request.json();
         const { produtoId, nome, email, telefone, cpf, itensBumpIds } = body;
 
@@ -27,8 +35,12 @@ export async function POST(request: NextRequest) {
         if (cpfDigits.length !== 11) {
             return NextResponse.json({ error: 'CPF inválido. Verifique os números.' }, { status: 400 });
         }
-        if (!email.includes('@')) {
+        if (!isValidEmail(String(email).trim().toLowerCase())) {
             return NextResponse.json({ error: 'E-mail inválido.' }, { status: 400 });
+        }
+        const telefoneDigits = String(telefone).replace(/\D/g, '');
+        if (telefoneDigits.length < 10 || telefoneDigits.length > 13) {
+            return NextResponse.json({ error: 'Telefone inválido. Informe o DDD e o número.' }, { status: 400 });
         }
 
         const produto = await prisma.produtoDigital.findUnique({ where: { id: produtoId } });
@@ -70,17 +82,25 @@ export async function POST(request: NextRequest) {
         // Cria a venda PENDENTE antes de chamar a Asaas, pra já ter um id
         // pronto pro externalReference da cobrança (webhook usa esse id pra
         // achar a venda de volta e marcar como PAGO).
+        // 🛒 Do checkout próprio vem também de onde a pessoa chegou (anúncio, cookies do pixel) e a "retirada", o segredo que
+        // só este navegador recebe e que mais tarde troca o pagamento por login automático (ver /api/membros/entrar-compra).
+        const { tracking, retirada } = montarTracking(body?.tracking, {
+            ip: getClientIp(request),
+            ua: request.headers.get('user-agent'),
+        });
+
         const venda = await prisma.produtoVenda.create({
             data: {
                 produtoId: produto.id,
                 nomeCliente: nome,
-                emailCliente: email,
+                emailCliente: String(email).trim(),
                 telefoneCliente: telefone,
                 cpfCliente: cpfDigits,
                 status: 'PENDENTE',
                 valorTotal,
                 itensBumpIds: bumpProdutos.length > 0 ? JSON.stringify(bumpProdutos.map((p) => p.id)) : null,
                 asaasCustomerId: customer.id,
+                tracking: JSON.stringify(tracking),
             },
         });
 
@@ -89,14 +109,33 @@ export async function POST(request: NextRequest) {
                 ? `${produto.nome} + ${bumpProdutos.length} item(ns) extra(s)`
                 : produto.nome;
 
-            const asaasPayment = await createPayment({
+            const cobranca = {
                 customer: customer.id,
-                billingType: 'UNDEFINED', // cliente escolhe PIX/cartão
+                billingType: 'UNDEFINED' as const, // cliente escolhe PIX/cartão
                 value: valorTotal,
                 dueDate: toDateOnly(new Date()),
                 description: descricao,
                 externalReference: `produto:${venda.id}`,
-            });
+            };
+
+            // Depois de pagar na fatura (cartão) a Asaas devolve a pessoa ao checkout. Só funciona com o domínio cadastrado na
+            // conta Asaas; se ela recusar, a cobrança sai igual, sem o retorno automático (a venda é confirmada pelo webhook).
+            const base = membrosBaseUrl();
+            let asaasPayment: any;
+            if (base) {
+                try {
+                    asaasPayment = await createPayment({
+                        ...cobranca,
+                        callback: { successUrl: `${base}/comprar/?v=${venda.id}`, autoRedirect: true },
+                    });
+                } catch (callbackError: any) {
+                    // Só tenta de novo se a Asaas RESPONDEU recusando o pedido (400). Erro de rede ou tempo esgotado pode ter criado a
+                    // cobrança do mesmo jeito: repetir poderia cobrar em dobro.
+                    if (callbackError?.status !== 400) throw callbackError;
+                    console.warn('[produtos/comprar] Asaas recusou o retorno automático, seguindo sem ele:', callbackError?.message);
+                }
+            }
+            if (!asaasPayment) asaasPayment = await createPayment(cobranca);
 
             let pixQrCode: string | null = null;
             let pixCopyPaste: string | null = null;
@@ -117,7 +156,7 @@ export async function POST(request: NextRequest) {
             });
 
             return NextResponse.json(
-                { vendaId: venda.id, pixQrCode, pixCopyPaste, invoiceUrl: asaasPayment.invoiceUrl || null },
+                { vendaId: venda.id, pixQrCode, pixCopyPaste, invoiceUrl: asaasPayment.invoiceUrl || null, retirada, valorTotal },
                 { status: 201 }
             );
         } catch (asaasError: any) {

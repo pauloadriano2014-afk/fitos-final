@@ -5,6 +5,8 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { criarLinkDeAcesso } from '@/lib/membros';
+import { enviarCompraMeta } from '@/lib/checkoutTracking';
+import { getPayment } from '@/lib/asaas';
 import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
 import { markCoachPaid } from '@/lib/coachPayments';
@@ -621,7 +623,28 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
     });
     if (!venda) return NextResponse.json({ received: true });
 
+    // 💸 REEMBOLSO / CHARGEBACK: a venda vira ESTORNADO e o acesso sai da área de membros e das páginas de treino e curso (todas
+    // conferem o status da venda a cada abertura). O link de entrega solto (PDF no Drive) já foi enviado e não tem como recolher.
+    if (event === 'PAYMENT_REFUNDED' || event === 'PAYMENT_CHARGEBACK_REQUESTED') {
+        if (venda.status !== 'ESTORNADO') {
+            await prisma.produtoVenda.update({ where: { id: vendaId }, data: { status: 'ESTORNADO' } });
+            console.log(`💸 Produto: venda ${vendaId} estornada (${event}) — acesso revogado (${venda.nomeCliente})`);
+        }
+        return NextResponse.json({ received: true });
+    }
+
     if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+        // Uma venda já estornada só volta a valer se a Asaas confirmar AGORA que o dinheiro está com a gente (chargeback revertido).
+        // Sem isso, um aviso de "pago" atrasado/reenviado depois do reembolso devolveria o acesso por engano.
+        if (venda.status === 'ESTORNADO') {
+            let agora: any = null;
+            try { agora = await getPayment(String(venda.asaasPaymentId || payment.id)); } catch { /* sem resposta: segue estornada */ }
+            if (!agora || !['CONFIRMED', 'RECEIVED', 'RECEIVED_IN_CASH'].includes(String(agora.status))) {
+                console.warn(`[produtos] venda ${vendaId} estornada ignorou ${event}: a cobrança não está paga na Asaas`);
+                return NextResponse.json({ received: true });
+            }
+        }
+
         // Idempotência: não repete o processamento (nem reenvia o e-mail) se a
         // Asaas reenviar o mesmo webhook.
         if (venda.status !== 'PAGO') {
@@ -710,6 +733,13 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
             } catch (emailError) {
                 console.error('[produtos][email] Falhou ao enviar, mas a venda já foi marcada PAGO:', emailError);
             }
+
+            // 📣 Meta (API de Conversões): a compra paga é avisada pelo servidor, com o mesmo event_id (= id da venda) do pixel do
+            // navegador, então o Meta conta uma vez só. Cobre quem pagou o cartão na fatura da Asaas e nunca voltou ao site.
+            // Só age com META_PIXEL_ID e META_CAPI_TOKEN configurados e nunca lança erro.
+            let idsDaVenda: string[] = [venda.produto.id];
+            try { const extras = venda.itensBumpIds ? JSON.parse(venda.itensBumpIds) : []; if (Array.isArray(extras)) idsDaVenda = [...idsDaVenda, ...extras.map(String)]; } catch { /* sem bumps */ }
+            await enviarCompraMeta(venda, venda.produto.nome, idsDaVenda);
         }
     }
 
