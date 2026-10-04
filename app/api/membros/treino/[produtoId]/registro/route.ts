@@ -4,7 +4,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rateLimit';
-import { tokenDoCabecalho, sessaoValida, vendaPagaComProduto } from '@/lib/membros';
+import { tokenDoCabecalho, sessaoValida, vendaPagaComProduto, lerTokenPrevia } from '@/lib/membros';
 import { lerPrograma, validarRegistro } from '@/lib/membrosTreino';
 
 export const dynamic = 'force-dynamic';
@@ -14,13 +14,15 @@ const reply = (body: any, status = 200) => NextResponse.json(body, { status, hea
 
 export async function PUT(request: Request, { params }: { params: { produtoId: string } }) {
   try {
-    const sessao = await sessaoValida(prisma, tokenDoCabecalho(request.headers.get('authorization')));
-    if (!sessao) return reply({ error: 'Sessão expirada. Entre de novo.' }, 401);
-    if (!checkRateLimit(`membros-registro:${sessao.membro.id}`, { max: 240, windowMs: 60 * 1000 }).allowed) return reply({ error: 'Muitas anotações seguidas. Aguarde um instante.' }, 429);
+    // prévia do painel de produtos: confere a anotação como sempre, mas NÃO grava nada
+    const previa = lerTokenPrevia(request.headers.get('authorization'));
+    const sessao = previa ? null : await sessaoValida(prisma, tokenDoCabecalho(request.headers.get('authorization')));
+    if (!previa && !sessao) return reply({ error: 'Sessão expirada. Entre de novo.' }, 401);
+    if (!checkRateLimit(previa ? `membros-previa:${previa.produtoId}` : `membros-registro:${sessao!.membro.id}`, { max: 240, windowMs: 60 * 1000 }).allowed) return reply({ error: 'Muitas anotações seguidas. Aguarde um instante.' }, 429);
 
     const produtoId = String(params?.produtoId ?? '');
     if (!produtoId || produtoId.length > 64) return reply({ error: 'Treino não encontrado.' }, 404);
-    if (!(await vendaPagaComProduto(prisma, sessao.membro.email, produtoId))) return reply({ error: 'Treino não encontrado.' }, 404);
+    if (previa ? previa.produtoId !== produtoId : !(await vendaPagaComProduto(prisma, sessao!.membro.email, produtoId))) return reply({ error: 'Treino não encontrado.' }, 404);
 
     const produto = await prisma.produtoDigital.findUnique({ where: { id: produtoId }, select: { treinoPrograma: true } });
     const programa = produto ? lerPrograma(produto.treinoPrograma) : null;
@@ -30,7 +32,9 @@ export async function PUT(request: Request, { params }: { params: { produtoId: s
     const r = validarRegistro(body, programa);
     if (!r.ok) return reply({ error: 'Anotação inválida.' }, 400);
 
-    const membroId = sessao.membro.id;
+    if (previa) return reply({ ok: true, previa: true });
+
+    const membroId = sessao!.membro.id;
     if (r.desmarcarTudo) {
       await prisma.membroRegistro.updateMany({ where: { membroId, produtoId, semana: r.semana, treino: r.treino }, data: { feito: false } });
       return reply({ ok: true });

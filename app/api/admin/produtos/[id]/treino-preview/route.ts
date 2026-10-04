@@ -1,6 +1,7 @@
 // app/api/admin/produtos/[id]/treino-preview/route.ts
 // 🔥 PRÉ-VISUALIZAÇÃO SEM CUSTO: gera (ou reaproveita) um link de treino
-// interativo pra esse produto sem precisar de uma compra real — útil pro
+// interativo pra esse produto sem precisar de uma compra real. Com a Área de Membros ligada (MEMBROS_URL) o link é o da página nova /treino/ (token assinado de 2h);
+// sem ela, é o da página antiga do app (venda TESTE abaixo) — útil pro
 // admin conferir como a página vai ficar enquanto ainda está montando o
 // programa. A "venda" criada aqui tem status TESTE (nunca PAGO/PENDENTE), por
 // isso não entra em nenhuma métrica de vendas, no dashboard, na prova social
@@ -10,6 +11,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { gerarTokenPrevia, membrosBaseUrl, PREVIA_TTL_MS } from '@/lib/membros';
+import { lerPrograma } from '@/lib/membrosTreino';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +41,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
         if (!produto.treinoPrograma) {
             return NextResponse.json({ error: 'Configure e salve o programa de treino antes de pré-visualizar.' }, { status: 400 });
+        }
+
+        // 🏋️ Treino na Área de Membros (página /treino/ do site de membros): link temporário e assinado, sem venda e sem e-mail. A página abre em "modo prévia"
+        // (aviso no topo, nada do que for marcado é gravado). Só vale quando o site de membros está ligado (MEMBROS_URL) e o programa é válido.
+        const membros = membrosBaseUrl();
+        if (membros && lerPrograma(produto.treinoPrograma)) {
+            const url = `${membros}/treino/?p=${encodeURIComponent(produto.id)}#previa=${gerarTokenPrevia(produto.id)}`;
+            return NextResponse.json({ url, membros: true, expiraEm: new Date(Date.now() + PREVIA_TTL_MS).toISOString() });
         }
 
         // Reaproveita a mesma "venda de teste" em pré-visualizações seguintes

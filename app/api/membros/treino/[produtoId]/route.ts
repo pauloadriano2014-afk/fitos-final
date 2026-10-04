@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { MASTER_TEAM_ID } from '@/lib/workoutShare';
-import { tokenDoCabecalho, sessaoValida, vendaPagaComProduto } from '@/lib/membros';
+import { tokenDoCabecalho, sessaoValida, vendaPagaComProduto, lerTokenPrevia } from '@/lib/membros';
 import { lerPrograma, semanaAtual, tecnicasDoPrograma } from '@/lib/membrosTreino';
 
 export const dynamic = 'force-dynamic';
@@ -15,14 +15,16 @@ const reply = (body: any, status = 200) => NextResponse.json(body, { status, hea
 
 export async function GET(request: Request, { params }: { params: { produtoId: string } }) {
   try {
-    const sessao = await sessaoValida(prisma, tokenDoCabecalho(request.headers.get('authorization')));
-    if (!sessao) return reply({ error: 'Sessão expirada. Entre de novo.' }, 401);
+    // prévia do painel de produtos (token assinado, sem compra): só lê o programa daquele produto, na semana 1 e sem registros
+    const previa = lerTokenPrevia(request.headers.get('authorization'));
+    const sessao = previa ? null : await sessaoValida(prisma, tokenDoCabecalho(request.headers.get('authorization')));
+    if (!previa && !sessao) return reply({ error: 'Sessão expirada. Entre de novo.' }, 401);
 
     const produtoId = String(params?.produtoId ?? '');
     if (!produtoId || produtoId.length > 64) return reply({ error: 'Treino não encontrado.' }, 404);
 
-    const venda = await vendaPagaComProduto(prisma, sessao.membro.email, produtoId);
-    if (!venda) return reply({ error: 'Treino não encontrado.' }, 404);
+    const venda = previa ? null : await vendaPagaComProduto(prisma, sessao!.membro.email, produtoId);
+    if (previa ? previa.produtoId !== produtoId : !venda) return reply({ error: 'Treino não encontrado.' }, 404);
 
     const produto = await prisma.produtoDigital.findUnique({ where: { id: produtoId }, select: { id: true, nome: true, treinoPrograma: true, coachId: true } });
     const programa = produto ? lerPrograma(produto.treinoPrograma) : null;
@@ -35,8 +37,8 @@ export async function GET(request: Request, { params }: { params: { produtoId: s
     linhas.filter((r) => r.teamId === MASTER_TEAM_ID).forEach((r) => { videos[r.key] = r.videoUrl; });
     linhas.filter((r) => r.teamId !== MASTER_TEAM_ID).forEach((r) => { videos[r.key] = r.videoUrl; });
 
-    const registros: any[] = await prisma.membroRegistro.findMany({ where: { membroId: sessao.membro.id, produtoId } });
-    const comprouEm = new Date(venda.paymentDate || venda.createdAt);
+    const registros: any[] = sessao ? await prisma.membroRegistro.findMany({ where: { membroId: sessao.membro.id, produtoId } }) : [];
+    const comprouEm = venda ? new Date(venda.paymentDate || venda.createdAt) : new Date();
 
     return reply({
       produto: { id: produto.id, nome: produto.nome },
@@ -45,6 +47,7 @@ export async function GET(request: Request, { params }: { params: { produtoId: s
       semanaAtual: semanaAtual(comprouEm, programa.semanas),
       treinos: programa.treinos,
       tecnicas: tecnicasDoPrograma(programa, videos),
+      ...(previa ? { previa: true } : {}),
       registros: registros.map((r) => ({ s: r.semana, t: r.treino, e: r.exercicio, f: !!r.feito, c: r.carga ?? null })),
     });
   } catch (error) {

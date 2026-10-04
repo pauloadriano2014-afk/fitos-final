@@ -123,6 +123,25 @@ export async function criarSessao(db: any, membro: { id: string }, userAgent?: s
   return { token, expiraEm };
 }
 
+// ─── prévia do treino (sem compra e sem e-mail) ──────────────────────────────
+// O painel de produtos gera um link temporário para quem administra o produto ver a página /treino/ exatamente como a cliente vê.
+// O token é assinado (não fica no banco): "p1.<produto>.<validade em segundos>.<assinatura>". Vale só para aquele produto, só para ler o programa
+// e só por PREVIA_TTL_MS; as marcações feitas na prévia não são gravadas.
+export const PREVIA_TTL_MS = 2 * 60 * 60 * 1000;
+export const hashPrevia = (value: string) => mac(`PREVIA:${value}`);
+export function gerarTokenPrevia(produtoId: string, now = new Date()): string {
+  const validade = Math.floor((now.getTime() + PREVIA_TTL_MS) / 1000);
+  return `p1.${produtoId}.${validade}.${hashPrevia(`${produtoId}:${validade}`)}`;
+}
+/** Confere o cabeçalho `Authorization: Bearer p1.…`: devolve o produto da prévia, ou null se não for um token de prévia válido e dentro do prazo. */
+export function lerTokenPrevia(authorization: string | null | undefined, now = new Date()): { produtoId: string } | null {
+  const m = /^Bearer\s+p1\.([A-Za-z0-9_-]{1,64})\.(\d{9,13})\.([0-9a-f]{64})$/.exec(String(authorization || '').trim());
+  if (!m) return null;
+  if (!(Number(m[2]) * 1000 > now.getTime())) return null;
+  if (!iguais(m[3], hashPrevia(`${m[1]}:${m[2]}`))) return null;
+  return { produtoId: m[1] };
+}
+
 export const tokenDoCabecalho = (authorization: string | null | undefined): string | null => {
   const m = /^Bearer\s+([0-9a-f]{64})$/i.exec(String(authorization || '').trim());
   return m ? m[1].toLowerCase() : null;
