@@ -217,6 +217,60 @@ export type PublicInput = {
 
 const customKey = (id: string) => `C:${id}`;
 
+// ─────────────────────────── cargas por série e nome do treino do dia (5 out 2026) ───────────────────────────
+// A página pública deixa a pessoa anotar a carga de CADA série, no mesmo modelo do app do aluno (src/components/ExerciseCardParts/techInputs): execução normal = 1 carga;
+// DROP-SET = 2 (a carga e a carga do drop); CLUSTER = 3 blocos; MÉTODO 21 = INF / SUP / FULL; técnica personalizada = uma caixa por passo, com os mesmos rótulos do app.
+// O servidor só diz QUANTAS caixas e COMO se chamam (`setPlan`); o que a pessoa anota fica no aparelho dela. Alongamento/mobilidade e cardio não têm carga (`setPlan: null`).
+export const MAX_PLAN_SETS = 60;
+export const MAX_LOAD_FIELDS = 5;
+export type SetPlanItem = { reps: string; loads: string[]; tech: string | null };
+export function loadLabelsOf(b: { techKey: string | null; customId: string | null }, customSteps?: any): string[] {
+  if (b.customId) {
+    if (Array.isArray(customSteps) && customSteps.length) {
+      return customSteps.slice(0, MAX_LOAD_FIELDS).map((st: any, idx: number) => {
+        if (idx === 0) return 'CARGA';
+        const type = String(st && typeof st === 'object' ? st.type || st.name || st.action || '' : st || '').toUpperCase();
+        if (type.includes('DROP')) return `DROP ${idx}`;
+        if (type.includes('REST') || type.includes('PAUSA')) return 'PAUSA';
+        if (type.includes('ISO')) return 'ISO';
+        return `PASSO ${idx + 1}`;
+      });
+    }
+    return ['CARGA'];
+  }
+  if (b.techKey === 'DROPSET') return ['CARGA', 'CARGA DO DROP'];
+  if (b.techKey === 'CLUSTERSET') return ['BLOCO 1', 'BLOCO 2', 'BLOCO 3'];
+  if (b.techKey === '21') return ['INF', 'SUP', 'FULL'];
+  return ['CARGA'];
+}
+const repsText = (reps: string) => (!reps ? '' : /^\d+(?:\s*[-–/]\s*\d+)*$/.test(reps) ? `${reps} reps` : reps);   // "10" -> "10 reps"; "30s" e "Falha" ficam como o coach escreveu
+
+const FOCUS_NAMES: Record<string, string> = {
+  PEITO: 'Peito', PEITORAL: 'Peito', COSTAS: 'Costas', PERNAS: 'Pernas', PERNA: 'Pernas', OMBROS: 'Ombros', OMBRO: 'Ombros', BICEPS: 'Bíceps', TRICEPS: 'Tríceps',
+  ABDOMEN: 'Abdômen', ABDOMINAIS: 'Abdômen', ANTEBRACO: 'Antebraço', GLUTEOS: 'Glúteos', GLUTEO: 'Glúteos', PANTURRILHA: 'Panturrilha', PANTURRILHAS: 'Panturrilha', TRAPEZIO: 'Trapézio', LOMBAR: 'Lombar',
+};
+const stripAccents = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+/** Nome do treino do dia pelos grupos musculares da musculação ("Peito, Ombros e Tríceps"). Conta só os grupos que têm pelo menos 15% dos exercícios (um acessório isolado
+ *  num treino de peito não vira "Peito e Antebraço"), na ordem em que aparecem; 4 ou mais grupos relevantes (ou nenhum que se destaque) = "Corpo inteiro". */
+export const FOCUS_MIN_SHARE = 0.15;
+export function dayFocus(categories: unknown[]): string | null {
+  const order: string[] = []; const count: Record<string, number> = {};
+  categories.forEach((c) => {
+    const raw = String(c == null ? '' : c).trim();
+    if (!raw || sectionOf(raw) !== 'MUSCULACAO' || isCardio(raw, '')) return;
+    const key = stripAccents(raw).toUpperCase();
+    const name = FOCUS_NAMES[key] || (raw.length <= 24 ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase() : null);
+    if (!name) return;
+    if (!(name in count)) { count[name] = 0; order.push(name); }
+    count[name] += 1;
+  });
+  if (order.length === 0) return null;
+  const total = order.reduce((n, k) => n + count[k], 0);
+  const kept = order.filter((n) => count[n] / total >= FOCUS_MIN_SHARE);
+  if (kept.length === 0 || kept.length >= 4) return 'Corpo inteiro';
+  return kept.length === 1 ? kept[0] : `${kept.slice(0, -1).join(', ')} e ${kept[kept.length - 1]}`;
+}
+
 /** Código opaco do exercício na página (guarda a marcação de "feito" no aparelho do aluno). Vem do dia + exercício do catálogo + posição entre repetidos,
  *  e NÃO do id da linha (o app recria as linhas a cada salvar), então sobrevive a edições do coach. O código do link entra no cálculo: não vaza id nenhum. */
 export function exerciseKey(shareCode: string, day: string, exerciseId: unknown, occurrence: number): string {
@@ -283,6 +337,16 @@ export function buildPublicWorkout(input: PublicInput) {
       const subIds: any[] = Array.isArray(r.substitutes) && r.substitutes.length ? r.substitutes : r.substituteId ? [r.substituteId] : [];   // `substituteId` = formato antigo (um só)
       const subs = subIds.map((id: any) => input.substituteNames?.[String(id)]).filter(Boolean).slice(0, 3) as string[];
 
+      const section = sectionOf(ex.category);
+      let setPlan: SetPlanItem[] | null = null;
+      if (section === 'MUSCULACAO' && !cardio) {
+        setPlan = [];
+        blocks.forEach((b) => {
+          const loads = loadLabelsOf(b, b.customId ? customMap.get(b.customId)?.steps : undefined); const tech = titleOf(b) || null;
+          for (let i = 0; i < b.sets && setPlan!.length < MAX_PLAN_SETS; i++) setPlan!.push({ reps: repsText(b.reps), loads, tech });
+        });
+      }
+
       const exId = String(r.exerciseId == null ? name : r.exerciseId);
       seen[exId] = (seen[exId] || 0) + 1;
       // trocas que a pessoa pode escolher na página: { key, name, video }. `key` é um código (hash) que não expõe nenhum id; a escolha fica só no navegador dela.
@@ -293,7 +357,7 @@ export function buildPublicWorkout(input: PublicInput) {
         if (!nm || swaps.length >= 3 || swaps.some((x) => x.key === key)) return;
         swaps.push({ key, name: String(nm).trim().slice(0, 120), video: parseVideoRef(input.substituteVideos?.[String(id)]) });
       });
-      bySection[sectionOf(ex.category)].push({
+      bySection[section].push({
         key: exerciseKey(shareCode, day, exId, seen[exId]),
         name,
         cardio,
@@ -301,6 +365,7 @@ export function buildPublicWorkout(input: PublicInput) {
         summary,
         rest: cardio ? null : rest,
         blocks: blocks.length > 1 ? blocks.map((b) => ({ sets: b.sets, reps: b.reps, tech: titleOf(b) || null })) : null,
+        setPlan,
         techAlerts,
         observation,
         substitutes: subs,
@@ -313,6 +378,7 @@ export function buildPublicWorkout(input: PublicInput) {
 
     return {
       day,
+      focus: dayFocus(dayRows.map((r) => (r.exercise || {}).category)),
       sections: SECTION_ORDER.filter((k) => bySection[k].length).map((k) => ({ key: k, label: SECTION_LABEL[k], items: bySection[k] })),
     };
   });
