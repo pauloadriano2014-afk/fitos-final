@@ -84,6 +84,10 @@ model WorkoutShare {
   // Avisos ao coach (push): `notifyOpen` = na 1ª vez que abrirem o link; `notifyDone` = quando alguém concluir um dia do treino.
   notifyOpen   Boolean   @default(false)
   notifyDone   Boolean   @default(false)
+  // 🎁 (5 out 2026) TESTE GRÁTIS: link de demonstração para quem ainda não é aluno (só a equipe master cria). A página mostra a faixa "Teste grátis", o
+  // carrossel "como é o acompanhamento" e o botão de WhatsApp; quando o link vence, mostra o convite para falar no WhatsApp. Coluna nova (só adiciona):
+  // rodar `npx prisma db push` ANTES de publicar o backend.
+  trial        Boolean   @default(false)
   doneCount    Int       @default(0)       // conclusões já recebidas (cada pessoa conta uma vez por dia de treino)
   lastDoneAt   DateTime?
   dones        WorkoutShareDone[]

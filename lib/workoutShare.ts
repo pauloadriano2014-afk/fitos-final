@@ -31,7 +31,7 @@ export function generateShareCode(length = SHARE_CODE_LENGTH): string {
 export const isValidShareCode = (code: unknown): code is string => typeof code === 'string' && /^[A-Za-z0-9]{10,24}$/.test(code);
 
 // ─────────────────────────── escolhas do coach ───────────────────────────
-export type ShareOptions = { showName: boolean; displayName: string | null; days: string[]; expiresInHours: number | null; notifyOpen: boolean; notifyDone: boolean };
+export type ShareOptions = { showName: boolean; displayName: string | null; days: string[]; expiresInHours: number | null; notifyOpen: boolean; notifyDone: boolean; trial: boolean };
 
 /** Nome livre da página: sem quebras de linha/controle, espaços normalizados, até 40 caracteres. Vazio = null. */
 export function cleanDisplayName(raw: unknown): string | null {
@@ -42,7 +42,7 @@ export function cleanDisplayName(raw: unknown): string | null {
 export function parseShareOptions(body: any, availableDays: string[]): { ok: true; value: ShareOptions } | { ok: false; error: string } {
   const b = body && typeof body === 'object' ? body : {};
   if (b.showName !== undefined && typeof b.showName !== 'boolean') return { ok: false, error: 'showName deve ser verdadeiro ou falso.' };
-  for (const k of ['notifyOpen', 'notifyDone']) if (b[k] !== undefined && typeof b[k] !== 'boolean') return { ok: false, error: `${k} deve ser verdadeiro ou falso.` };
+  for (const k of ['notifyOpen', 'notifyDone', 'trial']) if (b[k] !== undefined && typeof b[k] !== 'boolean') return { ok: false, error: `${k} deve ser verdadeiro ou falso.` };
 
   // validade: obrigatória e explícita (null = sem validade), para nunca criar um link eterno por descuido.
   // `expiresInHours` (1 a 8760) ou `expiresInDays` (1 a 365, formato antigo); se vierem os dois, vale o das horas.
@@ -75,7 +75,7 @@ export function parseShareOptions(body: any, availableDays: string[]): { ok: tru
     if (unknown.length) return { ok: false, error: `Este treino não tem o(s) dia(s): ${unknown.join(', ')}.` };
     days = wanted.length === availableDays.length ? [] : wanted;   // todos os dias marcados = "todos" (inclui dias criados depois)
   }
-  return { ok: true, value: { showName: b.showName === true, displayName, days, expiresInHours, notifyOpen: b.notifyOpen === true, notifyDone: b.notifyDone === true } };
+  return { ok: true, value: { showName: b.showName === true, displayName, days, expiresInHours, notifyOpen: b.notifyOpen === true, notifyDone: b.notifyDone === true, trial: b.trial === true } };
 }
 
 export const computeExpiresAt = (expiresInHours: number | null, now: Date = new Date()): Date | null =>
@@ -208,7 +208,7 @@ export type PublicInput = {
   rows: any[];                                                // WorkoutExercise com `exercise`, já ordenadas por `order`
   substituteNames?: Record<string, string>;                    // id do exercício -> nome (para "pode trocar por")
   substituteVideos?: Record<string, string | null | undefined>; // id do exercício -> endereço do vídeo (para o botão de TROCAR mostrar o vídeo do substituto)
-  share: { code?: string; showName: boolean; displayName?: string | null; days: string[]; expiresAt: Date | string | null; notifyDone?: boolean | null };
+  share: { code?: string; showName: boolean; displayName?: string | null; days: string[]; expiresAt: Date | string | null; notifyDone?: boolean | null; trial?: boolean | null };
   studentName?: string | null;
   coach?: { name?: string | null; brandLogoUrl?: string | null; brandLogoSize?: number | null } | null;
   customTechniques?: CustomTechniqueRow[];
@@ -334,6 +334,7 @@ export function buildPublicWorkout(input: PublicInput) {
     coach: coach ? { name: coach.name ? String(coach.name).trim().slice(0, 80) : null, brandLogoUrl: coach.brandLogoUrl || null, brandLogoSize: coach.brandLogoSize || null } : null,
     expiresAt: input.share.expiresAt ? new Date(input.share.expiresAt).toISOString() : null,
     notifyDone: input.share.notifyDone === true,          // a página só manda o "concluí" quando o coach ligou o aviso neste link
+    trial: input.share.trial === true,                    // link de TESTE GRÁTIS: a página mostra a faixa, o carrossel do acompanhamento e o WhatsApp
     days,
     techniques,
   };

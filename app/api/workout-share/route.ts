@@ -8,7 +8,7 @@
 // A página que o aluno abre é a rota pública /api/treino-publico/[code]. Regras em lib/workoutShare.ts.
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { generateShareCode, parseShareOptions, computeExpiresAt, shareStatus, isValidShareCode, parseQuickData, quickAvailableDays, parseRenewBody, renewExpiry } from '@/lib/workoutShare';
 
@@ -31,6 +31,7 @@ const publicShare = (s: any) => ({
   createdAt: s.createdAt ? new Date(s.createdAt).toISOString() : null,
   notifyOpen: !!s.notifyOpen,
   notifyDone: !!s.notifyDone,
+  trial: !!s.trial,
   doneCount: s.doneCount || 0,
   lastDoneAt: s.lastDoneAt ? new Date(s.lastDoneAt).toISOString() : null,
 });
@@ -84,18 +85,20 @@ export async function POST(req: Request) {
 
     const parsed = parseShareOptions(body, availableDays);
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    // teste grátis é da equipe master (a página manda a pessoa para o WhatsApp do Paulo e da Adri); outro coach não pode ligar
+    if (parsed.value.trial && !isMasterId(auth.user.id)) return NextResponse.json({ error: 'O teste grátis só está disponível para a equipe PA Elite.' }, { status: 403 });
     // treino avulso não tem aluno: para mostrar o nome, o coach precisa digitar um
     if (target.kind === 'quick' && parsed.value.showName && !parsed.value.displayName) return NextResponse.json({ error: 'Digite o nome que vai aparecer na página.' }, { status: 400 });
 
     const existing = await prisma.workoutShare.count({ where: { ...whereShare(target), revokedAt: null } });
     if (existing >= MAX_LINKS_PER_WORKOUT) return NextResponse.json({ error: `Este treino já tem ${MAX_LINKS_PER_WORKOUT} links ativos. Desative algum antes de criar outro.` }, { status: 400 });
 
-    const { showName, displayName, days, expiresInHours, notifyOpen, notifyDone } = parsed.value;
+    const { showName, displayName, days, expiresInHours, notifyOpen, notifyDone, trial } = parsed.value;
     let share: any = null;
     for (let attempt = 0; attempt < 5 && !share; attempt++) {                       // código repetido é raríssimo; tenta de novo
       try {
         share = await prisma.workoutShare.create({
-          data: { code: generateShareCode(), ...whereShare(target), createdById: auth.user.id, showName, displayName, days, notifyOpen, notifyDone, expiresAt: computeExpiresAt(expiresInHours) },
+          data: { code: generateShareCode(), ...whereShare(target), createdById: auth.user.id, showName, displayName, days, notifyOpen, notifyDone, trial, expiresAt: computeExpiresAt(expiresInHours) },
         });
       } catch (e: any) { if (e?.code !== 'P2002') throw e; }
     }

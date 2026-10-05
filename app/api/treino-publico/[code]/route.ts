@@ -32,7 +32,7 @@ export async function GET(req: Request, { params }: { params: { code: string } }
     }
     const status = shareStatus(share);
     if (status === 'REVOKED') return reply({ error: 'revoked' }, 410);
-    if (status === 'EXPIRED') return reply({ error: 'expired', expiredAt: share.expiresAt ? new Date(share.expiresAt).toISOString() : null }, 410);
+    if (status === 'EXPIRED') return reply({ error: 'expired', expiredAt: share.expiresAt ? new Date(share.expiresAt).toISOString() : null, trial: !!share.trial }, 410);   // `trial`: a página oferece o WhatsApp no lugar do aviso seco
 
     // 1) as linhas do treino, de onde quer que venham (treino de aluno ou treino avulso do coach)
     let rows: any[] = [];
@@ -105,7 +105,7 @@ export async function GET(req: Request, { params }: { params: { code: string } }
       rows,
       substituteNames,
       substituteVideos,
-      share: { code: share.code, showName: share.showName, displayName: share.displayName, days: share.days || [], expiresAt: share.expiresAt, notifyDone: !!share.notifyDone },
+      share: { code: share.code, showName: share.showName, displayName: share.displayName, days: share.days || [], expiresAt: share.expiresAt, notifyDone: !!share.notifyDone, trial: !!share.trial },
       studentName,
       coach,
       customTechniques: techs as any[],
