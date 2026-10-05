@@ -1,0 +1,23 @@
+// prisma/schema/mobility-presets.prisma
+// 🔥 (5 out 2026) COMBOS DE MOBILIDADE/ALONGAMENTO: sequências prontas (2 a 4
+// exercícios, com séries/tempo/pausa) que o coach monta uma vez e adiciona num
+// treino com um toque (ex: mobilidade de dia de pernas).
+//
+// PRIVADO POR COACH: cada combo pertence a quem criou (coachId = id do usuário
+// logado no token). Um coach nunca vê nem apaga combo de outro.
+//
+// Arquivo separado de propósito (não mexe no workout.prisma). Sem relação
+// (FK) com User -- é só um dono lógico, então não exige alterar user.prisma e
+// o `prisma db push` só cria uma tabela nova (nada existente é alterado).
+//
+// `exercises` guarda uma lista JSON no formato:
+//   [{ exerciseId, title, observation, blocks: [{ sets, reps, restTime }] }]
+model MobilityPreset {
+  id        String   @id @default(uuid())
+  coachId   String
+  name      String
+  exercises Json
+  createdAt DateTime @default(now())
+
+  @@index([coachId])
+}
