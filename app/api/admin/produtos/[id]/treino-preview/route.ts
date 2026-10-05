@@ -43,7 +43,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         // nada do que for marcado é gravado) e mostra TODAS as abas do produto: treino, guias, hábitos, medidas, receitas. Só vale quando o site de membros está ligado
         // (MEMBROS_URL) e o produto tem alguma aba (um Treino Avulso ligado, ou a lista de abas).
         const membros = membrosBaseUrl();
-        if (membros && lerAbas(produto.membrosAbas, !!produto.treinoAvulsoId).length > 0) {
+        const temAbas = lerAbas(produto.membrosAbas, !!produto.treinoAvulsoId).length > 0;
+        // O produto já é da Área de Membros, mas o servidor ainda não sabe o endereço do site: avisa em vez de abrir a página antiga (que não mostra as abas novas).
+        if (temAbas && !membros) {
+            return NextResponse.json({ error: 'A Área de Membros ainda não está ligada no servidor. No Render (serviço fitos-final), em Environment, crie a variável MEMBROS_URL com o valor https://membros.pauloadrianoteam.com.br e aguarde o deploy.' }, { status: 400 });
+        }
+        if (membros && temAbas) {
             const url = `${membros}/p/?p=${encodeURIComponent(produto.id)}#previa=${gerarTokenPrevia(produto.id)}`;
             return NextResponse.json({ url, membros: true, expiraEm: new Date(Date.now() + PREVIA_TTL_MS).toISOString() });
         }

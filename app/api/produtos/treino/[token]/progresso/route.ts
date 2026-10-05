@@ -24,8 +24,8 @@ export async function POST(request: NextRequest, { params }: { params: { token: 
         }
 
         const acesso = await prisma.produtoTreinoAcesso.findUnique({ where: { token }, include: { venda: { select: { status: true } } } });
-        // 💸 Compra estornada (reembolso/chargeback): o link deixa de funcionar.
-        if (!acesso || acesso.venda?.status !== 'PAGO') {
+        // 💸 Compra estornada (reembolso/chargeback): o link deixa de funcionar. TESTE é a "venda" da pré-visualização do painel (nunca é cobrança de verdade).
+        if (!acesso || !['PAGO', 'TESTE'].includes(String(acesso.venda?.status))) {
             return NextResponse.json({ error: 'Link inválido ou expirado' }, { status: 404 });
         }
 

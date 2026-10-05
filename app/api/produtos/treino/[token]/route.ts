@@ -18,8 +18,8 @@ export async function GET(request: NextRequest, { params }: { params: { token: s
             include: { produto: { select: { nome: true, treinoPrograma: true } }, venda: { select: { status: true } } },
         });
 
-        // 💸 Compra estornada (reembolso/chargeback): o link deixa de funcionar.
-        if (!acesso || acesso.venda?.status !== 'PAGO') {
+        // 💸 Compra estornada (reembolso/chargeback): o link deixa de funcionar. TESTE é a "venda" da pré-visualização do painel (nunca é cobrança de verdade).
+        if (!acesso || !['PAGO', 'TESTE'].includes(String(acesso.venda?.status))) {
             return NextResponse.json({ error: 'Link inválido ou expirado' }, { status: 404 });
         }
 
