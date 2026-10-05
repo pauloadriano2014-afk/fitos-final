@@ -88,6 +88,11 @@ model WorkoutShare {
   // carrossel "como é o acompanhamento" e o botão de WhatsApp; quando o link vence, mostra o convite para falar no WhatsApp. Coluna nova (só adiciona):
   // rodar `npx prisma db push` ANTES de publicar o backend.
   trial        Boolean   @default(false)
+  // 📈 (5 out 2026) PROGRESSO DO TESTE GRÁTIS: o que a pessoa fez na página (cargas por série, "Ant", exercícios marcados, trocas), enviado pela própria página só nos links
+  // de teste grátis. JSON { [vid]: { at, loads, prev, done, swaps } } (até 3 aparelhos). O coach lê o relatório em GET /api/workout-share/progress. Colunas novas (só adicionam):
+  // rodar `npx prisma db push` ANTES de publicar o backend.
+  progress     String?   @db.Text
+  progressAt   DateTime?
   doneCount    Int       @default(0)       // conclusões já recebidas (cada pessoa conta uma vez por dia de treino)
   lastDoneAt   DateTime?
   dones        WorkoutShareDone[]
