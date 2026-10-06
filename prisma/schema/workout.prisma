@@ -258,6 +258,12 @@ model WorkoutHistory {
   // Registros antigos ficam null (o Postgres não considera null igual a null no índice único).
   clientKey        String?
 
+  // ⏱️ (6 out 2026) Pergunta OPCIONAL ao finalizar o treino: "deu tempo de fazer tudo?". null = o aluno não respondeu (entende-se que deu tempo);
+  // true = respondeu SIM; false = respondeu NÃO e `timeNote` diz o que faltou (ex.: "esteira", "os últimos exercícios"). Nunca bloqueia o finalizar.
+  // Quem decide o que fazer (menos séries, descanso menor, bi-set...) é o coach: o app só avisa, não muda a ficha sozinho.
+  timeOk           Boolean?
+  timeNote         String?  @db.Text
+
   details          ExerciseHistory[]
 
   @@unique([userId, clientKey])
