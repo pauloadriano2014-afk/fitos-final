@@ -2,6 +2,7 @@
 // ⏰ (6 out 2026) Avisos da agenda, chamados por app/api/cron/agenda (um Cron Job do Render a cada 5 minutos):
 //   reminders -- lembrete antes do compromisso: ao coach (X min antes, qualquer hora) e ao aluno COM app (nunca de madrugada ou à noite)
 //   summary   -- resumo do dia ao coach (padrão 07h de Brasília): quantos compromissos e quantas pendências
+//   workouts  -- (7 out 2026) lembrete ao aluno que INICIOU o treino e esqueceu de finalizar (lib/workoutSessions.ts); mesmo cron, sem agendamento novo
 // Cada aviso é "reservado" no banco ANTES de enviar (updateMany com o campo ainda vazio): duas execuções ao mesmo tempo nunca mandam o mesmo aviso duas vezes.
 // `db` e `sendToUser` entram por parâmetro para testar sem rede.
 import {
@@ -9,6 +10,7 @@ import {
 } from '@/lib/agenda';
 import { DEFAULT_SETTINGS, loadPersons, personOf, ensureAllSeries, Db } from '@/lib/agendaStore';
 import { buildHoje } from '@/lib/agendaHoje';
+import { runWorkoutReminders } from '@/lib/workoutSessions';
 
 export type CronDeps = { db: Db; sendToUser: (user: any, title: string, body: string, data?: any) => Promise<any>; now?: Date };
 
@@ -93,5 +95,10 @@ export async function runAgendaCron(task: string, deps: CronDeps) {
   const res: any = {};
   if (task === 'reminders' || task === 'all') res.reminders = await runAgendaReminders(deps);
   if (task === 'summary' || task === 'all') res.summary = await runAgendaSummary(deps);
+  // cada parte roda separada: se a tabela de sessões ainda não existir (db push pendente), a agenda continua funcionando
+  if (task === 'workouts' || task === 'all') {
+    try { res.workouts = await runWorkoutReminders(deps); }
+    catch (e: any) { res.workouts = { error: String(e?.message || e).slice(0, 120) }; console.error('[agendaCron] lembrete de treino falhou:', e?.message || e); }
+  }
   return res;
 }

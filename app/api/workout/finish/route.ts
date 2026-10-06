@@ -9,6 +9,8 @@ import { analyzeWorkoutEvolution } from '@/app/utils/analyzeEvolution';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 import { cleanWeight, isPerSide } from '@/lib/exerciseLoad';
 import { autoClientKey, cleanDay, cleanWorkoutId, findExistingFinish, isUniqueViolation, sanitizeClientKey } from '@/lib/finishWorkout';
+import { cleanDuration, cleanCardio } from '@/lib/workoutDuration';
+import { closeSessions } from '@/lib/workoutSessions';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +42,11 @@ export async function POST(req: Request) {
     const clientKey = providedKey ?? autoClientKey({ workoutId: workoutIdClean, day: dayClean, workoutName, now });
     const finishLookup = { userId, clientKey, auto: !providedKey, workoutId: workoutIdClean, day: dayClean, workoutName: String(workoutName || ''), now };
 
+    // 🔔 (7 out 2026) o treino foi finalizado: fecha a sessão aberta no INICIAR (para o servidor parar de lembrar o aluno). Melhor esforço (a tabela pode ainda não existir).
+    const closeOpenSessions = () => closeSessions(prisma, userId, { clientKey, workoutId: workoutIdClean, day: dayClean }).catch((e: any) => { if (!/does not exist|P2021|P2022/i.test(String(e?.code || '') + String(e?.message || ''))) console.error('Erro ao fechar sessão de treino:', e?.message || e); });
+
     const duplicateResponse = async (existing: { id: string; xpEarned: number }) => {
+        await closeOpenSessions();
         const current = await prisma.user.findUnique({ where: { id: userId }, select: { currentXP: true } });
         return NextResponse.json({ success: true, duplicate: true, xpGained: existing.xpEarned, newTotalXP: current?.currentXP ?? 0 });
     };
@@ -76,7 +82,7 @@ export async function POST(req: Request) {
                     workoutId: workoutIdClean,
                     clientKey,
                     xpEarned: totalXp,
-                    duration: duration || 0,
+                    duration: cleanDuration(duration),
                     rpe: rpe ? Number(rpe) : null,
                     feedback: feedback || null,
                     details: {
@@ -97,6 +103,8 @@ export async function POST(req: Request) {
                                 weight: cleanWeight(s.weight), // <--- USO DA FUNÇÃO DE LIMPEZA (sempre o TOTAL: "20 cada lado" já chega aqui como 40)
                                 perSide: isPerSide(s),         // ⚖️ (3 out 2026) o aluno anotou "cada lado" (só para mostrar do jeito dele)
                                 reps: String(s.reps || "0"),
+                                // 🚴 cardio feito de verdade (cardio guiado ou digitado): tempo em segundos e calorias; nulo quando não é cardio
+                                ...cleanCardio(s),
                                 note: noteClean || null,
                             }));
                         })
@@ -161,7 +169,9 @@ export async function POST(req: Request) {
         const dayLabel = day || workoutName || 'treino';
 
         let pushTitle = '🔥 Treino Concluído!';
-        let pushBody = `${displayName} finalizou o treino "${dayLabel}"`;
+        // ⏱️ (7 out 2026) o coach passa a ver QUANTO TEMPO o aluno levou (minutos do cronômetro do treino), quando o app mandou
+        const mins = cleanDuration(duration);
+        let pushBody = `${displayName} finalizou o treino "${dayLabel}"${mins > 0 ? ` · ${mins} min` : ''}`;
         // 🔥 (17 set 2026) `data` de deep link — ao tocar, o admin abre já na
         // tela de histórico desse treino, focado no comentário certo (se
         // houver). Ver PENDING_MOBILE_DEEPLINKS.md pra como consumir isso.
@@ -179,6 +189,8 @@ export async function POST(req: Request) {
 
         sendPushToUser(user.coach, pushTitle, pushBody, pushData).catch((pushError) => console.error("Erro ao enviar push de treino finalizado:", pushError));
     }
+
+    await closeOpenSessions();
 
     return NextResponse.json({ 
         success: true, 

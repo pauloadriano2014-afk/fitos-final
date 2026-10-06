@@ -263,6 +263,30 @@ model WorkoutHistory {
   @@unique([userId, clientKey])
 }
 
+// 🔔 (7 out 2026) SESSÃO DE TREINO: nasce quando o aluno toca em INICIAR TREINO (o app avisa o servidor) e fecha quando ele finaliza o treino.
+// Antes o servidor só sabia do treino DEPOIS de finalizado: quem esquecia de finalizar sumia (o tempo e as cargas ficavam só no celular).
+// Agora, se a sessão fica aberta por horas, o servidor manda um push ("Você terminou o treino?", no máximo 2 avisos, nunca de madrugada).
+// `clientKey` é a MESMA chave que o app manda ao finalizar (WorkoutHistory.clientKey): é assim que a sessão é fechada.
+model WorkoutSession {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  clientKey     String
+  workoutId     String?
+  day           String?
+  workoutName   String?
+
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+
+  remindedAt    DateTime?
+  reminderCount Int       @default(0)
+
+  @@unique([userId, clientKey])
+  @@index([finishedAt, startedAt])
+}
+
 model ExerciseHistory {
   id               String         @id @default(uuid())
   workoutHistoryId String
@@ -280,6 +304,11 @@ model ExerciseHistory {
   reps             String
 
   note             String?  @db.Text
+
+  // 🚴 (7 out 2026) CARDIO feito de verdade: o tempo (segundos) e as calorias que o aluno registrou depois do cardio guiado (ou digitou). Nulo = treino antigo
+  // ou exercício que não é cardio. `weight` continua guardando os minutos, como sempre foi (compatibilidade); estes dois são o dado exato.
+  cardioSeconds    Int?
+  cardioKcal       Int?
 
   // 🔥 (17 set 2026) Mesma ideia do WorkoutHistory acima, só que pra uma
   // observação específica de exercício (o aluno reclamou de dor/dificuldade

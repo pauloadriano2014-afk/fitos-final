@@ -185,6 +185,9 @@ model User {
   // sem nenhum erro visível. Ver app/api/user/web-push-subscription e
   // app/utils/sendNotification.ts.
   webPushSubscriptions WebPushSubscription[]
+
+  // 🔔 (7 out 2026) Sessões de treino iniciadas pelo aluno (ver WorkoutSession em workout.prisma): servem para lembrá-lo de FINALIZAR.
+  workoutSessions WorkoutSession[]
 }
 
 model WebPushSubscription {
