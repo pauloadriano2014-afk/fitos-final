@@ -39,8 +39,11 @@ export async function GET(
 
     const synced = await syncProgress(prisma, protocol, logs);
 
+    // o texto que foi enviado à IA (com dados de saúde da anamnese) é interno: não vai para o app
+    const { aiPromptSnapshot: _prompt, ...publicProtocol } = synced.protocol;
+
     return NextResponse.json({
-      protocol: { ...synced.protocol, logs: synced.logs },
+      protocol: { ...publicProtocol, logs: synced.logs },
       currentWeek: synced.view.week,
       currentBlock: synced.view.block,
       progress: synced.view,
