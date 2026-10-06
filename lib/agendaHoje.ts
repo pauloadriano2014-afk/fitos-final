@@ -6,7 +6,7 @@
 import {
   ATENDIMENTO_KINDS, KIND_LABEL, addDaysKey, dateKeyBrt, diffDaysKeys, endOfDayBrt, startOfDayBrt, timeKeyBrt, firstName,
 } from '@/lib/agenda';
-import { ensureSeriesWindow, studentScope, offlineScope, withPersons, Person, Db } from '@/lib/agendaStore';
+import { ensureSeriesWindow, ownStudentScope, ownOfflineScope, withPersons, Person, Db } from '@/lib/agendaStore';
 
 export type Severity = 'late' | 'today' | 'soon' | 'info';
 export type Target =
@@ -78,7 +78,7 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
 
   // ── alunos do coach (uma consulta só; o resto filtra por estes ids) ──
   const students: any[] = await safe('alunos', unavailable, () => db.user.findMany({
-    where: { role: 'USER', active: { not: false }, AND: [studentScope(coachId)] },
+    where: { role: 'USER', active: { not: false }, AND: [ownStudentScope(coachId)] },
     select: { id: true, name: true, phone: true, isFinanceActive: true, isTestAccount: true, contractValue: true, paymentDueDate: true, paymentClaimStatus: true, financeCategory: true, nextCheckInDate: true, disableCheckIn: true },
   }), [] as any[]);
   const real = students.filter((s) => !s.isTestAccount);
@@ -146,7 +146,7 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     if (s.paymentClaimStatus === 'PENDING') push({ key: `paguei:${s.id}`, type: 'paguei', severity: 'today', title: `${s.name || 'Aluno'} informou que pagou`, subtitle: 'confirme ou recuse no financeiro', person: person('student', s), dueAt: null, target: { type: 'finance' } });
     else money('student', s);
   }
-  const offlines: any[] = await safe('clientes do financeiro', unavailable, () => db.offlineClient.findMany({ where: { AND: [offlineScope(coachId)] }, select: { id: true, name: true, phone: true, financeCategory: true, isFinanceActive: true, contractValue: true, paymentDueDate: true } }), [] as any[]);
+  const offlines: any[] = await safe('clientes do financeiro', unavailable, () => db.offlineClient.findMany({ where: { AND: [ownOfflineScope(coachId)] }, select: { id: true, name: true, phone: true, financeCategory: true, isFinanceActive: true, contractValue: true, paymentDueDate: true } }), [] as any[]);
   offlines.forEach((o) => money('offline', o));
 
   // ── teste grátis (links do treino avulso) ──

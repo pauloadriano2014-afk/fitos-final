@@ -24,6 +24,10 @@ export const studentScope = (coachId: string) => isMaster(coachId) ? { OR: [{ co
 /** Cadastros só do financeiro (sem conta no app). */
 export const offlineScope = (coachId: string) => isMaster(coachId) ? { OR: [{ coachId: null }, { coachId: { in: MASTER_IDS } }] } : { coachId };
 
+/** Na central HOJE o master vê só os alunos dele e os sem dono (os do outro master ficam com o outro), igual ao "MEUS ALUNOS" do painel. */
+export const ownStudentScope = (coachId: string) => isMaster(coachId) ? { OR: [{ coachId }, { coachId: null }, { nutritionistId: coachId }] } : studentScope(coachId);
+export const ownOfflineScope = (coachId: string) => isMaster(coachId) ? { OR: [{ coachId }, { coachId: null }] } : offlineScope(coachId);
+
 export async function personBelongs(db: Db, coachId: string, studentId: string | null, offlineClientId: string | null): Promise<boolean> {
   if (studentId) return !!(await db.user.findFirst({ where: { id: studentId, role: 'USER', AND: [studentScope(coachId)] }, select: { id: true } }));
   if (offlineClientId) return !!(await db.offlineClient.findFirst({ where: { id: offlineClientId, AND: [offlineScope(coachId)] }, select: { id: true } }));
