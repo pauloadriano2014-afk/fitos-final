@@ -20,6 +20,8 @@ export type Task = {
   event?: any;
   /** anotação do coach nesta pendência ("já cobrei, falta enviar as fotos") e quando foi escrita */
   note?: string; noteAt?: string;
+  /** cobrança / "já paguei": valor da mensalidade (o app já abre a baixa com ele preenchido) */
+  amount?: number;
 };
 
 const DAY = 86400000;
@@ -144,10 +146,10 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     const k = dateKeyBrt(new Date(s.paymentDueDate)), left = diffDaysKeys(todayKey, k);
     if (left > 2) return;
     const nm = s.name || (kind === 'student' ? 'Aluno' : 'Cliente');
-    push({ key: `cobranca:${kind[0]}${s.id}:${k}`, type: 'cobranca', severity: left < 0 ? 'late' : left === 0 ? 'today' : 'soon', title: left < 0 ? `Cobrança atrasada: ${nm}` : left === 0 ? `Cobrança vence hoje: ${nm}` : `Cobrança vence em ${daysWord(left)}: ${nm}`, subtitle: (left < 0 ? `venceu há ${daysWord(-left)}` : `vence ${k.split('-').reverse().slice(0, 2).join('/')}`) + brl(s.contractValue), person: person(kind, s), dueAt: new Date(s.paymentDueDate).toISOString(), target: { type: 'finance' } });
+    push({ key: `cobranca:${kind[0]}${s.id}:${k}`, type: 'cobranca', severity: left < 0 ? 'late' : left === 0 ? 'today' : 'soon', title: left < 0 ? `Cobrança atrasada: ${nm}` : left === 0 ? `Cobrança vence hoje: ${nm}` : `Cobrança vence em ${daysWord(left)}: ${nm}`, subtitle: (left < 0 ? `venceu há ${daysWord(-left)}` : `vence ${k.split('-').reverse().slice(0, 2).join('/')}`) + brl(s.contractValue), person: person(kind, s), dueAt: new Date(s.paymentDueDate).toISOString(), amount: Number(s.contractValue) || 0, target: { type: 'finance' } });
   };
   for (const s of real) {
-    if (s.paymentClaimStatus === 'PENDING') push({ key: `paguei:${s.id}`, type: 'paguei', severity: 'today', title: `${s.name || 'Aluno'} informou que pagou`, subtitle: 'confirme ou recuse no financeiro', person: person('student', s), dueAt: null, target: { type: 'finance' } });
+    if (s.paymentClaimStatus === 'PENDING') push({ key: `paguei:${s.id}`, type: 'paguei', severity: 'today', title: `${s.name || 'Aluno'} informou que pagou`, subtitle: 'confirme ou recuse no financeiro', person: person('student', s), dueAt: null, amount: Number(s.contractValue) || 0, target: { type: 'finance' } });
     else money('student', s);
   }
   const offlines: any[] = await safe('clientes do financeiro', unavailable, () => db.offlineClient.findMany({ where: { AND: [ownOfflineScope(coachId)] }, select: { id: true, name: true, phone: true, financeCategory: true, isFinanceActive: true, contractValue: true, paymentDueDate: true } }), [] as any[]);
