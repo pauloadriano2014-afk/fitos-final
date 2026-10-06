@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
+import { dropPersonAgenda } from '@/lib/agendaStore';
 
 export async function POST(req: Request) {
     try {
@@ -115,6 +116,7 @@ export async function DELETE(req: Request) {
         }
 
         await prisma.offlineClient.delete({ where: { id } });
+        await dropPersonAgenda(prisma, { offlineClientId: id });   // 📅 os horários dessa pessoa saem da agenda
         return NextResponse.json({ success: true });
     } catch (error: any) {
         console.error('Erro ao excluir aluno offline:', error);

@@ -1,0 +1,102 @@
+// prisma/schema/agenda.prisma
+// 📅 (6 out 2026) AGENDA DO COACH: atendimento presencial, videochamada (Google Meet), avaliação, bloco de tempo, bloqueio (férias/folga) e lembrete.
+// Quem atende (coachId) é dono da própria agenda -- Paulo, Adri, personal e nutri parceiros têm cada um a sua. A pessoa atendida (aluno com conta OU
+// cadastro só do financeiro, o OfflineClient) é opcional: um compromisso pode ser só um bloco de tempo.
+//
+// Arquivo separado e SEM relação (FK) com User/OfflineClient, igual aos combos de mobilidade: o `prisma db push` só cria tabelas novas (nada existente
+// é alterado). A limpeza ao excluir uma pessoa é feita no código (ver lib/accountDeletion.ts e app/api/admin/offline-clients).
+// Tabelas novas: só adicionam (rodar `npx prisma db push` ANTES de publicar o backend).
+//
+// HORÁRIOS: tudo é guardado em UTC; "dia" e "hora" da agenda são sempre de Brasília (UTC-3, sem horário de verão), ver lib/agenda.ts.
+
+// 🔁 Compromisso que se repete toda semana (ex.: seg/qua/sex às 07:00 com a Samara). Os dias reais viram linhas em AgendaEvent à medida que a
+// agenda é aberta (lib/agendaStore.ts), então presença, remarcação e cancelamento são sempre por dia, sem mexer na série.
+model AgendaSeries {
+  id              String   @id @default(uuid())
+  coachId         String
+  kind            String   @default("PRESENCIAL") // PRESENCIAL | VIDEO | AVALIACAO | BLOCO | BLOQUEIO | LEMBRETE
+  title           String?
+  studentId       String?  // aluno com conta no app
+  offlineClientId String?  // cadastro só do financeiro (sem conta)
+  weekdays        Int[]    // 0 = domingo ... 6 = sábado
+  startTime       String   // "HH:MM" (Brasília)
+  durationMin     Int      @default(60)
+  startDate       String   // "AAAA-MM-DD": primeiro dia possível
+  endDate         String?  // "AAAA-MM-DD": último dia (vazio = sem fim)
+  location        String?
+  meetProvider    String?  // MEET por enquanto (a coluna já aceita outros provedores depois)
+  meetUrl         String?
+  notes           String?  @db.Text // só o coach vê
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  events AgendaEvent[]
+
+  @@index([coachId, active])
+  @@index([studentId])
+  @@index([offlineClientId])
+}
+
+model AgendaEvent {
+  id              String        @id @default(uuid())
+  coachId         String
+  seriesId        String?
+  series          AgendaSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  // horário "de fábrica" do dia na série: não muda quando o compromisso é remarcado, e é ele que impede a série de recriar o dia que o coach moveu
+  slotAt          DateTime
+  kind            String        @default("PRESENCIAL")
+  title           String?
+  studentId       String?
+  offlineClientId String?
+  startsAt        DateTime
+  endsAt          DateTime
+  location        String?
+  meetProvider    String?
+  meetUrl         String?
+  notes           String?       @db.Text // só o coach vê
+  status          String        @default("SCHEDULED") // SCHEDULED | DONE | MISSED | CANCELLED
+  statusAt        DateTime?
+  // resposta do aluno pelo app: CONFIRMED | RESCHEDULE
+  studentResponse    String?
+  studentRespondedAt DateTime?
+  // lembretes já enviados (para não repetir)
+  coachRemindedAt   DateTime?
+  studentRemindedAt DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([seriesId, slotAt])
+  @@index([coachId, startsAt])
+  @@index([studentId, startsAt])
+  @@index([offlineClientId])
+  @@index([status, startsAt])
+}
+
+// ⚙️ Preferências da agenda de cada coach. `meetUrl` é o link do Google Meet de quem atende: aparece no botão "Entrar no Meet" das videochamadas
+// (cada profissional entra com a própria conta; o app não cria sala). Sem linha = valores padrão.
+model AgendaSettings {
+  coachId          String   @id
+  meetProvider     String   @default("MEET")
+  meetUrl          String?
+  remindCoachMin   Int      @default(30)  // lembrete ao coach X minutos antes
+  remindStudentMin Int      @default(120) // lembrete ao aluno (com app) X minutos antes
+  dailySummary     Boolean  @default(true)
+  summaryHour      Int      @default(7)   // hora (Brasília) do resumo do dia
+  summarySentOn    String?  // "AAAA-MM-DD" do último resumo enviado
+  workStart        String   @default("06:00") // limites da grade da semana (e, no futuro, dos horários oferecidos ao aluno)
+  workEnd          String   @default("21:00")
+  updatedAt        DateTime @updatedAt
+}
+
+// ⏸️ Pendência da central HOJE que o coach adiou (ou marcou como tratada): some até `until`.
+model AgendaTaskSnooze {
+  id        String   @id @default(uuid())
+  coachId   String
+  taskKey   String
+  until     DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([coachId, taskKey])
+  @@index([coachId, until])
+}
