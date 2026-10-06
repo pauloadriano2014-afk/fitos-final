@@ -281,15 +281,20 @@ export async function deleteAgenda(db: Db, coachId: string, ev: any, scope: 'thi
 export async function dropPersonAgenda(db: Db, o: { studentId?: string; offlineClientId?: string }) {
   const where = o.studentId ? { studentId: o.studentId } : o.offlineClientId ? { offlineClientId: o.offlineClientId } : null;
   if (!where) return;
-  try { await db.agendaEvent.deleteMany({ where }); await db.agendaSeries.deleteMany({ where }); }
-  catch (e: any) { if (!isMissingTable(e)) console.error('[agenda] limpeza da pessoa falhou:', e?.message || e); }
+  try {
+    const evs: any[] = await db.agendaEvent.findMany({ where, select: { id: true } });
+    await db.agendaEvent.deleteMany({ where }); await db.agendaSeries.deleteMany({ where });
+    // anotações das pendências dessa pessoa (as chaves trazem o id dela ou o do compromisso)
+    const ids = [o.studentId || o.offlineClientId, ...evs.map((e) => e.id)].filter(Boolean).slice(0, 300) as string[];
+    if (ids.length) await db.agendaTaskNote.deleteMany({ where: { OR: ids.map((id) => ({ taskKey: { contains: id } })) } });
+  } catch (e: any) { if (!isMissingTable(e)) console.error('[agenda] limpeza da pessoa falhou:', e?.message || e); }
 }
 
 /** Quando um coach é excluído, a agenda inteira dele vai junto. */
 export async function dropCoachAgenda(db: Db, coachId: string) {
   try {
     await db.agendaEvent.deleteMany({ where: { coachId } }); await db.agendaSeries.deleteMany({ where: { coachId } });
-    await db.agendaSettings.deleteMany({ where: { coachId } }); await db.agendaTaskSnooze.deleteMany({ where: { coachId } });
+    await db.agendaSettings.deleteMany({ where: { coachId } }); await db.agendaTaskSnooze.deleteMany({ where: { coachId } }); await db.agendaTaskNote.deleteMany({ where: { coachId } });
   } catch (e: any) { if (!isMissingTable(e)) console.error('[agenda] limpeza do coach falhou:', e?.message || e); }
 }
 

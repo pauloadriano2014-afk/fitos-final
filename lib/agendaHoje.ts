@@ -18,9 +18,13 @@ export type Task = {
   person: Pick<Person, 'kind' | 'id' | 'name' | 'phone'> | null; dueAt: string | null; count: number; target: Target;
   /** presença e remarcação trazem o próprio compromisso, para o app abrir o editor sem outra consulta */
   event?: any;
+  /** anotação do coach nesta pendência ("já cobrei, falta enviar as fotos") e quando foi escrita */
+  note?: string; noteAt?: string;
 };
 
 const DAY = 86400000;
+/** A anotação some sozinha tantos dias depois da última edição. */
+export const NOTE_DAYS = 90;
 const RANK: Record<Severity, number> = { late: 0, today: 1, soon: 2, info: 3 };
 /** Mais de uma lista longa do mesmo tipo vira "+N outras" para a central não virar um paredão. */
 export const MAX_PER_TYPE = 8;
@@ -176,12 +180,15 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
   // ── adiadas ──
   const snoozed = await safe('adiadas', unavailable, async () => new Set<string>((await db.agendaTaskSnooze.findMany({ where: { coachId, until: { gt: now } }, select: { taskKey: true } })).map((r: any) => r.taskKey)), new Set<string>());
 
+  const notes = await safe('anotações', unavailable, async () => new Map<string, { note: string; noteAt: string }>((await db.agendaTaskNote.findMany({ where: { coachId, updatedAt: { gte: new Date(now.getTime() - NOTE_DAYS * DAY) } }, select: { taskKey: true, note: true, updatedAt: true } })).map((r: any) => [r.taskKey, { note: r.note, noteAt: new Date(r.updatedAt).toISOString() }] as [string, { note: string; noteAt: string }])), new Map<string, { note: string; noteAt: string }>());
+
   let list = tasks.filter((t) => !snoozed.has(t.key));
   list = capType(list, 'presenca', (n) => `+ ${n} atendimentos sem presença marcada`, { type: 'agenda' });
   list = capType(list, 'cobranca', (n) => `+ ${n} cobranças em aberto no financeiro`, { type: 'finance' });
   list = capType(list, 'treino', (n) => `+ ${n} treinos vencendo ou vencidos`, { type: 'students' });
   list = capType(list, 'checkin', (n) => `+ ${n} avaliações atrasadas`, { type: 'checkins' });
   list = capType(list, 'semhorario', (n) => `+ ${n} sem horário na agenda`, { type: 'agenda' });
+  list = list.map((t) => { const n = notes.get(t.key); return n ? { ...t, note: n.note, noteAt: n.noteAt } : t; });
   list.sort((a, b) => RANK[a.severity] - RANK[b.severity] || String(a.dueAt || '9').localeCompare(String(b.dueAt || '9')));
   const counts = { late: 0, today: 0, soon: 0, info: 0 };
   list.forEach((t) => { counts[t.severity]++; });

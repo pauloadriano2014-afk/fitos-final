@@ -100,3 +100,17 @@ model AgendaTaskSnooze {
   @@unique([coachId, taskKey])
   @@index([coachId, until])
 }
+
+// 📝 Anotação do coach numa pendência da central HOJE ("já cobrei, falta ele mandar as fotos"). Vale enquanto a pendência existir com a mesma chave
+// e some sozinha 90 dias depois da última edição.
+model AgendaTaskNote {
+  id        String   @id @default(uuid())
+  coachId   String
+  taskKey   String
+  note      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([coachId, taskKey])
+  @@index([coachId, updatedAt])
+}
