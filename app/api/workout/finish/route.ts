@@ -48,6 +48,17 @@ export async function POST(req: Request) {
     const already = await findExistingFinish(prisma, finishLookup);
     if (already) return duplicateResponse(already);
 
+    // ⏱️ (6 out 2026) "Deu tempo de fazer tudo?" (opcional). App antigo / sem resposta = null. Só vale `true` / `false` de verdade.
+    const timeOk: boolean | null = body.timeOk === true ? true : body.timeOk === false ? false : null;
+    const timeNote: string | null = timeOk === false ? (String(body.timeNote || '').replace(/\s+/g, ' ').trim().slice(0, 300) || null) : null;
+    // o coach recebe UM aviso de "sem tempo" por aluno a cada 7 dias (o registro continua sendo gravado sempre): quem repete a resposta não vira spam
+    let timeAlreadyFlagged = false;
+    if (timeOk === false) {
+        try {
+            timeAlreadyFlagged = (await prisma.workoutHistory.count({ where: { userId, timeOk: false, date: { gte: new Date(now.getTime() - 7 * 86400000) } } })) > 0;
+        } catch (e) { console.error('Erro checando aviso de tempo:', e); }
+    }
+
     let xpBase = 150; 
     let xpBonus = 0;
     
@@ -75,6 +86,8 @@ export async function POST(req: Request) {
                     day: dayClean,
                     workoutId: workoutIdClean,
                     clientKey,
+                    timeOk,
+                    timeNote,
                     xpEarned: totalXp,
                     duration: duration || 0,
                     rpe: rpe ? Number(rpe) : null,
@@ -175,6 +188,15 @@ export async function POST(req: Request) {
             pushTitle = '📝 Treino concluído com observação!';
             pushBody = `${displayName} deixou um comentário em "${noteDetail.exerciseName}": "${(noteDetail.note || '').slice(0, 80)}"`;
             pushData = { type: 'exercise_comment', studentId: userId, workoutHistoryId: workoutHistoryRecord.id, exerciseHistoryId: noteDetail.id };
+        }
+
+        // ⏱️ (6 out 2026) Aluno avisou que NÃO deu tempo de fazer tudo: o aviso vira "sem tempo" (o toque abre o mesmo lugar de antes) e a pendência
+        // aparece no A FAZER do coach. Só no 1º aviso dos últimos 7 dias; depois disso segue o aviso normal de treino concluído.
+        if (timeOk === false && !timeAlreadyFlagged) {
+            pushTitle = '⏱️ Sem tempo para terminar o treino';
+            pushBody = timeNote
+                ? `${displayName} (${dayLabel}): "${timeNote.slice(0, 100)}"`
+                : `${displayName} finalizou "${dayLabel}", mas disse que não deu tempo de fazer tudo`;
         }
 
         sendPushToUser(user.coach, pushTitle, pushBody, pushData).catch((pushError) => console.error("Erro ao enviar push de treino finalizado:", pushError));

@@ -140,6 +140,24 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     }
   }, undefined);
 
+  // ── aluno avisou que NÃO deu tempo de fazer o treino todo (pergunta opcional ao finalizar) ──
+  // Uma pendência por aluno (a resposta mais recente dos últimos 10 dias). "JÁ TRATEI" (adiar) some com ela; uma nova resposta "não deu tempo" cria outra.
+  await safe('sem tempo no treino', unavailable, async () => {
+    if (!ids.length) return;
+    const rows: any[] = await db.workoutHistory.findMany({ where: { userId: { in: ids }, timeOk: false, date: { gte: new Date(now.getTime() - 10 * DAY) } }, select: { id: true, userId: true, day: true, date: true, timeNote: true }, orderBy: { date: 'desc' } });
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (seen.has(r.userId)) continue;
+      seen.add(r.userId);
+      const s = byId.get(r.userId);
+      if (!s) continue;
+      const dayTxt = r.day ? (String(r.day).length <= 3 ? `Treino ${r.day}` : String(r.day)) : null;
+      const note = r.timeNote ? `“${String(r.timeNote).slice(0, 90)}”` : 'não deu tempo de fazer tudo';
+      const ageDays = Math.floor((now.getTime() - new Date(r.date).getTime()) / DAY);
+      push({ key: `tempo:${r.id}`, type: 'tempo', severity: ageDays <= 3 ? 'today' : 'soon', title: `Sem tempo no treino: ${s.name || 'Aluno'}`, subtitle: [dayTxt, note].filter(Boolean).join(' · '), person: person('student', s), dueAt: new Date(r.date).toISOString(), target: { type: 'student', id: s.id } });
+    }
+  }, undefined);
+
   // ── cobrança (mensal): atrasada, vencendo e "já paguei" ──
   const money = (kind: 'student' | 'offline', s: any) => {
     if (s.isFinanceActive === false || !(Number(s.contractValue) > 0) || !s.paymentDueDate) return;
@@ -189,6 +207,7 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
   list = capType(list, 'cobranca', (n) => `+ ${n} cobranças em aberto no financeiro`, { type: 'finance' });
   list = capType(list, 'treino', (n) => `+ ${n} treinos vencendo ou vencidos`, { type: 'students' });
   list = capType(list, 'checkin', (n) => `+ ${n} avaliações atrasadas`, { type: 'checkins' });
+  list = capType(list, 'tempo', (n) => `+ ${n} alunos sem tempo para o treino`, { type: 'students' });
   list = capType(list, 'semhorario', (n) => `+ ${n} sem horário na agenda`, { type: 'agenda' });
   list = list.map((t) => { const n = notes.get(t.key); return n ? { ...t, note: n.note, noteAt: n.noteAt } : t; });
   list.sort((a, b) => RANK[a.severity] - RANK[b.severity] || String(a.dueAt || '9').localeCompare(String(b.dueAt || '9')));
