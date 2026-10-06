@@ -1,5 +1,5 @@
 // app/api/admin/weekly-feedback/route.ts
-// GET ?adminId=&weekStart=  -> painel "Feedback da semana" do coach (quem respondeu, alertas, o que falta responder, auto-avaliação do coach)
+// GET ?adminId=&weekStart=&owner=  (owner: só para você e a Adri, de quem são os alunos) -> painel "Feedback da semana" do coach (quem respondeu, alertas, o que falta responder, auto-avaliação do coach)
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     const weekStart = asked && isWeekStart(asked) && asked <= current ? asked : current;
 
     try {
-      return NextResponse.json({ available: true, ...(await loadWeeklyBoard(prisma, { adminId, weekStart, now })) });
+      return NextResponse.json({ available: true, ...(await loadWeeklyBoard(prisma, { adminId, weekStart, now, owner: searchParams.get('owner') })) });
     } catch (e) {
       if (isMissingTable(e)) return NextResponse.json({ available: false, weekStart });
       throw e;

@@ -25,7 +25,7 @@ export async function GET(req: Request) {
     }
 
     try {
-      return NextResponse.json({ available: true, ...(await loadAdherenceHistory(prisma, { adminId, now: new Date(), weeks: searchParams.get('weeks'), month: searchParams.get('month') })) });
+      return NextResponse.json({ available: true, ...(await loadAdherenceHistory(prisma, { adminId, now: new Date(), weeks: searchParams.get('weeks'), month: searchParams.get('month'), owner: searchParams.get('owner') })) });
     } catch (e) {
       if (isMissingTable(e)) return NextResponse.json({ available: false, weeks: [] });
       throw e;

@@ -21,19 +21,28 @@ export type BoardRow = {
   channel: 'APP' | 'WHATSAPP'; sourceText: string | null;
 };
 
+/**
+ * De quais alunos é o painel. Coach comum: os dele. Você e a Adri (MASTER_IDS): por padrão os dois juntos (apps antigos, que não mandam `owner`);
+ * o app novo manda `owner` = o próprio id (cada um vê os seus) ou o id do outro mestre (quando quer ver os dele).
+ */
+export function studentCoachWhere(adminId: string, owner?: string | null) {
+  if (!MASTER_IDS.includes(adminId)) return { coachId: adminId };
+  if (owner && MASTER_IDS.includes(owner)) return { coachId: owner };
+  return { coachId: { in: MASTER_IDS } };
+}
+
 const pct = (num: number, den: number) => (den > 0 ? Math.round((100 * num) / den) : null);
 const iso = (d: any) => (d ? new Date(d).toISOString() : null);
 
-export async function loadWeeklyBoard(db: any, o: { adminId: string; weekStart: string; now?: Date }) {
+export async function loadWeeklyBoard(db: any, o: { adminId: string; weekStart: string; now?: Date; owner?: string | null }) {
   const now = o.now || new Date();
   const { weekStart } = o;
-  const isMaster = MASTER_IDS.includes(o.adminId);
   const range = weekRange(weekStart);
   // os "nudges" (cobranças) acontecem na semana SEGUINTE à avaliada, que é quando o aluno é cobrado
   const nudgeFrom = range.end, nudgeTo = new Date(range.end.getTime() + 7 * DAY_MS);
 
   const users: any[] = await db.user.findMany({
-    where: { role: 'USER', ...(isMaster ? { coachId: { in: MASTER_IDS } } : { coachId: o.adminId }) },
+    where: { role: 'USER', ...studentCoachWhere(o.adminId, o.owner) },
     select: { id: true, name: true, photoUrl: true, coachId: true, createdAt: true, active: true, accountStatus: true, lastContactDate: true },
   });
   const students = users.filter((u) => isDueStudentForWeek(u, weekStart));

@@ -1,7 +1,7 @@
 // lib/weeklyHistory.ts
 // 📈 (1 out 2026) Histórico de ADESÃO do feedback da semana: das últimas semanas, quantos alunos deviam responder e quantos responderam.
 // Alimenta a tira de barras do painel do coach (cada barra leva à semana). Só leitura; recebe o `db` (Prisma) para poder ser testado.
-import { MASTER_IDS } from '@/lib/masterIds';
+import { studentCoachWhere } from '@/lib/weeklyBoard';
 import { addDays, brtYearMonth, evaluatedWeekStart, isDueStudentForWeek, mondayOf, weekLabel } from '@/lib/weeklyFeedback';
 
 export const HISTORY_MIN_WEEKS = 2;
@@ -82,15 +82,14 @@ export function computeAdherence(users: any[], feedbacks: Array<{ userId: string
   });
 }
 
-export async function loadAdherenceHistory(db: any, o: { adminId: string; now?: Date; weeks?: unknown; month?: unknown }) {
+export async function loadAdherenceHistory(db: any, o: { adminId: string; now?: Date; weeks?: unknown; month?: unknown; owner?: string | null }) {
   const now = o.now || new Date();
   const weeks = clampWeeks(o.weeks);
-  const isMaster = MASTER_IDS.includes(o.adminId);
   const month = parseMonth(o.month);
   const allWeekStarts = month ? monthWeekStarts(month.year, month.month, now) : recentWeekStarts(now, weeks);
 
   const users: any[] = await db.user.findMany({
-    where: { role: 'USER', ...(isMaster ? { coachId: { in: MASTER_IDS } } : { coachId: o.adminId }) },
+    where: { role: 'USER', ...studentCoachWhere(o.adminId, o.owner) },
     select: { id: true, coachId: true, createdAt: true, active: true, accountStatus: true },
   });
   const ids = users.map((u) => u.id);
