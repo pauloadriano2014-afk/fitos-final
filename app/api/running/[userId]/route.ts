@@ -2,8 +2,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { loadUserLogs, syncProgress } from '@/lib/runningStore';
 
-// GET — App do aluno busca protocolo ativo + logs + anamnese
+// GET — App do aluno busca protocolo ativo + andamento + registros + anamnese.
+// 🏃 (6 out 2026) A semana atual vem do DESEMPENHO (lib/runningProgress.ts), não mais só do calendário. `currentWeek` e `currentBlock` continuam na resposta
+// (o app antigo lê esses dois); `progress` traz o resto (treinos feitos, quando a próxima semana abre, recado). `logs` agora traz TAMBÉM as corridas avulsas.
 export async function GET(
   req: NextRequest,
   { params }: { params: { userId: string } }
@@ -25,40 +28,26 @@ export async function GET(
       select: { token: true, filled: true, filledAt: true },
     });
 
+    const logs = await loadUserLogs(prisma, userId);
+
     // Busca protocolo ativo
-    const protocol = await prisma.runningProtocol.findFirst({
-      where: { userId, isActive: true },
-      include: {
-        logs: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
+    const protocol = await prisma.runningProtocol.findFirst({ where: { userId, isActive: true }, orderBy: { createdAt: 'desc' } });
 
     if (!protocol) {
-      return NextResponse.json({ protocol: null, anamnese: anamnese || null });
+      return NextResponse.json({ protocol: null, logs, anamnese: anamnese || null });
     }
 
-    // Calcula semana atual com base no startDate
-    const now = new Date();
-    const start = new Date(protocol.startDate);
-    start.setHours(0, 0, 0, 0);
-    now.setHours(0, 0, 0, 0);
+    const synced = await syncProgress(prisma, protocol, logs);
 
-    const diffDays = Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const weeksElapsed = Math.floor(diffDays / 7);
-    const currentWeek = Math.min(protocol.startWeek + weeksElapsed, 8);
-
-    const currentBlock =
-      currentWeek <= 2 ? 1 :
-      currentWeek <= 4 ? 2 :
-      currentWeek <= 6 ? 3 :
-      currentWeek === 7 ? 4 : 5;
+    // o texto que foi enviado à IA (com dados de saúde da anamnese) é interno: não vai para o app
+    const { aiPromptSnapshot: _prompt, ...publicProtocol } = synced.protocol;
 
     return NextResponse.json({
-      protocol,
-      currentWeek,
-      currentBlock,
+      protocol: { ...publicProtocol, logs: synced.logs },
+      currentWeek: synced.view.week,
+      currentBlock: synced.view.block,
+      progress: synced.view,
+      logs,
       anamnese: anamnese || null,
     });
 

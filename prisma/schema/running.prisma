@@ -54,8 +54,20 @@ model RunningProtocol {
   isActive    Boolean  @default(true)
   startDate   DateTime @default(now())
 
+  // 🏃 (6 out 2026) Tipo do protocolo (5K, 10K, 21K ou 42K) e dias de treino escolhidos (SEG…DOM, na ordem leve / qualidade / longão).
+  protocolType String  @default("5K")
+  trainingDays String[] @default([])
+
   startBlock  Int      @default(1)  
   startWeek   Int      @default(1)  
+
+  // 🏃 Andamento por DESEMPENHO (antes a semana só andava com o calendário): semana atual, quando ela abriu, quando o protocolo foi concluído e o recado
+  // que explica a última mudança ("semana repetida por esforço alto", "voltamos uma semana"). Nulo = protocolo antigo (usa o calendário e passa a gravar sozinho).
+  currentWeek     Int?
+  weekOpenedAt    DateTime?
+  completedAt     DateTime?
+  lastRepeatWeek  Int?
+  progressNote    String?   @db.Text
 
   customNotes       String?  @db.Text  
   customSpeeds      Json?              
@@ -75,8 +87,9 @@ model RunningLog {
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  protocolId  String
-  protocol    RunningProtocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+  // 🏃 Opcional: a corrida avulsa de quem não tem protocolo ativo não tem protocolo (antes o campo era obrigatório e essa corrida não salvava).
+  protocolId  String?
+  protocol    RunningProtocol? @relation(fields: [protocolId], references: [id], onDelete: Cascade)
 
   week        Int              
   block       Int              

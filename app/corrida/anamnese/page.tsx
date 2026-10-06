@@ -413,6 +413,9 @@ export default function RunningAnamnesePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
                 { val: 'complete_5k', label: 'Completar os 5km', desc: 'Quero cruzar a linha de chegada' },
+                { val: 'complete_10k', label: 'Completar os 10km', desc: 'Já corro e quero ir além dos 5km' },
+                { val: 'complete_21k', label: 'Meia maratona (21km)', desc: 'Quero me preparar para os 21km' },
+                { val: 'complete_42k', label: 'Maratona (42km)', desc: 'Quero me preparar para os 42km' },
                 { val: 'weight_loss', label: 'Emagrecer', desc: 'Usar a corrida para queimar gordura' },
                 { val: 'fitness', label: 'Condicionamento geral', desc: 'Melhorar minha saúde e disposição' },
                 { val: 'race', label: 'Me preparar para uma prova', desc: 'Tenho uma corrida oficial em mente' },
