@@ -27,6 +27,8 @@ model AgendaSeries {
   meetProvider    String?  // MEET por enquanto (a coluna já aceita outros provedores depois)
   meetUrl         String?
   notes           String?  @db.Text // só o coach vê
+  notifyStudent   Boolean  @default(true) // false = o aluno não vê o cartão nem recebe aviso (ex.: aula de personal: só registro do coach)
+  notifyCoach     Boolean  @default(true) // false = sem push de lembrete ao coach (o resumo do dia continua)
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -55,7 +57,9 @@ model AgendaEvent {
   meetProvider    String?
   meetUrl         String?
   notes           String?       @db.Text // só o coach vê
-  status          String        @default("SCHEDULED") // SCHEDULED | DONE | MISSED | CANCELLED
+  notifyStudent   Boolean       @default(true)
+  notifyCoach     Boolean       @default(true)
+  status          String        @default("SCHEDULED") // SCHEDULED | DONE | MISSED | RESCHEDULED | CANCELLED
   statusAt        DateTime?
   // resposta do aluno pelo app: CONFIRMED | RESCHEDULE
   studentResponse    String?

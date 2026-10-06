@@ -33,7 +33,7 @@ export async function runAgendaReminders(deps: CronDeps) {
     const st = setOf(ev.coachId), startsAt = new Date(ev.startsAt), endsAt = new Date(ev.endsAt);
     const personName = personOf(persons, ev)?.name || null;
 
-    if (!ev.coachRemindedAt && ev.kind !== 'BLOQUEIO' && st.remindCoachMin > 0 && now >= coachReminderAt(startsAt, st.remindCoachMin)) {
+    if (!ev.coachRemindedAt && ev.notifyCoach !== false && ev.kind !== 'BLOQUEIO' && st.remindCoachMin > 0 && now >= coachReminderAt(startsAt, st.remindCoachMin)) {
       const claim = await db.agendaEvent.updateMany({ where: { id: ev.id, coachRemindedAt: null }, data: { coachRemindedAt: now } });
       const coach = userOf.get(ev.coachId);
       if (claim.count === 1 && coach) {
@@ -43,7 +43,7 @@ export async function runAgendaReminders(deps: CronDeps) {
       }
     }
 
-    if (!ev.studentRemindedAt && ev.studentId && ATENDIMENTO_KINDS.includes(ev.kind) && st.remindStudentMin > 0 && now >= studentReminderAt(startsAt, st.remindStudentMin) && !isQuietNow(now)) {
+    if (!ev.studentRemindedAt && ev.notifyStudent !== false && ev.studentId && ATENDIMENTO_KINDS.includes(ev.kind) && st.remindStudentMin > 0 && now >= studentReminderAt(startsAt, st.remindStudentMin) && !isQuietNow(now)) {
       const claim = await db.agendaEvent.updateMany({ where: { id: ev.id, studentRemindedAt: null }, data: { studentRemindedAt: now } });
       const student = userOf.get(ev.studentId);
       if (claim.count === 1 && student) {

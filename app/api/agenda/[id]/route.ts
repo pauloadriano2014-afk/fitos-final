@@ -1,7 +1,7 @@
 // app/api/agenda/[id]/route.ts
 // 📅 (6 out 2026) Um compromisso da agenda.
 //   PATCH  { status? | title? | location? | meetUrl? | notes? | date? | time? | durationMin? | weekdays? | scope?: 'this'|'future' | force? }
-//          status = SCHEDULED | DONE | MISSED | CANCELLED (presença). Remarcar = date/time. scope 'future' (só em série) muda este dia e os próximos.
+//          status = SCHEDULED | DONE | MISSED | RESCHEDULED (o aluno pediu outra data) | CANCELLED (presença); notifyStudent/notifyCoach = avisos ligados/desligados. Remarcar = date/time. scope 'future' (só em série) muda este dia e os próximos.
 //   DELETE ?scope=this|future   -- dia de série vira CANCELADO (a série não recria); 'future' encerra a série a partir deste dia; avulso é apagado.
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';

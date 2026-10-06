@@ -34,14 +34,14 @@ export async function personBelongs(db: Db, coachId: string, studentId: string |
   return true;
 }
 
-export type Person = { kind: 'student' | 'offline'; id: string; name: string; photoUrl: string | null; phone: string | null };
+export type Person = { kind: 'student' | 'offline'; id: string; name: string; photoUrl: string | null; phone: string | null; category: string | null };
 
 export async function loadPersons(db: Db, events: { studentId?: string | null; offlineClientId?: string | null }[]): Promise<Map<string, Person>> {
   const sIds = [...new Set(events.map((e) => e.studentId).filter(Boolean))] as string[];
   const oIds = [...new Set(events.map((e) => e.offlineClientId).filter(Boolean))] as string[];
   const map = new Map<string, Person>();
-  if (sIds.length) (await db.user.findMany({ where: { id: { in: sIds } }, select: { id: true, name: true, photoUrl: true, phone: true } })).forEach((u: any) => map.set('s:' + u.id, { kind: 'student', id: u.id, name: u.name || 'Aluno', photoUrl: u.photoUrl || null, phone: u.phone || null }));
-  if (oIds.length) (await db.offlineClient.findMany({ where: { id: { in: oIds } }, select: { id: true, name: true, photoUrl: true, phone: true } })).forEach((o: any) => map.set('o:' + o.id, { kind: 'offline', id: o.id, name: o.name || 'Cliente', photoUrl: o.photoUrl || null, phone: o.phone || null }));
+  if (sIds.length) (await db.user.findMany({ where: { id: { in: sIds } }, select: { id: true, name: true, photoUrl: true, phone: true, financeCategory: true } })).forEach((u: any) => map.set('s:' + u.id, { kind: 'student', id: u.id, name: u.name || 'Aluno', photoUrl: u.photoUrl || null, phone: u.phone || null, category: u.financeCategory || null }));
+  if (oIds.length) (await db.offlineClient.findMany({ where: { id: { in: oIds } }, select: { id: true, name: true, photoUrl: true, phone: true, financeCategory: true } })).forEach((o: any) => map.set('o:' + o.id, { kind: 'offline', id: o.id, name: o.name || 'Cliente', photoUrl: o.photoUrl || null, phone: o.phone || null, category: o.financeCategory || null }));
   return map;
 }
 export const personOf = (map: Map<string, Person>, e: { studentId?: string | null; offlineClientId?: string | null }) =>
@@ -94,6 +94,7 @@ export async function saveSettings(db: Db, coachId: string, v: Partial<Settings>
 const rowFromSeries = (s: any, slot: Slot) => ({
   coachId: s.coachId, seriesId: s.id, slotAt: slot.slotAt, kind: s.kind, title: s.title ?? null, studentId: s.studentId ?? null, offlineClientId: s.offlineClientId ?? null,
   startsAt: slot.startsAt, endsAt: slot.endsAt, location: s.location ?? null, meetProvider: s.meetProvider ?? null, meetUrl: s.meetUrl ?? null, notes: s.notes ?? null, status: 'SCHEDULED',
+  notifyStudent: s.notifyStudent !== false, notifyCoach: s.notifyCoach !== false,
 });
 
 /** Cria os dias que faltam das séries ativas do coach entre `fromKey` e `toKey`. Pode rodar quantas vezes quiser: o que já existe (inclusive cancelado ou remarcado) não é recriado. */
@@ -144,7 +145,7 @@ export async function listWindow(db: Db, coachId: string, fromKey: string, toKey
 async function conflictsFor(db: Db, coachId: string, spans: { startsAt: Date; endsAt: Date }[], ignore: { eventId?: string; seriesId?: string; fromSlot?: Date } = {}): Promise<Conflict[]> {
   if (!spans.length) return [];
   const lo = new Date(Math.min(...spans.map((s) => s.startsAt.getTime()))), hi = new Date(Math.max(...spans.map((s) => s.endsAt.getTime())));
-  let rows: any[] = await db.agendaEvent.findMany({ where: { coachId, startsAt: { lt: hi }, endsAt: { gt: lo }, status: { not: 'CANCELLED' } } });
+  let rows: any[] = await db.agendaEvent.findMany({ where: { coachId, startsAt: { lt: hi }, endsAt: { gt: lo }, status: { notIn: ['CANCELLED', 'RESCHEDULED'] } } });
   // ao refazer uma série, os dias dela daqui em diante (refeitos ou mantidos no lugar) não contam como choque
   if (ignore.seriesId && ignore.fromSlot) rows = rows.filter((r) => !(r.seriesId === ignore.seriesId && new Date(r.slotAt) >= ignore.fromSlot!));
   const seen = new Map<string, any>();
@@ -169,14 +170,14 @@ export async function createAgenda(db: Db, coachId: string, input: CreateInput, 
     }
     const event = await db.agendaEvent.create({ data: {
       coachId, slotAt: startsAt, kind: input.kind, title: input.title, studentId: input.studentId, offlineClientId: input.offlineClientId, startsAt, endsAt,
-      location: input.location, meetProvider: meta.provider, meetUrl: input.meetUrl, notes: input.notes, status: 'SCHEDULED',
+      location: input.location, meetProvider: meta.provider, meetUrl: input.meetUrl, notes: input.notes, notifyStudent: input.notifyStudent, notifyCoach: input.notifyCoach, status: 'SCHEDULED',
     } });
     return { event: (await withPersons(db, [event]))[0] };
   }
 
   const seriesData = {
     coachId, kind: input.kind, title: input.title, studentId: input.studentId, offlineClientId: input.offlineClientId, weekdays: input.repeat.weekdays, startTime: input.time,
-    durationMin: input.durationMin, startDate: input.date, endDate: input.repeat.endDate, location: input.location, meetProvider: meta.provider, meetUrl: input.meetUrl, notes: input.notes, active: true,
+    durationMin: input.durationMin, startDate: input.date, endDate: input.repeat.endDate, location: input.location, meetProvider: meta.provider, meetUrl: input.meetUrl, notes: input.notes, notifyStudent: input.notifyStudent, notifyCoach: input.notifyCoach, active: true,
   };
   const horizon = addDaysKey(input.date, SERIES_HORIZON_DAYS - 1);
   const until = input.repeat.endDate && input.repeat.endDate < horizon ? input.repeat.endDate : horizon;
@@ -195,7 +196,7 @@ export async function createAgenda(db: Db, coachId: string, input: CreateInput, 
 
 const seriesFieldsOf = (p: PatchInput) => {
   const d: any = {};
-  for (const k of ['title', 'location', 'meetUrl', 'notes'] as const) if (k in p) d[k] = (p as any)[k];
+  for (const k of ['title', 'location', 'meetUrl', 'notes', 'notifyStudent', 'notifyCoach'] as const) if (k in p) d[k] = (p as any)[k];
   if (p.time) d.startTime = p.time;
   if (p.durationMin) d.durationMin = p.durationMin;
   if (p.weekdays) d.weekdays = p.weekdays;
@@ -227,7 +228,7 @@ export async function updateAgenda(db: Db, coachId: string, ev: any, p: PatchInp
     const fresh = await db.agendaSeries.create({ data: {
       coachId, kind: next.kind, title: next.title ?? null, studentId: next.studentId ?? null, offlineClientId: next.offlineClientId ?? null, weekdays: next.weekdays,
       startTime: next.startTime, durationMin: next.durationMin, startDate: fromKey, endDate: series.endDate ?? null, location: next.location ?? null,
-      meetProvider: next.meetProvider ?? null, meetUrl: next.meetUrl ?? null, notes: next.notes ?? null, active: true,
+      meetProvider: next.meetProvider ?? null, meetUrl: next.meetUrl ?? null, notes: next.notes ?? null, notifyStudent: next.notifyStudent !== false, notifyCoach: next.notifyCoach !== false, active: true,
     } });
     for (const k of kept) {
       const dk = dateKeyBrt(new Date(k.slotAt));
@@ -240,13 +241,13 @@ export async function updateAgenda(db: Db, coachId: string, ev: any, p: PatchInp
 
   // 2) só este dia
   const data: any = {};
-  for (const k of ['title', 'location', 'meetUrl', 'notes'] as const) if (k in p) data[k] = (p as any)[k];
+  for (const k of ['title', 'location', 'meetUrl', 'notes', 'notifyStudent', 'notifyCoach'] as const) if (k in p) data[k] = (p as any)[k];
   if (p.status) { data.status = p.status; data.statusAt = p.status === 'SCHEDULED' ? null : now; }
   if (p.date || p.time || p.durationMin) {
     const curStart = new Date(ev.startsAt), curDur = Math.round((new Date(ev.endsAt).getTime() - curStart.getTime()) / MIN);
     const startsAt = brtToUtc(p.date || dateKeyBrt(curStart), p.time || timeKeyBrt(curStart));
     const endsAt = new Date(startsAt.getTime() + (p.durationMin || curDur) * MIN);
-    if (!p.force && ev.kind !== 'LEMBRETE' && ev.status !== 'CANCELLED') {
+    if (!p.force && ev.kind !== 'LEMBRETE' && ev.status !== 'CANCELLED' && ev.status !== 'RESCHEDULED') {
       const conflicts = await conflictsFor(db, coachId, [{ startsAt, endsAt }], { eventId: ev.id });
       if (conflicts.length) return { error: 'Já existe compromisso nesse horário.', status: 409, conflicts };
     }
@@ -303,7 +304,7 @@ export async function dropCoachAgenda(db: Db, coachId: string) {
 /** Próximos atendimentos do aluno (sem as anotações do coach). */
 export async function upcomingForStudent(db: Db, studentId: string, now: Date = new Date(), days = 21) {
   const rows: any[] = await db.agendaEvent.findMany({
-    where: { studentId, status: 'SCHEDULED', kind: { in: ATENDIMENTO_KINDS }, endsAt: { gte: now }, startsAt: { lt: new Date(now.getTime() + days * 86400000) } },
+    where: { studentId, status: 'SCHEDULED', kind: { in: ATENDIMENTO_KINDS }, endsAt: { gte: now }, startsAt: { lt: new Date(now.getTime() + days * 86400000) }, NOT: { notifyStudent: false } },
     orderBy: { startsAt: 'asc' }, take: 20,
   });
   if (!rows.length) return [];
@@ -321,7 +322,7 @@ export async function upcomingForStudent(db: Db, studentId: string, now: Date = 
 
 export async function studentRespond(db: Db, studentId: string, eventId: string, response: string, now: Date = new Date()): Promise<{ event?: any } | Fail> {
   const ev = await db.agendaEvent.findUnique({ where: { id: eventId } });
-  if (!ev || ev.studentId !== studentId || !ATENDIMENTO_KINDS.includes(ev.kind)) return { error: 'Compromisso não encontrado.', status: 404 };
+  if (!ev || ev.studentId !== studentId || !ATENDIMENTO_KINDS.includes(ev.kind) || ev.notifyStudent === false) return { error: 'Compromisso não encontrado.', status: 404 };
   if (ev.status !== 'SCHEDULED' || new Date(ev.startsAt) <= now) return { error: 'Esse compromisso não aceita mais resposta.', status: 409 };
   const event = await db.agendaEvent.update({ where: { id: eventId }, data: { studentResponse: response, studentRespondedAt: now } });
   return { event };

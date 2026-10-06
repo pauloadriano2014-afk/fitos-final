@@ -12,7 +12,7 @@ export const KINDS = ['PRESENCIAL', 'VIDEO', 'AVALIACAO', 'BLOCO', 'BLOQUEIO', '
 export type AgendaKind = (typeof KINDS)[number];
 /** Atendimentos de verdade (têm presença, lembrete ao aluno e entram na central HOJE). */
 export const ATENDIMENTO_KINDS: string[] = ['PRESENCIAL', 'VIDEO', 'AVALIACAO'];
-export const STATUSES = ['SCHEDULED', 'DONE', 'MISSED', 'CANCELLED'] as const;
+export const STATUSES = ['SCHEDULED', 'DONE', 'MISSED', 'RESCHEDULED', 'CANCELLED'] as const;
 export type AgendaStatus = (typeof STATUSES)[number];
 export const STUDENT_RESPONSES = ['CONFIRMED', 'RESCHEDULE'] as const;
 
@@ -114,11 +114,12 @@ export function normalizeMeetUrl(raw: unknown, provider = 'MEET'): { ok: true; u
 export type CreateInput = {
   kind: AgendaKind; title: string | null; studentId: string | null; offlineClientId: string | null;
   date: string; time: string; durationMin: number; location: string | null; meetUrl: string | null; notes: string | null;
+  notifyStudent: boolean; notifyCoach: boolean;
   repeat: { weekdays: number[]; endDate: string | null } | null; force: boolean;
 };
 export type PatchInput = {
   status?: AgendaStatus; title?: string | null; location?: string | null; meetUrl?: string | null; notes?: string | null;
-  date?: string; time?: string; durationMin?: number; weekdays?: number[]; scope: 'this' | 'future'; force: boolean;
+  date?: string; time?: string; durationMin?: number; weekdays?: number[]; notifyStudent?: boolean; notifyCoach?: boolean; scope: 'this' | 'future'; force: boolean;
 };
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -136,6 +137,12 @@ function parseWeekdays(v: unknown): Parsed<number[]> {
   const days = [...new Set(v.map((n) => Number(n)))];
   if (days.some((n) => !Number.isInteger(n) || n < 0 || n > 6)) return { ok: false, error: 'Dia da semana inválido.' };
   return { ok: true, value: days.sort((a, b) => a - b) };
+}
+/** Aviso ligado/desligado: ausente = padrão (ligado); só aceita verdadeiro/falso. */
+function parseNotify(v: unknown): Parsed<boolean | undefined> {
+  if (v === undefined || v === null) return { ok: true, value: undefined };
+  if (typeof v !== 'boolean') return { ok: false, error: 'Aviso inválido.' };
+  return { ok: true, value: v };
 }
 function parseDuration(v: unknown, fallback: number): Parsed<number> {
   if (v == null || v === '') return { ok: true, value: fallback };
@@ -175,7 +182,8 @@ export function parseCreateBody(b: any): Parsed<CreateInput> {
     }
     repeat = { weekdays: wd.value, endDate };
   }
-  return { ok: true, value: { kind, title: finalTitle, studentId, offlineClientId, date: b.date, time: b.time, durationMin: dur.value, location: location.v, meetUrl, notes: notes.v, repeat, force: b.force === true } };
+  const ns = parseNotify(b.notifyStudent), nc = parseNotify(b.notifyCoach); if (!ns.ok) return ns; if (!nc.ok) return nc;
+  return { ok: true, value: { kind, title: finalTitle, studentId, offlineClientId, date: b.date, time: b.time, durationMin: dur.value, location: location.v, meetUrl, notes: notes.v, notifyStudent: ns.value ?? true, notifyCoach: nc.value ?? true, repeat, force: b.force === true } };
 }
 
 export function parsePatchBody(b: any): Parsed<PatchInput> {
@@ -194,14 +202,15 @@ export function parsePatchBody(b: any): Parsed<PatchInput> {
   if ('time' in b) { if (!isTimeKey(b.time)) return { ok: false, error: 'Horário inválido (use HH:MM).' }; out.time = b.time; }
   if ('durationMin' in b) { const d = parseDuration(b.durationMin, DEFAULT_DURATION_MIN); if (!d.ok) return d; out.durationMin = d.value; }
   if ('weekdays' in b) { const w = parseWeekdays(b.weekdays); if (!w.ok) return w; out.weekdays = w.value; }
+  for (const k of ['notifyStudent', 'notifyCoach'] as const) if (k in b) { const n = parseNotify(b[k]); if (!n.ok) return n; if (n.value !== undefined) out[k] = n.value; }
   return { ok: true, value: out };
 }
 
 // ───────────────────────────── choque de horários ─────────────────────────────
 
 export type Busy = { id: string; kind: string; status: string; startsAt: Date | string; endsAt: Date | string };
-/** Lembrete não ocupa tempo; cancelado também não. Faltou/feito ainda ocupam o horário. */
-export const occupiesTime = (e: { kind: string; status: string }) => e.kind !== 'LEMBRETE' && e.status !== 'CANCELLED';
+/** Lembrete não ocupa tempo; cancelado e remarcado (o aluno pediu outra data) também não. Faltou/feito ainda ocupam o horário. */
+export const occupiesTime = (e: { kind: string; status: string }) => e.kind !== 'LEMBRETE' && e.status !== 'CANCELLED' && e.status !== 'RESCHEDULED';
 
 export function findConflicts<T extends Busy>(existing: T[], startsAt: Date, endsAt: Date, ignoreId?: string | null): T[] {
   return existing.filter((e) => e.id !== ignoreId && occupiesTime(e) && new Date(e.startsAt) < endsAt && startsAt < new Date(e.endsAt));
