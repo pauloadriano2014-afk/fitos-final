@@ -1,0 +1,21 @@
+// prisma/schema/cardio-presets.prisma
+// 🚴 (7 out 2026) COMBOS DE CARDIO: sequências prontas de cardio (1 a 6 exercícios, já com o formato — contínuo, HIIT ou progressivo —, tempo, calorias, regulagem da
+// máquina e as opções de troca) que o coach monta uma vez e adiciona num treino com um toque. Ex.: "Cardio para hipertrofia" (leve, curto), "Cardio para definição",
+// "Cardio para emagrecimento" (HIIT + contínuo). Mesmo desenho dos combos de mobilidade (mobility-presets.prisma).
+//
+// PRIVADO POR COACH: cada combo pertence a quem criou (coachId = id do usuário logado no token). Um coach nunca vê nem apaga combo de outro.
+// Sem relação (FK) com User: é só um dono lógico, então o `prisma db push` só cria uma tabela nova (nada existente é alterado).
+//
+// `goal`: objetivo do combo, só para organizar/filtrar na tela (HIPERTROFIA | DEFINICAO | EMAGRECIMENTO | OUTRO | null).
+// `exercises` guarda uma lista JSON no formato (ver lib/cardioPresets.ts):
+//   [{ exerciseId, title, observation, substitutes: [{ id, name }], blocks: [{ sets, reps, restTime, technique, cardio }], subBlocks: { [idDaOpcao]: { cardio, sets, reps, restTime, technique } } }]
+model CardioPreset {
+  id        String   @id @default(uuid())
+  coachId   String
+  name      String
+  goal      String?
+  exercises Json
+  createdAt DateTime @default(now())
+
+  @@index([coachId])
+}
