@@ -52,14 +52,16 @@ export function monthWeekStarts(year: number, month: number, now: Date): string[
   return out;
 }
 
-/** Os meses que o coach pode escolher: dos últimos `count` meses, os que já têm ao menos uma semana fechada; do mais novo para o mais antigo. */
-export function recentMonths(now: Date, count = HISTORY_MONTH_CHOICES): MonthChoice[] {
+/** Os meses que o coach pode escolher: dos últimos `count` meses, os que já têm ao menos uma semana fechada (e, com `firstWeek`, ao menos uma semana com dados); do mais novo para o mais antigo. */
+export function recentMonths(now: Date, count = HISTORY_MONTH_CHOICES, firstWeek: string | null = null): MonthChoice[] {
   const cur = brtYearMonth(now);
   const out: MonthChoice[] = [];
   for (let i = 0; i < count; i++) {
     const idx = cur.year * 12 + (cur.month - 1) - i;
     const year = Math.floor(idx / 12); const month = (idx % 12) + 1;
-    if (!monthWeekStarts(year, month, now).length) continue;
+    const weeksOfMonth = monthWeekStarts(year, month, now);
+    if (!weeksOfMonth.length) continue;
+    if (firstWeek && !weeksOfMonth.some((ws) => ws >= firstWeek)) continue;      // mês anterior ao início dos dados: nem aparece
     out.push({ key: monthKey(year, month), label: `${MONTH_NAMES[month - 1]} ${year}`, short: `${MONTH_NAMES[month - 1].slice(0, 3).toUpperCase()}${year === cur.year ? '' : `/${String(year).slice(2)}`}` });
   }
   return out;
@@ -85,13 +87,17 @@ export async function loadAdherenceHistory(db: any, o: { adminId: string; now?: 
   const weeks = clampWeeks(o.weeks);
   const isMaster = MASTER_IDS.includes(o.adminId);
   const month = parseMonth(o.month);
-  const weekStarts = month ? monthWeekStarts(month.year, month.month, now) : recentWeekStarts(now, weeks);
+  const allWeekStarts = month ? monthWeekStarts(month.year, month.month, now) : recentWeekStarts(now, weeks);
 
   const users: any[] = await db.user.findMany({
     where: { role: 'USER', ...(isMaster ? { coachId: { in: MASTER_IDS } } : { coachId: o.adminId }) },
     select: { id: true, coachId: true, createdAt: true, active: true, accountStatus: true },
   });
   const ids = users.map((u) => u.id);
+  // 🔥 (6 out 2026) Início dos dados: a 1ª semana em que algum aluno do coach respondeu. Antes disso (a função ainda nem existia, ou o coach nem tinha chegado) não há semana nem mês no gráfico.
+  const first: any = ids.length ? await db.weeklyFeedback.findFirst({ where: { userId: { in: ids } }, orderBy: { weekStart: 'asc' }, select: { weekStart: true } }) : null;
+  const firstWeek: string | null = first ? first.weekStart : null;
+  const weekStarts = firstWeek ? allWeekStarts.filter((ws) => ws >= firstWeek) : [];
   const feedbacks: any[] = ids.length && weekStarts.length
     ? await db.weeklyFeedback.findMany({ where: { userId: { in: ids }, weekStart: { in: weekStarts } }, select: { userId: true, weekStart: true } })
     : [];
@@ -100,6 +106,7 @@ export async function loadAdherenceHistory(db: any, o: { adminId: string; now?: 
     weeks: computeAdherence(users, feedbacks, weekStarts),
     month: picked,                                                                  // o mês pedido (null = as últimas semanas); apps antigos nem recebem
     monthLabel: month ? `${MONTH_NAMES[month.month - 1]} ${month.year}` : null,
-    months: recentMonths(now),                                                      // os meses que o coach pode escolher
+    months: (() => { const list = recentMonths(now, HISTORY_MONTH_CHOICES, firstWeek); return list.length >= 2 ? list : []; })(),   // os meses que o coach pode escolher (só com 2 ou mais meses de dados)
+    firstWeek,                                                                      // 1ª semana com dados (o app não deixa navegar para antes dela)
   };
 }
