@@ -22,6 +22,8 @@ export type Task = {
   note?: string; noteAt?: string;
   /** cobrança / "já paguei": valor da mensalidade (o app já abre a baixa com ele preenchido) */
   amount?: number;
+  /** "sem tempo no treino": a ficha e o dia em que o aluno não deu conta (o app abre o editor direto nele) */
+  workoutId?: string; day?: string;
 };
 
 const DAY = 86400000;
@@ -144,7 +146,7 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
   // Uma pendência por aluno (a resposta mais recente dos últimos 10 dias). "JÁ TRATEI" (adiar) some com ela; uma nova resposta "não deu tempo" cria outra.
   await safe('sem tempo no treino', unavailable, async () => {
     if (!ids.length) return;
-    const rows: any[] = await db.workoutHistory.findMany({ where: { userId: { in: ids }, timeOk: false, date: { gte: new Date(now.getTime() - 10 * DAY) } }, select: { id: true, userId: true, day: true, date: true, timeNote: true }, orderBy: { date: 'desc' } });
+    const rows: any[] = await db.workoutHistory.findMany({ where: { userId: { in: ids }, timeOk: false, date: { gte: new Date(now.getTime() - 10 * DAY) } }, select: { id: true, userId: true, day: true, workoutId: true, date: true, timeNote: true }, orderBy: { date: 'desc' } });
     const seen = new Set<string>();
     for (const r of rows) {
       if (seen.has(r.userId)) continue;
@@ -154,7 +156,7 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       const dayTxt = r.day ? (String(r.day).length <= 3 ? `Treino ${r.day}` : String(r.day)) : null;
       const note = r.timeNote ? `“${String(r.timeNote).slice(0, 90)}”` : 'não deu tempo de fazer tudo';
       const ageDays = Math.floor((now.getTime() - new Date(r.date).getTime()) / DAY);
-      push({ key: `tempo:${r.id}`, type: 'tempo', severity: ageDays <= 3 ? 'today' : 'soon', title: `Sem tempo no treino: ${s.name || 'Aluno'}`, subtitle: [dayTxt, note].filter(Boolean).join(' · '), person: person('student', s), dueAt: new Date(r.date).toISOString(), target: { type: 'student', id: s.id } });
+      push({ key: `tempo:${r.id}`, type: 'tempo', severity: ageDays <= 3 ? 'today' : 'soon', title: `Sem tempo no treino: ${s.name || 'Aluno'}`, subtitle: [dayTxt, note].filter(Boolean).join(' · '), person: person('student', s), dueAt: new Date(r.date).toISOString(), workoutId: r.workoutId || undefined, day: r.day || undefined, target: { type: 'student', id: s.id } });
     }
   }, undefined);
 
