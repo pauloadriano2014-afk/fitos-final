@@ -1,6 +1,6 @@
 // lib/agendaHoje.ts
 // ☀️ (6 out 2026) Central HOJE do coach: a agenda do dia + as pendências que não podem ficar sem resposta, montadas AUTOMATICAMENTE a partir do que o app
-// já guarda (feedback da semana, observações de exercício, avaliações, cobrança, treino vencendo, teste grátis, presença da agenda...). Não existe
+// já guarda (feedback da semana, observações de exercício, avaliações, cobrança, treino vencendo, teste grátis, presença da agenda, corrida...). Não existe
 // "lista de tarefas" para o coach preencher: a pendência aparece enquanto a condição for verdadeira e some sozinha quando ele resolve.
 // Cada fonte roda separada: se uma falhar (ex.: tabela ainda não criada) as outras continuam e o nome dela vai em `unavailable`.
 import {
@@ -10,7 +10,7 @@ import { ensureSeriesWindow, ownStudentScope, ownOfflineScope, withPersons, Pers
 
 export type Severity = 'late' | 'today' | 'soon' | 'info';
 export type Target =
-  | { type: 'student'; id: string } | { type: 'offline'; id: string } | { type: 'event'; id: string }
+  | { type: 'student'; id: string; openRunning?: boolean } | { type: 'offline'; id: string } | { type: 'event'; id: string }
   | { type: 'weekly' } | { type: 'checkins' } | { type: 'feed' } | { type: 'finance' } | { type: 'students' } | { type: 'agenda' }
   | { type: 'share'; code: string } | { type: 'agenda_setup'; personKind: 'student' | 'offline'; personId: string };
 export type Task = {
@@ -137,6 +137,26 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       const k = dateKeyBrt(new Date(w.endDate)), left = diffDaysKeys(todayKey, k), s = byId.get(uid)!;
       if (left > 3) continue;
       push({ key: `treino:${uid}:${k}`, type: 'treino', severity: left < 0 ? 'late' : left === 0 ? 'today' : 'soon', title: left < 0 ? `Treino vencido: ${s.name || 'Aluno'}` : `Treino vence ${left === 0 ? 'hoje' : 'em ' + daysWord(left)}: ${s.name || 'Aluno'}`, subtitle: left < 0 ? `venceu há ${daysWord(-left)}` : null, person: person('student', s), dueAt: new Date(w.endDate).toISOString(), target: { type: 'student', id: s.id } });
+    }
+  }, undefined);
+
+  // ── corrida: anamnese respondida sem protocolo (montar) e protocolo concluído (escolher o próximo desafio) ──
+  // Some sozinha: ativar um protocolo novo desativa o anterior. Só olha o último mês, para uma anamnese esquecida há muito tempo não virar atraso eterno.
+  await safe('corrida', unavailable, async () => {
+    if (!ids.length) return;
+    const since = new Date(now.getTime() - 30 * DAY);
+    const anams: any[] = await db.runningAnamnese.findMany({ where: { userId: { in: ids }, filled: true, filledAt: { gte: since } }, select: { userId: true, filledAt: true } });
+    const protos: any[] = await db.runningProtocol.findMany({ where: { userId: { in: ids }, isActive: true }, select: { userId: true, protocolType: true, completedAt: true } });
+    const active = new Map<string, any>(protos.map((p) => [p.userId, p]));
+    for (const a of anams) {
+      if (active.has(a.userId) || !a.filledAt) continue;
+      const s = byId.get(a.userId)!, k = dateKeyBrt(new Date(a.filledAt)), ago = diffDaysKeys(k, todayKey);
+      push({ key: `corrida_montar:${s.id}:${k}`, type: 'corrida_montar', severity: ago >= 2 ? 'late' : 'today', title: `Montar protocolo de corrida: ${s.name || 'Aluno'}`, subtitle: ago <= 0 ? 'respondeu a anamnese hoje' : `respondeu a anamnese há ${daysWord(ago)}`, person: person('student', s), dueAt: new Date(a.filledAt).toISOString(), target: { type: 'student', id: s.id, openRunning: true } });
+    }
+    for (const p of protos) {
+      if (!p.completedAt || new Date(p.completedAt) < since) continue;
+      const s = byId.get(p.userId)!, k = dateKeyBrt(new Date(p.completedAt));
+      push({ key: `corrida_fim:${s.id}:${k}`, type: 'corrida_fim', severity: 'today', title: `${s.name || 'Aluno'} concluiu o protocolo de ${p.protocolType || '5K'}`, subtitle: 'escolha o próximo desafio', person: person('student', s), dueAt: new Date(p.completedAt).toISOString(), target: { type: 'student', id: s.id, openRunning: true } });
     }
   }, undefined);
 

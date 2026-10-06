@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { notifyCoachAnamnese } from '@/lib/runningNotify';
 
 // GET — Formulário público busca os dados pelo token (para pré-popular se já preencheu)
 export async function GET(
@@ -86,6 +87,13 @@ export async function POST(
         filledAt: new Date(),
       },
     });
+
+    // 🔔 (6 out 2026) Avisa o coach na PRIMEIRA vez que a aluna responde (reenviar o formulário não manda de novo). Melhor esforço: não segura a resposta.
+    if (!anamnese.filled) {
+      prisma.user.findUnique({ where: { id: updated.userId }, select: { id: true, name: true, coachId: true } })
+        .then((student) => (student ? notifyCoachAnamnese(prisma, student, updated) : false))
+        .catch((e) => console.error('[running-anamnese-notify]', e));
+    }
 
     return NextResponse.json({ success: true, anamneseId: updated.id });
 

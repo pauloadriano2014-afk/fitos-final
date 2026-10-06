@@ -125,6 +125,39 @@ export type RulesSuggestion = {
   protocolType: PlanType; startWeek: number; customSpeeds: Preset; trainingDays: string[]; adaptations: string | null; customNotes: string; warnings: string[]; reasons: string[];
 };
 
+// 💬 (6 out 2026) `customNotes` ("recado") e `adaptations` aparecem NA TELA DA ALUNA (Corrida e janela do treino), palavra por palavra. Por isso são escritos PARA ela
+// ("você"), em tom acolhedor e sem jargão clínico. O que é só para o coach (liberação médica, lesões, justificativa) fica em `warnings`/`reasons`/`coachNotes`,
+// que o app mostra só no editor do coach e nunca grava no protocolo.
+/** Texto escrito SOBRE a pessoa ("o aluno parado há 1 ano...") em vez de PARA ela. Pega o vício mais comum da IA: falar do aluno para o coach. */
+export const speaksAboutStudent = (t: any) => /\b(alun[oa]s?|pacientes?|clientes?)\b/i.test(strip(t));
+
+const studentProfile = (a: any): string | null =>
+  a?.runningExperience === 'never' ? 'Você está começando do zero, então as primeiras semanas misturam caminhada e trote leve: isso é de propósito.'
+    : a?.runningExperience === 'stopped' ? 'Você já correu antes e o corpo lembra, mas vamos retomar com calma.'
+    : a?.runningExperience === 'active' ? 'Você já corre, então vamos construir em cima da sua base.'
+    : null;
+
+/** O recado padrão para a aluna (sem nada clínico). */
+export function studentNotes(a: any, type: PlanType, startWeek: number): string {
+  return [
+    `Este é o seu protocolo de ${type}.`,
+    startWeek > 1 ? `Pelo seu histórico, você começa na semana ${startWeek}.` : 'Você começa pela semana 1, no seu ritmo.',
+    studentProfile(a),
+    'Nos treinos leves, a regra é terminar conseguindo conversar. Se sentir dor (e não só cansaço), tontura ou falta de ar fora do normal, pare e me avise.',
+  ].filter(Boolean).join(' ');
+}
+
+/** Cuidados padrão para a aluna com lesão, problema articular ou dor ao caminhar; null se não há nada disso. */
+export function studentCare(a: any): string | null {
+  const injuries = Array.isArray(a?.injuries) ? a.injuries.filter((x: string) => x && x !== 'Nenhuma') : [];
+  const items: string[] = [];
+  if (injuries.length) items.push(`lesão (${injuries.join(', ')})`);
+  if (a?.jointIssues) items.push('problema articular');
+  if (a?.bodyPainDuringWalk) items.push('dor ao caminhar');
+  if (!items.length) return null;
+  return `Cuidados para o seu treino (${items.join(', ')}): prefira esteira ou piso plano e regular, faça um aquecimento articular antes de cada sessão e, se a dor passar de 3 em 10, reduza o ritmo ou pare e me avise.`;
+}
+
 /** A sugestão por regras (sem IA): serve para todo coach e também de rede de segurança quando a IA erra. */
 export function suggestByRules(a: any): RulesSuggestion {
   const warnings: string[] = [];
@@ -164,17 +197,8 @@ export function suggestByRules(a: any): RulesSuggestion {
   if (a?.jointIssues) warnings.push('Informou problema articular: observe o impacto e a progressão.');
   if (a?.canWalk30min === false) warnings.push('Disse que não consegue caminhar 30 minutos: comece pela caminhada antes do protocolo.');
 
-  const attention: string[] = [];
-  if (injuries.length) attention.push(`Lesões: ${injuries.join(', ')}.`);
-  if (a?.jointIssues) attention.push('Problema articular.');
-  if (a?.bodyPainDuringWalk) attention.push(`Dor ao caminhar: ${String(a.bodyPainDuringWalk).slice(0, 120)}.`);
-  const adaptations = attention.length ? `Pontos de atenção: ${attention.join(' ')} Priorize piso plano/esteira e avalie reduzir o impacto.` : null;
-
-  const customNotes = [
-    `Sugestão automática: ${type}, entrada na semana ${startWeek}.`,
-    `Perfil: ${a?.runningExperience === 'never' ? 'nunca correu' : a?.runningExperience === 'stopped' ? 'já correu e parou' : 'corre atualmente'}.`,
-    a?.runningGoal ? `Objetivo: ${GOAL_LABELS[a.runningGoal] || a.runningGoal}.` : null,
-  ].filter(Boolean).join(' ');
+  const adaptations = studentCare(a);
+  const customNotes = studentNotes(a, type, startWeek);
 
   return { protocolType: type, startWeek, customSpeeds, trainingDays: t.days, adaptations, customNotes, warnings, reasons };
 }
@@ -183,7 +207,7 @@ export function suggestByRules(a: any): RulesSuggestion {
  * Confere a resposta da IA (que vem como texto livre): tipo e semana válidos, velocidades coerentes e nada que a anamnese não sustente.
  * O que não servir é trocado pela sugestão por regras. Devolve a sugestão final + o que foi corrigido.
  */
-export function sanitizeAiSuggestion(raw: any, a: any): { suggestion: RulesSuggestion; corrections: string[] } {
+export function sanitizeAiSuggestion(raw: any, a: any): { suggestion: RulesSuggestion; corrections: string[]; coachNotes: string | null } {
   const rules = suggestByRules(a);
   const corrections: string[] = [];
   const r = raw && typeof raw === 'object' ? raw : {};
@@ -207,13 +231,22 @@ export function sanitizeAiSuggestion(raw: any, a: any): { suggestion: RulesSugge
   if (!speeds) { if (r.customSpeeds) corrections.push('As velocidades da IA estavam fora do normal: usei as da sugestão automática.'); speeds = rules.customSpeeds; }
 
   const text = (v: any, max: number) => (typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'null' ? v.trim().slice(0, max) : null);
+  // o que a aluna lê tem que ser escrito PARA ela; se a IA escreveu sobre "o aluno", vale o texto padrão
+  const forStudent = (v: any, fallback: string | null, label: string): string | null => {
+    const t = text(v, 1500);
+    if (!t) return fallback;
+    if (speaksAboutStudent(t)) { corrections.push(`O ${label} da IA estava escrito sobre a aluna, não para ela: usei o texto padrão.`); return fallback; }
+    return t;
+  };
   const suggestion: RulesSuggestion = {
     ...rules, protocolType: type, startWeek, customSpeeds: speeds,
-    adaptations: text(r.adaptations, 1500) ?? rules.adaptations,
-    customNotes: text(r.customNotes, 1500) ?? rules.customNotes,
+    adaptations: forStudent(r.adaptations, rules.adaptations, 'texto de adaptações'),
+    // o recado padrão cita o tipo e a semana de entrada JÁ conferidos (os da regra podem ter mudado por causa da IA)
+    customNotes: forStudent(r.customNotes, studentNotes(a, type, startWeek), 'recado') as string,
     warnings: rules.warnings,
   };
-  return { suggestion, corrections };
+  const coachNotes = text(r.coachNotes, 1500);
+  return { suggestion, corrections, coachNotes };
 }
 
 /** A IA devolve texto: tira cercas de markdown e pega do primeiro "{" ao último "}". Null se não for um objeto JSON. */

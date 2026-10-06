@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { SESSION_KEYS } from '@/lib/runningPlans';
 import { loadUserLogs, syncProgress } from '@/lib/runningStore';
+import { notifyCoachProgress } from '@/lib/runningNotify';
 
 const FREE = 'AVULSO';
 
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     // 🔒 Só o próprio aluno pode logar a corrida dele (ou o coach/master).
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true, name: true } });
     if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
@@ -54,12 +55,13 @@ export async function POST(req: NextRequest) {
     }
 
     let week = 0, block = 0;
+    let beforeView: any = null;
     if (protocol) {
       const before = await syncProgress(prisma, protocol, await loadUserLogs(prisma, userId));
       if (!isFree && before.view.status === 'COMPLETED') {
         return NextResponse.json({ error: 'Seu protocolo já foi concluído. Fale com seu coach para o próximo desafio.' }, { status: 400 });
       }
-      week = before.view.week; block = before.view.block;
+      week = before.view.week; block = before.view.block; beforeView = before.view;
     }
 
     const log = await prisma.runningLog.create({
@@ -81,6 +83,10 @@ export async function POST(req: NextRequest) {
     if (protocol) {
       const after = await syncProgress(prisma, protocol, await loadUserLogs(prisma, userId));
       progress = after.view;
+      // 🔔 o treino fechou a semana, repetiu, avançou ou concluiu o protocolo: avisa o coach (melhor esforço, só quando muda; corrida avulsa nunca muda)
+      if (!isFree && beforeView && targetUser) {
+        notifyCoachProgress(prisma, { id: userId, name: targetUser.name, coachId: targetUser.coachId }, beforeView, after.view, auth.user.id).catch(() => {});
+      }
     }
 
     return NextResponse.json({ success: true, log, progress, currentWeek: progress ? progress.week : undefined, currentBlock: progress ? progress.block : undefined });

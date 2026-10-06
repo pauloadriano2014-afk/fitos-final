@@ -5,6 +5,7 @@ import { requireAuth, canActAsCoach } from '@/lib/auth';
 import { PLAN_META, PLAN_TYPES, clampWeek, eligibleTypes, firstWeekOfBlock, normalizeTrainingDays, sanitizeSpeeds } from '@/lib/runningPlans';
 import { initialPersisted } from '@/lib/runningProgress';
 import { persistData } from '@/lib/runningStore';
+import { notifyStudentProtocol } from '@/lib/runningNotify';
 
 const MAX_TEXT = 2000;
 
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
     }
 
     // desativa os anteriores
-    await prisma.runningProtocol.updateMany({ where: { userId, isActive: true }, data: { isActive: false } });
+    const replaced = await prisma.runningProtocol.updateMany({ where: { userId, isActive: true }, data: { isActive: false } });
 
     const now = new Date();
     const protocol = await prisma.runningProtocol.create({
@@ -95,6 +96,9 @@ export async function POST(req: NextRequest) {
         ...persistData(initialPersisted(type, startWeek, now)),
       },
     });
+
+    // 🔔 avisa a aluna que o protocolo (ou o próximo desafio) está pronto; melhor esforço, não segura a resposta
+    notifyStudentProtocol(prisma, userId, type, clampWeek(type, startWeek), days, !!(replaced && replaced.count > 0)).catch(() => {});
 
     return NextResponse.json({ success: true, protocol, warnings });
 

@@ -13,6 +13,8 @@ import { GOAL_LABELS, PLAN_META, PLAN_TYPES, eligibleTypes, extractJson, sanitiz
 //   • o time master recebe a sugestão da IA (`source: 'ai'`), conferida: tipo e semana válidos, velocidades coerentes e nada que a anamnese não sustente;
 //     a IA só pode ser mais cautelosa que as regras na semana de entrada. Se a IA falhar ou responder fora do formato, cai nas regras (nunca fica sem sugestão);
 //   • os dias de treino são escolhidos pelas regras a partir dos dias que a aluna marcou (a IA não decide isso).
+// 💬 Os textos `customNotes` e `adaptations` são lidos pela ALUNA no app: a IA escreve para ela ("você") e o que é só do coach (liberação médica, lesões,
+//   por que essa semana de entrada) vem à parte em `coachNotes`, que aparece só no editor do coach. Texto da IA escrito "sobre o aluno" é trocado pelo padrão.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
@@ -44,6 +46,7 @@ export async function POST(req: NextRequest) {
     let suggestion = rules;
     let source: 'ai' | 'rules' = 'rules';
     let corrections: string[] = [];
+    let coachNotes: string | null = null;
     let fallbackReason: string | null = null;
 
     if (canUseAiBuilder(auth.user)) {
@@ -52,7 +55,7 @@ export async function POST(req: NextRequest) {
         const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
         const response = await client.messages.create({
           model: 'claude-opus-4-6',
-          max_tokens: 1500,
+          max_tokens: 2000,
           messages: [{ role: 'user', content: prompt }],
         });
         const raw = response.content[0] && response.content[0].type === 'text' ? response.content[0].text : '';
@@ -61,6 +64,7 @@ export async function POST(req: NextRequest) {
         const checked = sanitizeAiSuggestion(parsed, anamnese);
         suggestion = checked.suggestion;
         corrections = checked.corrections;
+        coachNotes = checked.coachNotes;
         source = 'ai';
       } catch (e: any) {
         console.error('[running-generate] IA indisponível, usando regras:', e && e.message);
@@ -75,6 +79,7 @@ export async function POST(req: NextRequest) {
       warnings,
       reasons,
       corrections,
+      coachNotes,
       fallbackReason,
       eligibleTypes: eligibleTypes(anamnese),
       promptSnapshot: source === 'ai' ? prompt : null,
@@ -124,6 +129,14 @@ Os demais começam com treinos mais curtos e crescem, com semanas de recuperaç�
 PROTOCOLOS QUE O HISTÓRICO DESTE ALUNO SUSTENTA: ${allowed.join(', ')}. Escolha somente entre eles; na dúvida, escolha o mais cauteloso.
 Se for um dos protocolos longos (10K, 21K, 42K), comece pela semana 1.
 
+COMO ESCREVER OS TEXTOS (importante):
+- "customNotes" e "adaptations" serão LIDOS PELA PRÓPRIA PESSOA no app dela. Escreva DIRETAMENTE para ela, na segunda pessoa ("você"), em português do Brasil, com tom acolhedor, motivador e objetivo.
+- Máximo de 4 frases em "customNotes" e 3 em "adaptations". Sem jargão (diga "esforço", não "RPE" nem "zona Z2") e sem listar números da anamnese.
+- NUNCA use as palavras "aluno", "aluna", "paciente" ou "cliente", nem fale da pessoa em terceira pessoa. Gênero informado: ${anamnese.user?.gender ?? 'não informado'}; se não estiver claro, evite adjetivos com marca de gênero.
+- NÃO escreva diagnósticos, avisos clínicos nem cobranças de liberação médica nesses dois campos: isso vai em "coachNotes".
+- "adaptations": cuidados práticos para o treino (piso, aquecimento, o que fazer se doer), só se houver lesão, dor ou problema articular; senão null.
+- "coachNotes": análise técnica PARA O COACH (terceira pessoa é ok): pontos de atenção clínicos, liberação médica, por que essa semana de entrada. Texto corrido, no máximo 6 frases, ou null.
+
 Responda APENAS com um JSON válido, sem nenhum texto adicional, sem markdown:
 {
   "protocolType": "<${allowed.join(' | ')}>",
@@ -134,7 +147,8 @@ Responda APENAS com um JSON válido, sem nenhum texto adicional, sem markdown:
     "z4": <velocidade esteira km/h>,
     "z5": <velocidade esteira km/h>
   },
-  "adaptations": "<string com adaptações específicas ou null>",
-  "customNotes": "<string com observações personalizadas para o coach revisar>"
+  "adaptations": "<cuidados para a pessoa, escritos para ela, ou null>",
+  "customNotes": "<recado de boas-vindas escrito para a pessoa>",
+  "coachNotes": "<análise para o coach ou null>"
 }`;
 }
