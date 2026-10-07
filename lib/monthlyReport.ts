@@ -9,6 +9,10 @@
 //   • O app guarda as REPETIÇÕES PRESCRITAS (não as feitas): o "volume" (carga × repetições) é uma ESTIMATIVA e o relatório diz isso.
 //   • Recorde = a maior carga (total, em kg) do período MAIOR que a maior carga de TODO o histórico anterior daquele exercício. Exercício novo não conta como recorde.
 //   • Cardio e mobilidade ficam fora de volume, recordes e músculos (o campo "carga" deles são minutos).
+//   • (8 out 2026) Treino repetido conta UMA vez (dedupeHistories): o app antigo gravava o mesmo treino várias vezes quando o aluno tocava mais de uma vez em
+//     "finalizar" (a idempotência de 1 out acabou com isso, mas o histórico antigo ficou). Treino sem nenhum exercício gravado também não conta.
+//   • (8 out 2026) O tempo do treino só entra na média quando é plausível (MIN_PLAUSIBLE_MIN a MAX_PLAUSIBLE_MIN): o app antigo gravava lixo (segundos, relógio
+//     que ficou aberto: 11.438, 15.270...) e a média saía em "1.476 min".
 import { addDays, mondayOf } from '@/lib/weeklyFeedback';
 import { brtYmd, diffDays, ddmm } from '@/lib/weeklyFacts';
 import { activeWorkoutsForWeek } from '@/lib/weeklyFactsLoader';
@@ -22,6 +26,13 @@ export const MAX_RECORDS = 5;
 export const MAX_MUSCLES = 6;
 /** Poucas refeições registradas não dizem nada: abaixo disso a dieta não entra nos destaques. */
 export const MIN_MEALS_FOR_DIET = 5;
+/** Tempo de treino que dá para acreditar (minutos). Fora disso o número é lixo do app antigo e fica de fora da média. */
+export const MIN_PLAUSIBLE_MIN = 10;
+export const MAX_PLAUSIBLE_MIN = 180;
+/** Com menos tempos confiáveis que isso, "tempo médio" não aparece (uma média de 1 ou 2 treinos engana). */
+export const MIN_DURATIONS_FOR_AVG = 3;
+/** Dois treinos do MESMO dia com pelo menos essa parte dos exercícios em comum são o mesmo treino gravado duas vezes. */
+export const SAME_WORKOUT_OVERLAP = 0.8;
 
 /** Quantidade de dias pedida: inteiro de 7 a 92; vazio, texto ou fora da faixa = 30. */
 export function cleanDays(v: unknown): number {
@@ -35,7 +46,7 @@ export type DetailIn = {
   exerciseId: string; exerciseName?: string | null; setNumber?: number; weight?: number | null; reps?: string | null;
   cardioSeconds?: number | null; cardioKcal?: number | null;
 };
-export type HistoryIn = { id?: string; date: Date | string; duration?: number | null; rpe?: number | null; details?: DetailIn[] | null };
+export type HistoryIn = { id?: string; date: Date | string; day?: string | null; duration?: number | null; rpe?: number | null; details?: DetailIn[] | null };
 export type CheckInIn = { id?: string; date: Date | string; weight?: number | null; photoFront?: string | null; photoSide?: string | null; photoBack?: string | null };
 export type MonthlyInput = {
   now: Date;
@@ -124,29 +135,62 @@ function photoOf(c: CheckInIn): Photo | null {
   return { date: brtYmd(c.date), front: c.photoFront || null, side: c.photoSide || null, back: c.photoBack || null };
 }
 
+/**
+ * Tira do histórico o que NÃO é um treino de verdade, para os números não incharem:
+ *   1) treino sem nenhuma série gravada (o aluno não fez nada, ou foi um registro vazio do app antigo);
+ *   2) o mesmo treino gravado mais de uma vez no mesmo dia (toques repetidos em "finalizar"): fica UM, o mais completo.
+ * Mesmo treino = mesmo dia (Brasília) E (a mesma letra/nome de dia, quando os dois têm; senão, pelo menos 80% dos exercícios em comum).
+ * Treinos diferentes no mesmo dia (outros exercícios) continuam contando separados. Não mexe na lista de entrada; devolve na ordem do tempo.
+ */
+export function dedupeHistories<T extends HistoryIn>(list: T[]): T[] {
+  const kept: Array<{ h: T; ymd: string; label: string; ids: Set<string> }> = [];
+  const sorted = [...(list || [])].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  for (const h of sorted) {
+    const details = h.details || [];
+    if (details.length === 0) continue;
+    const ymd = brtYmd(h.date);
+    const label = String(h.day ?? '').trim().toUpperCase();
+    const ids = new Set(details.map((d) => String(d.exerciseId)));
+    const same = kept.find((k) => {
+      if (k.ymd !== ymd) return false;
+      if (label && k.label) return label === k.label;
+      let inter = 0; ids.forEach((id) => { if (k.ids.has(id)) inter++; });
+      const union = ids.size + k.ids.size - inter;
+      return inter / union >= SAME_WORKOUT_OVERLAP;   // (união nunca é 0: treino sem série já foi descartado acima)
+    });
+    if (!same) { kept.push({ h, ymd, label, ids }); continue; }
+    if (details.length > (same.h.details || []).length) { same.h = h; same.ids = ids; if (label) same.label = label; }   // a cópia mais completa vence
+  }
+  return kept.map((k) => k.h);
+}
+
 // ───────────── o relatório ─────────────
 export function computeMonthlyReport(inp: MonthlyInput): MonthlyReport {
   const days = cleanDays(inp.days);
+  const histories = dedupeHistories(inp.histories);
+  const prevHistories = dedupeHistories(inp.prevHistories);
   const end = brtYmd(inp.now);
   const start = addDays(end, -(days - 1));
   const weeks = Math.ceil(days / 7);
   const cats = inp.categories || {};
 
   // ── treino ──
-  const sessions = inp.histories.length;
+  const sessions = histories.length;
   const perWeek = Array.from({ length: weeks }, () => 0);
   const dayset = new Set<string>();
-  for (const h of inp.histories) {
+  for (const h of histories) {
     const ymd = brtYmd(h.date);
     dayset.add(ymd);
     const idx = Math.min(weeks - 1, Math.max(0, Math.floor(diffDays(start, ymd) / 7)));
     perWeek[idx]++;
   }
-  const durations = inp.histories.map((h) => toNum(h.duration)).filter((n) => n > 0);
-  const rpes = inp.histories.map((h) => toNum(h.rpe)).filter((n) => n > 0);
+  // só tempos que dá para acreditar (o app antigo gravou segundos e relógios abertos: 11.438 "minutos"); poucos tempos = sem média
+  const okDur = histories.map((h) => toNum(h.duration)).filter((n) => n >= MIN_PLAUSIBLE_MIN && n <= MAX_PLAUSIBLE_MIN);
+  const durations = okDur.length >= MIN_DURATIONS_FOR_AVG ? okDur : [];
+  const rpes = histories.map((h) => toNum(h.rpe)).filter((n) => n > 0);
   const planned = inp.plannedPerWeek && inp.plannedPerWeek > 0 ? inp.plannedPerWeek : null;
   const avgPerWeek = round1(sessions / (days / 7));
-  const prevSessions = inp.prevHistories.length;
+  const prevSessions = prevHistories.length;
   const training: MonthlyReport['training'] = {
     sessions, trainedDays: dayset.size, perWeek, activeWeeks: perWeek.filter((n) => n > 0).length, avgPerWeek,
     plannedPerWeek: planned,
@@ -158,13 +202,13 @@ export function computeMonthlyReport(inp: MonthlyInput): MonthlyReport {
   };
 
   // ── volume ──
-  const cur = volumeOf(inp.histories, cats);
-  const prev = volumeOf(inp.prevHistories, cats);
+  const cur = volumeOf(histories, cats);
+  const prev = volumeOf(prevHistories, cats);
   const volume: MonthlyReport['volume'] = { totalKg: cur.kg, prevKg: prev.kg, changePct: prev.kg > 0 ? Math.round(((cur.kg - prev.kg) / prev.kg) * 100) : null, sets: cur.sets };
 
   // ── recordes: maior carga do período x maior de todo o histórico anterior ──
   const winMax = new Map<string, { name: string; kg: number }>();
-  for (const h of inp.histories) {
+  for (const h of histories) {
     for (const d of h.details || []) {
       if (isNonStrength(d, cats)) continue;
       const w = toNum(d.weight);
@@ -183,7 +227,7 @@ export function computeMonthlyReport(inp: MonthlyInput): MonthlyReport {
 
   // ── músculos: séries por categoria (só força) ──
   const bySets = new Map<string, number>();
-  for (const h of inp.histories) {
+  for (const h of histories) {
     for (const d of h.details || []) {
       if (isNonStrength(d, cats)) continue;
       const g = String(cats[d.exerciseId] || '').trim();
@@ -195,7 +239,7 @@ export function computeMonthlyReport(inp: MonthlyInput): MonthlyReport {
 
   // ── cardio: tempo e calorias de verdade; cardio antigo (sem tempo exato) usa o "peso" que eram os minutos ──
   let cardioMin = 0, cardioKcal = 0; const cardioSess = new Set<number>();
-  inp.histories.forEach((h, i) => {
+  histories.forEach((h, i) => {
     for (const d of h.details || []) {
       if (!isCardioRow(d, cats)) continue;
       cardioSess.add(i);
@@ -295,7 +339,7 @@ export async function loadMonthlyReport(db: any, student: { id: string; name?: s
   const start = startOfBrtDay(startYmd);
   const end = new Date(start.getTime() + days * DAY_MS);
   const prevStart = new Date(start.getTime() - days * DAY_MS);
-  const select = { id: true, date: true, duration: true, rpe: true, details: { select: { exerciseId: true, exerciseName: true, setNumber: true, weight: true, reps: true, cardioSeconds: true, cardioKcal: true } } };
+  const select = { id: true, date: true, day: true, duration: true, rpe: true, details: { select: { exerciseId: true, exerciseName: true, setNumber: true, weight: true, reps: true, cardioSeconds: true, cardioKcal: true } } };
 
   // ── núcleo: se falhar, o erro SOBE (melhor não responder do que dizer "0 treinos" por uma falha de banco) ──
   const [histories, prevHistories, baseRows]: any[][] = await Promise.all([
