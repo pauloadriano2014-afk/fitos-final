@@ -45,6 +45,35 @@ export async function GET(req: Request) {
       };
     }
 
+    // 🧾 + 🕒 (7 out 2026) o que o aluno DISSE dos exercícios sem registro (pulou / não fez / fez parte / fez sem marcar) e o HORÁRIO em que cada exercício foi marcado.
+    // Consultas à parte e protegidas: se as colunas novas ainda não existirem no banco, o resto da resposta sai igual a antes.
+    if (history) {
+      try {
+        const x: any = await prisma.workoutHistory.findUnique({ where: { id: history.id }, select: { exerciseStatus: true } });
+        history.status = Array.isArray(x?.exerciseStatus)
+          ? x.exerciseStatus.filter((i: any) => i && i.exerciseId && ['PULOU', 'NAO_FEZ', 'PARCIAL', 'FEZ'].includes(i.status)).map((i: any) => ({ exerciseId: String(i.exerciseId), name: String(i.name || ''), status: i.status }))
+          : null;
+      } catch (e) { history.status = null; }
+      try {
+        const rows: any[] = await prisma.exerciseHistory.findMany({ where: { workoutHistoryId: history.id, loggedAt: { not: null } }, select: { exerciseId: true, exerciseName: true, loggedAt: true } });
+        if (rows.length) {
+          const by = new Map<string, { exerciseId: string; name: string; first: number; last: number; n: number }>();
+          rows.forEach((r) => {
+            const t = new Date(r.loggedAt).getTime(); if (!Number.isFinite(t)) return;
+            const cur = by.get(r.exerciseId) || { exerciseId: r.exerciseId, name: r.exerciseName, first: t, last: t, n: 0 };
+            cur.first = Math.min(cur.first, t); cur.last = Math.max(cur.last, t); cur.n++; by.set(r.exerciseId, cur);
+          });
+          const list = Array.from(by.values()).sort((a, b) => a.first - b.first);
+          // "minuto 0" = quando ele apertou INICIAR (hora de finalizar menos a duração); sem a duração, o 1º registro
+          const base = history.durationMin ? new Date(history.date).getTime() - history.durationMin * 60000 : list[0].first;
+          const min = (t: number) => Math.max(0, Math.round((t - base) / 60000));
+          history.timeline = list.map((e) => ({ exerciseId: e.exerciseId, name: e.name, firstMin: min(e.first), lastMin: min(e.last), sets: e.n }));
+          history.lastLoggedMin = Math.max(...list.map((e) => min(e.last)));
+          history.timelineFromStart = !!history.durationMin;
+        }
+      } catch (e) { /* sem os horários */ }
+    }
+
     // as últimas vezes que ele fez o mesmo dia (para o coach ver se 54 min foi um dia fora do normal)
     let recent: { date: Date; durationMin: number }[] = [];
     const dayForRecent = h?.day || dayRaw;

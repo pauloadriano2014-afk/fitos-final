@@ -12,6 +12,7 @@ import { autoClientKey, cleanDay, cleanWorkoutId, findExistingFinish, isUniqueVi
 import { cleanDuration, cleanCardio } from '@/lib/workoutDuration';
 import { closeSessions } from '@/lib/workoutSessions';
 import { cleanEffort } from '@/lib/loadSuggest';
+import { cleanExerciseStatus, cleanLoggedAt, notDoneNames } from '@/lib/exerciseStatus';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,9 @@ export async function POST(req: Request) {
         } catch (e) { console.error('Erro checando aviso de tempo:', e); }
     }
 
+    // 🧾 (7 out 2026) o que o aluno disse dos exercícios sem registro (pulou / não fez / fez parte / fez sem marcar). Opcional; app antigo = null.
+    const exerciseStatus = cleanExerciseStatus(body.exerciseStatus);
+
     let xpBase = 150; 
     let xpBonus = 0;
     
@@ -95,6 +99,7 @@ export async function POST(req: Request) {
                     clientKey,
                     timeOk,
                     timeNote,
+                    ...(exerciseStatus ? { exerciseStatus: exerciseStatus as any } : {}),
                     xpEarned: totalXp,
                     duration: cleanDuration(duration),
                     rpe: rpe ? Number(rpe) : null,
@@ -121,6 +126,7 @@ export async function POST(req: Request) {
                                 reps: String(s.reps || "0"),
                                 // 🚴 cardio feito de verdade (cardio guiado ou digitado): tempo em segundos e calorias; nulo quando não é cardio
                                 ...cleanCardio(s),
+                                loggedAt: cleanLoggedAt(s.at, now),   // 🕒 quando a série foi marcada no app (nulo se o app não mandou)
                                 note: noteClean || null,
                                 effort: effortClean,
                             }));
@@ -211,6 +217,9 @@ export async function POST(req: Request) {
             pushBody = timeNote
                 ? `${displayName} (${dayLabel}): "${timeNote.slice(0, 100)}"`
                 : `${displayName} finalizou "${dayLabel}", mas disse que não deu tempo de fazer tudo`;
+            // 🧾 e já diz o que ficou de fora (só o que o aluno confirmou que pulou/não fez)
+            const skippedNames = notDoneNames(exerciseStatus);
+            if (skippedNames.length) pushBody = `${pushBody} · Não fez: ${skippedNames.slice(0, 3).join(', ')}${skippedNames.length > 3 ? ` +${skippedNames.length - 3}` : ''}`.slice(0, 220);
         }
 
         sendPushToUser(user.coach, pushTitle, pushBody, pushData).catch((pushError) => console.error("Erro ao enviar push de treino finalizado:", pushError));

@@ -7,6 +7,7 @@ import {
   ATENDIMENTO_KINDS, KIND_LABEL, addDaysKey, dateKeyBrt, diffDaysKeys, endOfDayBrt, startOfDayBrt, timeKeyBrt, firstName,
 } from '@/lib/agenda';
 import { ensureSeriesWindow, ownStudentScope, ownOfflineScope, withPersons, Person, Db } from '@/lib/agendaStore';
+import { notDoneNames } from '@/lib/exerciseStatus';
 
 export type Severity = 'late' | 'today' | 'soon' | 'info';
 export type Target =
@@ -175,6 +176,12 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       const an: any[] = await db.anamnese.findMany({ where: { userId: { in: [...new Set(rows.map((r) => r.userId))] } }, orderBy: { createdAt: 'desc' }, select: { userId: true, tempoDisponivel: true } });
       an.forEach((a) => { if (!avail.has(a.userId) && Number(a.tempoDisponivel) > 0) avail.set(a.userId, Number(a.tempoDisponivel)); });
     } catch (e) { /* sem o tempo disponível */ }
+    // 🧾 o que o aluno confirmou que NÃO fez (pulou / marcou "não fiz" no fim do treino). Consulta à parte e protegida: se a coluna ainda não existir, o cartão sai igual a antes.
+    const notDone = new Map<string, string[]>();
+    try {
+      const st: any[] = await db.workoutHistory.findMany({ where: { id: { in: rows.map((r) => r.id) } }, select: { id: true, exerciseStatus: true } });
+      st.forEach((x) => { const names = notDoneNames(x.exerciseStatus); if (names.length) notDone.set(x.id, names); });
+    } catch (e) { /* sem a lista do que ficou de fora */ }
     const seen = new Set<string>();
     for (const r of rows) {
       if (seen.has(r.userId)) continue;
@@ -182,11 +189,13 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       const s = byId.get(r.userId);
       if (!s) continue;
       const dayTxt = r.day ? (String(r.day).length <= 3 ? `Treino ${r.day}` : String(r.day)) : null;
+      const skipNames = notDone.get(r.id) || [];
+      const skipTxt = skipNames.length ? `não fez: ${skipNames.slice(0, 2).join(', ')}${skipNames.length > 2 ? ` +${skipNames.length - 2}` : ''}` : null;
       const note = r.timeNote ? `“${String(r.timeNote).slice(0, 90)}”` : 'não deu tempo de fazer tudo';
       const ageDays = Math.floor((now.getTime() - new Date(r.date).getTime()) / DAY);
       const took = r.duration > 0 ? Number(r.duration) : 0, has = avail.get(r.userId) || 0;
       const timeTxt = took ? `treinou ${took} min${has ? ` de ${has}` : ''}` : null;
-      push({ key: `tempo:${r.id}`, type: 'tempo', severity: ageDays <= 3 ? 'today' : 'soon', title: `Sem tempo no treino: ${s.name || 'Aluno'}`, subtitle: [dayTxt, timeTxt, note].filter(Boolean).join(' · '), person: person('student', s), dueAt: new Date(r.date).toISOString(), workoutId: r.workoutId || undefined, day: r.day || undefined, historyId: r.id, durationMin: took || undefined, availableMin: has || undefined, target: { type: 'student', id: s.id } });
+      push({ key: `tempo:${r.id}`, type: 'tempo', severity: ageDays <= 3 ? 'today' : 'soon', title: `Sem tempo no treino: ${s.name || 'Aluno'}`, subtitle: [dayTxt, timeTxt, note, skipTxt].filter(Boolean).join(' · '), person: person('student', s), dueAt: new Date(r.date).toISOString(), workoutId: r.workoutId || undefined, day: r.day || undefined, historyId: r.id, durationMin: took || undefined, availableMin: has || undefined, target: { type: 'student', id: s.id } });
     }
   }, undefined);
 

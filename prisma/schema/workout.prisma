@@ -264,6 +264,10 @@ model WorkoutHistory {
   timeOk           Boolean?
   timeNote         String?  @db.Text
 
+  // 🧾 (7 out 2026) O que o aluno disse dos exercícios SEM série registrada: lista [{ exerciseId, name, status }] com status PULOU | NAO_FEZ | PARCIAL | FEZ
+  // (ver lib/exerciseStatus.ts). null = o app não mandou (treino antigo ou o aluno não respondeu): "sem registro" NÃO prova que ele não fez. Coluna nova opcional.
+  exerciseStatus   Json?
+
   details          ExerciseHistory[]
 
   @@unique([userId, clientKey])
@@ -319,6 +323,10 @@ model ExerciseHistory {
   // 🏋️ (7 out 2026) "Como foi?" que o aluno marca ao terminar o exercício: FACIL | OK | PESADO (nulo = não respondeu / treino antigo). Alimenta a SUGESTÃO DE CARGA
   // (lib/loadSuggest.ts). Gravado igual em todas as séries do exercício, como a `note`. Coluna nova opcional: só adiciona (`npx prisma db push`).
   effort           String?
+
+  // 🕒 (7 out 2026) O instante em que a série foi marcada no app (relógio do aparelho, validado no servidor). Dá o ritmo real do aluno e o minuto em que ele
+  // parou de registrar. Nulo = treino antigo / app antigo. Coluna nova opcional: só adiciona (`npx prisma db push`).
+  loggedAt         DateTime?
 
   // 🔥 (17 set 2026) Mesma ideia do WorkoutHistory acima, só que pra uma
   // observação específica de exercício (o aluno reclamou de dor/dificuldade
