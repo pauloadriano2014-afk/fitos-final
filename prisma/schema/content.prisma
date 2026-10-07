@@ -244,10 +244,44 @@ model ProdutoVenda {
   // bump) que tiver cursoPrograma configurado.
   cursoAcessos    ProdutoCursoAcesso[]
 
+  // 🎟️ CUPOM DE DESCONTO (opcional): o que foi aplicado nesta venda. `valorTotal` já é o valor FINAL cobrado na Asaas; `valorOriginal` é o
+  // total antes do cupom e `descontoValor` a diferença. `cupomCodigo` guarda o código escrito (continua no histórico mesmo se o cupom for apagado).
+  cupomId         String?
+  cupom           CupomDesconto? @relation(fields: [cupomId], references: [id], onDelete: SetNull)
+  cupomCodigo     String?
+  valorOriginal   Float?
+  descontoValor   Float?
+
   paymentDate     DateTime?
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([cupomId])
+}
+
+// 🎟️ CUPOM DE DESCONTO do checkout dos produtos digitais (página de compra do site de membros e página /Produto).
+// Regras e contas: lib/cupom.ts. O servidor SEMPRE recalcula o valor (o navegador só mostra). Um pedido pendente segura um uso por 2 horas.
+model CupomDesconto {
+  id               String   @id @default(uuid())
+  codigo           String   @unique   // sempre em MAIÚSCULAS, sem espaços/acentos (ex.: VERAO10)
+  descricao        String?            // anotação interna do coach ("Black Friday", "Parceria com a Fulana")
+  tipo             String             // PERCENTUAL (1 a 90) ou VALOR (reais)
+  valor            Float
+  coachId          String             // dono: quem criou (o time master vê e edita todos)
+  produtoIds       String?  @db.Text  // JSON string[]: vale só para esses produtos; vazio = todos os produtos do dono
+  validoDe         DateTime?
+  validoAte        DateTime?          // vale até o FIM desse instante; vazio = sem prazo
+  usoMaximo        Int?               // total de compras com o cupom; vazio = sem limite
+  umaVezPorCliente Boolean  @default(true) // o mesmo CPF ou e-mail só usa uma vez
+  ativo            Boolean  @default(true)
+
+  vendas           ProdutoVenda[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([coachId])
 }
 
 // 🔥 TREINO INTERATIVO — acesso por link mágico (sem senha, sem conta) a um

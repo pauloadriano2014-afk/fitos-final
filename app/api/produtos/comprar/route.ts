@@ -10,6 +10,8 @@ import { findOrCreateCustomer, createPayment, getPixQrCode } from '@/lib/asaas';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 import { isValidEmail, membrosBaseUrl } from '@/lib/membros';
 import { montarTracking } from '@/lib/checkoutTracking';
+import { montarPedido } from '@/lib/produtoPedido';
+import { avaliarCupom, carregarCupom, contarUsos, mensagemDoMotivo, round2 } from '@/lib/cupom';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { produtoId, nome, email, telefone, cpf, itensBumpIds } = body;
+        const { produtoId, nome, email, telefone, cpf, itensBumpIds, cupom: cupomDigitado } = body;
 
         if (!produtoId || !nome || !email || !telefone || !cpf) {
             return NextResponse.json({ error: 'Preencha todos os campos obrigatórios.' }, { status: 400 });
@@ -48,29 +50,24 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Produto não encontrado ou indisponível.' }, { status: 404 });
         }
 
-        // 🔒 Nunca confia nos ids/valores mandados pelo cliente pra decidir o
-        // valor cobrado — filtra `itensBumpIds` contra a lista de bumps que
-        // o admin realmente configurou pra ESTE produto, e busca o valor real
-        // de cada um direto no banco. Isso impede tentar cobrar um valor
-        // menor ou "adicionar" um produto que não é bump desse checkout.
-        const bumpIdsPermitidos: string[] = (() => {
-            try { return produto.orderBumpProdutoIds ? JSON.parse(produto.orderBumpProdutoIds) : []; }
-            catch { return []; }
-        })();
-        const bumpIdsEscolhidos: string[] = Array.isArray(itensBumpIds)
-            ? itensBumpIds.filter((id: string) => bumpIdsPermitidos.includes(id))
-            : [];
+        // 🔒 Nunca confia nos ids/valores mandados pelo cliente pra decidir o valor cobrado (ver lib/produtoPedido.ts): os extras são filtrados contra
+        // a lista que o admin configurou pra ESTE produto e o valor de cada um vem do banco.
+        const { bumpProdutos, valorTotal: valorBruto } = await montarPedido(prisma, produto, itensBumpIds);
 
-        let bumpProdutos: { id: string; valor: number }[] = [];
-        if (bumpIdsEscolhidos.length > 0) {
-            bumpProdutos = await prisma.produtoDigital.findMany({
-                where: { id: { in: bumpIdsEscolhidos }, ativo: true },
-                select: { id: true, valor: true },
-            });
+        // 🎟️ CUPOM (opcional): o servidor confere TUDO de novo (validade, produto, limite de usos, "uma vez por cliente") e recalcula o valor. Se o cupom não
+        // vale mais, a compra é recusada com o motivo (nunca cobra o preço cheio escondido de quem viu o preço com desconto).
+        const emailLimpo = String(email).trim();
+        let cupom: any = null;
+        let valorTotal = valorBruto;
+        let descontoValor = 0;
+        if (typeof cupomDigitado === 'string' && cupomDigitado.trim()) {
+            cupom = await carregarCupom(prisma, cupomDigitado);
+            const usos = cupom ? await contarUsos(prisma, cupom.id, { cpf: cpfDigits, email: emailLimpo }) : { total: 0, cliente: 0 };
+            const r = avaliarCupom(cupom, { now: new Date(), produto, total: valorBruto, usosTotal: usos.total, usosCliente: usos.cliente });
+            if (!r.ok) return NextResponse.json({ error: r.mensagem, cupomInvalido: true, motivo: r.motivo }, { status: 400 });
+            valorTotal = r.final;
+            descontoValor = r.desconto;
         }
-
-        const valorBumps = bumpProdutos.reduce((soma, p) => soma + p.valor, 0);
-        const valorTotal = produto.valor + valorBumps;
 
         const customer = await findOrCreateCustomer({
             name: nome,
@@ -93,16 +90,30 @@ export async function POST(request: NextRequest) {
             data: {
                 produtoId: produto.id,
                 nomeCliente: nome,
-                emailCliente: String(email).trim(),
+                emailCliente: emailLimpo,
                 telefoneCliente: telefone,
                 cpfCliente: cpfDigits,
                 status: 'PENDENTE',
                 valorTotal,
+                ...(cupom ? { cupomId: cupom.id, cupomCodigo: cupom.codigo, valorOriginal: valorBruto, descontoValor } : {}),
                 itensBumpIds: bumpProdutos.length > 0 ? JSON.stringify(bumpProdutos.map((p) => p.id)) : null,
                 asaasCustomerId: customer.id,
                 tracking: JSON.stringify(tracking),
             },
         });
+
+        // 🎟️ Duas pessoas podem ter conferido o último uso ao mesmo tempo: depois de criar a venda (que já segura 1 uso) confere de novo e, se estourou o
+        // limite (ou o mesmo cliente criou 2 pedidos juntos), desfaz ESTA venda e recusa.
+        if (cupom && (cupom.usoMaximo !== null && cupom.usoMaximo !== undefined || cupom.umaVezPorCliente !== false)) {
+            const agora = await contarUsos(prisma, cupom.id, { cpf: cpfDigits, email: emailLimpo });
+            const estourou = cupom.usoMaximo !== null && cupom.usoMaximo !== undefined && agora.total > cupom.usoMaximo;
+            const repetiu = cupom.umaVezPorCliente !== false && agora.cliente > 1;
+            if (estourou || repetiu) {
+                await prisma.produtoVenda.delete({ where: { id: venda.id } }).catch(() => {});
+                const motivo = estourou ? 'ESGOTADO' : 'JA_USOU';
+                return NextResponse.json({ error: mensagemDoMotivo(motivo), cupomInvalido: true, motivo }, { status: 400 });
+            }
+        }
 
         try {
             const descricao = bumpProdutos.length > 0
@@ -114,7 +125,7 @@ export async function POST(request: NextRequest) {
                 billingType: 'UNDEFINED' as const, // cliente escolhe PIX/cartão
                 value: valorTotal,
                 dueDate: toDateOnly(new Date()),
-                description: descricao,
+                description: cupom ? `${descricao} (cupom ${cupom.codigo})` : descricao,
                 externalReference: `produto:${venda.id}`,
             };
 
@@ -156,7 +167,7 @@ export async function POST(request: NextRequest) {
             });
 
             return NextResponse.json(
-                { vendaId: venda.id, pixQrCode, pixCopyPaste, invoiceUrl: asaasPayment.invoiceUrl || null, retirada, valorTotal },
+                { vendaId: venda.id, pixQrCode, pixCopyPaste, invoiceUrl: asaasPayment.invoiceUrl || null, retirada, valorTotal, ...(cupom ? { cupomCodigo: cupom.codigo, valorOriginal: valorBruto, desconto: round2(descontoValor) } : {}) },
                 { status: 201 }
             );
         } catch (asaasError: any) {
