@@ -261,7 +261,8 @@ export function buildHighlights(r: MonthlyReport): Highlight[] {
   if (r.volume.totalKg > 0) {
     const tons = fmtDec(r.volume.totalKg / 1000);
     const vol = r.volume.totalKg >= 1000 ? `${tons} ${tons === '1' ? 'tonelada' : 'toneladas'}` : `${fmtInt(r.volume.totalKg)} kg`;
-    const cmp = r.volume.changePct === null ? '' : ` (${r.volume.changePct >= 0 ? '+' : '−'}${Math.abs(r.volume.changePct)}% em relação ao período anterior)`;
+    const ch = r.volume.changePct;
+    const cmp = ch === null ? '' : ch === 0 ? ' (igual ao período anterior)' : ` (${ch > 0 ? '+' : '−'}${Math.abs(ch)}% em relação ao período anterior)`;
     out.push({ key: 'volume', icon: 'weight-lifter', text: `Volume de treino (estimado): ${vol}${cmp}`, tone: r.volume.changePct !== null && r.volume.changePct < 0 ? 'warn' : 'good' });
   }
   if (r.cardio.minutes > 0 || r.cardio.kcal > 0) {
