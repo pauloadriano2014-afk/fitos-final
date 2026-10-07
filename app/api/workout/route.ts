@@ -92,6 +92,8 @@ export async function GET(req: Request) {
             lastWeights: lastWeightsMap,
             lastWeightModes: lastWeightModesMap,
             loadSuggestions,
+            // false = o coach desligou para este aluno (o app também deixa de perguntar "como foi?" ao terminar o exercício)
+            loadSuggestEnabled: !targetUser?.loadSuggestOff,
             lastLog: calculatedLastLog 
         });
     }

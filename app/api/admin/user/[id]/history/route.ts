@@ -42,7 +42,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         // 🚴 (7 out 2026) além das observações, traz as séries de CARDIO feitas de verdade (tempo e calorias) para o coach ver o que o aluno cumpriu.
         // (`exerciseId` também vem agora: a tela agrupa por exercício, e sem ele só a primeira observação do treino aparecia.)
         details: {
-          where: { OR: [{ note: { not: null } }, { cardioSeconds: { not: null } }, { cardioKcal: { not: null } }] },
+          // 🏋️ (7 out 2026) também traz as linhas com "como foi?" (effort) que o aluno marcou: a tela mostra FÁCIL / NA MEDIDA / PESADO de cada exercício.
+          where: { OR: [{ note: { not: null } }, { cardioSeconds: { not: null } }, { cardioKcal: { not: null } }, { effort: { not: null } }] },
           orderBy: { setNumber: 'asc' },
           select: {
             id: true,
@@ -51,6 +52,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             setNumber: true,
             cardioSeconds: true,
             cardioKcal: true,
+            effort: true,
             note: true,
             resolvedAt: true,
             coachReply: true,
