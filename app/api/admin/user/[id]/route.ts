@@ -52,6 +52,8 @@ function sanitizeUpdateData(rawBody: any, { isSelfEdit }: { isSelfEdit: boolean 
     // Fora da lista de campos do próprio aluno (abaixo): só o coach dele (ou o master) muda isso.
     if (Object.prototype.hasOwnProperty.call(body, 'loadStep')) body.loadStep = cleanStep(body.loadStep);
     if (Object.prototype.hasOwnProperty.call(body, 'loadSuggestOff')) body.loadSuggestOff = body.loadSuggestOff === true;
+    // 📅 (8 out 2026) relatório do mês liberado ao aluno: sempre verdadeiro/falso e, como o de cima, só o coach dele (ou o master) muda (não está em SELF_EDIT_ALLOWED_FIELDS)
+    if (Object.prototype.hasOwnProperty.call(body, 'monthlyReportOn')) body.monthlyReportOn = body.monthlyReportOn === true;
 
     if (!isSelfEdit) return body; // coach/master editando outra pessoa: sem mudança de comportamento
 
@@ -132,6 +134,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             menstruationStartDate: true,
             loadSuggestOff: true,
             loadStep: true,
+            monthlyReportOn: true,
             onboardingCompleted: true,
             onboardingStep:      true,
             coachPlan:           true,

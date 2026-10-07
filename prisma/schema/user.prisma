@@ -115,6 +115,10 @@ model User {
   loadSuggestOff  Boolean   @default(false)
   loadStep        Float?
 
+  // 📅 (8 out 2026) RELATÓRIO DO MÊS liberado para o aluno (lib/monthlyReport.ts). O coach (ou o master) liga por aluno; desligado = o aluno não vê o cartão nem o aviso
+  // mensal e o servidor recusa o relatório DELE (o coach sempre vê o do aluno). Coluna nova: só adiciona (`npx prisma db push`); padrão = desligado.
+  monthlyReportOn Boolean   @default(false)
+
   strategyNotes   String?   @db.Text
   lastContactDate DateTime?
   weeklyChecks    Json?
