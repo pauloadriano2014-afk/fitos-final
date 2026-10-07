@@ -137,7 +137,8 @@ export function suggestLoad(sessions: Session[], opts: { now?: Date; step?: numb
 
     const make = (action: Action, reason: Reason, delta: number): Suggestion => {
         const loads: Record<number, number> = {};
-        for (const s of last.sets) loads[s.setNumber] = snapLoad(Math.max(0, s.weight + delta), perSide);
+        // descer nunca zera uma série leve (ex.: aquecimento de 1 kg numa pirâmide): se não sobra carga depois do degrau, ela fica como estava
+        for (const s of last.sets) loads[s.setNumber] = snapLoad(s.weight + delta > 0 ? s.weight + delta : s.weight, perSide);
         return { action, reason, step, from, to: snapLoad(Math.max(0, from + delta), perSide), perSide, daysSince, loads };
     };
 
