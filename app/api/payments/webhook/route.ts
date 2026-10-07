@@ -12,6 +12,7 @@ import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
 import { markCoachPaid } from '@/lib/coachPayments';
 import { releasePromo } from '@/lib/launchPromo';
 import { sendPushToUser } from '@/app/utils/sendNotification';
+import { criarPremio, pausarPremioDaVenda, PERCENTUAL_PREMIO } from '@/lib/indicacao';
 
 export const dynamic = 'force-dynamic';
 
@@ -629,6 +630,8 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
         if (venda.status !== 'ESTORNADO') {
             await prisma.produtoVenda.update({ where: { id: vendaId }, data: { status: 'ESTORNADO' } });
             console.log(`💸 Produto: venda ${vendaId} estornada (${event}) — acesso revogado (${venda.nomeCliente})`);
+            // 🤝 o prêmio de indicação que essa compra gerou (se houve) fica pausado; nunca derruba o webhook
+            try { await pausarPremioDaVenda(prisma, vendaId); } catch (premioError) { console.error('[produtos][indicacao] Falhou ao pausar o prêmio do estorno:', premioError); }
         }
         return NextResponse.json({ received: true });
     }
@@ -740,6 +743,18 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
             let idsDaVenda: string[] = [venda.produto.id];
             try { const extras = venda.itensBumpIds ? JSON.parse(venda.itensBumpIds) : []; if (Array.isArray(extras)) idsDaVenda = [...idsDaVenda, ...extras.map(String)]; } catch { /* sem bumps */ }
             await enviarCompraMeta(venda, venda.produto.nome, idsDaVenda);
+        }
+
+        // 🤝 INDICAÇÃO: se a compra foi feita com o código de um aluno, o aluno ganha o prêmio dele (uma vez por venda; se a venda voltou de um estorno, o prêmio pausado volta).
+        // Roda também no aviso repetido da Asaas (é idempotente) e nunca derruba o webhook.
+        try {
+            const premio = await criarPremio(prisma, venda);
+            if (premio.criado && premio.indicadorId) {
+                const dono = await prisma.user.findUnique({ where: { id: premio.indicadorId }, select: { id: true, pushToken: true } });
+                if (dono) await sendPushToUser(dono, '🎁 Seu amigo comprou!', `Você ganhou ${PERCENTUAL_PREMIO}% de desconto numa próxima compra. Toque para ver o seu prêmio.`, { type: 'INDICACAO' });
+            }
+        } catch (premioError) {
+            console.error('[produtos][indicacao] Falhou ao gerar o prêmio, mas a venda já está paga:', premioError);
         }
     }
 

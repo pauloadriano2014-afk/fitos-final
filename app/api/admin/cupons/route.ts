@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
     try {
         const auth = requireAuth(request);
         if ('response' in auth) return auth.response;
-        const where = isMasterId(auth.user.id) ? {} : { coachId: auth.user.id };
+        // 🤝 só os cupons feitos pelo coach: os códigos dos alunos e os prêmios da indicação têm o painel próprio (/api/admin/indicacoes)
+        const where = isMasterId(auth.user.id) ? { origem: null } : { coachId: auth.user.id, origem: null };
         const cupons = await prisma.cupomDesconto.findMany({ where, orderBy: { createdAt: 'desc' } });
 
         const ids = cupons.map((c: any) => c.id);

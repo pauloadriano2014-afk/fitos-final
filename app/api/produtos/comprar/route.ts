@@ -12,6 +12,7 @@ import { isValidEmail, membrosBaseUrl } from '@/lib/membros';
 import { montarTracking } from '@/lib/checkoutTracking';
 import { montarPedido } from '@/lib/produtoPedido';
 import { avaliarCupom, carregarCupom, contarUsos, mensagemDoMotivo, round2 } from '@/lib/cupom';
+import { carregarIndicador } from '@/lib/indicacao';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +64,8 @@ export async function POST(request: NextRequest) {
         if (typeof cupomDigitado === 'string' && cupomDigitado.trim()) {
             cupom = await carregarCupom(prisma, cupomDigitado);
             const usos = cupom ? await contarUsos(prisma, cupom.id, { cpf: cpfDigits, email: emailLimpo }) : { total: 0, cliente: 0 };
-            const r = avaliarCupom(cupom, { now: new Date(), produto, total: valorBruto, usosTotal: usos.total, usosCliente: usos.cliente });
+            const indicador = await carregarIndicador(prisma, cupom);   // 🤝 código de indicação: o dono não usa o próprio (mesmo e-mail ou CPF)
+            const r = avaliarCupom(cupom, { now: new Date(), produto, total: valorBruto, usosTotal: usos.total, usosCliente: usos.cliente, indicador, comprador: { email: emailLimpo, cpf: cpfDigits } });
             if (!r.ok) return NextResponse.json({ error: r.mensagem, cupomInvalido: true, motivo: r.motivo }, { status: 400 });
             valorTotal = r.final;
             descontoValor = r.desconto;

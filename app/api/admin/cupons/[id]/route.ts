@@ -13,8 +13,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     try {
         const auth = requireAuth(request);
         if ('response' in auth) return auth.response;
-        const existente = await prisma.cupomDesconto.findUnique({ where: { id: params.id }, select: { id: true, coachId: true } });
-        if (!existente) return NextResponse.json({ error: 'Cupom não encontrado.' }, { status: 404 });
+        const existente = await prisma.cupomDesconto.findUnique({ where: { id: params.id }, select: { id: true, coachId: true, origem: true } });
+        if (!existente || existente.origem) return NextResponse.json({ error: 'Cupom não encontrado.' }, { status: 404 });   // (códigos e prêmios de indicação não são editados por aqui)
         if (!canActAsCoach(auth.user, existente.coachId)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
 
         const body = await request.json().catch(() => ({}));
@@ -43,8 +43,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     try {
         const auth = requireAuth(request);
         if ('response' in auth) return auth.response;
-        const existente = await prisma.cupomDesconto.findUnique({ where: { id: params.id }, select: { id: true, coachId: true } });
-        if (!existente) return NextResponse.json({ error: 'Cupom não encontrado.' }, { status: 404 });
+        const existente = await prisma.cupomDesconto.findUnique({ where: { id: params.id }, select: { id: true, coachId: true, origem: true } });
+        if (!existente || existente.origem) return NextResponse.json({ error: 'Cupom não encontrado.' }, { status: 404 });   // (códigos e prêmios de indicação não são editados por aqui)
         if (!canActAsCoach(auth.user, existente.coachId)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
 
         await prisma.cupomDesconto.delete({ where: { id: params.id } });

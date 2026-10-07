@@ -20,7 +20,7 @@ export const MAX_PRODUTOS_POR_CUPOM = 50;
 export const MAX_DESCRICAO = 80;
 
 export type CupomTipo = 'PERCENTUAL' | 'VALOR';
-export type MotivoCupom = 'NAO_ENCONTRADO' | 'INATIVO' | 'AINDA_NAO' | 'EXPIRADO' | 'OUTRO_PRODUTO' | 'ESGOTADO' | 'JA_USOU' | 'SEM_EFEITO';
+export type MotivoCupom = 'NAO_ENCONTRADO' | 'INATIVO' | 'AINDA_NAO' | 'EXPIRADO' | 'OUTRO_PRODUTO' | 'AUTO_INDICACAO' | 'ESGOTADO' | 'JA_USOU' | 'SEM_EFEITO';
 
 export interface CupomRow {
   id: string;
@@ -35,6 +35,21 @@ export interface CupomRow {
   umaVezPorCliente?: boolean;
   ativo?: boolean;
   descricao?: string | null;
+  origem?: string | null;        // null = cupom do coach; "INDICACAO" = código pessoal de aluno; "PREMIO" = prêmio de quem indicou (ver lib/indicacao.ts)
+  indicadorId?: string | null;
+}
+
+/** E-mail e/ou CPF de uma pessoa, para saber se duas são a mesma. */
+export interface Contato { email?: string | null; cpf?: string | null }
+
+/** Mesma pessoa: mesmo e-mail (sem diferenciar maiúsculas) ou mesmo CPF completo. */
+export function mesmoContato(a: Contato | null | undefined, b: Contato | null | undefined): boolean {
+  const ea = String(a?.email ?? '').trim().toLowerCase();
+  const eb = String(b?.email ?? '').trim().toLowerCase();
+  if (ea && ea === eb) return true;
+  const ca = String(a?.cpf ?? '').replace(/\D/g, '');
+  const cb = String(b?.cpf ?? '').replace(/\D/g, '');
+  return ca.length === 11 && ca === cb;
 }
 
 export const round2 = (n: number): number => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -87,6 +102,7 @@ const MENSAGEM: Record<MotivoCupom, string> = {
   AINDA_NAO: 'Este cupom ainda não está valendo.',
   EXPIRADO: 'Este cupom expirou.',
   OUTRO_PRODUTO: 'Este cupom não vale para este produto.',
+  AUTO_INDICACAO: 'Você não pode usar o seu próprio código de indicação.',
   ESGOTADO: 'Este cupom já atingiu o limite de usos.',
   JA_USOU: 'Você já usou este cupom.',
   SEM_EFEITO: 'Este cupom não reduz o valor deste pedido.',
@@ -105,7 +121,7 @@ const nao = (motivo: MotivoCupom): AvaliacaoCupom => ({ ok: false, motivo, mensa
  */
 export function avaliarCupom(
   cupom: CupomRow | null | undefined,
-  ctx: { now: Date; produto: { id: string; coachId: string }; total: number; usosTotal: number; usosCliente: number },
+  ctx: { now: Date; produto: { id: string; coachId: string }; total: number; usosTotal: number; usosCliente: number; indicador?: Contato | null; comprador?: Contato | null },
 ): AvaliacaoCupom {
   if (!cupom) return nao('NAO_ENCONTRADO');
   if (cupom.ativo === false) return nao('INATIVO');
@@ -113,6 +129,8 @@ export function avaliarCupom(
   if (cupom.validoDe && agora < new Date(cupom.validoDe).getTime()) return nao('AINDA_NAO');
   if (cupom.validoAte && agora > new Date(cupom.validoAte).getTime()) return nao('EXPIRADO');
   if (!cupomServeProduto(cupom, ctx.produto)) return nao('OUTRO_PRODUTO');
+  // 🤝 o dono do código de indicação não usa o próprio código (nem com outro nome: vale o mesmo e-mail ou CPF)
+  if (cupom.origem === 'INDICACAO' && mesmoContato(ctx.indicador, ctx.comprador)) return nao('AUTO_INDICACAO');
   if (cupom.usoMaximo !== null && cupom.usoMaximo !== undefined && ctx.usosTotal >= cupom.usoMaximo) return nao('ESGOTADO');
   if (cupom.umaVezPorCliente !== false && ctx.usosCliente > 0) return nao('JA_USOU');
   const { desconto, final, limitado } = descontoDe(cupom.tipo, cupom.valor, ctx.total);

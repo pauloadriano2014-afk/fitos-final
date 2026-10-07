@@ -276,12 +276,21 @@ model CupomDesconto {
   umaVezPorCliente Boolean  @default(true) // o mesmo CPF ou e-mail só usa uma vez
   ativo            Boolean  @default(true)
 
+  // 🤝 INDICAÇÃO (ver lib/indicacao.ts). null = cupom comum, criado pelo coach.
+  //   "INDICACAO" = código pessoal de um aluno: quem compra com ele ganha desconto e o aluno ganha um prêmio quando a compra é paga
+  //   "PREMIO"    = o prêmio do aluno que indicou (1 uso), criado quando a compra do amigo foi paga
+  origem           String?
+  indicadorId      String?            // o aluno (User) dono do código ou do prêmio
+  codigoDeId       String?  @unique   // só no código pessoal: o mesmo id do aluno (garante um código por aluno, mesmo com dois toques ao mesmo tempo)
+  vendaOrigemId    String?  @unique   // só no prêmio: a venda paga que o gerou (garante um prêmio por compra, mesmo com o webhook repetido)
+
   vendas           ProdutoVenda[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   @@index([coachId])
+  @@index([indicadorId])
 }
 
 // 🔥 TREINO INTERATIVO — acesso por link mágico (sem senha, sem conta) a um

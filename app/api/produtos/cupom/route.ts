@@ -10,6 +10,7 @@ import prisma from '@/lib/prisma';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 import { montarPedido } from '@/lib/produtoPedido';
 import { avaliarCupom, carregarCupom, contarUsos, descreverCupom, normalizarCodigo } from '@/lib/cupom';
+import { carregarIndicador } from '@/lib/indicacao';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,8 +36,11 @@ export async function POST(request: NextRequest) {
 
         // CPF e e-mail ainda podem não estar preenchidos aqui: sem eles só dá para conferir o limite geral (o "uma vez por cliente" é conferido na compra).
         const cpfDigits = String(cpf ?? '').replace(/\D/g, '');
-        const usos = cupom ? await contarUsos(prisma, cupom.id, { cpf: cpfDigits.length === 11 ? cpfDigits : null, email: typeof email === 'string' && email.includes('@') ? email : null }) : { total: 0, cliente: 0 };
-        const r = avaliarCupom(cupom, { now: new Date(), produto, total: valorTotal, usosTotal: usos.total, usosCliente: usos.cliente });
+        const cpfOk = cpfDigits.length === 11 ? cpfDigits : null; const emailOk = typeof email === 'string' && email.includes('@') ? email : null;
+        const usos = cupom ? await contarUsos(prisma, cupom.id, { cpf: cpfOk, email: emailOk }) : { total: 0, cliente: 0 };
+        // 🤝 código de indicação: o próprio dono não usa (só dá para saber se a pessoa já preencheu o e-mail ou o CPF; a compra confere de novo)
+        const indicador = await carregarIndicador(prisma, cupom);
+        const r = avaliarCupom(cupom, { now: new Date(), produto, total: valorTotal, usosTotal: usos.total, usosCliente: usos.cliente, indicador, comprador: { email: emailOk, cpf: cpfOk } });
 
         if (!r.ok) return NextResponse.json({ valido: false, error: r.mensagem, motivo: r.motivo }, { status: 400 });
         return NextResponse.json({
