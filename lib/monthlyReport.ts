@@ -259,7 +259,8 @@ export function buildHighlights(r: MonthlyReport): Highlight[] {
     out.push({ key: 'records', icon: 'trophy-outline', text: `${n} ${n === 1 ? 'recorde' : 'recordes'} de carga: ${list}${n > 2 ? ' e mais' : ''}`, tone: 'good' });
   }
   if (r.volume.totalKg > 0) {
-    const vol = r.volume.totalKg >= 1000 ? `${fmtDec(r.volume.totalKg / 1000)} toneladas` : `${fmtInt(r.volume.totalKg)} kg`;
+    const tons = fmtDec(r.volume.totalKg / 1000);
+    const vol = r.volume.totalKg >= 1000 ? `${tons} ${tons === '1' ? 'tonelada' : 'toneladas'}` : `${fmtInt(r.volume.totalKg)} kg`;
     const cmp = r.volume.changePct === null ? '' : ` (${r.volume.changePct >= 0 ? '+' : '−'}${Math.abs(r.volume.changePct)}% em relação ao período anterior)`;
     out.push({ key: 'volume', icon: 'weight-lifter', text: `Volume de treino (estimado): ${vol}${cmp}`, tone: r.volume.changePct !== null && r.volume.changePct < 0 ? 'warn' : 'good' });
   }
