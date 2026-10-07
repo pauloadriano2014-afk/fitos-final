@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { Expo } from 'expo-server-sdk';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { buildLastLoads } from '@/lib/exerciseLoad';
+import { buildLoadSuggestions } from '@/lib/loadSuggest';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 
 const expo = new Expo();
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
     // 🔒 Só o próprio aluno, o coach dono dele, ou o time master.
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true, loadSuggestOff: true, loadStep: true } });
     if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
         return NextResponse.json({ error: "Acesso Negado: Aluno não pertence a você." }, { status: 403 });
     }
@@ -69,6 +70,12 @@ export async function GET(req: Request) {
         // anotada "cada lado". O app usa só para já abrir o exercício no mesmo modo da última vez (app antigo ignora o campo).
         const { weights: lastWeightsMap, modes: lastWeightModesMap } = buildLastLoads(history);
 
+        // 🏋️ (7 out 2026) SUGESTÃO DE CARGA: por exercício do treino (e por cada opção de troca, que tem o próprio histórico). Vazio quando o coach desligou para este
+        // aluno ou quando não há nada a sugerir; app antigo ignora o campo. Regras em lib/loadSuggest.ts.
+        const suggestIds: string[] = [];
+        workout.exercises.forEach((ex: any) => { suggestIds.push(ex.exerciseId); (ex.substitutes || []).forEach((id: string) => suggestIds.push(id)); });
+        const loadSuggestions = targetUser?.loadSuggestOff ? {} : buildLoadSuggestions(history as any, suggestIds, { step: targetUser?.loadStep ?? null });
+
         // 🔥 TRADUÇÃO DOS SUBSTITUTOS PARA O TREINO ESPECÍFICO 🔥
         const populatedExercises = workout.exercises.map((ex: any) => {
             const mappedSubs = (ex.substitutes || []).map((subId: string) => {
@@ -84,6 +91,7 @@ export async function GET(req: Request) {
             exercises: populatedExercises, 
             lastWeights: lastWeightsMap,
             lastWeightModes: lastWeightModesMap,
+            loadSuggestions,
             lastLog: calculatedLastLog 
         });
     }

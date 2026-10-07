@@ -11,6 +11,7 @@ import { cleanWeight, isPerSide } from '@/lib/exerciseLoad';
 import { autoClientKey, cleanDay, cleanWorkoutId, findExistingFinish, isUniqueViolation, sanitizeClientKey } from '@/lib/finishWorkout';
 import { cleanDuration, cleanCardio } from '@/lib/workoutDuration';
 import { closeSessions } from '@/lib/workoutSessions';
+import { cleanEffort } from '@/lib/loadSuggest';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,6 +109,8 @@ export async function POST(req: Request) {
                             // é -- na leitura (WorkoutLogCard.js) só olhamos a primeira
                             // ocorrência não-vazia por exercício.
                             const noteClean = ex.note ? String(ex.note).trim().slice(0, 500) : '';
+                            // 🏋️ "como foi?" (FACIL / OK / PESADO), igual em todas as séries do exercício; vazio ou fora da lista = sem resposta (lib/loadSuggest.ts)
+                            const effortClean = cleanEffort(ex.effort);
 
                             return sets.map((s: any) => ({
                                 exerciseId: ex.exerciseId,
@@ -119,6 +122,7 @@ export async function POST(req: Request) {
                                 // 🚴 cardio feito de verdade (cardio guiado ou digitado): tempo em segundos e calorias; nulo quando não é cardio
                                 ...cleanCardio(s),
                                 note: noteClean || null,
+                                effort: effortClean,
                             }));
                         })
                     }

@@ -316,6 +316,10 @@ model ExerciseHistory {
   cardioSeconds    Int?
   cardioKcal       Int?
 
+  // 🏋️ (7 out 2026) "Como foi?" que o aluno marca ao terminar o exercício: FACIL | OK | PESADO (nulo = não respondeu / treino antigo). Alimenta a SUGESTÃO DE CARGA
+  // (lib/loadSuggest.ts). Gravado igual em todas as séries do exercício, como a `note`. Coluna nova opcional: só adiciona (`npx prisma db push`).
+  effort           String?
+
   // 🔥 (17 set 2026) Mesma ideia do WorkoutHistory acima, só que pra uma
   // observação específica de exercício (o aluno reclamou de dor/dificuldade
   // num exercício certo, não do treino inteiro).

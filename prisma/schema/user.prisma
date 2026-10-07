@@ -110,6 +110,11 @@ model User {
   isMenstruating  Boolean   @default(false)
   menstruationStartDate DateTime?
 
+  // 🏋️ (7 out 2026) SUGESTÃO DE CARGA no treino do aluno (lib/loadSuggest.ts). O coach desliga por aluno (`loadSuggestOff`) e escolhe o salto em kg
+  // (`loadStep`: 1, 2, 2.5 ou 5; nulo = automático). Colunas novas: só adicionam (`npx prisma db push`); padrão = ligada e automática.
+  loadSuggestOff  Boolean   @default(false)
+  loadStep        Float?
+
   strategyNotes   String?   @db.Text
   lastContactDate DateTime?
   weeklyChecks    Json?

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, isMasterId, type AuthUser } from '@/lib/auth';
+import { cleanStep } from '@/lib/loadSuggest';
 
 // 🔒 A ownership agora é decidida pelo usuário REAL do token (authUser), nunca
 // pelo `adminId` que o cliente manda no body/query — esse `adminId` é
@@ -46,6 +47,11 @@ function sanitizeUpdateData(rawBody: any, { isSelfEdit }: { isSelfEdit: boolean 
     delete body.password;
     delete body.id;
     delete body.email;
+
+    // 🏋️ (7 out 2026) sugestão de carga do aluno: o salto só vale entre os valores permitidos (outro valor = automático) e o interruptor é sempre verdadeiro/falso.
+    // Fora da lista de campos do próprio aluno (abaixo): só o coach dele (ou o master) muda isso.
+    if (Object.prototype.hasOwnProperty.call(body, 'loadStep')) body.loadStep = cleanStep(body.loadStep);
+    if (Object.prototype.hasOwnProperty.call(body, 'loadSuggestOff')) body.loadSuggestOff = body.loadSuggestOff === true;
 
     if (!isSelfEdit) return body; // coach/master editando outra pessoa: sem mudança de comportamento
 
@@ -124,6 +130,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             paymentClaimCycleDueDate: true,
             isMenstruating: true,
             menstruationStartDate: true,
+            loadSuggestOff: true,
+            loadStep: true,
             onboardingCompleted: true,
             onboardingStep:      true,
             coachPlan:           true,
