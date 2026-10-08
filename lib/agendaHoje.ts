@@ -27,6 +27,10 @@ export type Task = {
   workoutId?: string; day?: string;
   /** … e o treino finalizado em que ele avisou, quanto ele levou (min) e quanto diz ter por sessão (anamnese) */
   historyId?: string; durationMin?: number; availableMin?: number;
+  /** "sem tempo" que se repete: quantos ajustes o coach já fez nesse treino e quando foi o último (o 2º aviso mostra o que já foi tentado) */
+  adjustments?: number; lastAdjustAt?: string; lastAdjustLines?: string[];
+  /** "não tem o aparelho": o exercício e o aviso do aluno (o app abre o editor direto nele) */
+  reportId?: string; exerciseId?: string; exerciseName?: string; workoutExerciseId?: string;
 };
 
 const DAY = 86400000;
@@ -182,12 +186,20 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       const st: any[] = await db.workoutHistory.findMany({ where: { id: { in: rows.map((r) => r.id) } }, select: { id: true, exerciseStatus: true } });
       st.forEach((x) => { const names = notDoneNames(x.exerciseStatus); if (names.length) notDone.set(x.id, names); });
     } catch (e) { /* sem a lista do que ficou de fora */ }
+    // 🛠️ ajustes que o coach já fez e avisou ao aluno (StudentCoachMessage): se faltou tempo DE NOVO depois de um, é o "2º aviso" (só avisa; o coach decide o que mudar)
+    const adjusts: any[] = [];
+    try {
+      adjusts.push(...await db.studentCoachMessage.findMany({ where: { userId: { in: [...new Set(rows.map((r) => r.userId))] }, kind: 'AJUSTE_TREINO', createdAt: { gte: new Date(now.getTime() - 45 * DAY) } }, orderBy: { createdAt: 'desc' }, select: { id: true, userId: true, day: true, workoutId: true, createdAt: true, changes: true } }));
+    } catch (e) { /* tabela ainda não criada: sem o histórico de ajustes */ }
     const seen = new Set<string>();
     for (const r of rows) {
       if (seen.has(r.userId)) continue;
       seen.add(r.userId);
       const s = byId.get(r.userId);
       if (!s) continue;
+      const before = adjusts.filter((a) => a.userId === r.userId && new Date(a.createdAt) < new Date(r.date)
+        && (!a.day || !r.day || String(a.day).trim().toUpperCase() === String(r.day).trim().toUpperCase())
+        && (!a.workoutId || !r.workoutId || a.workoutId === r.workoutId));
       const dayTxt = r.day ? (String(r.day).length <= 3 ? `Treino ${r.day}` : String(r.day)) : null;
       const skipNames = notDone.get(r.id) || [];
       const skipTxt = skipNames.length ? `não fez: ${skipNames.slice(0, 2).join(', ')}${skipNames.length > 2 ? ` +${skipNames.length - 2}` : ''}` : null;
@@ -195,11 +207,31 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       const ageDays = Math.floor((now.getTime() - new Date(r.date).getTime()) / DAY);
       const took = r.duration > 0 ? Number(r.duration) : 0, has = avail.get(r.userId) || 0;
       const timeTxt = took ? `treinou ${took} min${has ? ` de ${has}` : ''}` : null;
-      push({ key: `tempo:${r.id}`, type: 'tempo', severity: ageDays <= 3 ? 'today' : 'soon', title: `Sem tempo no treino: ${s.name || 'Aluno'}`, subtitle: [dayTxt, timeTxt, note, skipTxt].filter(Boolean).join(' · '), person: person('student', s), dueAt: new Date(r.date).toISOString(), workoutId: r.workoutId || undefined, day: r.day || undefined, historyId: r.id, durationMin: took || undefined, availableMin: has || undefined, target: { type: 'student', id: s.id } });
+      const last = before[0];
+      const lastLines: string[] = last && Array.isArray(last.changes) ? last.changes.slice(0, 3).map((c: any) => String(c?.text || '')).filter(Boolean) : [];
+      const again = before.length > 0;
+      const adjTxt = last ? `já ajustei em ${dateKeyBrt(new Date(last.createdAt)).split('-').reverse().slice(0, 2).join('/')}${lastLines.length ? ': ' + lastLines.join('; ') : ''}` : null;
+      push({ key: `tempo:${r.id}`, type: 'tempo', severity: again ? (ageDays <= 7 ? 'today' : 'soon') : (ageDays <= 3 ? 'today' : 'soon'), title: again ? `${before.length + 1}º aviso de falta de tempo: ${s.name || 'Aluno'}` : `Sem tempo no treino: ${s.name || 'Aluno'}`, subtitle: [dayTxt, timeTxt, note, skipTxt, adjTxt].filter(Boolean).join(' · '), person: person('student', s), dueAt: new Date(r.date).toISOString(), workoutId: r.workoutId || undefined, day: r.day || undefined, historyId: r.id, durationMin: took || undefined, availableMin: has || undefined, ...(again ? { adjustments: before.length, lastAdjustAt: new Date(last.createdAt).toISOString(), lastAdjustLines: lastLines } : {}), target: { type: 'student', id: s.id } });
     }
   }, undefined);
 
   // ── cobrança (mensal): atrasada, vencendo e "já paguei" ──
+  // ── aluno avisou que NÃO tem o aparelho / exercício na academia ──
+  // Uma pendência por aviso em aberto. Resolver (RESOLVIDO ou trocar o exercício na ficha) tira da lista; o exercício NUNCA é apagado da biblioteca nem do treino.
+  await safe('aparelho indisponível', unavailable, async () => {
+    if (!ids.length) return;
+    const rows: any[] = await db.equipmentReport.findMany({ where: { userId: { in: ids }, status: 'OPEN' }, orderBy: { lastReportedAt: 'desc' }, select: { id: true, userId: true, exerciseId: true, exerciseName: true, workoutId: true, workoutExerciseId: true, day: true, note: true, count: true, lastReportedAt: true } });
+    for (const r of rows) {
+      const s = byId.get(r.userId);
+      if (!s) continue;
+      const ageDays = Math.floor((now.getTime() - new Date(r.lastReportedAt).getTime()) / DAY);
+      const when = dateKeyBrt(new Date(r.lastReportedAt)).split('-').reverse().slice(0, 2).join('/');
+      const dayTxt = r.day ? (String(r.day).length <= 3 ? `Treino ${r.day}` : String(r.day)) : null;
+      const sub = [dayTxt, `avisou em ${when}`, r.count > 1 ? `${r.count} vezes` : null, r.note ? `“${String(r.note).slice(0, 80)}”` : null].filter(Boolean).join(' · ');
+      push({ key: `aparelho:${r.id}`, type: 'aparelho', severity: ageDays <= 3 ? 'today' : 'soon', title: `${firstName(s.name || 'Aluno')} não tem: ${r.exerciseName}`, subtitle: sub, person: person('student', s), dueAt: new Date(r.lastReportedAt).toISOString(), workoutId: r.workoutId || undefined, day: r.day || undefined, reportId: r.id, exerciseId: r.exerciseId, exerciseName: r.exerciseName, workoutExerciseId: r.workoutExerciseId || undefined, target: { type: 'student', id: s.id } });
+    }
+  }, undefined);
+
   const money = (kind: 'student' | 'offline', s: any) => {
     if (s.isFinanceActive === false || !(Number(s.contractValue) > 0) || !s.paymentDueDate) return;
     const k = dateKeyBrt(new Date(s.paymentDueDate)), left = diffDaysKeys(todayKey, k);
@@ -243,12 +275,16 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
 
   const notes = await safe('anotações', unavailable, async () => new Map<string, { note: string; noteAt: string }>((await db.agendaTaskNote.findMany({ where: { coachId, updatedAt: { gte: new Date(now.getTime() - NOTE_DAYS * DAY) } }, select: { taskKey: true, note: true, updatedAt: true } })).map((r: any) => [r.taskKey, { note: r.note, noteAt: new Date(r.updatedAt).toISOString() }] as [string, { note: string; noteAt: string }])), new Map<string, { note: string; noteAt: string }>());
 
-  let list = tasks.filter((t) => !snoozed.has(t.key));
+  // ✅ resolvidas pelo coach (botão RESOLVIDO): somem da lista até ele REABRIR. Uma pendência nova com outra chave (ex.: novo "não deu tempo") aparece normalmente.
+  const resolved = await safe('resolvidas', unavailable, async () => new Set<string>((await db.agendaTaskResolved.findMany({ where: { coachId }, select: { taskKey: true } })).map((r: any) => r.taskKey)), new Set<string>());
+
+  let list = tasks.filter((t) => !snoozed.has(t.key) && !resolved.has(t.key));
   list = capType(list, 'presenca', (n) => `+ ${n} atendimentos sem presença marcada`, { type: 'agenda' });
   list = capType(list, 'cobranca', (n) => `+ ${n} cobranças em aberto no financeiro`, { type: 'finance' });
   list = capType(list, 'treino', (n) => `+ ${n} treinos vencendo ou vencidos`, { type: 'students' });
   list = capType(list, 'checkin', (n) => `+ ${n} avaliações atrasadas`, { type: 'checkins' });
   list = capType(list, 'tempo', (n) => `+ ${n} alunos sem tempo para o treino`, { type: 'students' });
+  list = capType(list, 'aparelho', (n) => `+ ${n} avisos de aparelho que o aluno não tem`, { type: 'students' });
   list = capType(list, 'semhorario', (n) => `+ ${n} sem horário na agenda`, { type: 'agenda' });
   list = list.map((t) => { const n = notes.get(t.key); return n ? { ...t, note: n.note, noteAt: n.noteAt } : t; });
   list.sort((a, b) => RANK[a.severity] - RANK[b.severity] || String(a.dueAt || '9').localeCompare(String(b.dueAt || '9')));

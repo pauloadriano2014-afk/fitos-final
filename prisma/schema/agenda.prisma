@@ -118,3 +118,26 @@ model AgendaTaskNote {
   @@unique([coachId, taskKey])
   @@index([coachId, updatedAt])
 }
+
+// ✅ (9 out 2026) Pendência da central HOJE marcada como RESOLVIDA. As pendências são calculadas na hora (não existem como linha no banco), então ao resolver
+// guardamos uma CÓPIA do que o coach viu (`snapshot`) para a aba "Resolvidas" continuar mostrando. A chave (`taskKey`) esconde a pendência da lista; REABRIR apaga
+// a linha. `messageId` liga ao aviso que o coach mandou ao aluno (StudentCoachMessage), de onde sai o resultado ("o ajuste funcionou").
+model AgendaTaskResolved {
+  id         String   @id @default(uuid())
+  coachId    String
+  taskKey    String
+  type       String
+  title      String
+  subtitle   String?
+  personKind String?
+  personId   String?
+  personName String?
+  snapshot   Json?
+  note       String?
+  messageId  String?
+  resolvedAt DateTime @default(now())
+
+  @@unique([coachId, taskKey])
+  @@index([coachId, resolvedAt])
+  @@index([coachId, personId])
+}

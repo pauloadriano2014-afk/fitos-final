@@ -1,0 +1,54 @@
+// prisma/schema/coach-messages.prisma
+// 💬 (9 out 2026) Mensagens do coach para UM aluno (não é o aviso geral `Notice`, que vai para todos): "ajustei o seu treino para caber", "troquei o exercício que
+// você não tinha na academia". Sempre escritas/revisadas pelo coach antes de sair. Sem relação com User de propósito (tabela só de histórico: não trava a exclusão de conta).
+
+model StudentCoachMessage {
+  id            String    @id @default(uuid())
+  userId        String                      // o aluno que recebe
+  coachId       String                      // o coach que mandou
+  kind          String                      // AJUSTE_TREINO | APARELHO_TROCADO | LIVRE
+  title         String
+  body          String    @db.Text
+  changes       Json?                       // lista do que mudou: [{ type, day, exercise, text }]
+  workoutId     String?
+  day           String?
+  sourceTaskKey String?                     // a pendência da central HOJE que originou o aviso
+  followUp      Boolean   @default(false)   // pede ao aluno que avise se ainda faltar tempo
+  outcome       String?                     // AJUSTE_TREINO: WORKED (próximo treino coube) | STILL_SHORT (faltou de novo)
+  outcomeAt     DateTime?
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([coachId, createdAt])
+}
+
+// 🛠️ (9 out 2026) O aluno avisou que NÃO tem esse aparelho/exercício na academia. É só um AVISO ao coach: o exercício continua na biblioteca e no treino; ele só deixa
+// de ser sugerido pela IA e vira alerta ao montar ou importar treino para este aluno. `status`:
+//   OPEN       -> o coach ainda não tratou (aparece na central HOJE)
+//   RESOLVED   -> o coach tratou (trocou / orientou); continua valendo como "este aluno não tem" para os avisos
+//   AVAILABLE  -> "voltou a ter" (o aluno mudou de aparelho/academia e agora tem): sai dos avisos, fica no histórico
+//   OTHER_GYM  -> era de outra academia (botão "mudou de academia"): sai dos avisos, fica no histórico
+model EquipmentReport {
+  id                String    @id @default(uuid())
+  userId            String
+  coachId           String?
+  exerciseId        String
+  exerciseName      String
+  workoutId         String?
+  workoutExerciseId String?
+  day               String?
+  note              String?   @db.Text
+  count             Int       @default(1)     // quantas vezes o aluno avisou (mesmo exercício)
+  status            String    @default("OPEN")
+  resolution        String?
+  replacedWithId    String?
+  resolvedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  lastReportedAt    DateTime  @default(now())
+
+  @@index([userId, status])
+  @@index([coachId, status])
+  @@index([exerciseId])
+}

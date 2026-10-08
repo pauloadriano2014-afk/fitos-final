@@ -12,6 +12,7 @@ import { buildLastLoads, sideValue } from '@/lib/exerciseLoad';
 import { geminiClient, getOrCreateGeminiCache, hashForCache } from '@/lib/geminiCache';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { jointFilterIssues } from '@/lib/autoPlanQuality';
+import { unavailableExerciseIds, filterUnavailable } from '@/lib/equipment';
 
 export interface GenerateWorkoutInput {
   userId: string;
@@ -51,10 +52,16 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
     // os exercícios que a própria biblioteca marca como de risco para ela. Sem a opção, nada muda (rota do coach intacta).
     const excludeRisks: string[] = Array.isArray(cycleConfig?.excludeJointRisk) ? cycleConfig.excludeJointRisk.map((r: any) => String(r).toUpperCase()) : [];
     const riskOf = (ex: any): string[] => (Array.isArray((ex.tags as any)?.jointRisk) ? (ex.tags as any).jointRisk.map((r: any) => String(r).toUpperCase()) : []);
-    const adminExercises = excludeRisks.length ? allAdminExercises.filter((ex) => !riskOf(ex).some((r) => excludeRisks.includes(r))) : allAdminExercises;
+    const afterJoint = excludeRisks.length ? allAdminExercises.filter((ex) => !riskOf(ex).some((r) => excludeRisks.includes(r))) : allAdminExercises;
+    // 🛠️ (9 out 2026) exercícios que ESTE aluno disse não ter na academia: a IA não os escolhe. Só afasta; nunca apaga nada. Se afastar esvaziaria um grupo (sobrariam menos
+    // de 2 exercícios dele), o exercício volta para a lista: um treino completo vale mais do que o aviso (o coach vê a observação no resumo).
+    const bannedIds = new Set<string>(await unavailableExerciseIds(userId).catch(() => [] as string[]));
+    const eq = filterUnavailable(afterJoint, bannedIds);
+    const adminExercises = eq.list;
+    const avoidedNames = eq.avoided;
     if (excludeRisks.length && cycleConfig?.days?.length) {
       const targetOf = (ex: any) => String((ex.tags as any)?.target || ex.category || '').toUpperCase();
-      const issues = jointFilterIssues(cycleConfig.days, allAdminExercises.map(targetOf), adminExercises.map(targetOf));
+      const issues = jointFilterIssues(cycleConfig.days, allAdminExercises.map(targetOf), afterJoint.map(targetOf));
       if (issues.length) return { status: 422, body: { error: `Biblioteca insuficiente depois de tirar os exercícios de risco (${excludeRisks.join(', ')}): ${issues.join('; ')}`, code: 'BANCO_INSUFICIENTE' } };
     }
 
@@ -518,7 +525,8 @@ Responda APENAS com JSON válido.`.trim();
         trainingEnvironment: trainingEnv || 'UNIVERSAL',
         exercisesByDay: validatedDays,
         workoutTabs,
-        ...(excludeRisks.length ? { jointFilter: { risks: excludeRisks, excluded: allAdminExercises.length - adminExercises.length } } : {}),
+        ...(excludeRisks.length ? { jointFilter: { risks: excludeRisks, excluded: allAdminExercises.length - afterJoint.length } } : {}),
+        ...(avoidedNames.length ? { avoidedUnavailable: avoidedNames } : {}),
       },
     };
   }

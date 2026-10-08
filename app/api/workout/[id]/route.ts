@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
+import { describeSave, autoResolveEquipment } from '@/lib/workoutAdjust';
 
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
@@ -48,10 +49,17 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       },
     });
 
+    // 🛠️ (9 out 2026) como a ficha estava ANTES de salvar: serve para dizer ao aluno o que mudou (nunca atrapalha o salvar)
+    const beforeRows: any[] = await prisma.workoutExercise.findMany({
+      where: { workoutId: id }, orderBy: { order: 'asc' },
+      select: { exerciseId: true, day: true, sets: true, reps: true, restTime: true, technique: true },
+    }).catch(() => []);
+
     await prisma.workoutExercise.deleteMany({
       where: { workoutId: id },
     });
 
+    let savedRows: any[] = [];
     if (exercises && exercises.length > 0) {
       const allIds: string[] = [];
       exercises.forEach((ex: any) => {
@@ -98,6 +106,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
             data: exercisesToCreate,
           });
       }
+      savedRows = exercisesToCreate;
     }
 
     if (notifyStudent) {
@@ -110,7 +119,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       }
     }
 
-    return NextResponse.json(workout, { status: 200 });
+    // 🛠️ (9 out 2026) o que mudou na ficha (para o coach avisar o aluno) e os avisos de aparelho que a troca resolveu. Campos EXTRAS na resposta: o app antigo ignora.
+    const adjustment = await describeSave(beforeRows, savedRows);
+    const equipmentResolved = await autoResolveEquipment({ userId: existingWorkout.userId, workoutId: id, keepExerciseIds: savedRows.map((r) => String(r.exerciseId)) });
+
+    return NextResponse.json({ ...workout, adjustment, equipmentResolved }, { status: 200 });
   } catch (error: any) {
     console.error("Erro no PUT (Edição) do Workout:", error);
     return NextResponse.json(
