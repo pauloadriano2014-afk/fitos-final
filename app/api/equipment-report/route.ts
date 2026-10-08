@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       report = await prisma.equipmentReport.create({ data: { userId, coachId: student.coachId || null, exerciseId, exerciseName: ex.name, note, ...fields } });
     }
 
-    if (student.coachId && (!existing || reopened)) {
+    if (student.coachId && auth.user.id !== student.coachId && (!existing || reopened)) {   // o coach registrando pelo Prontuário não precisa de push dele mesmo
       try {
         const coach: any = await prisma.user.findUnique({ where: { id: student.coachId }, select: { id: true, pushToken: true } });
         if (coach) await sendPushToUser(coach, `🛠️ ${student.name || 'Aluno'} não tem: ${ex.name}`, 'Veja a pendência e troque o exercício na ficha.', { type: 'equipment_report', studentId: userId, reportId: report.id });

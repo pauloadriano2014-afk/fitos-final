@@ -15,6 +15,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 import { registerCoachContact } from '@/lib/coachReplies';
+import { resolveExerciseNote } from '@/lib/noteSync';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   try {
     const workoutHistoryId = params.id;
     const body = await req.json().catch(() => ({}));
-    const { exerciseHistoryId, reply } = body as { exerciseHistoryId?: string; reply?: string };
+    const { exerciseHistoryId, reply, silent } = body as { exerciseHistoryId?: string; reply?: string; silent?: boolean };
 
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
@@ -62,6 +63,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           ...(replyClean ? { coachReply: replyClean, coachReplyAt: now } : {}),
         },
       });
+      // 🔗 (9 out 2026) as outras séries do exercício (a nota vem repetida em cada uma) e o aviso imediato do Feed / A FAZER resolvem junto
+      await resolveExerciseNote({ workoutHistory: { id: workoutHistoryId, userId: workoutHistory.userId, date: workoutHistory.date }, exerciseName: exerciseHistory.exerciseName, reply: replyClean, now });
 
       pushTitle = replyClean ? `💬 Seu coach respondeu sobre "${exerciseHistory.exerciseName}"` : `✅ Observação resolvida`;
       pushBody = replyClean
@@ -82,7 +85,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       pushData = { type: 'workout_feedback_replied', workoutHistoryId };
     }
 
-    sendPushToUser(workoutHistory.user, pushTitle, pushBody, pushData).catch(() => {});
+    if (silent !== true) sendPushToUser(workoutHistory.user, pushTitle, pushBody, pushData).catch(() => {});   // `silent`: a resposta já foi avisada por outro caminho (ex.: mensagem de troca de exercício)
     if (replyClean) await registerCoachContact(prisma, workoutHistory.userId, now);   // responder = falar com o aluno
 
     return NextResponse.json({ success: true });

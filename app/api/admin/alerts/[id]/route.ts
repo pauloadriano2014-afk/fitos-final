@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 import { COACH_REPLY_TYPE, registerCoachContact } from '@/lib/coachReplies';
+import { resolveHistoryNotesForAlert } from '@/lib/noteSync';
 
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -19,7 +20,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         if ('response' in auth) return auth.response;
         const existingAlert = await prisma.studentAlert.findUnique({
             where: { id },
-            select: { userId: true, coachId: true, type: true, exerciseName: true, workoutId: true, day: true, workoutExerciseId: true }
+            select: { userId: true, coachId: true, type: true, exerciseName: true, workoutId: true, day: true, workoutExerciseId: true, createdAt: true }
         });
         if (!existingAlert) {
             return NextResponse.json({ error: "Alert not found" }, { status: 404 });
@@ -59,6 +60,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
                 sendPushToUser(student, title, reply.slice(0, 120), { type: 'coach_reply', replyId: replyRow.id }).catch(() => {});
             }
             await registerCoachContact(prisma, existingAlert.userId);   // responder = falar com o aluno
+            await resolveHistoryNotesForAlert(existingAlert as any, reply);   // o cartão do Prontuário também fica resolvido
             return NextResponse.json({ ...updatedAlert, replied: true });
         }
 
@@ -70,6 +72,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             }
         });
 
+        if (body.isRead === true && existingAlert.type === 'EXERCISE_NOTE') await resolveHistoryNotesForAlert(existingAlert as any, null);   // marcar como visto também resolve o cartão do Prontuário
         return NextResponse.json(updatedAlert);
     } catch (error: any) {
         console.error("Erro ao dispensar alerta:", error);

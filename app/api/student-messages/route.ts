@@ -7,6 +7,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { isCoachRole } from '@/lib/agendaAuth';
 import { cleanMessage, createStudentMessage, MESSAGE_KINDS } from '@/lib/studentMessages';
+import { resolveExerciseNote } from '@/lib/noteSync';
 
 export const dynamic = 'force-dynamic';
 const DAY = 86400000;
@@ -28,8 +29,17 @@ export async function POST(req: Request) {
     if (!canAccessStudent(auth.user, studentId, student.coachId)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     const clean = cleanMessage(body);
     if (!clean.ok) return NextResponse.json({ error: clean.error }, { status: 400 });
+    // 🔗 (9 out 2026) `resolveNote` { workoutHistoryId, exerciseHistoryId }: a mensagem é a RESPOSTA ao comentário do aluno naquele exercício (ex.: "Troquei X por Y"). Valida ANTES de enviar.
+    let note: { workoutHistory: any; exerciseName: string } | null = null;
+    if (body.resolveNote && typeof body.resolveNote === 'object') {
+      const wh: any = await prisma.workoutHistory.findFirst({ where: { id: String(body.resolveNote.workoutHistoryId || ''), userId: studentId }, select: { id: true, userId: true, date: true } });
+      const eh: any = wh ? await prisma.exerciseHistory.findFirst({ where: { id: String(body.resolveNote.exerciseHistoryId || ''), workoutHistoryId: wh.id }, select: { exerciseName: true } }) : null;
+      if (!wh || !eh) return NextResponse.json({ error: 'Comentário do aluno não encontrado.' }, { status: 404 });
+      note = { workoutHistory: wh, exerciseName: eh.exerciseName };
+    }
     const { row, pushed } = await createStudentMessage(auth.user.id, studentId, clean.value);
-    return NextResponse.json({ success: true, message: row, pushed });
+    if (note) { try { await resolveExerciseNote({ workoutHistory: note.workoutHistory, exerciseName: note.exerciseName, reply: clean.value.body }); } catch (e) { console.error('[student-messages] resolver comentário:', (e as any)?.message || e); } }
+    return NextResponse.json({ success: true, message: row, pushed, resolvedNote: !!note });
   } catch (e: any) {
     if (missing(e)) return NextResponse.json(UNAVAILABLE, { status: 503 });
     console.error('[POST /api/student-messages]', e);
