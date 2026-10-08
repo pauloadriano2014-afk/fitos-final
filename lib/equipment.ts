@@ -17,19 +17,47 @@ export async function unavailableExerciseIds(userId: string, db: any = prisma): 
   } catch (e) { if (missing(e)) return []; throw e; }
 }
 
+const FILLER = new Set(['no', 'na', 'nos', 'nas', 'com', 'c', 'de', 'do', 'da', 'o', 'a', 'e', 'em']);
+const TWO_WORD = new Set(['leg', 'mesa', 'cadeira', 'supino', 'rosca', 'remada', 'puxada', 'crucifixo', 'desenvolvimento', 'elevacao', 'agachamento', 'triceps', 'pulldown', 'stiff', 'levantamento']);
+/** "Família" do exercício pelo nome: "Afundo c/halteres" e "Afundo no Smith" são "afundo"; "Leg press 45°" e "Leg press horizontal" são "leg press". Serve só para não repetir o mesmo movimento no dia. */
+export function familyKey(name: any): string {
+  const t = String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w && !FILLER.has(w) && !/\d/.test(w));
+  if (!t.length) return '';
+  return TWO_WORD.has(t[0]) && t[1] ? `${t[0]} ${t[1]}` : t[0];
+}
+/** Famílias dos OUTROS exercícios do mesmo dia da ficha (o exercício que falta não conta). Sem ficha/dia, vazio. */
+async function familiesInDay(o: { exerciseId: string; workoutExerciseId?: string | null; workoutId?: string | null; day?: string | null }, db: any): Promise<Set<string>> {
+  const fams = new Set<string>();
+  if (!o.workoutId || !o.day) return fams;
+  try {
+    const rows: any[] = await db.workoutExercise.findMany({ where: { workoutId: o.workoutId, day: o.day }, select: { id: true, exerciseId: true } });
+    const others = rows.filter((r) => r.id !== o.workoutExerciseId && r.exerciseId !== o.exerciseId);
+    if (!others.length) return fams;
+    const names: any[] = await db.exercise.findMany({ where: { id: { in: others.map((r) => r.exerciseId) } }, select: { id: true, name: true } });
+    names.forEach((n) => { const k = familyKey(n.name); if (k) fams.add(k); });
+  } catch (e) { if (!missing(e)) console.error('[equipment] famílias do dia:', (e as any)?.message || e); }
+  return fams;
+}
+
 /**
  * Até `limit` alternativas para o aluno fazer HOJE, em ordem de confiança: as que o coach já cadastrou nesse cartão, as padrão do exercício e, só se faltar,
  * exercícios parecidos (mesma categoria/subcategoria) da biblioteca. Nunca sugere um exercício que o próprio aluno também disse não ter.
  */
-export async function suggestSubstitutes(o: { exerciseId: string; workoutExerciseId?: string | null; userId: string; coachId?: string | null; limit?: number }, db: any = prisma): Promise<Substitute[]> {
+export async function suggestSubstitutes(o: { exerciseId: string; workoutExerciseId?: string | null; workoutId?: string | null; day?: string | null; userId: string; coachId?: string | null; limit?: number }, db: any = prisma): Promise<Substitute[]> {
   const limit = o.limit ?? 3;
   const banned = new Set<string>([o.exerciseId, ...(await unavailableExerciseIds(o.userId, db))]);
+  const inDay = await familiesInDay(o, db);   // o treino do dia já tem "Afundo": não sugerir "Afundo com halteres" (ficaria repetido)
   const out: Substitute[] = [];
   const take = async (ids: string[], source: Substitute['source']) => {
     const want = ids.filter((id) => id && !banned.has(String(id)) && !out.some((x) => x.id === String(id)));
     if (!want.length || out.length >= limit) return;
     const rows: any[] = await db.exercise.findMany({ where: { id: { in: want } }, select: { id: true, name: true, category: true, videoUrl: true } });
-    for (const id of want) { const r = rows.find((x) => x.id === id); if (r && out.length < limit) out.push({ id: r.id, name: r.name, category: r.category ?? null, videoUrl: r.videoUrl ?? null, source }); }
+    for (const id of want) {
+      const r = rows.find((x) => x.id === id); if (!r || out.length >= limit) continue;
+      const fam = familyKey(r.name);
+      if (fam && (inDay.has(fam) || out.some((x) => familyKey(x.name) === fam))) continue;
+      out.push({ id: r.id, name: r.name, category: r.category ?? null, videoUrl: r.videoUrl ?? null, source });
+    }
   };
   if (o.workoutExerciseId) {
     const we: any = await db.workoutExercise.findUnique({ where: { id: o.workoutExerciseId }, select: { substitutes: true, substituteId: true } }).catch(() => null);

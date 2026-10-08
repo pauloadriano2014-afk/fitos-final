@@ -45,7 +45,7 @@ export async function POST(req: Request) {
         if (coach) await sendPushToUser(coach, `🛠️ ${student.name || 'Aluno'} não tem: ${ex.name}`, 'Veja a pendência e troque o exercício na ficha.', { type: 'equipment_report', studentId: userId, reportId: report.id });
       } catch (e) { console.error('[equipment-report] push:', (e as any)?.message || e); }
     }
-    const substitutes = await suggestSubstitutes({ exerciseId, workoutExerciseId: fields.workoutExerciseId, userId, coachId: student.coachId });
+    const substitutes = await suggestSubstitutes({ exerciseId, workoutExerciseId: fields.workoutExerciseId, workoutId: fields.workoutId, day: fields.day, userId, coachId: student.coachId });
     return NextResponse.json({ success: true, report, substitutes });
   } catch (e: any) {
     if (missing(e)) return NextResponse.json({ error: 'O aviso de aparelho ainda não está habilitado no servidor.', unavailable: true }, { status: 503 });
