@@ -1,13 +1,13 @@
 // app/api/equipment-report/route.ts
 // 🛠️ (9 out 2026) O aluno avisa que NÃO tem esse aparelho/exercício na academia.
-//   POST { userId?, exerciseId, exerciseName?, workoutId?, workoutExerciseId?, day?, note? }  -> registra (ou soma ao aviso que já existe), avisa o coach e devolve
-//        substitutos para o aluno treinar hoje sem esperar.
+//   POST { userId?, exerciseId, exerciseName?, workoutId?, workoutExerciseId?, day?, note? }  -> registra (ou soma ao aviso que já existe), avisa o coach.
+//        Sem sugestão de troca para o aluno: o coach escolhe o exercício.
 //   GET  ?userId=&status=active|all  -> os avisos do aluno (o app do coach usa para alertar ao montar/importar treino).
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
-import { ACTIVE_STATUS, suggestSubstitutes } from '@/lib/equipment';
+import { ACTIVE_STATUS } from '@/lib/equipment';
 
 export const dynamic = 'force-dynamic';
 const missing = (e: any) => /does not exist|P2021|P2022/i.test(String(e?.code || '') + String(e?.message || ''));
@@ -45,7 +45,8 @@ export async function POST(req: Request) {
         if (coach) await sendPushToUser(coach, `🛠️ ${student.name || 'Aluno'} não tem: ${ex.name}`, 'Veja a pendência e troque o exercício na ficha.', { type: 'equipment_report', studentId: userId, reportId: report.id });
       } catch (e) { console.error('[equipment-report] push:', (e as any)?.message || e); }
     }
-    const substitutes = await suggestSubstitutes({ exerciseId, workoutExerciseId: fields.workoutExerciseId, workoutId: fields.workoutId, day: fields.day, userId, coachId: student.coachId });
+    // (9 out 2026) O aluno NÃO recebe sugestão de troca: só avisa e o coach escolhe o exercício. `substitutes` segue vazio só para apps antigos.
+    const substitutes: any[] = [];
     return NextResponse.json({ success: true, report, substitutes });
   } catch (e: any) {
     if (missing(e)) return NextResponse.json({ error: 'O aviso de aparelho ainda não está habilitado no servidor.', unavailable: true }, { status: 503 });
