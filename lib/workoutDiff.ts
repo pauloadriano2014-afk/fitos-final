@@ -13,7 +13,6 @@ export interface DayEstimate { day: string; before: number; after: number }
 export interface WorkoutDiff { changes: Change[]; lines: string[]; estimate: DayEstimate[]; days: string[]; hasChanges: boolean }
 
 const EXEC_SECONDS = 40;                 // tempo médio de uma série em si (o descanso vem à parte)
-const MAX_LINES = 8;
 
 const norm = (s: any) => String(s ?? '').trim().toUpperCase();
 const num = (v: any): number => { const n = parseInt(String(v), 10); return Number.isFinite(n) ? n : 0; };
@@ -105,7 +104,7 @@ export function summaryLines(changes: Change[]): string[] {
   if (rest.length) out.push(`Descanso ajustado: ${join(rest.map((c) => `${c.exercise} (${c.from}s→${c.to}s)`))}.`);
   if (tech.length) out.push(`Técnica: ${join(tech.map((c) => (c.to ? `${c.exercise} em ${techLabel(String(c.to))}` : `${c.exercise} sem ${techLabel(String(c.from))}`)))}.`);
   if (added.length) out.push(`Incluí ${join(uniq(added.map((c) => c.exercise)))}.`);
-  return out.slice(0, MAX_LINES);
+  return out;
 }
 
 const firstName = (n?: string | null) => String(n || '').trim().split(/\s+/)[0] || '';
