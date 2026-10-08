@@ -78,7 +78,7 @@ export function diffWorkout(before: DiffRow[], after: DiffRow[], names: Record<s
     const pb = parseRow(b), pa = parseRow(a);
     const cardio = opts.cardio && opts.cardio.has(b.exerciseId);
     if (pb.totalSets !== pa.totalSets) changes.push({ type: 'SETS', day, exerciseId: b.exerciseId, exercise: nm(b.exerciseId), from: pb.totalSets, to: pa.totalSets, text: `${nm(b.exerciseId)}: ${pb.totalSets} → ${pa.totalSets}${cardio ? ' min' : ' séries'}` });
-    if (!cardio && pb.rest !== pa.rest && (pb.rest || pa.rest)) changes.push({ type: 'REST', day, exerciseId: b.exerciseId, exercise: nm(b.exerciseId), from: pb.rest, to: pa.rest, text: `${nm(b.exerciseId)}: descanso de ${pb.rest}s para ${pa.rest}s` });
+    if (!cardio && pb.rest !== pa.rest) changes.push({ type: 'REST', day, exerciseId: b.exerciseId, exercise: nm(b.exerciseId), from: pb.rest, to: pa.rest, text: `${nm(b.exerciseId)}: descanso de ${pb.rest}s para ${pa.rest}s` });
     if (norm(pb.technique) !== norm(pa.technique)) changes.push({ type: 'TECHNIQUE', day, exerciseId: b.exerciseId, exercise: nm(b.exerciseId), from: pb.technique || null, to: pa.technique || null, text: pa.technique ? `${nm(b.exerciseId)}: agora em ${techLabel(pa.technique)}` : `${nm(b.exerciseId)}: sem ${techLabel(pb.technique)}` });
   }
   for (const [k, a] of A) {
