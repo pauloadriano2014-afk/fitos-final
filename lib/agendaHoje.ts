@@ -234,15 +234,18 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     }
   }, undefined);
 
-  // ── 🎥 vídeo de execução que o aluno enviou e o coach ainda não respondeu; e pedido de vídeo que o aluno ainda não atendeu ──
+  // ── 🎥 vídeo de execução que o aluno enviou e o coach ainda não respondeu; e TODO pedido de vídeo que o coach fez e o aluno ainda não atendeu (aparece na hora) ──
+  // (inclui a conta de TESTE do coach: vídeo/pedido só existem se alguém os criou de propósito, e é assim que o coach confere o fluxo)
+  const vidIds = students.map((s) => s.id);
+  const vidById = new Map(students.map((s) => [s.id, s]));
   await safe('vídeos de execução', unavailable, async () => {
-    if (!ids.length) return;
-    const vids: any[] = await db.executionVideo.findMany({ where: { userId: { in: ids }, status: 'READY', createdAt: { gte: new Date(now.getTime() - 30 * DAY) } }, orderBy: { createdAt: 'desc' }, take: 60 });
+    if (!vidIds.length) return;
+    const vids: any[] = await db.executionVideo.findMany({ where: { userId: { in: vidIds }, status: 'READY', createdAt: { gte: new Date(now.getTime() - 30 * DAY) } }, orderBy: { createdAt: 'desc' }, take: 60 });
     if (vids.length) {
       const answered = new Set<string>((await db.videoFeedback.findMany({ where: { videoId: { in: vids.map((v) => v.id) } }, select: { videoId: true } })).map((f: any) => f.videoId));
       for (const v of vids) {
         if (answered.has(v.id)) continue;
-        const s = byId.get(v.userId);
+        const s = vidById.get(v.userId);
         if (!s) continue;
         const ageDays = Math.floor((now.getTime() - new Date(v.createdAt).getTime()) / DAY);
         const when = dateKeyBrt(new Date(v.createdAt)).split('-').reverse().slice(0, 2).join('/');
@@ -251,12 +254,12 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
         push({ key: `video:${v.id}`, type: 'video', severity: v.priority || ageDays <= 2 ? 'today' : 'soon', title: `${firstName(s.name || 'Aluno')} enviou vídeo: ${v.exerciseName}`, subtitle: sub, person: person('student', s), dueAt: new Date(v.createdAt).toISOString(), videoId: v.id, exerciseId: v.exerciseId || undefined, exerciseName: v.exerciseName, workoutId: v.workoutId || undefined, day: v.day || undefined, target: { type: 'student', id: s.id, openVideo: v.id } });
       }
     }
-    const reqs: any[] = await db.videoRequest.findMany({ where: { userId: { in: ids }, status: 'OPEN', createdAt: { lte: new Date(now.getTime() - 3 * DAY) } }, orderBy: { createdAt: 'asc' }, take: 30 });
+    const reqs: any[] = await db.videoRequest.findMany({ where: { userId: { in: vidIds }, status: 'OPEN' }, orderBy: { createdAt: 'asc' }, take: 30 });
     for (const r of reqs) {
-      const s = byId.get(r.userId);
+      const s = vidById.get(r.userId);
       if (!s) continue;
       const ageDays = Math.floor((now.getTime() - new Date(r.createdAt).getTime()) / DAY);
-      push({ key: `videopedido:${r.id}`, type: 'videopedido', severity: 'soon', title: `${firstName(s.name || 'Aluno')} ainda não mandou o vídeo pedido`, subtitle: `${r.exerciseName} · pedido há ${daysWord(ageDays)}`, person: person('student', s), dueAt: new Date(r.createdAt).toISOString(), exerciseId: r.exerciseId || undefined, exerciseName: r.exerciseName, workoutId: r.workoutId || undefined, day: r.day || undefined, target: { type: 'student', id: s.id } });
+      push({ key: `videopedido:${r.id}`, type: 'videopedido', severity: 'soon', title: `${firstName(s.name || 'Aluno')} ainda não mandou o vídeo pedido`, subtitle: `${r.exerciseName} · ${ageDays <= 0 ? 'pedido hoje' : 'pedido há ' + daysWord(ageDays)}`, person: person('student', s), dueAt: new Date(r.createdAt).toISOString(), exerciseId: r.exerciseId || undefined, exerciseName: r.exerciseName, workoutId: r.workoutId || undefined, day: r.day || undefined, target: { type: 'student', id: s.id } });
     }
   }, undefined);
 

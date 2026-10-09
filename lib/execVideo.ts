@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma';
 import { dateKeyBrt, startOfDayBrt } from '@/lib/agenda';
 
 export const MAX_RECORD_SECONDS = 20;        // o que o app mostra ao aluno
-export const MAX_UPLOAD_SECONDS = 30;        // teto na Cloudflare (folga para vídeo escolhido da galeria)
+export const MAX_UPLOAD_SECONDS = 20;        // teto técnico na Cloudflare: o app pede até 15 s ao aluno (e manda cortar); os 5 s de folga evitam recusar um vídeo de 15,4 s
 export const MAX_REPLY_SECONDS = 60;         // vídeo-resposta do coach
 export const KEEP_DAYS = 90;                 // depois disso o arquivo é apagado
 export const MAX_NOTE = 300;
