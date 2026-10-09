@@ -1,0 +1,91 @@
+// prisma/schema/exec-video.prisma
+// 🎥 (9 out 2026) VÍDEO DE EXECUÇÃO: o aluno grava (até ~20 s) como está fazendo um exercício e o coach responde com texto, comentário no instante do vídeo, desenho por cima, vídeo-resposta
+// ou o vídeo da biblioteca para comparar. O arquivo mora na Cloudflare Stream (PRIVADO: só toca com link assinado); aqui ficam só os dados. Tudo aditivo e sem relação com User de propósito
+// (histórico: não trava a exclusão de conta; ao apagar o aluno o vídeo some pela limpeza automática de 90 dias).
+
+model ExecutionVideo {
+  id                String    @id @default(uuid())
+  userId            String                      // o aluno
+  coachId           String?                     // o coach do aluno na hora do envio
+  exerciseId        String?
+  exerciseName      String
+  workoutId         String?
+  workoutExerciseId String?
+  day               String?
+  setNumber         Int?
+  studentNote       String?   @db.Text          // "senti no joelho"
+  cfUid             String    @unique           // id do vídeo na Cloudflare Stream
+  durationSec       Float?
+  status            String    @default("UPLOADING") // UPLOADING | READY | FAILED | DELETED
+  requestId         String?                     // veio de um pedido do coach (não conta no limite mensal)
+  priority          Boolean   @default(false)   // o recado cita dor/lesão ou foi a resposta a um pedido: sobe na central HOJE
+  coachViewedAt     DateTime?
+  createdAt         DateTime  @default(now())
+  expiresAt         DateTime                    // a limpeza apaga o arquivo depois disso (90 dias)
+  deletedAt         DateTime?
+
+  @@index([userId, createdAt])
+  @@index([coachId, status, createdAt])
+  @@index([expiresAt])
+}
+
+// Resposta do coach a um vídeo. `kind`: TEXT | MOMENT (texto num instante) | DRAWING (desenho num instante) | VIDEO (vídeo-resposta) | REFERENCE (vídeo da biblioteca para comparar)
+model VideoFeedback {
+  id                  String    @id @default(uuid())
+  videoId             String
+  coachId             String
+  kind                String
+  body                String?   @db.Text
+  atSec               Float?                      // o instante do vídeo (MOMENT / DRAWING)
+  drawing             Json?                       // traços normalizados 0..1: [{ color, points: [[x, y], ...] }]
+  replyCfUid          String?                     // VIDEO: o vídeo-resposta do coach na Cloudflare Stream
+  referenceExerciseId String?                     // REFERENCE: o exercício da biblioteca
+  referenceName       String?
+  studentReadAt       DateTime?
+  createdAt           DateTime  @default(now())
+
+  @@index([videoId, createdAt])
+  @@index([replyCfUid])
+}
+
+// "Me mande um vídeo desse exercício": libera UM envio daquele exercício mesmo sem liberação geral nem limite sobrando.
+model VideoRequest {
+  id                String    @id @default(uuid())
+  userId            String
+  coachId           String
+  exerciseId        String?
+  exerciseName      String
+  workoutId         String?
+  workoutExerciseId String?
+  day               String?
+  note              String?
+  status            String    @default("OPEN")  // OPEN | FULFILLED | CANCELED
+  videoId           String?
+  createdAt         DateTime  @default(now())
+  fulfilledAt       DateTime?
+
+  @@index([userId, status])
+  @@index([coachId, status, createdAt])
+}
+
+// Quem pode enviar vídeo por conta própria. `studentId` = id do aluno, ou '*' = o padrão do coach para quem não tem regra própria. Sem regra nenhuma: só envia a pedido.
+model VideoPolicy {
+  id           String   @id @default(uuid())
+  coachId      String
+  studentId    String
+  enabled      Boolean  @default(false)         // envio livre liberado
+  monthlyLimit Int?                             // vídeos livres por mês (vazio = sem limite)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([coachId, studentId])
+}
+
+// Respostas prontas de feedback de vídeo (do próprio coach).
+model VideoQuickReply {
+  id        String   @id @default(uuid())
+  coachId   String
+  text      String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([coachId, createdAt])
+}

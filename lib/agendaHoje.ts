@@ -11,7 +11,7 @@ import { notDoneNames } from '@/lib/exerciseStatus';
 
 export type Severity = 'late' | 'today' | 'soon' | 'info';
 export type Target =
-  | { type: 'student'; id: string; openRunning?: boolean } | { type: 'offline'; id: string } | { type: 'event'; id: string }
+  | { type: 'student'; id: string; openRunning?: boolean; openVideo?: string } | { type: 'offline'; id: string } | { type: 'event'; id: string }
   | { type: 'weekly' } | { type: 'checkins' } | { type: 'feed' } | { type: 'finance' } | { type: 'students' } | { type: 'agenda' }
   | { type: 'share'; code: string } | { type: 'agenda_setup'; personKind: 'student' | 'offline'; personId: string };
 export type Task = {
@@ -31,6 +31,8 @@ export type Task = {
   adjustments?: number; lastAdjustAt?: string; lastAdjustLines?: string[];
   /** "não tem o aparelho": o exercício e o aviso do aluno (o app abre o editor direto nele) */
   reportId?: string; exerciseId?: string; exerciseName?: string; workoutExerciseId?: string;
+  /** "enviou vídeo": o vídeo (o app abre direto nele) */
+  videoId?: string;
 };
 
 const DAY = 86400000;
@@ -232,6 +234,32 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     }
   }, undefined);
 
+  // ── 🎥 vídeo de execução que o aluno enviou e o coach ainda não respondeu; e pedido de vídeo que o aluno ainda não atendeu ──
+  await safe('vídeos de execução', unavailable, async () => {
+    if (!ids.length) return;
+    const vids: any[] = await db.executionVideo.findMany({ where: { userId: { in: ids }, status: 'READY', createdAt: { gte: new Date(now.getTime() - 30 * DAY) } }, orderBy: { createdAt: 'desc' }, take: 60 });
+    if (vids.length) {
+      const answered = new Set<string>((await db.videoFeedback.findMany({ where: { videoId: { in: vids.map((v) => v.id) } }, select: { videoId: true } })).map((f: any) => f.videoId));
+      for (const v of vids) {
+        if (answered.has(v.id)) continue;
+        const s = byId.get(v.userId);
+        if (!s) continue;
+        const ageDays = Math.floor((now.getTime() - new Date(v.createdAt).getTime()) / DAY);
+        const when = dateKeyBrt(new Date(v.createdAt)).split('-').reverse().slice(0, 2).join('/');
+        const dayTxt = v.day ? (String(v.day).length <= 3 ? `Treino ${v.day}` : String(v.day)) : null;
+        const sub = [dayTxt, `enviou em ${when}`, v.priority ? 'cita dor/lesão ou foi a pedido' : null, v.studentNote ? `“${String(v.studentNote).slice(0, 80)}”` : null].filter(Boolean).join(' · ');
+        push({ key: `video:${v.id}`, type: 'video', severity: v.priority || ageDays <= 2 ? 'today' : 'soon', title: `${firstName(s.name || 'Aluno')} enviou vídeo: ${v.exerciseName}`, subtitle: sub, person: person('student', s), dueAt: new Date(v.createdAt).toISOString(), videoId: v.id, exerciseId: v.exerciseId || undefined, exerciseName: v.exerciseName, workoutId: v.workoutId || undefined, day: v.day || undefined, target: { type: 'student', id: s.id, openVideo: v.id } });
+      }
+    }
+    const reqs: any[] = await db.videoRequest.findMany({ where: { userId: { in: ids }, status: 'OPEN', createdAt: { lte: new Date(now.getTime() - 3 * DAY) } }, orderBy: { createdAt: 'asc' }, take: 30 });
+    for (const r of reqs) {
+      const s = byId.get(r.userId);
+      if (!s) continue;
+      const ageDays = Math.floor((now.getTime() - new Date(r.createdAt).getTime()) / DAY);
+      push({ key: `videopedido:${r.id}`, type: 'videopedido', severity: 'soon', title: `${firstName(s.name || 'Aluno')} ainda não mandou o vídeo pedido`, subtitle: `${r.exerciseName} · pedido há ${daysWord(ageDays)}`, person: person('student', s), dueAt: new Date(r.createdAt).toISOString(), exerciseId: r.exerciseId || undefined, exerciseName: r.exerciseName, workoutId: r.workoutId || undefined, day: r.day || undefined, target: { type: 'student', id: s.id } });
+    }
+  }, undefined);
+
   const money = (kind: 'student' | 'offline', s: any) => {
     if (s.isFinanceActive === false || !(Number(s.contractValue) > 0) || !s.paymentDueDate) return;
     const k = dateKeyBrt(new Date(s.paymentDueDate)), left = diffDaysKeys(todayKey, k);
@@ -285,6 +313,8 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
   list = capType(list, 'checkin', (n) => `+ ${n} avaliações atrasadas`, { type: 'checkins' });
   list = capType(list, 'tempo', (n) => `+ ${n} alunos sem tempo para o treino`, { type: 'students' });
   list = capType(list, 'aparelho', (n) => `+ ${n} avisos de aparelho que o aluno não tem`, { type: 'students' });
+  list = capType(list, 'video', (n) => `+ ${n} vídeos de execução sem resposta`, { type: 'students' });
+  list = capType(list, 'videopedido', (n) => `+ ${n} pedidos de vídeo sem resposta`, { type: 'students' });
   list = capType(list, 'semhorario', (n) => `+ ${n} sem horário na agenda`, { type: 'agenda' });
   list = list.map((t) => { const n = notes.get(t.key); return n ? { ...t, note: n.note, noteAt: n.noteAt } : t; });
   list.sort((a, b) => RANK[a.severity] - RANK[b.severity] || String(a.dueAt || '9').localeCompare(String(b.dueAt || '9')));
