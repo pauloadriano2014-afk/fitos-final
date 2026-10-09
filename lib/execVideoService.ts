@@ -60,8 +60,9 @@ export async function presentVideo(db: any, cf: CfCfg | null, video: any, o: { f
   const items: any[] = [];
   for (const fb of feedbacks) {
     const it: any = { id: fb.id, kind: fb.kind, body: fb.body, atSec: fb.atSec, drawing: fb.drawing, createdAt: fb.createdAt, isNew: o.viewerIsStudent ? !fb.studentReadAt : false };
-    if (fb.kind === 'VIDEO' && fb.replyCfUid) { const p = await playbackFor(cf, fb.replyCfUid, o.f); it.reply = p ? { hls: p.hls, thumb: p.thumb, ready: p.ready } : null; }
-    if (fb.kind === 'REFERENCE' && fb.referenceExerciseId) {
+    if ((fb.kind === 'VIDEO' || fb.kind === 'COMBO') && fb.replyCfUid) { const p = await playbackFor(cf, fb.replyCfUid, o.f); it.reply = p ? { hls: p.hls, thumb: p.thumb, ready: p.ready } : null; }
+    if (fb.kind === 'COMBO') { const pr: any = fb.parts && typeof fb.parts === 'object' ? fb.parts : {}; it.parts = { marks: Array.isArray(pr.marks) ? pr.marks : [], coachMarks: pr.coach && Array.isArray(pr.coach.marks) ? pr.coach.marks : [], hasCoachVideo: !!(pr.coach && pr.coach.replyCfUid) }; }
+    if ((fb.kind === 'REFERENCE' || fb.kind === 'COMBO') && fb.referenceExerciseId) {
       const ex: any = await db.exercise.findUnique({ where: { id: fb.referenceExerciseId }, select: { id: true, name: true, videoUrl: true } }).catch(() => null);
       it.reference = ex ? { exerciseId: ex.id, name: ex.name, videoUrl: ex.videoUrl || null } : { exerciseId: fb.referenceExerciseId, name: fb.referenceName || null, videoUrl: null };
     }

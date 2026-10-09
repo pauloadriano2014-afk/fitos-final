@@ -30,6 +30,7 @@ model ExecutionVideo {
 }
 
 // Resposta do coach a um vídeo. `kind`: TEXT | MOMENT (texto num instante) | DRAWING (desenho num instante) | VIDEO (vídeo-resposta) | REFERENCE (vídeo da biblioteca para comparar)
+// | COMBO (10 out: UMA resposta com tudo junto: texto, várias marcações com formas no vídeo do aluno, o vídeo do coach (também com marcações) e a comparação com a biblioteca; usa `parts`).
 model VideoFeedback {
   id                  String    @id @default(uuid())
   videoId             String
@@ -41,6 +42,7 @@ model VideoFeedback {
   replyCfUid          String?                     // VIDEO: o vídeo-resposta do coach na Cloudflare Stream
   referenceExerciseId String?                     // REFERENCE: o exercício da biblioteca
   referenceName       String?
+  parts               Json?                       // COMBO: { marks:[{atSec,drawing,note}], coach:{replyCfUid,marks}|null } (a resposta composta: texto + marcações + vídeo do coach + comparação)
   studentReadAt       DateTime?
   createdAt           DateTime  @default(now())
 
