@@ -1,0 +1,17 @@
+// prisma/schema/tutorial.prisma
+// 🎓 (10 out 2026) Os vídeos do tutorial do app do aluno (um por aba). O arquivo mora na Cloudflare Stream (público, link HLS) e aqui ficam o link, os CAPÍTULOS (trechos do vídeo em segundos)
+// e, se quiser, os nomes de tela. Quem edita é só o time master (tela "Vídeos do tutorial" em Ferramentas); o app do aluno lê (GET /api/tutorial-videos) e, onde não houver linha, usa o
+// que está em src/constants/tutorialVideos.js. Tabela nova e independente (nada muda nas existentes): precisa de `prisma db push`.
+
+model TutorialVideo {
+  tab          String   @id               // 'Início' | 'Treinos' | 'Dieta' | 'Evolução' | 'Histórico' | 'Check-in' | 'Biblioteca' | 'Assistente' | 'Perfil'
+  url          String?                    // link HLS (https) do vídeo; vazio = sem vídeo ("EM BREVE")
+  guid         String?                    // id do vídeo na Cloudflare (para saber o que apagar depois)
+  title        String?                    // nome na tela do aluno de Paulo/Adri (vazio = o padrão do app)
+  partnerTitle String?                    // nome na tela do aluno de coach parceiro
+  subtitle     String?
+  chapters     Json     @default("[]")    // [{ id, title, start, end? }] em segundos
+  durationSec  Float?
+  updatedBy    String?
+  updatedAt    DateTime @updatedAt
+}
