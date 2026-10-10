@@ -10,7 +10,7 @@ model TutorialVideo {
   title        String?                    // nome na tela do aluno de Paulo/Adri (vazio = o padrão do app)
   partnerTitle String?                    // nome na tela do aluno de coach parceiro
   subtitle     String?
-  chapters     Json     @default("[]")    // [{ id, title, start, end? }] em segundos
+  chapters     Json?                      // [{ id, title, start, end? }] em segundos; vazio (null) = usar os capítulos padrão do app; [] = sem capítulos de propósito
   durationSec  Float?
   updatedBy    String?
   updatedAt    DateTime @updatedAt

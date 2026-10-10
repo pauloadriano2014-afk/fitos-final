@@ -61,6 +61,6 @@ export function buildUpdate(body: any): Record<string, any> {
 
 /** Linha do banco -> o que o app recebe. */
 export function toPublic(r: any) {
-  const ch = Array.isArray(r?.chapters) ? r.chapters : [];
+  const ch = Array.isArray(r?.chapters) ? r.chapters : null;   // null = o app usa os capítulos padrão
   return { tab: r.tab, url: r.url || null, title: r.title || null, partnerTitle: r.partnerTitle || null, subtitle: r.subtitle || null, chapters: ch, durationSec: r.durationSec ?? null, updatedAt: r.updatedAt || null };
 }

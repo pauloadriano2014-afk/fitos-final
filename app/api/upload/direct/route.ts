@@ -71,7 +71,8 @@ export async function GET(req: Request) {
     }
     const state = data.result?.status?.state || null;
     const videoUrl = data.result?.playback?.hls || null;
-    return NextResponse.json({ success: true, videoUrl, state, ready: state === 'ready' });
+    const duration = Number(data.result?.duration) > 0 ? Number(data.result.duration) : null;   // segundos (a Cloudflare só sabe depois de processar)
+    return NextResponse.json({ success: true, videoUrl, state, ready: state === 'ready', duration });
   } catch (error: any) {
     console.error('ERRO upload/direct GET:', error);
     return NextResponse.json({ error: 'Erro interno ao consultar o vídeo.' }, { status: 500 });
