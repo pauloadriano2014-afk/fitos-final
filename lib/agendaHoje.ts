@@ -304,9 +304,9 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     wantO.filter((o) => !hasO.has(o.id)).forEach((o) => push({ key: `semhorario:o${o.id}`, type: 'semhorario', severity: 'info', title: `Sem horário na agenda: ${o.name || 'Cliente'}`, subtitle: 'personal ativo sem atendimento marcado', person: person('offline', o), dueAt: null, target: { type: 'agenda_setup', personKind: 'offline', personId: o.id } }));
   }, undefined);
 
-  // ── tarefas das anotações por voz do coach (aparecem na data; sem data = hoje) ──
+  // ── tarefas das anotações por voz do coach (vencida/hoje = A FAZER; data futura = EM BREVE; sem data = hoje) ──
   await safe('anotações do coach', unavailable, async () => {
-    const rows: any[] = await db.coachNote.findMany({ where: { coachId, kind: 'TAREFA', status: 'OPEN', OR: [{ dueDate: null }, { dueDate: { lte: todayKey } }] }, orderBy: { createdAt: 'desc' }, take: 100 });
+    const rows: any[] = await db.coachNote.findMany({ where: { coachId, kind: 'TAREFA', status: 'OPEN' }, orderBy: { createdAt: 'desc' }, take: 100 });
     if (!rows.length) return;
     const sids = [...new Set(rows.map((r) => r.studentId).filter(Boolean))] as string[];
     const students: any[] = sids.length ? await db.user.findMany({ where: { id: { in: sids } }, select: { id: true, name: true, phone: true } }) : [];
@@ -314,13 +314,14 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     for (const r of rows) {
       const s = r.studentId ? byId.get(r.studentId) : null;
       const who = s?.name || r.studentName || '';
-      const late = r.dueDate ? diffDaysKeys(r.dueDate, todayKey) : 0;
+      const late = r.dueDate ? diffDaysKeys(r.dueDate, todayKey) : 0;   // > 0 atrasada · < 0 ainda vai chegar
+      const future = late < 0;
       const tag = TAG_LABEL[r.tag as keyof typeof TAG_LABEL] || null;
       const body = String(r.body || '');
       push({
-        key: `nota:${r.id}`, type: 'nota', severity: late > 0 ? 'late' : 'today',
+        key: `nota:${r.id}`, type: 'nota', severity: late > 0 ? 'late' : future ? 'soon' : 'today',
         title: who ? `${firstName(who)}: ${body.length > 90 ? body.slice(0, 89) + '…' : body}` : (body.length > 100 ? body.slice(0, 99) + '…' : body),
-        subtitle: [tag, late > 0 ? `era para ${daysWord(late)} atrás` : (r.dueDate ? 'para hoje' : null)].filter(Boolean).join(' · ') || null,
+        subtitle: [tag, late > 0 ? `era para ${daysWord(late)} atrás` : future ? `para ${String(r.dueDate).slice(8, 10)}/${String(r.dueDate).slice(5, 7)}` : (r.dueDate ? 'para hoje' : null)].filter(Boolean).join(' · ') || null,
         person: s ? person('student', s) : null, dueAt: r.dueDate ? startOfDayBrt(r.dueDate).toISOString() : new Date(r.createdAt).toISOString(),
         noteId: r.id, tag: r.tag || undefined, body, target: s ? { type: 'student', id: s.id } : { type: 'students' },
       });
