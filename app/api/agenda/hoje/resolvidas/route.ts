@@ -120,12 +120,17 @@ function sanitizeSnapshot(t: any) {
 
 // Pendências que nascem de uma linha do banco: resolver/reabrir a pendência acompanha a linha.
 const reportIdOf = (taskKey: string) => (taskKey.startsWith('aparelho:') ? taskKey.slice('aparelho:'.length) : null);
+const noteIdOf = (taskKey: string) => (taskKey.startsWith('nota:') ? taskKey.slice('nota:'.length) : null);
 async function resolveSource(taskKey: string, resolution: string) {
+  const nid = noteIdOf(taskKey);
+  if (nid) { try { await prisma.coachNote.updateMany({ where: { id: nid, kind: 'TAREFA', status: 'OPEN' }, data: { status: 'DONE', doneAt: new Date() } }); } catch (e) { /* tabela ainda não criada */ } return; }
   const id = reportIdOf(taskKey);
   if (!id) return;
   try { await prisma.equipmentReport.updateMany({ where: { id, status: 'OPEN' }, data: { status: 'RESOLVED', resolvedAt: new Date(), ...(resolution ? { resolution } : {}) } }); } catch (e) { /* tabela ainda não criada */ }
 }
 async function reopenSource(taskKey: string) {
+  const nid = noteIdOf(taskKey);
+  if (nid) { try { await prisma.coachNote.updateMany({ where: { id: nid, kind: 'TAREFA', status: 'DONE' }, data: { status: 'OPEN', doneAt: null } }); } catch (e) { /* tabela ainda não criada */ } return; }
   const id = reportIdOf(taskKey);
   if (!id) return;
   try { await prisma.equipmentReport.updateMany({ where: { id, status: 'RESOLVED' }, data: { status: 'OPEN', resolvedAt: null } }); } catch (e) { /* tabela ainda não criada */ }

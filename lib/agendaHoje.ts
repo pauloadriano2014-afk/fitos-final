@@ -8,6 +8,7 @@ import {
 } from '@/lib/agenda';
 import { ensureSeriesWindow, ownStudentScope, ownOfflineScope, withPersons, Person, Db } from '@/lib/agendaStore';
 import { notDoneNames } from '@/lib/exerciseStatus';
+import { TAG_LABEL } from '@/lib/coachNotes';
 
 export type Severity = 'late' | 'today' | 'soon' | 'info';
 export type Target =
@@ -33,6 +34,8 @@ export type Task = {
   reportId?: string; exerciseId?: string; exerciseName?: string; workoutExerciseId?: string;
   /** "enviou vídeo": o vídeo (o app abre direto nele) */
   videoId?: string;
+  /** tarefa das ANOTAÇÕES POR VOZ do coach: a anotação, a etiqueta (DOR, PEDIDO...) e o texto inteiro */
+  noteId?: string; tag?: string; body?: string;
 };
 
 const DAY = 86400000;
@@ -301,6 +304,29 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     wantO.filter((o) => !hasO.has(o.id)).forEach((o) => push({ key: `semhorario:o${o.id}`, type: 'semhorario', severity: 'info', title: `Sem horário na agenda: ${o.name || 'Cliente'}`, subtitle: 'personal ativo sem atendimento marcado', person: person('offline', o), dueAt: null, target: { type: 'agenda_setup', personKind: 'offline', personId: o.id } }));
   }, undefined);
 
+  // ── tarefas das anotações por voz do coach (aparecem na data; sem data = hoje) ──
+  await safe('anotações do coach', unavailable, async () => {
+    const rows: any[] = await db.coachNote.findMany({ where: { coachId, kind: 'TAREFA', status: 'OPEN', OR: [{ dueDate: null }, { dueDate: { lte: todayKey } }] }, orderBy: { createdAt: 'desc' }, take: 100 });
+    if (!rows.length) return;
+    const sids = [...new Set(rows.map((r) => r.studentId).filter(Boolean))] as string[];
+    const students: any[] = sids.length ? await db.user.findMany({ where: { id: { in: sids } }, select: { id: true, name: true, phone: true } }) : [];
+    const byId = new Map(students.map((s) => [s.id, s]));
+    for (const r of rows) {
+      const s = r.studentId ? byId.get(r.studentId) : null;
+      const who = s?.name || r.studentName || '';
+      const late = r.dueDate ? diffDaysKeys(r.dueDate, todayKey) : 0;
+      const tag = TAG_LABEL[r.tag as keyof typeof TAG_LABEL] || null;
+      const body = String(r.body || '');
+      push({
+        key: `nota:${r.id}`, type: 'nota', severity: late > 0 ? 'late' : 'today',
+        title: who ? `${firstName(who)}: ${body.length > 90 ? body.slice(0, 89) + '…' : body}` : (body.length > 100 ? body.slice(0, 99) + '…' : body),
+        subtitle: [tag, late > 0 ? `era para ${daysWord(late)} atrás` : (r.dueDate ? 'para hoje' : null)].filter(Boolean).join(' · ') || null,
+        person: s ? person('student', s) : null, dueAt: r.dueDate ? startOfDayBrt(r.dueDate).toISOString() : new Date(r.createdAt).toISOString(),
+        noteId: r.id, tag: r.tag || undefined, body, target: s ? { type: 'student', id: s.id } : { type: 'students' },
+      });
+    }
+  }, undefined);
+
   // ── adiadas ──
   const snoozed = await safe('adiadas', unavailable, async () => new Set<string>((await db.agendaTaskSnooze.findMany({ where: { coachId, until: { gt: now } }, select: { taskKey: true } })).map((r: any) => r.taskKey)), new Set<string>());
 
@@ -318,6 +344,7 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
   list = capType(list, 'aparelho', (n) => `+ ${n} avisos de aparelho que o aluno não tem`, { type: 'students' });
   list = capType(list, 'video', (n) => `+ ${n} vídeos de execução sem resposta`, { type: 'students' });
   list = capType(list, 'videopedido', (n) => `+ ${n} pedidos de vídeo sem resposta`, { type: 'students' });
+  list = capType(list, 'nota', (n) => `+ ${n} tarefas das suas anotações`, { type: 'students' });
   list = capType(list, 'semhorario', (n) => `+ ${n} sem horário na agenda`, { type: 'agenda' });
   list = list.map((t) => { const n = notes.get(t.key); return n ? { ...t, note: n.note, noteAt: n.noteAt } : t; });
   list.sort((a, b) => RANK[a.severity] - RANK[b.severity] || String(a.dueAt || '9').localeCompare(String(b.dueAt || '9')));

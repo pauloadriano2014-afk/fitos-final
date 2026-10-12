@@ -1,0 +1,25 @@
+// prisma/schema/coach-notes.prisma
+// 🎙️ (12 out 2026) NOTAS DO COACH por voz: o coach fala "o Samuel sentiu as costas no agachamento Smith" e vira uma anotação no aluno (o "diário do coach", só ele vê).
+// `kind` NOTA = só registro; TAREFA = o coach precisa fazer algo (pedido do aluno, dor para avaliar, lembrete com data): aparece na central HOJE até ele resolver.
+// Tabela nova, sem relação com User de propósito (histórico: não trava a exclusão de conta).
+
+model CoachNote {
+  id          String    @id @default(uuid())
+  coachId     String
+  studentId   String?                       // o aluno da nota (vazio = nota solta)
+  studentName String?                       // o nome na hora de salvar (o histórico não muda se o aluno trocar de nome ou sair)
+  kind        String    @default("NOTA")    // NOTA | TAREFA
+  tag         String?                       // DOR | APARELHO | TREINO | DIETA | PEDIDO | OUTRO
+  body        String    @db.Text            // a anotação (já organizada)
+  rawText     String?   @db.Text            // o que o coach falou (transcrição), para conferir depois
+  source      String    @default("VOZ")     // VOZ | TEXTO
+  dueDate     String?                       // AAAA-MM-DD (Brasília): quando a TAREFA passa a aparecer na central HOJE
+  status      String    @default("INFO")    // INFO (NOTA) | OPEN | DONE (TAREFA)
+  doneAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([coachId, status, dueDate])
+  @@index([coachId, studentId, createdAt])
+  @@index([coachId, createdAt])
+}
