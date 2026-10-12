@@ -11,6 +11,7 @@ import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
 import { markCoachPaid } from '@/lib/coachPayments';
 import { releasePromo } from '@/lib/launchPromo';
+import { revokeCoachFeaturesSafe } from '@/lib/coachFeatures';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 import { criarPremio, pausarPremioDaVenda, PERCENTUAL_PREMIO } from '@/lib/indicacao';
 
@@ -477,6 +478,7 @@ async function handleCoachSubscriptionRenewal(event: string, payment: any, local
 
     if (event === 'PAYMENT_OVERDUE') {
         await prisma.user.update({ where: { id: localSub.userId }, data: { coachBillingStatus: 'OVERDUE' } as any });
+        await revokeCoachFeaturesSafe(prisma, localSub.userId, 'ACESSO_BLOQUEADO');   // recursos especiais saem na hora e NÃO voltam ao renovar (só o master religa)
         await notifyCoachBillingIssue(localSub.userId, '⚠️ Mensalidade em atraso', 'Sua mensalidade ELITE FIT está em atraso. Regularize para não perder o acesso.');
     }
 
@@ -485,6 +487,7 @@ async function handleCoachSubscriptionRenewal(event: string, payment: any, local
             where: { id: localSub.userId },
             data: { coachBillingStatus: 'CANCELLED', accountStatus: 'REJECTED' } as any,
         });
+        await revokeCoachFeaturesSafe(prisma, localSub.userId, 'ACESSO_BLOQUEADO');
         await notifyCoachBillingIssue(localSub.userId, '❌ Assinatura cancelada', 'Sua assinatura ELITE FIT foi cancelada.');
     }
 
@@ -544,6 +547,7 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
             where: { id: coachId },
             data:  { coachBillingStatus: 'OVERDUE' } as any,
         });
+        await revokeCoachFeaturesSafe(prisma, coachId, 'ACESSO_BLOQUEADO');
         await notifyCoachBillingIssue(coachId, '⚠️ Mensalidade em atraso', 'Sua mensalidade ELITE FIT está em atraso. Regularize para não perder o acesso.');
         console.log(`⚠️ Coach ${coachId} billing vencido`);
     }
@@ -555,6 +559,7 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
         });
         // cobrança da promoção apagada/estornada: devolve a vaga
         if (isPromoCharge) await releasePromo(prisma, coachId);
+        await revokeCoachFeaturesSafe(prisma, coachId, 'ACESSO_BLOQUEADO');
         await notifyCoachBillingIssue(coachId, '❌ Assinatura cancelada', 'Sua assinatura ELITE FIT foi cancelada.');
         console.log(`❌ Coach ${coachId} billing cancelado`);
     }

@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireMaster } from '@/lib/auth';
+import { revokeCoachFeaturesSafe } from '@/lib/coachFeatures';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +81,7 @@ export async function PATCH(req: NextRequest) {
                 where: { id: coachId },
                 data:  { accountStatus: 'REJECTED' } as any,
             });
+            await revokeCoachFeaturesSafe(prisma, coachId, 'ACESSO_BLOQUEADO');   // bloqueado = perde os recursos especiais (desbloquear NÃO devolve: só o master religa)
             return NextResponse.json({ ok: true, accountStatus: 'REJECTED' });
         }
 

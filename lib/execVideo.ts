@@ -2,6 +2,9 @@
 // 🎥 (9 out 2026) Regras do VÍDEO DE EXECUÇÃO (ver prisma/schema/exec-video.prisma): quem pode enviar (liberação + limite do coach, ou pedido), validação do que o app manda
 // e o que o coach responde. Funções puras + consultas com `db` injetável (para teste).
 import prisma from '@/lib/prisma';
+import { coachHasFeature } from '@/lib/coachFeatures';
+import { MASTER_IDS } from '@/lib/masterIds';
+const isMasterId = (id: any) => !!id && MASTER_IDS.includes(String(id));
 import { dateKeyBrt, startOfDayBrt } from '@/lib/agenda';
 
 export const MAX_RECORD_SECONDS = 20;        // o que o app mostra ao aluno
@@ -133,6 +136,10 @@ export interface Allowance { canUpload: boolean; mode: 'REQUEST' | 'FREE' | 'NON
 /** O aluno pode enviar agora? Pedido do coach (daquele exercício, ou "qualquer") > liberação com limite sobrando > não. */
 export async function checkAllowance(db: any, o: { studentId: string; coachId: string | null | undefined; exerciseId?: string | null; requestId?: string | null; now?: Date }): Promise<Allowance> {
   const now = o.now || new Date();
+  // 12 out: o coach precisa ter o recurso (Fundador, concessão do master ou chave geral); sem ele ninguém envia, nem a pedido
+  if (o.coachId && !(await coachHasFeature(db, o.coachId, 'execVideo', { isMaster: isMasterId(o.coachId) }))) {
+    return { canUpload: false, mode: 'NONE', requestId: null, enabled: false, used: 0, limit: null, reason: 'O envio de vídeos ainda não está disponível com o seu coach.' };
+  }
   const pol = await resolvePolicy(db, o.coachId, o.studentId);
   const used = await monthlyUsage(db, o.studentId, now);
   const base = { enabled: pol.enabled, used, limit: pol.monthlyLimit };

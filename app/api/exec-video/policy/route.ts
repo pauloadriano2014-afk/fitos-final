@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, isMasterId } from '@/lib/auth';
+import { coachHasFeature } from '@/lib/coachFeatures';
 import { isCoachRole } from '@/lib/agendaAuth';
 import { monthlyUsage, resolvePolicy } from '@/lib/execVideo';
 import { actsAsCoach, loadStudent } from '@/lib/execVideoService';
@@ -44,6 +45,7 @@ export async function PUT(req: Request) {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
     if (!isCoachRole(auth.user)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    if (!(await coachHasFeature(prisma, auth.user.id, 'execVideo', { isMaster: isMasterId(auth.user.id) }))) return NextResponse.json({ error: 'O vídeo de execução não está liberado para a sua conta.', locked: true }, { status: 403 });
     const b = await req.json().catch(() => null);
     const studentId = String(b?.studentId || '');
     if (!studentId) return NextResponse.json({ error: 'studentId obrigatório.' }, { status: 400 });

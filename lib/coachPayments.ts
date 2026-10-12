@@ -5,6 +5,7 @@
 //   - promoConfirmed: a cobrança era a da promoção de lançamento, então a vaga vira USADA (lib/launchPromo.ts).
 // Recebe o `db` (Prisma) por parâmetro para testar sem banco.
 import { confirmPromo } from '@/lib/launchPromo';
+import { grantFounderFeaturesSafe } from '@/lib/coachFeatures';
 
 export async function markCoachPaid(db: any, coachId: string, o: { paidValue?: number; promoConfirmed?: boolean; now?: Date }): Promise<void> {
     const now = o.now ?? new Date();
@@ -14,5 +15,8 @@ export async function markCoachPaid(db: any, coachId: string, o: { paidValue?: n
     const v = Number(o.paidValue);
     if (Number.isFinite(v) && v > 0) data.coachBillingPaidValue = Math.round(v * 100) / 100;
     if (Object.keys(data).length) await db.user.update({ where: { id: coachId }, data });
-    if (o.promoConfirmed) await confirmPromo(db, coachId);
+    if (o.promoConfirmed) {
+        await confirmPromo(db, coachId);
+        await grantFounderFeaturesSafe(db, coachId);   // 12 out: Fundador entra com vídeo de execução + notas por voz (só na 1ª vez: lib/coachFeatures.ts)
+    }
 }

@@ -1,0 +1,27 @@
+// prisma/schema/coach-features.prisma
+// 🔑 (12 out 2026) CHAVES POR COACH dos recursos especiais (vídeo de execução e notas por voz). Tudo aditivo: tabelas novas, sem relação com User de propósito.
+//   CoachFeature  = recurso liberado a UM coach (Fundador ou manual do master). `revokedAt` preenchido = recurso tirado (acesso bloqueado, cancelado ou o master desligou).
+//                   Renovar a mensalidade NÃO religa: só o master (ou a chave geral) volta a liberar. Quem já teve uma linha nunca recebe a concessão automática de Fundador de novo.
+//   FeatureGlobal = chave GERAL: quando `enabled`, o recurso vale para todos os coaches (o master liga quando decidir liberar para todo mundo).
+
+model CoachFeature {
+  id            String    @id @default(uuid())
+  coachId       String
+  feature       String                      // 'execVideo' | 'notasVoz'
+  reason        String?                     // 'FUNDADOR' | 'MANUAL'
+  grantedBy     String?                     // id do master, ou 'system' (concedido ao confirmar o pagamento da promoção)
+  grantedAt     DateTime  @default(now())
+  revokedAt     DateTime?
+  revokedReason String?                     // 'ACESSO_BLOQUEADO' | 'MASTER'
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([coachId, feature])
+  @@index([feature, revokedAt])
+}
+
+model FeatureGlobal {
+  feature   String   @id
+  enabled   Boolean  @default(false)
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}

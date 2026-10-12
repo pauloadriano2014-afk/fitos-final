@@ -4,7 +4,8 @@
 // GET  ?userId= -> pedidos em aberto (aluno: os dele; coach: os do aluno informado)
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, isMasterId } from '@/lib/auth';
+import { coachHasFeature } from '@/lib/coachFeatures';
 import { openRequests } from '@/lib/execVideo';
 import { actsAsCoach, actsAsStudent, loadStudent, notifyUser } from '@/lib/execVideoService';
 
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
     const student: any = await loadStudent(prisma, studentId);
     if (!student || student.role !== 'USER') return NextResponse.json({ error: 'Aluno não encontrado.' }, { status: 404 });
     if (!actsAsCoach(auth.user, student)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    if (!(await coachHasFeature(prisma, student.coachId || auth.user.id, 'execVideo', { isMaster: isMasterId(student.coachId || auth.user.id) }))) return NextResponse.json({ error: 'O vídeo de execução não está liberado para a sua conta.', locked: true }, { status: 403 });
     const exerciseId = cut(b?.exerciseId, 80) || null;
     let exerciseName = cut(b?.exerciseName, 120);
     if (exerciseId) { const ex: any = await prisma.exercise.findUnique({ where: { id: exerciseId }, select: { name: true } }).catch(() => null); if (ex?.name) exerciseName = ex.name; }
