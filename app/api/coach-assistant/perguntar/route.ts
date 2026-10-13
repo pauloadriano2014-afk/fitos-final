@@ -3,11 +3,12 @@
 //   POST { text, ios? }                      -> { ok, answer: { intent, title, spoken, items[], total, restricted?, ambiguous? }, ai }
 //   POST { intent: 'RESUMO_ALUNO', studentId } -> o resumo de um aluno já escolhido na lista de "qual deles?"
 // SÓ LÊ. A IA (Haiku 5.5) escolhe a consulta pronta; o servidor busca os dados só da carteira do coach. `ios: true` = o app é o do iPhone: perguntas de cobrança/financeiro não são respondidas (regra da Apple).
-// Mesma trava das notas por voz: coach ativo COM a chave `notasVoz` (a conta que grava notas por voz também pergunta).
+// Trava: coach ativo COM a chave `perguntasVoz` (no início só o time master; o master libera coach a coach no painel de chaves).
+// As perguntas RÁPIDAS (prontas, sem IA) ficam em ./rapida e valem para qualquer coach ativo.
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rateLimit';
-import { requireNotesCoach, missing } from '@/lib/coachNotesStore';
+import { requireAskCoach, missing } from '@/lib/coachNotesStore';
 import { todayKeyBrt } from '@/lib/coachNotes';
 import { MAX_QUESTION, NOT_UNDERSTOOD, aiRoute, isIntent, ruleRoute, runIntent, type Route } from '@/lib/coachAssistant';
 
@@ -16,7 +17,7 @@ export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
-    const auth = await requireNotesCoach(req);
+    const auth = await requireAskCoach(req);
     if ('response' in auth) return auth.response;
     const body = await req.json().catch(() => ({}));
     const noFinance = body && body.ios === true;

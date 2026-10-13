@@ -1,6 +1,6 @@
 // app/api/admin/coach-features/route.ts
 // 🔑 Painel do time master: liga/desliga os recursos especiais por coach e a chave GERAL.
-//   GET                                   -> { global: { execVideo, notasVoz }, coaches: [ { id, name, email, accountStatus, coachBillingStatus, isLaunchPromo, features: { execVideo: {on, source, grantedAt, reason, revokedAt, revokedReason}, ... } } ] }
+//   GET                                   -> { global: { execVideo, notasVoz, perguntasVoz }, coaches: [ { id, name, email, accountStatus, coachBillingStatus, isLaunchPromo, features: { execVideo: {on, source, grantedAt, reason, revokedAt, revokedReason}, ... } } ] }
 //   PUT { coachId, feature, enabled }     -> liga/desliga um recurso de UM coach (ligar de novo apaga a revogação)
 //   PUT { global: true, feature, enabled }-> chave geral: vale para todos os coaches
 //   PUT { action: 'GRANT_FOUNDERS' }      -> libera os recursos para os Fundadores que já pagaram e estão com acesso em dia (só quem nunca teve linha)

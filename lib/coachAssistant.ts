@@ -12,6 +12,9 @@ import { matchStudents, norm, TAG_LABEL } from '@/lib/coachNotes';
 
 export const INTENTS = ['COBRANCA', 'SEM_TREINAR', 'TREINO_VENCENDO', 'FEEDBACKS', 'TAREFAS', 'AGENDA_HOJE', 'RESUMO_ALUNO', 'TOTAL_ALUNOS'] as const;
 export type Intent = (typeof INTENTS)[number];
+/** Perguntas rápidas (botões prontos, sem IA): tudo menos o resumo de aluno (precisa de nome falado) */
+export const QUICK_INTENTS = ['COBRANCA', 'SEM_TREINAR', 'TREINO_VENCENDO', 'FEEDBACKS', 'TAREFAS', 'AGENDA_HOJE', 'TOTAL_ALUNOS'] as const;
+export const isQuickIntent = (v: any): v is Intent => (QUICK_INTENTS as readonly string[]).includes(String(v));
 export const FINANCE_INTENTS: Intent[] = ['COBRANCA'];
 export const isIntent = (v: any): v is Intent => (INTENTS as readonly string[]).includes(String(v));
 
@@ -30,6 +33,8 @@ export type Answer = {
   items: Item[];
   total: number;
   restricted?: boolean;
+  /** Período/situação usados (a tela oferece 7/15/30 dias a partir daqui) */
+  params?: { dias: number; situacao: Situacao };
   ambiguous?: { id: string; name: string }[];
 };
 
@@ -219,6 +224,9 @@ async function resumoAluno(db: Db, coachId: string, p: ReturnType<typeof cleanPa
   return answer('RESUMO_ALUNO', `Resumo: ${nm}`, spoken, items, items.length, { ambiguous: undefined });
 }
 
+/** Consultas que aceitam período (a tela oferece 7/15/30 dias) */
+export const TAKES_DIAS: Intent[] = ['COBRANCA', 'SEM_TREINAR', 'TREINO_VENCENDO'];
+
 export type RunOpts = { now?: Date; noFinance?: boolean; studentId?: string | null };
 
 /** Roda a consulta escolhida. Nunca lança por causa de uma tabela ausente: devolve "indisponível". */
@@ -231,10 +239,11 @@ export async function runIntent(db: Db, coachId: string, intent: Intent | 'NENHU
     return answer(intent, 'Disponível na versão web', 'As perguntas sobre cobrança e financeiro ficam disponíveis na versão web e no Android. No iPhone, use o painel financeiro do app.', [], 0, { restricted: true });
   }
   try {
+    const withParams = (a: Answer): Answer => (TAKES_DIAS.includes(intent) ? { ...a, params: { dias: p.dias, situacao: p.situacao } } : a);
     switch (intent) {
-      case 'COBRANCA': return await cobranca(db, coachId, p, todayKey);
-      case 'SEM_TREINAR': return await semTreinar(db, coachId, p, now);
-      case 'TREINO_VENCENDO': return await treinoVencendo(db, coachId, p, todayKey);
+      case 'COBRANCA': return withParams(await cobranca(db, coachId, p, todayKey));
+      case 'SEM_TREINAR': return withParams(await semTreinar(db, coachId, p, now));
+      case 'TREINO_VENCENDO': return withParams(await treinoVencendo(db, coachId, p, todayKey));
       case 'FEEDBACKS': return await feedbacks(db, coachId, now);
       case 'TAREFAS': return await tarefas(db, coachId, todayKey);
       case 'AGENDA_HOJE': return await agendaHoje(db, coachId, todayKey);

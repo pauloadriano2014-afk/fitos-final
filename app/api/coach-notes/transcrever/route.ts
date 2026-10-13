@@ -6,7 +6,7 @@ import OpenAI, { toFile } from 'openai';
 import prisma from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { firstName } from '@/lib/agenda';
-import { loadCoachStudents, requireNotesCoach } from '@/lib/coachNotesStore';
+import { loadCoachStudents, requireAskCoach } from '@/lib/coachNotesStore';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -29,7 +29,8 @@ function extFrom(name: string, mime: string): string {
 
 export async function POST(req: Request) {
   try {
-    const auth = await requireNotesCoach(req);
+    // grava nota (notasVoz) OU pergunta por voz (perguntasVoz) -- o áudio é transcrito do mesmo jeito
+    const auth = await requireAskCoach(req, { orNotes: true });
     if ('response' in auth) return auth.response;
     const rl = checkRateLimit(`nota-transcrever:${auth.user.id}`, { max: 60, windowMs: 60 * 60 * 1000 });
     if (!rl.allowed) return NextResponse.json({ error: 'Muitas gravações seguidas. Aguarde um pouco.' }, { status: 429 });

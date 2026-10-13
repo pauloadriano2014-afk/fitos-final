@@ -22,6 +22,26 @@ export async function requireNotesCoach(req: Request): Promise<{ user: AuthUser 
   return { user: auth.user };
 }
 
+/** Perguntas LIVRES por voz/texto (usam IA): coach ativo COM a chave `perguntasVoz` (no início só o time master). A rota de transcrição aceita `notasVoz` OU `perguntasVoz`. */
+export async function requireAskCoach(req: Request, o: { orNotes?: boolean } = {}): Promise<{ user: AuthUser } | { response: NextResponse }> {
+  const auth = requireAuth(req);
+  if ('response' in auth) return auth;
+  if (!(await isActiveCoach(prisma, auth.user))) return { response: coachOnly() };
+  const master = isMasterId(auth.user.id);
+  let ok = await coachHasFeature(prisma, auth.user.id, 'perguntasVoz', { isMaster: master });
+  if (!ok && o.orNotes) ok = await coachHasFeature(prisma, auth.user.id, 'notasVoz', { isMaster: master });
+  if (!ok) return { response: NextResponse.json({ error: 'As perguntas por voz não estão liberadas para a sua conta.', locked: true }, { status: 403 }) };
+  return { user: auth.user };
+}
+
+/** Perguntas RÁPIDAS (prontas, sem IA): qualquer coach ativo. */
+export async function requireActiveCoach(req: Request): Promise<{ user: AuthUser } | { response: NextResponse }> {
+  const auth = requireAuth(req);
+  if ('response' in auth) return auth;
+  if (!(await isActiveCoach(prisma, auth.user))) return { response: coachOnly() };
+  return { user: auth.user };
+}
+
 /** Os alunos que o coach atende (para casar o nome falado). Sem contas de teste. */
 export async function loadCoachStudents(db: any, coachId: string): Promise<StudentRef[]> {
   const rows: any[] = await db.user.findMany({

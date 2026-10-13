@@ -9,9 +9,11 @@
 // Sem carência. Os ganchos de revogação também ficam no webhook do Asaas e no bloqueio do master; a checagem aqui é a rede de segurança.
 //
 // Recebe o `db` (Prisma) por parâmetro para testar sem banco. Se as tabelas ainda não existem (antes do `npx prisma db push`), tudo responde "sem recurso" em vez de quebrar.
-export const FEATURE_KEYS = ['execVideo', 'notasVoz'] as const;
+export const FEATURE_KEYS = ['execVideo', 'notasVoz', 'perguntasVoz'] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
-export const FEATURE_LABELS: Record<FeatureKey, string> = { execVideo: 'Vídeo de execução', notasVoz: 'Notas por voz' };
+export const FEATURE_LABELS: Record<FeatureKey, string> = { execVideo: 'Vídeo de execução', notasVoz: 'Notas por voz', perguntasVoz: 'Perguntas livres por voz (IA)' };
+/** Recursos que o Fundador recebe sozinho ao pagar. `perguntasVoz` (gasta IA a cada pergunta) fica de fora: só o master libera, coach a coach. */
+export const FOUNDER_KEYS: readonly FeatureKey[] = ['execVideo', 'notasVoz'];
 
 export type FeatureSource = 'MASTER' | 'GLOBAL' | 'GRANT' | null;
 export type FeatureState = { on: boolean; source: FeatureSource };
@@ -20,8 +22,9 @@ export type FeatureMap = Record<FeatureKey, FeatureState>;
 export const isFeatureKey = (v: any): v is FeatureKey => (FEATURE_KEYS as readonly string[]).includes(String(v));
 
 const missing = (e: any) => /does not exist|P2021|P2022/i.test(String(e?.code || '') + String(e?.message || ''));
-const none = (): FeatureMap => ({ execVideo: { on: false, source: null }, notasVoz: { on: false, source: null } });
-const all = (state: FeatureState): FeatureMap => ({ execVideo: { ...state }, notasVoz: { ...state } });
+const build = (f: () => FeatureState): FeatureMap => { const m: any = {}; for (const k of FEATURE_KEYS) m[k] = f(); return m as FeatureMap; };
+const none = (): FeatureMap => build(() => ({ on: false, source: null }));
+const all = (state: FeatureState): FeatureMap => build(() => ({ ...state }));
 
 /** Coach com acesso em dia? Conta aprovada e mensalidade fora de atraso/cancelada (mesma regra que bloqueia o app dele). */
 export function coachInGoodStanding(c: { accountStatus?: string | null; coachBillingStatus?: string | null } | null | undefined): boolean {
@@ -32,7 +35,8 @@ export function coachInGoodStanding(c: { accountStatus?: string | null; coachBil
 }
 
 export async function loadGlobal(db: any): Promise<Record<FeatureKey, boolean>> {
-  const out: Record<FeatureKey, boolean> = { execVideo: false, notasVoz: false };
+  const out = {} as Record<FeatureKey, boolean>;
+  for (const k of FEATURE_KEYS) out[k] = false;
   try {
     const rows: any[] = await db.featureGlobal.findMany({});
     for (const r of rows) { const k = r.feature; if (isFeatureKey(k)) out[k] = !!r.enabled; }
@@ -76,7 +80,7 @@ export async function grantFounderFeatures(db: any, coachId: string, now: Date =
   const granted: FeatureKey[] = [];
   if (!coachId) return granted;
   try {
-    for (const feature of FEATURE_KEYS) {
+    for (const feature of FOUNDER_KEYS) {
       const had = await db.coachFeature.findUnique({ where: { coachId_feature: { coachId, feature } } });
       if (had) continue;
       await db.coachFeature.create({ data: { coachId, feature, reason: 'FUNDADOR', grantedBy: 'system', grantedAt: now } });
