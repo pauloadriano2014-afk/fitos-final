@@ -27,7 +27,7 @@ export function parseRow(r: DiffRow): Parsed {
   let blocks: Parsed['blocks'] = [];
   try {
     const j = typeof r.technique === 'string' && r.technique.trim().startsWith('{') ? JSON.parse(r.technique) : null;
-    if (j && Array.isArray(j.b)) blocks = j.b.map((b: any) => ({ sets: num(b?.sets), rest: num(b?.restTime), technique: String(b?.technique || '').trim() }));
+    if (j && Array.isArray(j.b)) blocks = j.b.map((b: any) => ({ sets: num(b?.sets), rest: num(b?.restTime), technique: [String(b?.technique || '').trim(), /^(BISET|TRISET)$/i.test(String(b?.technique || '').trim()) ? String(b?.ownTech || '').trim() : ''].filter(Boolean).join(' + ') }));   // 🔗 Bi-set/Tri-set + técnica própria: "BISET + 1_5_REPS"
     if (j && !blocks.length && j.t) blocks = [{ sets: num(r.sets), rest: num(r.restTime), technique: String(j.t) }];
   } catch { /* técnica em texto simples */ }
   if (!blocks.length) blocks = [{ sets: num(r.sets), rest: num(r.restTime), technique: typeof r.technique === 'string' && !r.technique.trim().startsWith('{') ? r.technique.trim() : '' }];

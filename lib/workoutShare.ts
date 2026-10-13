@@ -120,7 +120,7 @@ export function normalizeTechKey(raw: unknown): string | null {
   return TECH_ALIASES[compact] || null;
 }
 
-export type Block = { sets: number; reps: string; restTime: number | null; techKey: string | null; customId: string | null; techLabel: string | null };
+export type Block = { sets: number; reps: string; restTime: number | null; techKey: string | null; customId: string | null; techLabel: string | null; groupKey?: string | null };
 
 const clampInt = (v: any, min: number, max: number, fallback: number) => { const n = parseInt(String(v), 10); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback; };
 
@@ -140,15 +140,23 @@ export function parseExerciseRow(row: any): { blocks: Block[]; observation: stri
     rawBlocks = [{ sets: row?.sets || 3, reps: row?.reps || '12', restTime: row?.restTime || 60, technique: realTech || '', customTechniqueId: row?.customTechniqueId || undefined }];
   }
   const blocks: Block[] = rawBlocks.slice(0, 30).map((b: any) => {
-    const customId = b && b.customTechniqueId ? String(b.customTechniqueId) : null;
+    // 🔗 Bi-set/Tri-set + técnica própria (ex.: 1 e meio dentro do Bi-set): o app grava technique = BISET (marcador do grupo) e a técnica do exercício em ownTech / ownCustomId.
+    const rawKey = normalizeTechKey(b?.technique);
+    const groupKey = rawKey && GROUP_SIZES[rawKey] ? rawKey : null;
+    const ownCustom = groupKey && b && b.ownCustomId ? String(b.ownCustomId) : null;
+    const ownTech = groupKey && !ownCustom && b && b.ownTech ? b.ownTech : null;
+    const customId = ownCustom || (b && b.customTechniqueId ? String(b.customTechniqueId) : null);
+    const techSource = ownTech !== null ? ownTech : b?.technique;
+    const techKey = customId ? null : (ownTech !== null ? normalizeTechKey(ownTech) : rawKey);
     const rest = parseInt(String(b?.restTime), 10);
     return {
       sets: clampInt(b?.sets, 1, 99, 1),
       reps: String(b?.reps == null ? '' : b.reps).trim().slice(0, 20),
       restTime: Number.isFinite(rest) && rest > 0 ? Math.min(rest, 3600) : null,
-      techKey: customId ? null : normalizeTechKey(b?.technique),
+      techKey,
       customId,
-      techLabel: customId ? null : (b?.technique && !normalizeTechKey(b.technique) && String(b.technique).trim().toUpperCase() !== 'NORMAL' ? String(b.technique).trim().slice(0, 40) : null),
+      techLabel: customId ? null : (techSource && !normalizeTechKey(techSource) && String(techSource).trim().toUpperCase() !== 'NORMAL' ? String(techSource).trim().slice(0, 40) : null),
+      ...(groupKey ? { groupKey } : {}),
     };
   });
   const observation = typeof obs === 'string' && obs.trim() ? obs.trim().slice(0, 600) : null;
@@ -370,7 +378,7 @@ export function buildPublicWorkout(input: PublicInput) {
         observation,
         substitutes: subs,
         swaps,
-        _gt: blocks[0]?.techKey && GROUP_SIZES[blocks[0].techKey] ? blocks[0].techKey : null,
+        _gt: blocks[0]?.groupKey || (blocks[0]?.techKey && GROUP_SIZES[blocks[0].techKey] ? blocks[0].techKey : null),
         group: null,
       });
     });
