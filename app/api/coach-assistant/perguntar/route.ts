@@ -10,7 +10,7 @@ import prisma from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { requireAskCoach, missing } from '@/lib/coachNotesStore';
 import { todayKeyBrt } from '@/lib/coachNotes';
-import { MAX_QUESTION, NOT_UNDERSTOOD, aiRoute, isIntent, ruleRoute, runIntent, type Route } from '@/lib/coachAssistant';
+import { MAX_QUESTION, NOT_UNDERSTOOD, aiRoute, isIntent, isMasterCoachId, ruleRoute, runIntent, type Route } from '@/lib/coachAssistant';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -25,8 +25,9 @@ export async function POST(req: Request) {
     if (!rl.allowed) return NextResponse.json({ error: 'Muitas perguntas seguidas. Aguarde um pouco.' }, { status: 429 });
 
     // seguimento de "qual aluno?": já vem o id (o servidor confere que é da carteira dele, dentro da consulta)
-    if (body && body.intent === 'RESUMO_ALUNO' && typeof body.studentId === 'string' && body.studentId) {
-      const answer = await runIntent(prisma, auth.user.id, 'RESUMO_ALUNO', {}, { noFinance, studentId: body.studentId });
+    const master = isMasterCoachId(auth.user.id);
+    if (body && (body.intent === 'RESUMO_ALUNO' || body.intent === 'RESUMO_COACH') && typeof body.studentId === 'string' && body.studentId) {
+      const answer = await runIntent(prisma, auth.user.id, body.intent, {}, { noFinance, studentId: body.studentId });   // (RESUMO_COACH: o servidor recusa quem não é do time master)
       return NextResponse.json({ ok: true, answer, ai: false });
     }
 
@@ -37,13 +38,13 @@ export async function POST(req: Request) {
     let route: Route = { intent: 'NENHUMA', params: {} };
     let ai = false;
     try {
-      const r = await aiRoute(text, todayKeyBrt());
+      const r = await aiRoute(text, todayKeyBrt(), { master });
       route = r.route; ai = true;
       console.info(`[pergunta-voz] roteou model=${r.usage.model} in=${r.usage.inputTokens} out=${r.usage.outputTokens} ms=${r.usage.ms} consulta=${route.intent}`);
     } catch (e: any) {
       console.error('[pergunta-voz] IA indisponível, usando palavras-chave:', e?.message || e);
     }
-    if (route.intent === 'NENHUMA') { const rr = ruleRoute(text); if (rr.intent !== 'NENHUMA') { route = rr; ai = false; } }
+    if (route.intent === 'NENHUMA') { const rr = ruleRoute(text, { master }); if (rr.intent !== 'NENHUMA') { route = rr; ai = false; } }
     if (!isIntent(route.intent)) return NextResponse.json({ ok: true, answer: NOT_UNDERSTOOD, ai });
     const answer = await runIntent(prisma, auth.user.id, route.intent, route.params, { noFinance });
     return NextResponse.json({ ok: true, answer, ai });
