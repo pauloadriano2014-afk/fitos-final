@@ -32,6 +32,7 @@ export async function POST(req: Request) {
             accountType = 'STUDENT',
             cpf, instagram,
             coachPlan: coachPlanBody, // ← v2: PERSONAL | NUTRICIONISTA | ELITE
+            platform: platformBody,   // ← 14 out 2026: de onde veio o cadastro (o app manda Platform.OS: 'ios' | 'android' | 'web')
         } = body;
         // 🐛 (1 out 2026) versões antigas do app mandavam o plano do coach em `plan` (e não em `coachPlan`), então todo coach entrava como PERSONAL.
         // Aceita os dois; no fluxo de coach `plan` só pode ser um plano de coach (a validação abaixo derruba qualquer outro valor).
@@ -60,6 +61,8 @@ export async function POST(req: Request) {
             // Valida coachPlan
             const validPlans = ['PERSONAL', 'NUTRICIONISTA', 'ELITE'];
             const safePlan   = validPlans.includes(coachPlan) ? coachPlan : 'PERSONAL';
+            // Só 'ios' | 'android' | 'web' (qualquer outra coisa vira nada): serve para medir quantos coaches chegam por cada porta (pergunta COACHES_ORIGEM do assistente)
+            const platform = ['ios', 'android', 'web'].includes(String(platformBody)) ? String(platformBody) : null;
 
             const coach = await prisma.user.create({
                 data: {
@@ -76,6 +79,7 @@ export async function POST(req: Request) {
                         instagram:   instagram || null,
                         requestedAt: new Date().toISOString(),
                         coachPlan:   safePlan, // duplicado no JSON para visibilidade no painel
+                        platform,
                     },
                 } as any,
             });
@@ -88,7 +92,7 @@ export async function POST(req: Request) {
             };
             await notifyMaster(
                 '🎯 Novo Coach quer entrar!',
-                `${name}${instagram ? ` (${instagram})` : ''} se cadastrou como ${planLabel[safePlan]} e aguarda aprovação.`,
+                `${name}${instagram ? ` (${instagram})` : ''} se cadastrou como ${planLabel[safePlan]}${platform === 'ios' ? ' pelo app do iPhone' : platform === 'android' ? ' pelo app do Android' : platform === 'web' ? ' pelo site' : ''} e aguarda aprovação.`,
                 { type: 'new_coach_request', coachId: coach.id }
             );
 

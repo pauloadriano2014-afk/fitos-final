@@ -15,7 +15,7 @@ import { MASTER_IDS } from '@/lib/masterIds';
 import { CATALOG_INTENTS } from '@/lib/assistantCatalog';
 
 /** Consultas sobre os COACHES da plataforma: só o time master (Paulo/Adri). O servidor confere em `runIntent`, não só o app. */
-export const MASTER_INTENTS = ['COACHES_RESUMO', 'COACHES_PENDENTES', 'COACHES_COBRANCA', 'COACHES_ALUNOS', 'COACHES_NOVOS', 'COACHES_FUNDADORES', 'RESUMO_COACH'] as const;
+export const MASTER_INTENTS = ['COACHES_RESUMO', 'COACHES_PENDENTES', 'COACHES_COBRANCA', 'COACHES_ALUNOS', 'COACHES_NOVOS', 'COACHES_ORIGEM', 'COACHES_FUNDADORES', 'RESUMO_COACH'] as const;
 export const INTENTS = ['COBRANCA', 'SEM_TREINAR', 'TREINO_VENCENDO', 'FEEDBACKS', 'TAREFAS', 'AGENDA_HOJE', 'RESUMO_ALUNO', 'TOTAL_ALUNOS',
   'RESUMO_HOJE', 'NOVOS_ALUNOS', 'ANIVERSARIANTES', 'SEM_TREINO_MONTADO', 'DELOAD_CHOQUE', 'PAGAMENTOS_AGUARDANDO', 'APARELHOS', 'VIDEOS_AGUARDANDO', 'COMENTARIOS_EXERCICIO',
   'CORRIDA_ATIVOS', 'SEM_DIETA', 'DIETA_FEEDBACKS', 'CHECKINS_AGUARDANDO', 'CHECKIN_ATRASADO', 'TESTE_GRATIS', ...MASTER_INTENTS] as const;
@@ -56,7 +56,7 @@ const isSituacao = (v: any): v is Situacao => v === 'vencendo' || v === 'atrasad
 /** Parâmetros já limpos, com os padrões de cada consulta. */
 export function cleanParams(intent: Intent, raw: any): Required<Pick<Params, 'dias' | 'situacao'>> & { aluno_falado: string | null } {
   return {
-    dias: clampDias(raw && raw.dias, 7, intent === 'SEM_TREINAR' ? 2 : 1),
+    dias: clampDias(raw && raw.dias, intent === 'COACHES_ORIGEM' ? 30 : 7, intent === 'SEM_TREINAR' ? 2 : 1),
     situacao: isSituacao(raw && raw.situacao) ? raw.situacao : 'vencendo',
     aluno_falado: raw && typeof raw.aluno_falado === 'string' && raw.aluno_falado.trim() ? raw.aluno_falado.trim().slice(0, 80) : null,
   };
@@ -523,6 +523,31 @@ async function coachesNovos(db: Db, p: ReturnType<typeof cleanParams>, now: Date
   return answer('COACHES_NOVOS', title, `${plural(rows.length, 'coach novo', 'coaches novos')} nos últimos ${daysWord(p.dias)}: ${joinNames(items.map((i) => i.name))}.`, items, rows.length);
 }
 
+/** De onde vêm os cadastros de coach (iPhone, Android ou web): o app manda `platform` no cadastro e o servidor guarda em coachRequestInfo. Mede quantos coaches chegam pelo iPhone (versão 1.1 sem compra no app). */
+const SIGNUP_ORDER = ['ios', 'android', 'web', 'desconhecido'] as const;
+const SIGNUP_LABEL: Record<string, string> = { ios: 'iPhone (app)', android: 'Android (app)', web: 'Web / site', desconhecido: 'Sem registro (antes da 1.1)' };
+async function coachesOrigem(db: Db, p: ReturnType<typeof cleanParams>, now: Date): Promise<Answer> {
+  const since = new Date(now.getTime() - p.dias * DAY);
+  const rows: any[] = await db.user.findMany(realCoaches({ id: true, accountStatus: true, coachRequestInfo: true, createdAt: true }, { createdAt: { gte: since }, id: { notIn: MASTER_IDS } }));
+  const title = `De onde vêm os cadastros de coach (${daysWord(p.dias)})`;
+  if (!rows.length) return answer('COACHES_ORIGEM', title, `Nenhum cadastro de coach nos últimos ${daysWord(p.dias)}.`, [], 0);
+  const groups = new Map<string, { n: number; ok: number; pend: number }>();
+  rows.forEach((c) => {
+    const raw = c.coachRequestInfo && typeof c.coachRequestInfo === 'object' ? (c.coachRequestInfo as any).platform : null;
+    const k = raw === 'ios' || raw === 'android' || raw === 'web' ? raw : 'desconhecido';
+    const g = groups.get(k) || { n: 0, ok: 0, pend: 0 };
+    g.n += 1; if (c.accountStatus === 'ACTIVE') g.ok += 1; if (c.accountStatus === 'PENDING_APPROVAL') g.pend += 1;
+    groups.set(k, g);
+  });
+  const items: Item[] = SIGNUP_ORDER.filter((k) => groups.has(k)).map((k) => {
+    const g = groups.get(k)!;
+    return { kind: 'note' as const, id: null, name: SIGNUP_LABEL[k], detail: `${plural(g.n, 'cadastro', 'cadastros')} · ${plural(g.ok, 'aprovado', 'aprovados')}${g.pend ? ` · ${g.pend} aguardando` : ''}`, tone: null as Item['tone'] };
+  });
+  const parts = SIGNUP_ORDER.filter((k) => groups.has(k) && k !== 'desconhecido').map((k) => `${groups.get(k)!.n} pelo ${SIGNUP_LABEL[k].replace(/ \(app\)$/, '')}`);
+  const unk = groups.get('desconhecido');
+  return answer('COACHES_ORIGEM', title, `${plural(rows.length, 'cadastro de coach', 'cadastros de coach')} nos últimos ${daysWord(p.dias)}${parts.length ? `: ${parts.join(', ')}` : ''}.${unk ? ` ${plural(unk.n, 'veio', 'vieram')} sem registro de origem (cadastros antigos).` : ''}`, items, rows.length);
+}
+
 async function coachesFundadores(db: Db, now: Date): Promise<Answer> {
   const st = await getPromoState(db, now);
   const founders: any[] = await db.user.findMany(realCoaches({ id: true, name: true, createdAt: true }, { isLaunchPromo: true }));
@@ -562,7 +587,7 @@ async function resumoCoach(db: Db, p: ReturnType<typeof cleanParams>, o: { today
 }
 
 /** Consultas que aceitam período (a tela oferece 7/15/30 dias) */
-export const TAKES_DIAS: Intent[] = ['COBRANCA', 'SEM_TREINAR', 'TREINO_VENCENDO', 'NOVOS_ALUNOS', 'ANIVERSARIANTES', 'COACHES_COBRANCA', 'COACHES_NOVOS'];
+export const TAKES_DIAS: Intent[] = ['COBRANCA', 'SEM_TREINAR', 'TREINO_VENCENDO', 'NOVOS_ALUNOS', 'ANIVERSARIANTES', 'COACHES_COBRANCA', 'COACHES_NOVOS', 'COACHES_ORIGEM'];
 
 export type RunOpts = { now?: Date; noFinance?: boolean; studentId?: string | null };
 
@@ -608,6 +633,7 @@ export async function runIntent(db: Db, coachId: string, intent: Intent | 'NENHU
       case 'COACHES_COBRANCA': return withParams(await coachesCobranca(db, p, now, todayKey));
       case 'COACHES_ALUNOS': return await coachesAlunos(db);
       case 'COACHES_NOVOS': return withParams(await coachesNovos(db, p, now));
+      case 'COACHES_ORIGEM': return withParams(await coachesOrigem(db, p, now));
       case 'COACHES_FUNDADORES': return await coachesFundadores(db, now);
       case 'RESUMO_COACH': return await resumoCoach(db, p, { todayKey, noFinance: !!o.noFinance, targetId: o.studentId });
       case 'RESUMO_ALUNO': return await resumoAluno(db, coachId, p, { todayKey, now, noFinance: !!o.noFinance, studentId: o.studentId });
@@ -640,6 +666,7 @@ export function ruleRoute(text: string, o: { master?: boolean } = {}): Route {
     if (has(/\b(fundador|fundadores)\b/) || (aboutCoach && has(/\bvagas?\b/))) return { intent: 'COACHES_FUNDADORES', params: {} };
     const whoCoach = t.match(/(?:resumo|situacao|como (?:esta|anda|vai)|me (?:fala|conta|diz) (?:do|da|sobre))\s+(?:o |a |do |da |sobre o |sobre a )?(?:coach|treinador|treinadora)\s+([a-z]+(?:\s+[a-z]+)?)/);
     if (whoCoach && whoCoach[1]) return { intent: 'RESUMO_COACH', params: { aluno_falado: whoCoach[1].replace(/\b[a-z]/g, (c) => c.toUpperCase()) } };
+    if (has(/\b(de onde|origem|plataforma)\b/) && (aboutCoach || has(/\b(cadastros?|iphone|ios|android)\b/))) return { intent: 'COACHES_ORIGEM', params: { dias } };
     if (aboutCoach) {
       if (has(/aprovar|aprovacao|pendente|pendentes|cadastros?|solicitac/)) return { intent: 'COACHES_PENDENTES', params: {} };
       if (has(/atrasad|vencend|vencid|vence|inadimpl|devendo|cobranca|mensalidade|pagamento|teste gratis|cancelad/)) return { intent: 'COACHES_COBRANCA', params: { dias } };
@@ -696,6 +723,7 @@ const ROUTER_COACH_LINES = `- COACHES_RESUMO: visão geral dos coaches da plataf
 - COACHES_COBRANCA: coaches em atraso, cancelados ou com plano/teste grátis vencendo. dias = janela (padrão 7).
 - COACHES_ALUNOS: quantos alunos cada coach tem; coaches sem aluno.
 - COACHES_NOVOS: coaches que entraram há pouco. dias = janela (padrão 7).
+- COACHES_ORIGEM: de onde vêm os cadastros de coach (iPhone, Android ou web). dias = janela (padrão 30).
 - COACHES_FUNDADORES: vagas da promoção de Fundador (usadas, reservadas, livres).
 - RESUMO_COACH: situação de UM coach (conta, plano, mensalidade, alunos, recursos). aluno_falado = o nome do coach como foi dito.`;
 

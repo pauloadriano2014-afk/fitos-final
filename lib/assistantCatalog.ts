@@ -49,6 +49,7 @@ export const CATALOG: CatalogCategory[] = [
     { key: 'c_cobranca', label: 'Coaches em atraso ou vencendo', intent: 'COACHES_COBRANCA', params: { dias: 7 }, icon: 'cash-clock', finance: true },
     { key: 'c_alunos', label: 'Alunos por coach', intent: 'COACHES_ALUNOS', icon: 'account-multiple-outline' },
     { key: 'c_novos', label: 'Coaches novos', intent: 'COACHES_NOVOS', params: { dias: 7 }, icon: 'account-plus-outline' },
+    { key: 'c_origem', label: 'De onde vêm os cadastros', intent: 'COACHES_ORIGEM', params: { dias: 30 }, icon: 'cellphone-arrow-down' },
     { key: 'c_fundadores', label: 'Vagas de Fundador', intent: 'COACHES_FUNDADORES', icon: 'medal-outline', finance: true },
   ] },
 ];
