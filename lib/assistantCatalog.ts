@@ -2,7 +2,7 @@
 // 🧭 (13 out 2026) Catálogo do ASSISTENTE ÚNICO (perguntas rápidas por categoria). É o servidor que diz ao app quais botões existem (GET /api/coach-assistant/catalogo):
 // uma pergunta nova aparece no app só subindo o backend, sem mexer no frontend. `finance` some no app do iPhone (Apple 3.1.1); `master` só aparece para o time master (Paulo/Adri).
 // Cada botão é uma consulta fixa (intent + params) respondida SEM IA por lib/coachAssistant.ts.
-export type CatalogButton = { key: string; label: string; intent: string; params?: { dias?: number; situacao?: 'vencendo' | 'atrasada' | 'todas' }; icon: string; finance?: boolean };
+export type CatalogButton = { key: string; label: string; intent: string; params?: { dias?: number; situacao?: 'vencendo' | 'atrasada' | 'todas' }; icon: string; finance?: boolean; noIos?: boolean };   // noIos: some no iPhone por outro motivo que não dinheiro (ex.: teste grátis, que leva a falar de contratar fora do app)
 export type CatalogCategory = { id: string; label: string; icon: string; master?: boolean; buttons: CatalogButton[] };
 
 export const CATALOG: CatalogCategory[] = [
@@ -41,7 +41,7 @@ export const CATALOG: CatalogCategory[] = [
     { key: 'feedbacks', label: 'Feedbacks da semana', intent: 'FEEDBACKS', icon: 'message-text-clock-outline' },
   ] },
   { id: 'crescimento', label: 'Crescimento', icon: 'trending-up', buttons: [
-    { key: 'teste', label: 'Links de teste grátis', intent: 'TESTE_GRATIS', icon: 'link-variant' },
+    { key: 'teste', label: 'Links de teste grátis', intent: 'TESTE_GRATIS', icon: 'link-variant', noIos: true },
   ] },
   { id: 'coaches', label: 'Coaches', icon: 'account-tie-outline', master: true, buttons: [
     { key: 'c_resumo', label: 'Visão geral dos coaches', intent: 'COACHES_RESUMO', icon: 'view-dashboard-outline' },
@@ -57,7 +57,7 @@ export const CATALOG: CatalogCategory[] = [
 /** As categorias que ESTE usuário vê: `master` = time master; `ios` = app do iPhone (sem os botões de finanças/cobrança). Categoria que ficar vazia some. */
 export function catalogFor(o: { master: boolean; ios: boolean }): CatalogCategory[] {
   return CATALOG.filter((c) => !c.master || o.master)
-    .map((c) => ({ ...c, buttons: c.buttons.filter((b) => !(o.ios && b.finance)) }))
+    .map((c) => ({ ...c, buttons: c.buttons.filter((b) => !(o.ios && (b.finance || b.noIos))) }))
     .filter((c) => c.buttons.length > 0);
 }
 
