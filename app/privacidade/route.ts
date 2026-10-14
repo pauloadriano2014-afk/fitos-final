@@ -22,7 +22,7 @@ export async function GET() {
   <body>
     <div class="container">
       <h1>Política de Privacidade - Aplicativo ELITE FIT</h1>
-      <p class="date"><strong>Última atualização:</strong> Setembro de 2026</p>
+      <p class="date"><strong>Última atualização:</strong> Outubro de 2026</p>
 
       <p>Bem-vindo ao aplicativo <strong>ELITE FIT</strong> (nome fantasia de <strong>PA ELITE TEAM LTDA</strong>, empresa responsável pelo aplicativo, sediada em Curitiba-PR). A sua privacidade e a segurança dos seus dados pessoais e físicos são nossas maiores prioridades. Esta Política de Privacidade explica como coletamos, usamos, armazenamos e protegemos as suas informações ao utilizar o nosso aplicativo e os nossos serviços.</p>
       <p>Ao utilizar o aplicativo, você concorda com a coleta e o uso de informações de acordo com esta política. Consulte também os nossos <a href="https://fitos-final.onrender.com/termos">Termos de Uso</a>.</p>
@@ -33,6 +33,9 @@ export async function GET() {
         <li><strong>Dados de Saúde e Bem-Estar (Health Data):</strong> Idade, peso atual, histórico de lesões, nível de experiência com musculação, informações preenchidas na Anamnese inicial e, quando informado voluntariamente pela aluna, dados do ciclo menstrual — usados exclusivamente para ajustar a intensidade do treino (deload) nos dias indicados por ela.</li>
         <li><strong>Dados de Acompanhamento (Check-in):</strong> Evolução de cargas, histórico de treinos concluídos, dieta e feedback de performance.</li>
         <li><strong>Mídia (Fotos e Vídeos):</strong> Imagens do seu corpo (frente, costas, lado e poses extras) enviadas voluntariamente durante o processo de Check-in, e vídeos curtos de execução de exercício enviados voluntariamente ao Scanner de Movimento (análise de técnica por IA).</li>
+        <li><strong>Vídeo de Execução (aluno para o treinador):</strong> vídeos curtos de um exercício que o aluno grava e envia ao seu próprio treinador para receber comentários. São de acesso restrito ao aluno e ao treinador e são apagados automaticamente após 90 dias.</li>
+        <li><strong>Anotações e Perguntas por Voz (treinadores):</strong> o treinador pode ditar anotações sobre seus alunos e fazer perguntas sobre a sua carteira, falando ou escrevendo. O áudio é enviado para ser transformado em texto e descartado em seguida (não é guardado). O texto da anotação, que pode citar o nome de alunos, fica salvo no registro do aluno e é visível apenas ao treinador.</li>
+        <li><strong>Controle financeiro do treinador:</strong> o treinador pode registrar, para o seu próprio controle, o valor e o vencimento da consultoria de cada aluno. O aplicativo para iPhone não realiza cobrança nem pagamento.</li>
         <li><strong>Dados Financeiros:</strong> Para alunos com cobrança recorrente via cartão ou PIX, coletamos CPF e endereço de cobrança, necessários para emissão de cobrança junto ao nosso processador de pagamentos (Asaas). Não armazenamos número completo de cartão de crédito — isso é feito diretamente pelo processador de pagamentos.</li>
       </ul>
 
@@ -40,6 +43,7 @@ export async function GET() {
       <ul>
         <li><strong>Câmera e Galeria de Fotos:</strong> Solicitamos acesso para que você possa capturar ou fazer upload das suas fotos de evolução física no Check-in e da foto do dia nos Desafios.</li>
         <li><strong>Câmera e Microfone (Scanner de Movimento):</strong> Usados exclusivamente para gravar, com o seu comando explícito, o vídeo de execução de um exercício que você opta por enviar para análise de técnica por Inteligência Artificial. <em>Nenhuma foto ou vídeo é capturado em segundo plano ou sem a sua ação direta.</em></li>
+        <li><strong>Microfone (anotações e perguntas por voz):</strong> usado somente quando o treinador toca em gravar, para ditar uma anotação ou uma pergunta. Antes do primeiro envio para a Inteligência Artificial o aplicativo pede a sua permissão. Nada é gravado em segundo plano.</li>
         <li><strong>Notificações (Push):</strong> Para enviar lembretes de treinos, avisos de novos conteúdos e mensagens do seu treinador.</li>
       </ul>
 
@@ -59,7 +63,7 @@ export async function GET() {
       </ul>
 
       <h2>5. Compartilhamento de Dados</h2>
-      <p>A <strong>PA ELITE TEAM LTDA</strong> jamais vende, aluga ou compartilha seus dados pessoais, de saúde ou fotos com terceiros para fins de marketing ou publicidade. O compartilhamento só ocorre com prestadores de serviço essenciais para o funcionamento do app: servidores em nuvem (armazenamento de fotos e vídeos), o processador de pagamentos Asaas (para dados financeiros) e o Google Gemini (Inteligência Artificial), usado para analisar o vídeo de execução do exercício enviado voluntariamente ao Scanner de Movimento e para apoiar a geração de treinos/dietas — ou ainda se exigido por lei ou ordem judicial. Esses prestadores possuem suas próprias políticas de segurança e são contratualmente obrigados a proteger seus dados.</p>
+      <p>A <strong>PA ELITE TEAM LTDA</strong> jamais vende, aluga ou compartilha seus dados pessoais, de saúde ou fotos com terceiros para fins de marketing ou publicidade. O compartilhamento só ocorre com prestadores de serviço essenciais para o funcionamento do app: servidores em nuvem (armazenamento de fotos e vídeos), o processador de pagamentos Asaas (para dados financeiros) e provedores de Inteligência Artificial: o Google Gemini, usado para analisar o vídeo de execução do exercício enviado voluntariamente ao Scanner de Movimento e para apoiar a geração de treinos/dietas; a OpenAI, usada para transformar em texto o áudio das anotações e perguntas por voz do treinador e para ler as respostas em voz alta; e a Anthropic (Claude), usada para organizar as anotações do treinador, responder às perguntas dele sobre os seus alunos e no chat de suporte. Para isso é enviado apenas o necessário (o áudio ou o texto da solicitação e, nas perguntas, os nomes e dados dos alunos citados), o áudio não é guardado e esses dados não são usados para publicidade — ou ainda se exigido por lei ou ordem judicial. Esses prestadores possuem suas próprias políticas de segurança e são contratualmente obrigados a proteger seus dados.</p>
 
       <h2>6. Retenção e Exclusão de Dados</h2>
       <p>Você tem o controle total sobre as suas informações. Retemos seus dados pessoais e de saúde apenas pelo tempo necessário para fornecer o serviço de consultoria.</p>
