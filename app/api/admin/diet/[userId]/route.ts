@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { attachItemMeta } from '@/lib/foodMeasures';
 import { attachDayScheme } from '@/lib/dayScheme';
+import { groupMealsWithAlternatives } from '@/lib/dietAlt';
 
 export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
@@ -81,28 +82,9 @@ export async function GET(req: Request, { params }: { params: { userId: string }
     });
 
     // ─── AGRUPAR VERSÕES ALTERNATIVAS ────────────────────────────────────────
-    // Separa principais das alternativas e agrupa pelo alternativeGroupId
-    const mainMeals:  any[] = [];
-    const altMap:     Map<string, any[]> = new Map();
-
-    for (const meal of diet.meals) {
-      if (!meal.alternativeGroupId || meal.isMainVersion !== false) {
-        // É uma refeição principal (ou não tem grupo)
-        mainMeals.push(meal);
-      } else {
-        // É uma versão alternativa — agrupa pelo ID do grupo
-        const existing = altMap.get(meal.alternativeGroupId) ?? [];
-        altMap.set(meal.alternativeGroupId, [...existing, meal]);
-      }
-    }
-
-    // Monta resposta final: cada refeição principal carrega suas alternativas
-    const formattedMeals = mainMeals.map(meal => {
-      const alternatives = meal.alternativeGroupId
-        ? (altMap.get(meal.alternativeGroupId) ?? [])
-        : [];
-      return formatMeal(meal, alternatives);
-    });
+    // Cada principal recebe só as alternativas da PRÓPRIA aba (lib/dietAlt.ts: o mesmo grupo existia em várias abas e triplicava as versões).
+    const { mainMeals, alternativesOf } = groupMealsWithAlternatives(diet.meals);
+    const formattedMeals = mainMeals.map(meal => formatMeal(meal, alternativesOf(meal)));
 
     return NextResponse.json({
       id:           diet.id,

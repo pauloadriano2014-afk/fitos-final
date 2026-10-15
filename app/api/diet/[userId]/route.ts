@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { attachItemMeta } from '@/lib/foodMeasures';
 import { attachDayScheme } from '@/lib/dayScheme';
+import { groupMealsWithAlternatives } from '@/lib/dietAlt';
 
 export const dynamic  = 'force-dynamic';
 export const revalidate = 0;
@@ -74,24 +75,10 @@ const formatMeal = (meal: any, alternatives: any[] = []) => ({
 
 // ─── FORMATAR DIETA COMPLETA ──────────────────────────────────────────────────
 function formatDiet(diet: any, isFromStrategy = false) {
-  const mainMeals:  any[] = [];
-  const altMap:     Map<string, any[]> = new Map();
+  // 🍽️ cada principal recebe só as alternativas da PRÓPRIA aba (ver lib/dietAlt.ts: o mesmo grupo existia em várias abas e triplicava as versões alternativas)
+  const { mainMeals, alternativesOf } = groupMealsWithAlternatives(diet.meals);
 
-  for (const meal of diet.meals) {
-    if (!meal.alternativeGroupId || meal.isMainVersion !== false) {
-      mainMeals.push(meal);
-    } else {
-      const existing = altMap.get(meal.alternativeGroupId) ?? [];
-      altMap.set(meal.alternativeGroupId, [...existing, meal]);
-    }
-  }
-
-  const formattedMeals = mainMeals.map(meal => {
-    const alternatives = meal.alternativeGroupId
-      ? (altMap.get(meal.alternativeGroupId) ?? [])
-      : [];
-    return formatMeal(meal, alternatives);
-  });
+  const formattedMeals = mainMeals.map(meal => formatMeal(meal, alternativesOf(meal)));
 
   return {
     id:           diet.id,
