@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, isMasterId, type AuthUser } from '@/lib/auth';
 import { cleanStep } from '@/lib/loadSuggest';
+import { findOwnedActiveCoachPlan, studentFieldsFromCoachPlan, coachPlanInfoFor } from '@/lib/coachPlanLink';
 
 // 🔒 A ownership agora é decidida pelo usuário REAL do token (authUser), nunca
 // pelo `adminId` que o cliente manda no body/query — esse `adminId` é
@@ -64,6 +65,23 @@ function sanitizeUpdateData(rawBody: any, { isSelfEdit }: { isSelfEdit: boolean 
         }
     }
     return safeData;
+}
+
+
+// 🧩 (15 out 2026) Atribuir um PLANO DO COACH ao aluno: `coachPlanId` no body. O plano precisa ser ATIVO e do coach DESSE aluno (nunca de outro coach).
+// Aplica junto os módulos (studentModules/dietModule) e o plano interno compatível (PERFORMANCE = só treino, ELITE = com dieta).
+// `coachPlanId: null` só tira o vínculo (não mexe nos módulos que o coach já liberou). Fora disso o body segue como sempre.
+async function applyCoachPlanToBody(userId: string, body: any, authUser: AuthUser | null): Promise<{ error?: string; status?: number }> {
+    if (!Object.prototype.hasOwnProperty.call(body, 'coachPlanId')) return {};
+    if (body.coachPlanId === null || body.coachPlanId === '') { body.coachPlanId = null; return {}; }
+    const student = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true, role: true } });
+    if (!student || student.role !== 'USER') { delete body.coachPlanId; return { error: 'Só aluno pode ter plano do coach.', status: 400 }; }
+    // o próprio aluno nunca troca o plano (já é cortado em sanitizeUpdateData); aqui só coach/master chegam
+    if (authUser && authUser.id === userId) { delete body.coachPlanId; return { error: 'Acesso não autorizado.', status: 403 }; }
+    const cp = await findOwnedActiveCoachPlan(student.coachId, body.coachPlanId);
+    if (!cp) { delete body.coachPlanId; return { error: 'Plano não encontrado para o coach deste aluno.', status: 400 }; }
+    Object.assign(body, studentFieldsFromCoachPlan(cp));
+    return {};
 }
 
 // 🔥 Tratamento de CORS GLOBAL para evitar bloqueios na PWA
@@ -141,6 +159,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             coachId:             true,
             nutritionistId:      true,
             studentModules:      true,
+            coachPlanId:         true,   // 🧩 (15 out 2026) plano do coach parceiro que o aluno contratou
 
             // 🔥 AS DUAS LINHAS QUE FALTAVAM E QUE RESOLVEM TUDO 🔥
             brandLogoUrl:        true,
@@ -193,6 +212,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         return corsResponse({
             ...userResponse,
             assignedCoachPlan: linkedCoach?.coachPlan ?? null,
+            // 🧩 nome/descrição/módulos do plano que o coach parceiro deu pro aluno (o Perfil mostra isso no lugar de "ELITE"/"PERFORMANCE")
+            coachPlanInfo: await coachPlanInfoFor((userResponse as any).coachPlanId),
         });
 
     } catch (error) {
@@ -211,6 +232,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         const isOwner = await checkOwnership(userId, auth.user);
         if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
 
+        const planErr = await applyCoachPlanToBody(userId, body, auth.user);
+        if (planErr.error) return corsResponse({ error: planErr.error }, planErr.status || 400);
         const dataToUpdate = sanitizeUpdateData(body, { isSelfEdit: auth.user.id === userId });
 
         const user = await prisma.user.update({ where: { id: userId }, data: dataToUpdate });
@@ -231,6 +254,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         const isOwner = await checkOwnership(userId, auth.user);
         if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
 
+        const planErr = await applyCoachPlanToBody(userId, body, auth.user);
+        if (planErr.error) return corsResponse({ error: planErr.error }, planErr.status || 400);
         const dataToUpdate = sanitizeUpdateData(body, { isSelfEdit: auth.user.id === userId });
 
         const user = await prisma.user.update({ where: { id: userId }, data: dataToUpdate });

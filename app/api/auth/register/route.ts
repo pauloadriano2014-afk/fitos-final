@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import { signAuthToken } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 import { isAutoPlan } from '@/lib/autoPlanKinds';
+import { isSystemPlan, findOwnedActiveCoachPlan, studentFieldsFromCoachPlan, coachPlanInfoFor } from '@/lib/coachPlanLink';
 
 
 const PAULO_EMAIL = 'paulo_adriano2014@live.com';
@@ -140,6 +141,23 @@ export async function POST(req: Request) {
         const studentCpf   = String(cpf || '').replace(/\D/g, '');
         const validStudentCpf = studentCpf.length === 11 || studentCpf.length === 14 ? studentCpf : null;
 
+        // 🧩 (15 out 2026) O link de um PLANO DO COACH PARCEIRO manda o ID do plano em `plan` (não um dos planos do sistema). Antes esse ID era gravado no campo
+        // `plan` (um código que nenhuma tela entende). Agora: se o ID é de um plano ativo DESSE coach, o aluno entra nele (nome pro Perfil + módulos de treino/dieta);
+        // qualquer outro valor desconhecido nunca é gravado como está (cai no padrão de sempre).
+        let studentPlan: string = plan || 'PREMIUM';
+        let planFields: Record<string, any> = {};
+        let linkedCoachPlan: any = null;
+        if (!isSystemPlan(plan)) {
+            linkedCoachPlan = await findOwnedActiveCoachPlan(coachId, plan);
+            if (linkedCoachPlan) {
+                const f = studentFieldsFromCoachPlan(linkedCoachPlan);
+                studentPlan = f.plan;
+                planFields = { studentModules: f.studentModules, dietModule: f.dietModule, coachPlanId: f.coachPlanId };
+            } else {
+                studentPlan = 'PREMIUM';
+            }
+        }
+
         const user = await prisma.user.create({
             data: {
                 email, password: hashedPassword, name,
@@ -147,10 +165,11 @@ export async function POST(req: Request) {
                 cpf:     validStudentCpf,
                 role:    'USER',
                 coachId: coachId,
-                plan:    plan || 'PREMIUM',
+                plan:    studentPlan,
+                ...planFields,
                 // 🤖 (3 out 2026) Planos com montagem automática (ficha 8 semanas / desafio 21 dias): o plano só nasce depois da anamnese. Quem fecha o
                 // app no meio dela fica "pendente" e a home mostra o banner pra terminar (a gravação da anamnese desliga o campo).
-                ...(isAutoPlan(plan) ? { anamnesePendente: true } : {}),
+                ...(isAutoPlan(studentPlan) ? { anamnesePendente: true } : {}),
             } as any,
         });
 
@@ -163,7 +182,8 @@ export async function POST(req: Request) {
 
         const { password: _, ...userWithoutPassword } = user;
         const token = signAuthToken({ id: user.id, role: (user as any).role, coachId: (user as any).coachId ?? null });
-        return NextResponse.json({ message: 'Usuário criado com sucesso!', user: userWithoutPassword, token }, { status: 201 });
+        const coachPlanInfo = linkedCoachPlan ? await coachPlanInfoFor(linkedCoachPlan.id) : null;
+        return NextResponse.json({ message: 'Usuário criado com sucesso!', user: { ...userWithoutPassword, coachPlanInfo }, token }, { status: 201 });
 
     } catch (error) {
         console.error('ERRO NO REGISTRO:', error);

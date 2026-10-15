@@ -197,6 +197,8 @@ model CoachPlan {
   
   name             String   
   description      String?  @db.Text
+  // 🧩 (15 out 2026) O que o plano libera pro aluno do coach parceiro: TREINO | DIETA | AMBOS (limitado pelo tipo do coach: Personal só TREINO, Nutri só DIETA).
+  modules          String   @default("TREINO")
   value            Float    
   promotionalValue Float?   
   durationInMonths Int      @default(1) 
