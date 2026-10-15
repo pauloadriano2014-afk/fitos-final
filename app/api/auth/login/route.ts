@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { signAuthToken } from '@/lib/auth';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
+import { coachPlanInfoFor } from '@/lib/coachPlanLink';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,7 +91,7 @@ export async function POST(req: Request) {
 
       // 🔥 O Servidor agora devolve o usuário com a role ('ADMIN' ou 'USER')
       return NextResponse.json({
-        user: { ...userWithoutPassword, assignedCoachPlan: linkedCoach?.coachPlan ?? null },
+        user: { ...userWithoutPassword, assignedCoachPlan: linkedCoach?.coachPlan ?? null, coachPlanInfo: await coachPlanInfoFor((user as any).coachPlanId) },
         token,
       });
     }

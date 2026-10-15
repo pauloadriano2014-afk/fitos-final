@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
+import { clampModules } from '@/lib/coachPlanLink';
 
 export async function POST(req: Request) {
     try {
         const body = await req.json();
         // 🔥 INCLUA paymentUrl AQUI:
-        const { coachId, planId, name, value, durationInMonths, discountPerc, paymentUrl } = body;
+        const { coachId, planId, name, value, durationInMonths, discountPerc, paymentUrl, description, modules } = body;
 
         const auth = requireAuth(req);
         if ('response' in auth) return auth.response;
@@ -25,9 +26,15 @@ export async function POST(req: Request) {
                 return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
             }
 
+            // 🧩 (15 out 2026) descrição + módulos (treino/dieta) do plano; o módulo respeita o tipo do coach (Personal só treino, Nutri só dieta)
+            const ownerId = (existingPlan as any).coachId as string;
+            const owner = await prisma.user.findUnique({ where: { id: ownerId }, select: { coachPlan: true } });
+            const extra: Record<string, any> = {};
+            if (description !== undefined) extra.description = String(description ?? '').trim().slice(0, 400) || null;
+            if (modules !== undefined) extra.modules = clampModules(modules, owner?.coachPlan, isMasterId(ownerId));
             const updatedPlan = await prisma.coachPlan.update({
                 where: { id: planId },
-                data: { name, value: parsedValue, durationInMonths: parsedMonths, discountPerc: parsedDiscount, paymentUrl }
+                data: { name, value: parsedValue, durationInMonths: parsedMonths, discountPerc: parsedDiscount, paymentUrl, ...extra }
             });
             return NextResponse.json({ success: true, plan: updatedPlan });
         } else {
@@ -36,8 +43,13 @@ export async function POST(req: Request) {
                 return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
             }
 
+            const owner = await prisma.user.findUnique({ where: { id: coachId }, select: { coachPlan: true } });
             const newPlan = await prisma.coachPlan.create({
-                data: { coachId, name, value: parsedValue, durationInMonths: parsedMonths, discountPerc: parsedDiscount, paymentUrl }
+                data: {
+                    coachId, name, value: parsedValue, durationInMonths: parsedMonths, discountPerc: parsedDiscount, paymentUrl,
+                    description: String(description ?? '').trim().slice(0, 400) || null,
+                    modules: clampModules(modules, owner?.coachPlan, isMasterId(coachId)),
+                }
             });
             return NextResponse.json({ success: true, plan: newPlan });
         }

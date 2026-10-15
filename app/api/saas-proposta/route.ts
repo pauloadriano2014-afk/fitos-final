@@ -3,7 +3,7 @@
 // Por que existe: a página pública chamava /api/admin/saas-meta, que exige login do coach (devolve a config inteira), então quem abria o link
 // recebia 401 e via "Proposta Indisponível". Aqui só sai o que a própria página mostra, com lista fechada de campos:
 //   • textos/fotos/vídeo/cor/funcionalidades da página; chave PIX e favorecido (a página exibe para o lead pagar);
-//   • planos ATIVOS (nome, valor, meses, desconto, link de pagamento);
+//   • planos ATIVOS (nome, descrição, módulos, valor, meses, desconto, link de pagamento);
 //   • logo da marca e o código de convite do coach (o cadastro do aluno é por código, não por id).
 // Nunca devolve id interno de configuração, datas, e-mail, telefone, CPF, nem planos inativos.
 import { NextResponse } from 'next/server';
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
             prisma.coachPlan.findMany({
                 where: { coachId, isActive: true },
                 orderBy: { value: 'asc' },
-                select: { id: true, name: true, value: true, durationInMonths: true, discountPerc: true, paymentUrl: true },
+                select: { id: true, name: true, description: true, modules: true, value: true, durationInMonths: true, discountPerc: true, paymentUrl: true },
             }),
         ]);
 

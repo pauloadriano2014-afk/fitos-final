@@ -33,6 +33,9 @@ model User {
   inviteCode        String? @unique
   coachRequestInfo  Json?
   studentModules      String?   @default("TREINO")
+  // 🧩 (15 out 2026) Plano do COACH PARCEIRO que este aluno contratou (CoachPlan.id, sem chave estrangeira de propósito: apagar o plano não apaga/bloqueia o aluno).
+  // Quem define o que o aluno vê é studentModules/dietModule; este campo só guarda QUAL plano é, pro nome e a descrição aparecerem no Perfil.
+  coachPlanId         String?
   coachPlan           String?   @default("PERSONAL")
   coachBillingPlan    String?
   coachBillingStart   DateTime?
