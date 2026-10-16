@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { notHiddenForCoach } from '@/lib/exerciseVisibility';
 import { withExerciseNotes, loadRecentExerciseNotes, loadRecentWeeklyFeedbacks } from '@/lib/dashboardFeed';
 
 export const dynamic = 'force-dynamic';
@@ -192,7 +193,8 @@ export async function GET(req: Request) {
             exerciseWhere = {
                 OR: [
                     { coachId: adminId },
-                    { coachId: masterAdmin.id }
+                    // 🙈 parceiro não herda o que o Paulo marcou "só o Paulo vê" (a Adri, que é master, continua vendo tudo)
+                    { coachId: masterAdmin.id, ...notHiddenForCoach(adminId) }
                 ]
             };
         }

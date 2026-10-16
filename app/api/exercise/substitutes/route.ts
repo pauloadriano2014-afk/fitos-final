@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { notHiddenForCoach } from '@/lib/exerciseVisibility';
 
 
 export async function GET(req: Request) {
@@ -35,8 +36,9 @@ export async function GET(req: Request) {
       const subs: string[] = mainExercise?.defaultSubstitutes ?? [];
 
       if (subs.length > 0) {
+        // 🙈 substituto marcado "só o Paulo vê" não aparece para parceiro (o treino já montado não muda; só a sugestão de troca)
         const preferred = await prisma.exercise.findMany({
-          where: { id: { in: subs } }
+          where: { id: { in: subs }, ...notHiddenForCoach(validAdminId ?? auth.user.id) }
         });
 
         // Retorna na ordem definida pelo coach
@@ -52,6 +54,7 @@ export async function GET(req: Request) {
     const whereClause: any = {
       category,
       id: { not: excludeId || '' },
+      ...notHiddenForCoach(validAdminId ?? auth.user.id),
       OR: validAdminId
         ? [{ coachId: validAdminId }, { coachId: null }]
         : [{ coachId: null }],

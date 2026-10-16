@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { PAULO_ID, ADRI_ID, MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { visibleLibraryWhere, hiddenFlagFromBody } from '@/lib/exerciseVisibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -170,29 +171,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
 
-    const isMaster = MASTER_IDS.includes(adminId);
-    let whereClause: any = {};
-
-    if (isMaster) {
-      // 🔥 CORREÇÃO: Master vê APENAS os próprios exercícios + globais (sem coachId)
-      // Não mistura com exercícios de outros admins do MASTER_IDS — evita duplicatas
-      whereClause = {
-        OR: [
-          { coachId: adminId },   // Só os dele
-          { coachId: null }       // Globais sem dono
-        ]
-      };
-    } else {
-      // Parceiro vê os próprios + herda APENAS do Paulo (master principal)
-      // Não inclui a Adri como fonte de herança para evitar duplicatas
-      whereClause = {
-        OR: [
-          { coachId: adminId },
-          { coachId: PAULO_ID }, // Paulo — fonte única de herança
-          { coachId: null }
-        ]
-      };
-    }
+    // 🔥 Master vê APENAS os próprios exercícios + globais (sem coachId); não mistura com os de outros admins do MASTER_IDS — evita duplicatas.
+    // Parceiro vê os próprios + herda APENAS do Paulo (master principal) e dos globais — menos os que o Paulo marcou "só o Paulo vê".
+    const whereClause = visibleLibraryWhere(adminId);
 
     const exercises = await prisma.exercise.findMany({
       where: whereClause,
@@ -240,9 +221,13 @@ export async function POST(req: Request) {
       defaultSubstitutes: body.defaultSubstitutes || []
     };
 
+    // 🙈 Só o time master pode marcar "só o Paulo vê"; de qualquer outro coach o campo é ignorado.
+    const hidden = hiddenFlagFromBody(body, adminId);
+
     const exercise = await prisma.exercise.create({
       data: {
         ...exerciseData,
+        ...(hidden === undefined ? {} : { hiddenFromCoaches: hidden }),
         coachId: adminId
       }
     });
@@ -284,6 +269,8 @@ export async function PUT(req: Request) {
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
     const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
     const tags = generateTags(body.name, cat);
+    // 🙈 Só o time master muda "só o Paulo vê"; sem o campo no corpo, o valor atual é mantido.
+    const hidden = hiddenFlagFromBody(body, adminId);
 
     const updatedExercise = await prisma.exercise.update({
       where: { id: id },
@@ -299,7 +286,8 @@ export async function PUT(req: Request) {
         commonMistakes: body.commonMistakes || null,
         maleFocus: body.maleFocus || null,
         femaleFocus: body.femaleFocus || null,
-        defaultSubstitutes: body.defaultSubstitutes || []
+        defaultSubstitutes: body.defaultSubstitutes || [],
+        ...(hidden === undefined ? {} : { hiddenFromCoaches: hidden })
       }
     });
     return NextResponse.json(updatedExercise);

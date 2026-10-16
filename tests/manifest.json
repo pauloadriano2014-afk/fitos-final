@@ -246,5 +246,8 @@
  ],
  "t_real_log": [
   "build58.mjs"
+ ],
+ "t_exercise_visibility": [
+  "build51.mjs"
  ]
 }

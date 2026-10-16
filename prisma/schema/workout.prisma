@@ -23,6 +23,10 @@ model Exercise {
   coachId         String?
   coach           User?    @relation("CoachExercises", fields: [coachId], references: [id], onDelete: Cascade)
 
+  // 🙈 (16 out 2026) true = "só o Paulo vê": o exercício continua na biblioteca dele (e nos treinos já montados), mas some da biblioteca dos
+  // outros coaches. Coluna opcional com padrão false: nenhum exercício existente muda de comportamento até o Paulo marcar.
+  hiddenFromCoaches Boolean @default(false)
+
   workoutExercises WorkoutExercise[] 
   asSubstitute     WorkoutExercise[] @relation("SubstituteRelation")
 
