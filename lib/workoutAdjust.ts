@@ -4,6 +4,7 @@
 // SALVAR do treino continua funcionando exatamente como antes.
 import prisma from '@/lib/prisma';
 import { diffWorkout, type DiffRow, type WorkoutDiff } from '@/lib/workoutDiff';
+import { diffSubstitutes, type SubRow, type SubstituteAdded } from '@/lib/substituteDiff';
 
 export async function describeSave(before: DiffRow[], after: DiffRow[], db: any = prisma): Promise<WorkoutDiff | null> {
   try {
@@ -13,6 +14,18 @@ export async function describeSave(before: DiffRow[], after: DiffRow[], db: any 
     ex.forEach((e) => { names[e.id] = e.name; if (String(e.category || '').toUpperCase() === 'CARDIO') cardio.add(e.id); });
     return diffWorkout(before, after, names, { cardio });
   } catch (e) { console.error('[workoutAdjust] comparação falhou:', (e as any)?.message || e); return null; }
+}
+
+/** 🔁 Opções de troca (substitutos) que o coach ACRESCENTOU neste salvar, com os nomes dos exercícios. Nunca atrapalha o salvar: falhou = lista vazia. */
+export async function describeSubstitutes(before: SubRow[], after: SubRow[], db: any = prisma): Promise<SubstituteAdded[]> {
+  try {
+    const rough = diffSubstitutes(before, after);
+    if (!rough.length) return [];
+    const ids = [...new Set(rough.flatMap((r) => [r.exerciseId, ...r.addedIds]))];
+    const ex: any[] = await db.exercise.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
+    const names: Record<string, string> = {}; ex.forEach((e) => { names[e.id] = e.name; });
+    return diffSubstitutes(before, after, names);
+  } catch (e) { console.error('[workoutAdjust] substitutos:', (e as any)?.message || e); return []; }
 }
 
 export interface AutoResolved { id: string; exerciseName: string; taskKey: string; studentId: string }

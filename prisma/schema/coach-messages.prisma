@@ -6,7 +6,7 @@ model StudentCoachMessage {
   id            String    @id @default(uuid())
   userId        String                      // o aluno que recebe
   coachId       String                      // o coach que mandou
-  kind          String                      // AJUSTE_TREINO | APARELHO_TROCADO | LIVRE
+  kind          String                      // AJUSTE_TREINO | APARELHO_TROCADO | SUBSTITUTOS | LIVRE
   title         String
   body          String    @db.Text
   changes       Json?                       // lista do que mudou: [{ type, day, exercise, text }]

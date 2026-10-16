@@ -4,13 +4,13 @@
 import prisma from '@/lib/prisma';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 
-export const MESSAGE_KINDS = ['AJUSTE_TREINO', 'APARELHO_TROCADO', 'LIVRE'] as const;
+export const MESSAGE_KINDS = ['AJUSTE_TREINO', 'APARELHO_TROCADO', 'SUBSTITUTOS', 'LIVRE'] as const;
 export type MessageKind = (typeof MESSAGE_KINDS)[number];
 export const MAX_TITLE = 120;
 export const MAX_BODY = 1500;
 export const MAX_CHANGES = 30;
 
-export const PUSH_TITLE: Record<MessageKind, string> = { AJUSTE_TREINO: '🛠️ Seu coach ajustou seu treino', APARELHO_TROCADO: '🔁 Seu coach trocou um exercício', LIVRE: '💬 Mensagem do seu coach' };
+export const PUSH_TITLE: Record<MessageKind, string> = { AJUSTE_TREINO: '🛠️ Seu coach ajustou seu treino', APARELHO_TROCADO: '🔁 Seu coach trocou um exercício', SUBSTITUTOS: '🔁 Novas opções de troca no seu treino', LIVRE: '💬 Mensagem do seu coach' };
 
 export interface MessageInput { studentId?: any; kind?: any; title?: any; body?: any; changes?: any; workoutId?: any; day?: any; sourceTaskKey?: any; followUp?: any }
 export interface CleanMessage { kind: MessageKind; title: string; body: string; changes: any[] | null; workoutId: string | null; day: string | null; sourceTaskKey: string | null; followUp: boolean }
