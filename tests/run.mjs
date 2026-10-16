@@ -78,7 +78,8 @@ for (const x of results.filter((y) => !y.ok)) {
 }
 const retried = results.filter((x) => x.retried).map((x) => x.name);
 const bad = results.filter((x) => !x.ok).sort((a, b) => a.name.localeCompare(b.name));
-for (const r of bad) { console.log('\n── ' + r.name + ' ──'); console.log(r.out.split('\n').filter((l) => l.trim()).slice(-8).join('\n')); }
+const keyLines = (out) => { const L = out.split('\n').filter((l) => l.trim()); const k = []; L.forEach((l, i) => { if (/FALHOU|AssertionError|TypeError|ReferenceError|Error:/.test(l)) { k.push(l.trim()); if (L[i + 1] && /^\s+at /.test(L[i + 1])) k.push(L[i + 1].trim()); } }); return k.slice(0, 12); };
+for (const r of bad) { console.log('\n── ' + r.name + ' ──'); const k = keyLines(r.out); console.log((k.length ? k : r.out.split('\n').filter((l) => l.trim()).slice(-8)).join('\n')); }
 console.log(`\n${results.length - bad.length} de ${results.length} testes passaram em ${Math.round((Date.now() - t0) / 1000)}s`);
 if (retried.length) console.log(`(${retried.length} passaram so na 2a tentativa: ${retried.join(', ')})`);
 if (skipped.length) console.log(`(${skipped.length} em quarentena ficaram de fora: veja tests/quarentena.json; rode com --todos para inclui-los)`);
