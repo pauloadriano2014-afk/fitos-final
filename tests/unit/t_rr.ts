@@ -1,0 +1,3 @@
+import * as A from '/home/user/fitos-final/lib/coachAssistant';
+const qs = ['Quais alunos estão com o plano financeiro vencendo?','quem está devendo mensalidade','cobranças atrasadas','todas as cobranças em aberto','quem vai pagar essa semana?','pagamentos dos próximos 15 dias','quem não treina há 10 dias?','quais alunos sumiram','quem não treinou essa semana','quais treinos estão vencendo?','o plano de treino do pessoal vence quando','tenho algum feedback pendente?','o que tem na minha agenda hoje','quais são minhas tarefas','quantos alunos eu tenho','resumo do Samuel','como está a Ana Paula','o que eu anotei sobre o Bruno','qual a capital da França',''];
+for (const q of qs) console.log(JSON.stringify(q), '=>', JSON.stringify(A.ruleRoute(q)));

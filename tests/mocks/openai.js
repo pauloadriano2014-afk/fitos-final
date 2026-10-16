@@ -1,0 +1,3 @@
+class OpenAI { constructor(o){ this.o=o; this.audio={speech:{create: async (a)=>{ globalThis.__TTS_ARGS=a; globalThis.__TTS_CALLS=(globalThis.__TTS_CALLS||0)+1; if (globalThis.__TTS_FAIL) throw new Error('tts fora do ar'); const bytes=Buffer.from(globalThis.__TTS_BYTES ?? 'mp3-bytes'); return { arrayBuffer: async ()=>bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength) }; }}, transcriptions:{create: async (a)=>{ globalThis.__WHISPER_ARGS=a; return { text: globalThis.__WHISPER_TEXT ?? ' agachamento livre  ' }; }}}; } }
+async function toFile(bytes, name, opts){ return { bytes, name, opts }; }
+module.exports = OpenAI; module.exports.default = OpenAI; module.exports.toFile = toFile;

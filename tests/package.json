@@ -1,0 +1,11 @@
+{
+  "name": "elitefit-backend-tests",
+  "private": true,
+  "description": "Testes automaticos do servidor (rotas e regras), sem banco real",
+  "scripts": { "test": "node run.mjs" },
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "jsonwebtoken": "^9.0.3",
+    "typescript": "^7.0.2"
+  }
+}

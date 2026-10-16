@@ -1,0 +1,4 @@
+const React = require('react');
+const glyph = { check: '✓', close: '✕', video: '▶', whatsapp: '✆', undo: '↺', plus: '+', cog: '⚙', 'chevron-left': '‹', 'chevron-right': '›', calendar: '▦', 'check-circle-outline': '✓', dumbbell: '▮', 'clipboard-check': '☑', 'timer-sand': '⧗', cancel: '⊘', 'bell-ring': '♪', 'alert-circle': '!', 'clock-alert-outline': '◔', 'calendar-clock': '▦', 'information-outline': 'i', account: '☺', 'close-circle': '✕', 'checkbox-marked': '☑', 'checkbox-blank-outline': '☐' };
+exports.MaterialCommunityIcons = ({ name, size = 16, color = '#fff', style }) => React.createElement('span', { style: { display: 'inline-block', width: size, height: size, lineHeight: size + 'px', textAlign: 'center', fontSize: size * 0.85, color, fontWeight: 700, ...(style || {}) } }, glyph[name] || '•');
+exports.Ionicons = exports.MaterialCommunityIcons;

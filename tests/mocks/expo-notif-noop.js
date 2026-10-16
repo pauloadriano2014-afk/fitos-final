@@ -1,0 +1,2 @@
+const noop = async () => {};
+module.exports = new Proxy({ setNotificationHandler: () => {}, scheduleNotificationAsync: async () => 'id', cancelScheduledNotificationAsync: noop, cancelAllScheduledNotificationsAsync: noop, getPermissionsAsync: async () => ({ status: 'granted' }), requestPermissionsAsync: async () => ({ status: 'granted' }), addNotificationReceivedListener: () => ({ remove() {} }), addNotificationResponseReceivedListener: () => ({ remove() {} }), AndroidImportance: { MAX: 5 }, SchedulableTriggerInputTypes: {} }, { get: (t, k) => (k in t ? t[k] : noop) });

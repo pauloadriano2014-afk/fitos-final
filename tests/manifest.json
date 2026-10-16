@@ -1,0 +1,250 @@
+{
+ "t_adjust": [
+  "build64.mjs"
+ ],
+ "t_adjust_more": [
+  "build64.mjs"
+ ],
+ "t_agenda": [
+  "build51.mjs"
+ ],
+ "t_ai_extract": [
+  "build44.mjs"
+ ],
+ "t_ai_gate": [
+  "build28.mjs"
+ ],
+ "t_ai_parity": [
+  "build45.mjs"
+ ],
+ "t_assistant_guides": [
+  "build70.mjs"
+ ],
+ "t_assistant_more": [
+  "build70.mjs"
+ ],
+ "t_assistant_voice": [
+  "build70.mjs"
+ ],
+ "t_auto_plan": [
+  "build44.mjs"
+ ],
+ "t_auto_quality": [
+  "build44.mjs"
+ ],
+ "t_cardio_presets": [
+  "build56.mjs"
+ ],
+ "t_cf": [
+  "build69.mjs",
+  "build70.mjs"
+ ],
+ "t_challenge": [
+  "build44.mjs"
+ ],
+ "t_checkout": [
+  "build48.mjs"
+ ],
+ "t_coach_assistant": [
+  "build70.mjs"
+ ],
+ "t_coach_notes": [
+  "build70.mjs"
+ ],
+ "t_coach_plans": [
+  "build31.mjs"
+ ],
+ "t_contact": [
+  "build26.mjs"
+ ],
+ "t_cupom": [
+  "build61.mjs"
+ ],
+ "t_dayscheme": [
+  "build18.mjs"
+ ],
+ "t_diet_native": [
+  "build12.mjs"
+ ],
+ "t_diet_route": [
+  "build6.mjs",
+  "build8.mjs"
+ ],
+ "t_exec_video": [
+  "build66.mjs",
+  "build69.mjs"
+ ],
+ "t_feed_route": [
+  "build23.mjs"
+ ],
+ "t_finish_day": [
+  "build26.mjs"
+ ],
+ "t_finish_idem": [
+  "build32.mjs"
+ ],
+ "t_finish_session": [
+  "build32.mjs"
+ ],
+ "t_food_many": [
+  "build.mjs"
+ ],
+ "t_food_match": [
+  "build.mjs",
+  "build6.mjs"
+ ],
+ "t_ibge_comp": [
+  "build22.mjs"
+ ],
+ "t_indicacao": [
+  "build62.mjs"
+ ],
+ "t_ios11_be": [
+  "build70.mjs"
+ ],
+ "t_load_side": [
+  "build39.mjs"
+ ],
+ "t_load_suggest": [
+  "build57.mjs"
+ ],
+ "t_load_suggest_finish": [
+  "build32.mjs"
+ ],
+ "t_match": [
+  "build.mjs"
+ ],
+ "t_measures": [
+  "build8.mjs"
+ ],
+ "t_membros": [
+  "build47.mjs"
+ ],
+ "t_membros_produto": [
+  "build50.mjs"
+ ],
+ "t_monthly_report": [
+  "build58.mjs"
+ ],
+ "t_no_hearts": [
+  "none"
+ ],
+ "t_notes": [
+  "build64.mjs",
+  "build70.mjs",
+  "build66.mjs"
+ ],
+ "t_notices_route": [
+  "build5.mjs"
+ ],
+ "t_plan_clock": [
+  "build45.mjs"
+ ],
+ "t_prof_route": [
+  "build16.mjs"
+ ],
+ "t_push_token": [
+  "build23.mjs"
+ ],
+ "t_register_auto": [
+  "build46.mjs"
+ ],
+ "t_register_plan": [
+  "build30.mjs"
+ ],
+ "t_replies": [
+  "build23.mjs"
+ ],
+ "t_routes": [
+  "build2.mjs"
+ ],
+ "t_rr": [
+  "build70.mjs"
+ ],
+ "t_running": [
+  "build52.mjs",
+  "build54.mjs"
+ ],
+ "t_saas_proposta": [
+  "build41.mjs"
+ ],
+ "t_servir": [
+  "build.mjs",
+  "build2.mjs"
+ ],
+ "t_share_group": [
+  "build71.mjs",
+  "build70.mjs"
+ ],
+ "t_taco_fix": [
+  "build22.mjs"
+ ],
+ "t_targets_route": [
+  "build13.mjs"
+ ],
+ "t_termos_route": [
+  "build37.mjs"
+ ],
+ "t_treino_preview": [
+  "build50.mjs"
+ ],
+ "t_tutorial_api": [
+  "build68.mjs"
+ ],
+ "t_units": [
+  "build2.mjs"
+ ],
+ "t_web_print": [
+  "build43.mjs"
+ ],
+ "t_weekly": [
+  "build23.mjs",
+  "build26.mjs"
+ ],
+ "t_weekly_data": [
+  "build26.mjs"
+ ],
+ "t_weekly_history": [
+  "build26.mjs"
+ ],
+ "t_weekly_import": [
+  "build26.mjs"
+ ],
+ "t_workout_share": [
+  "build38.mjs",
+  "build71.mjs",
+  "build70.mjs"
+ ],
+ "t_workout_templates": [
+  "build44.mjs"
+ ],
+ "t_alt": [
+  "profile:cp-alt"
+ ],
+ "t_cp": [
+  "profile:cp-subs",
+  "profile:cp-alt",
+  "profile:cp-limit"
+ ],
+ "t_limit": [
+  "profile:cp-limit"
+ ],
+ "t_subs": [
+  "profile:cp-subs"
+ ],
+ "t_partner_rules": [
+  "profile:partner-lib"
+ ],
+ "t_partner_routes": [
+  "profile:partner-routes"
+ ],
+ "t_register": [
+  "profile:partner-routes"
+ ],
+ "t_android_tester": [
+  "profile:partner-android"
+ ],
+ "t_real_log": [
+  "build58.mjs"
+ ]
+}

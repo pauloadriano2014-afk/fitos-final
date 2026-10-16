@@ -1,0 +1,11 @@
+{
+ "t_agenda": "falhou",
+ "t_ai_gate": "[running-generate] TypeError: Cannot read properties of undefined (reading 'user')",
+ "t_assistant_more": "so passa na ios-1.1 do servidor (a main ainda nao tem essas perguntas do assistente) - falhou",
+ "t_coach_assistant": "rota: IA fora do ar cai nas palavras-chave; IA diz NENHUMA mas as palavras-chave entendem; fora do assunto não inventa; ios:true bloqueia co",
+ "t_coach_notes": "falhou",
+ "t_diet_route": "coach parceiro ativo passa da trava",
+ "t_finish_day": "falhou",
+ "t_saas_proposta": "AssertionError [ERR_ASSERTION]: plano: sem descrição interna, valor promocional, coachId, datas",
+ "t_weekly_history": "TypeError: db2.weeklyFeedback.findFirst is not a function"
+}
