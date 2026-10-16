@@ -56,6 +56,11 @@ model User {
   partnerCoach        Boolean   @default(false)
   partnerOfferUntil   DateTime?
   launchPromoExtra    Boolean   @default(false)
+  // 🤖 Teste fechado do app Android (Google Play, 17 out 2026): o aluno toca em "Tenho Android" no aviso e deixa o e-mail da conta Google dele. A Play exige 12 testadores
+  // (lista de e-mails na Play Console). androidTesterAddedAt = o master já colocou esse e-mail na lista da Play (some de "só os novos"); trocar o e-mail zera.
+  androidTesterEmail   String?
+  androidTesterAt      DateTime?
+  androidTesterAddedAt DateTime?
   launchPromoStatus        String?
   launchPromoReservedUntil DateTime?
   // 1º período pago de verdade (null = nunca pagou: único caso que pode receber a promoção) e quanto foi efetivamente pago no período atual
