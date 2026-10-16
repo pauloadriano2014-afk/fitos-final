@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { catalogForClient } from '@/config/coachBillingPlans';
 import { getAuthUser, isMasterId } from '@/lib/auth';
-import { getPromoState, isEligibleForPromo } from '@/lib/launchPromo';
+import { getPromoState, isEligibleForPromo, isPartnerOfferOpen } from '@/lib/launchPromo';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,16 +21,22 @@ export async function GET(req: Request) {
     }
 
     let eligible: boolean | undefined;
+    let partner: { open: boolean; until: Date | string | null } | undefined;
     try {
         const auth = getAuthUser(req);
         if (auth && !isMasterId(auth.id)) {
-            const coach = await prisma.user.findUnique({ where: { id: auth.id }, select: { id: true, isLaunchPromo: true, coachFirstPaidAt: true, coachBillingStatus: true } as any });
-            if (coach) eligible = isEligibleForPromo(coach as any, isMasterId) && state.available > 0;
+            const coach = await prisma.user.findUnique({ where: { id: auth.id }, select: { id: true, isLaunchPromo: true, coachFirstPaidAt: true, coachBillingStatus: true, partnerCoach: true, partnerOfferUntil: true } as any });
+            if (coach) {
+                // 🤝 parceiro com a oferta aberta recebe o preço promocional mesmo sem vaga de fundador (vaga EXTRA)
+                const open = isPartnerOfferOpen(coach as any);
+                eligible = isEligibleForPromo(coach as any, isMasterId) && (open || state.available > 0);
+                if ((coach as any).partnerCoach) partner = { open, until: (coach as any).partnerOfferUntil ?? null };
+            }
         }
     } catch { /* sem login: segue sem `eligible` */ }
 
     return NextResponse.json({
         ...catalog,
-        promo: { ...catalog.promo, active: state.available > 0, slotsLeft: state.available, max: state.max, ...(eligible === undefined ? {} : { eligible }) },
+        promo: { ...catalog.promo, active: state.available > 0, slotsLeft: state.available, max: state.max, ...(eligible === undefined ? {} : { eligible }), ...(partner ? { partner } : {}) },
     });
 }

@@ -12,15 +12,18 @@ async function payload() {
     const state = await getPromoState(prisma);
     const now = new Date();
     const coaches: any[] = await (prisma.user as any).findMany({
-        where: { OR: [{ isLaunchPromo: true }, { launchPromoStatus: 'RESERVED', launchPromoReservedUntil: { gt: now } }] },
-        select: { id: true, name: true, email: true, coachPlan: true, coachBillingPlan: true, isLaunchPromo: true, launchPromoStatus: true, launchPromoReservedUntil: true, coachFirstPaidAt: true },
+        where: { OR: [{ isLaunchPromo: true }, { launchPromoStatus: 'RESERVED', launchPromoReservedUntil: { gt: now } }, { partnerCoach: true }] },
+        select: { id: true, name: true, email: true, coachPlan: true, coachBillingPlan: true, isLaunchPromo: true, launchPromoExtra: true, partnerCoach: true, partnerOfferUntil: true, trialEndsAt: true, launchPromoStatus: true, launchPromoReservedUntil: true, coachFirstPaidAt: true },
         orderBy: { coachFirstPaidAt: 'asc' },
     });
     return {
         ...state,
         coaches: coaches.map((c) => ({
             id: c.id, name: c.name, email: c.email, plan: c.coachBillingPlan || c.coachPlan,
-            status: c.isLaunchPromo ? 'USADA' : 'RESERVADA', reservedUntil: c.isLaunchPromo ? null : c.launchPromoReservedUntil,
+            // EXTRA = vaga extra de parceiro já paga (não conta nas vagas); PARCEIRO = parceiro ainda no teste/oferta, sem pagar; USADA/RESERVADA = fundadores de sempre
+            status: c.isLaunchPromo ? (c.launchPromoExtra ? 'EXTRA' : 'USADA') : (c.launchPromoStatus === 'RESERVED' && c.launchPromoReservedUntil && new Date(c.launchPromoReservedUntil) > now ? 'RESERVADA' : 'PARCEIRO'),
+            reservedUntil: c.isLaunchPromo ? null : c.launchPromoReservedUntil,
+            partner: !!c.partnerCoach, partnerOfferUntil: c.partnerOfferUntil ?? null, trialEndsAt: c.trialEndsAt ?? null,
         })),
     };
 }

@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
                 coachBillingEnd: true,
                 isFinanceActive: true,
                 startDate: true, // Adicionado por segurança
+                coachBillingStatus: true, trialEndsAt: true, isLaunchPromo: true,   // 🤝 parceiro (teste de 30 dias + vaga extra): o painel do master mostra e liga/desliga
+                partnerCoach: true, partnerOfferUntil: true, launchPromoExtra: true,
                 _count: {
                     select: { students: true }, 
                 },

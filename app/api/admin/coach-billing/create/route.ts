@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { BILLING_PLANS, LAUNCH_PROMO_PERCENT, calcBillingEnd, isPromoCycle, quotePlan, resolveOfferedPlanKey } from '@/config/coachBillingPlans';
 import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
-import { cancelReservation, isEligibleForPromo, reservePromo } from '@/lib/launchPromo';
+import { cancelReservation, isEligibleForPromo, reservePromoOrExtra } from '@/lib/launchPromo';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,14 +97,14 @@ export async function POST(req: Request) {
         // Busca o coach
         const coach = await prisma.user.findUnique({
             where:  { id: coachId },
-            select: { id:true, name:true, email:true, phone:true, cpf:true, coachAsaasId:true, isLaunchPromo:true, coachFirstPaidAt:true, coachBillingStatus:true, coachPlan:true, coachBillingPlan:true } as any,
+            select: { id:true, name:true, email:true, phone:true, cpf:true, coachAsaasId:true, isLaunchPromo:true, coachFirstPaidAt:true, coachBillingStatus:true, coachPlan:true, coachBillingPlan:true, partnerCoach:true, partnerOfferUntil:true } as any,
         });
         if (!coach) return NextResponse.json({ error: 'Coach não encontrado.' }, { status: 404 });
 
         // 🔥 Promoção: só ciclos longos, só coach que nunca pagou, só sem "valor especial" combinado na mão, só com vaga
         let usePromo = false;
         if (isPromoCycle(plan) && (customValue === undefined || customValue === null) && isEligibleForPromo(coach as any, isMasterId)) {
-            usePromo = await reservePromo(prisma, coachId);
+            usePromo = !!(await reservePromoOrExtra(prisma, coach as any));   // parceiro com a oferta aberta usa a vaga EXTRA (não ocupa vaga de fundador)
         }
         const quote = quotePlan(billingPlan, { promo: usePromo })!;
 

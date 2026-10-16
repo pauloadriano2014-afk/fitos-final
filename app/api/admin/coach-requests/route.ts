@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireMaster } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
+import { partnerTrialDates } from '@/lib/launchPromo';
 
 
 async function generateInviteCode(name: string): Promise<string> {
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
 
         const body = await req.json();
         const { coachId, action, inviteCode, coachPlan } = body; // ← v2: coachPlan
+        const asPartner = body?.partner === true;               // 🤝 aprovar como PARCEIRO: teste de 30 dias + vaga extra da promoção (lib/launchPromo.ts)
 
         if (!coachId || !['APPROVE', 'REJECT'].includes(action)) {
             return NextResponse.json({ error: 'coachId e action são obrigatórios.' }, { status: 400 });
@@ -87,8 +89,11 @@ export async function POST(req: NextRequest) {
         // nenhum plano pago criado (coachBillingStatus só muda pra PENDING/
         // ACTIVE quando existir uma cobrança de verdade, ver coach-billing/create).
         const TRIAL_DAYS = 7;
-        const trialEndsAt = new Date();
+        let trialEndsAt = new Date();
         trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DAYS);
+        // 🤝 PARCEIRO: 30 dias de teste e a oferta promocional (vaga extra) aberta até 7 dias depois do fim do teste
+        const partner = asPartner ? partnerTrialDates(new Date()) : null;
+        if (partner) trialEndsAt = partner.trialEndsAt;
 
         const updated = await prisma.user.update({
             where: { id: coachId },
@@ -98,6 +103,7 @@ export async function POST(req: NextRequest) {
                 coachPlan:     safePlan, // ← v2: confirma ou altera o plano
                 coachBillingStatus: 'TRIAL',
                 trialEndsAt,
+                ...(partner ? { partnerCoach: true, partnerOfferUntil: partner.partnerOfferUntil } : {}),
             } as any,
         });
 
@@ -107,12 +113,12 @@ export async function POST(req: NextRequest) {
                 NUTRICIONISTA:'Nutricionista',
                 ELITE:        'Personal + Nutricionista',
             };
-            await sendPushToUser(updated, '🎉 Você foi aprovado!', `Acesso liberado como ${planLabel[safePlan]}. Código de convite: ${finalCode}`, { type: 'coach_approved' });
+            await sendPushToUser(updated, '🎉 Você foi aprovado!', `Acesso liberado como ${planLabel[safePlan]}. Código de convite: ${finalCode}${partner ? '. Você é coach parceiro: 30 dias de teste grátis.' : ''}`, { type: 'coach_approved' });
         } catch (e) { /* não-crítico */ }
 
         return NextResponse.json({
             success: true, status: 'ACTIVE',
-            inviteCode: finalCode, coachPlan: safePlan,
+            inviteCode: finalCode, coachPlan: safePlan, partner: !!partner, trialEndsAt,
             coach: { id: updated.id, name: updated.name, email: updated.email },
         });
 
