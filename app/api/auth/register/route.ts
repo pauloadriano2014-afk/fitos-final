@@ -34,6 +34,7 @@ export async function POST(req: Request) {
             cpf, instagram,
             coachPlan: coachPlanBody, // ← v2: PERSONAL | NUTRICIONISTA | ELITE
             platform: platformBody,   // ← 14 out 2026: de onde veio o cadastro (o app manda Platform.OS: 'ios' | 'android' | 'web')
+            partnerInvite: partnerInviteBody, // ← 16 out 2026: veio pelo link de convite de parceiro (?parceiro=1)
         } = body;
         // 🐛 (1 out 2026) versões antigas do app mandavam o plano do coach em `plan` (e não em `coachPlan`), então todo coach entrava como PERSONAL.
         // Aceita os dois; no fluxo de coach `plan` só pode ser um plano de coach (a validação abaixo derruba qualquer outro valor).
@@ -65,6 +66,9 @@ export async function POST(req: Request) {
             // Só 'ios' | 'android' | 'web' (qualquer outra coisa vira nada): serve para medir quantos coaches chegam por cada porta (pergunta COACHES_ORIGEM do assistente)
             const platform = ['ios', 'android', 'web'].includes(String(platformBody)) ? String(platformBody) : null;
 
+            // 🤝 Só uma PISTA para o master (etiqueta em PENDENTES e interruptor de parceiro já ligado na aprovação). Não muda teste, vaga nem acesso: quem vira parceiro é decidido na aprovação.
+            const partnerInvite = partnerInviteBody === true || partnerInviteBody === 'true' || partnerInviteBody === 1 || partnerInviteBody === '1';
+
             const coach = await prisma.user.create({
                 data: {
                     email,
@@ -81,6 +85,7 @@ export async function POST(req: Request) {
                         requestedAt: new Date().toISOString(),
                         coachPlan:   safePlan, // duplicado no JSON para visibilidade no painel
                         platform,
+                        ...(partnerInvite ? { partnerInvite: true } : {}),
                     },
                 } as any,
             });
@@ -93,7 +98,7 @@ export async function POST(req: Request) {
             };
             await notifyMaster(
                 '🎯 Novo Coach quer entrar!',
-                `${name}${instagram ? ` (${instagram})` : ''} se cadastrou como ${planLabel[safePlan]}${platform === 'ios' ? ' pelo app do iPhone' : platform === 'android' ? ' pelo app do Android' : platform === 'web' ? ' pelo site' : ''} e aguarda aprovação.`,
+                `${name}${instagram ? ` (${instagram})` : ''} se cadastrou como ${planLabel[safePlan]}${platform === 'ios' ? ' pelo app do iPhone' : platform === 'android' ? ' pelo app do Android' : platform === 'web' ? ' pelo site' : ''}${partnerInvite ? ' pelo CONVITE DE PARCEIRO 🤝' : ''} e aguarda aprovação.`,
                 { type: 'new_coach_request', coachId: coach.id }
             );
 
