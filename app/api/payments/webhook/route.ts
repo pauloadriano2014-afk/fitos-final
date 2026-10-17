@@ -769,7 +769,7 @@ async function handleProdutoPayment(event: string, payment: any, externalRef: st
 // 🔥 Mesmo número usado como contato de suporte em outras telas do app
 // (ex: BibliotecaScreen.js) — reaproveitado aqui pra dar um canal de ajuda
 // caso o link não funcione ou o cliente tenha alguma dúvida sobre o material.
-const SUPORTE_WHATSAPP = '5541997991346';
+const SUPORTE_WHATSAPP = '5541988692641';   // número comercial do ELITE FIT (o dos alunos do Paulo continua sendo o 41 99799-1346)
 
 function buildProdutoEmailHtml(
     nomeCliente: string,

@@ -108,7 +108,7 @@ export async function GET(req: Request) {
       <p>Dúvidas sobre estes Termos de Uso podem ser enviadas pelos canais abaixo:</p>
       <ul style="list-style-type: none; padding-left: 0;">
         <li>📧 <strong>E-mail:</strong> elitefit_app@outlook.com</li>
-        <li>📱 <strong>WhatsApp / Suporte:</strong> (41) 99799-1346</li>
+        <li>📱 <strong>WhatsApp / Suporte:</strong> (41) 98869-2641</li>
       </ul>
     </div>
   </body>
