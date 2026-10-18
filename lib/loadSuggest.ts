@@ -18,6 +18,8 @@
 //
 // Este arquivo é PURO (sem banco): recebe o histórico já lido e devolve a sugestão. O texto que o aluno lê é montado no app (a partir de `reason`).
 
+import { isNormalPhase } from '@/lib/loadPhase';
+
 export const EFFORTS = ['FACIL', 'OK', 'PESADO'] as const;
 export type Effort = (typeof EFFORTS)[number];
 
@@ -54,7 +56,7 @@ type DetailRow = {
     perSide?: boolean | null; effort?: string | null;
     cardioSeconds?: number | null; cardioKcal?: number | null;
 };
-type HistoryRow = { date: Date | string; details?: DetailRow[] | null };
+type HistoryRow = { date: Date | string; loadPhase?: string | null; details?: DetailRow[] | null };
 
 /** Resposta do aluno em "como foi?": só FACIL / OK / PESADO valem (qualquer outra coisa = sem resposta). */
 export function cleanEffort(v: unknown): Effort | null {
@@ -88,6 +90,9 @@ export function snapLoad(total: number, perSide: boolean): number {
 export function sessionsOf(history: HistoryRow[], exerciseId: string): Session[] {
     const out: Session[] = [];
     for (const h of history || []) {
+        // 🏷️ (18 out 2026) semana de deload (carga leve) e de choque (carga pesada) NÃO contam: a sugestão olha só os treinos normais, assim depois do deload
+        // o aluno volta para a carga normal de antes e depois do choque a carga de choque não vira "carga repetida" (lib/loadPhase.ts). Treino antigo (sem fase) = normal.
+        if (!isNormalPhase(h.loadPhase)) continue;
         const rows = (h.details || []).filter((d) => d.exerciseId === exerciseId);
         if (rows.length === 0) continue;
         if (rows.some((d) => d.cardioSeconds != null || d.cardioKcal != null)) return [];   // é cardio: peso aqui são minutos

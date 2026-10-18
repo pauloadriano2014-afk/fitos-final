@@ -1,7 +1,7 @@
 // Banco em memória do "finalizar treino": WorkoutHistory com ÍNDICE ÚNICO (userId, clientKey) como no Postgres (null não conflita),
 // $transaction([...]) com desfazer se algum item falhar, e operações "preguiçosas" (só rodam dentro da transação, como no Prisma de verdade).
 const tick = () => new Promise((r) => setTimeout(r, 0));
-const state = { users: new Map(), histories: [], sessions: [], nextId: 1, failUserUpdateOnce: false, sessionFail: null };
+const state = { users: new Map(), histories: [], sessions: [], workouts: [], workoutFail: false, nextId: 1, failUserUpdateOnce: false, sessionFail: null };
 const clone = (o) => JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\dT/.test(v) ? new Date(v) : v));
 const lazy = (fn) => ({ __run: (ctx) => fn(ctx || { undo: [] }), then: (a, b) => fn({ undo: [] }).then(a, b), catch: (b) => fn({ undo: [] }).catch(b) });
 const matches = (row, w) => Object.entries(w || {}).every(([k, v]) => {
@@ -70,8 +70,10 @@ const sessionApi = {
   async updateMany({ where, data }) { await tick(); sGuard(); const hit = state.sessions.filter((x) => sMatch(x, where)); hit.forEach((x) => Object.assign(x, data)); return { count: hit.length }; },
   async deleteMany({ where }) { await tick(); sGuard(); const keep = state.sessions.filter((x) => !sMatch(x, where)); const count = state.sessions.length - keep.length; state.sessions.length = 0; keep.forEach((x) => state.sessions.push(x)); return { count }; },
 };
+// 🏷️ Workout: só a leitura da ficha (multiplicador de intensidade) que o finalizar usa para gravar a fase da carga (deload/choque/normal)
+const workoutApi = { async findUnique({ where, select }) { await tick(); if (state.workoutFail) throw new Error('banco fora'); const w = state.workouts.find((x) => x.id === where.id); return w ? pick(w, select) : null; } };
 const base = {
-  user: userApi, workoutHistory: historyApi, workoutSession: sessionApi,
+  user: userApi, workoutHistory: historyApi, workoutSession: sessionApi, workout: workoutApi,
   async $transaction(ops) {
     const ctx = { undo: [] };   // desfaz só o que ESTA transação fez (como o banco de verdade; as outras transações seguem)
     const out = [];
@@ -81,5 +83,7 @@ const base = {
 };
 module.exports = base; module.exports.default = base;
 module.exports.__state = state;
-module.exports.__reset = () => { state.users.clear(); state.histories.length = 0; state.sessions.length = 0; state.sessionFail = null; state.nextId = 1; state.failUserUpdateOnce = false; globalThis.__pushes = []; globalThis.__analyze = 0; };
+module.exports.__reset = () => { state.users.clear(); state.histories.length = 0; state.sessions.length = 0; state.workouts.length = 0; state.workoutFail = false; state.sessionFail = null; state.nextId = 1; state.failUserUpdateOnce = false; globalThis.__pushes = []; globalThis.__analyze = 0; };
 module.exports.__addUser = (u) => { state.users.set(u.id, { role: 'USER', currentXP: 0, name: u.id, coachId: null, ...u }); };
+
+module.exports.__addWorkout = (w) => { state.workouts.push({ intensityMultiplier: 1, intensityEndDate: null, ...w }); };

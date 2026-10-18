@@ -272,6 +272,12 @@ model WorkoutHistory {
   // (ver lib/exerciseStatus.ts). null = o app não mandou (treino antigo ou o aluno não respondeu): "sem registro" NÃO prova que ele não fez. Coluna nova opcional.
   exerciseStatus   Json?
 
+  // 🏷️ (18 out 2026) Fase da carga deste treino: NORMAL | DELOAD | CHOQUE (ver lib/loadPhase.ts), gravada ao finalizar pelo multiplicador do treino naquele dia,
+  // e o multiplicador aplicado (1 = normal). Assim o histórico não mistura carga leve (deload) nem pesada (choque) com a carga normal. Colunas novas
+  // opcionais, só de adicionar. null = treino antigo ou sem ficha identificada: conta como NORMAL.
+  loadPhase        String?
+  intensityApplied Float?
+
   details          ExerciseHistory[]
 
   @@unique([userId, clientKey])
