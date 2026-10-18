@@ -223,6 +223,9 @@
  "t_similar_students": [
   "build70.mjs"
  ],
+ "t_student_loads": [
+  "build32.mjs"
+ ],
  "t_subs": [
   "profile:cp-subs"
  ],

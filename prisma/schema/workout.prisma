@@ -273,8 +273,9 @@ model WorkoutHistory {
   exerciseStatus   Json?
 
   // 🏷️ (18 out 2026) Fase da carga deste treino: NORMAL | DELOAD | CHOQUE (ver lib/loadPhase.ts), gravada ao finalizar pelo multiplicador do treino naquele dia,
-  // e o multiplicador aplicado (1 = normal). Assim o histórico não mistura carga leve (deload) nem pesada (choque) com a carga normal. Colunas novas
-  // opcionais, só de adicionar. null = treino antigo ou sem ficha identificada: conta como NORMAL.
+  // e o multiplicador aplicado (1 = normal). `ExerciseHistory.weight` continua sendo a carga equivalente à BASE (o app do aluno divide pelo multiplicador antes de
+  // enviar); a carga que o aluno de fato levantou numa semana especial é weight × intensityApplied. Colunas novas opcionais, só de adicionar.
+  // null = treino antigo ou sem ficha identificada: conta como NORMAL.
   loadPhase        String?
   intensityApplied Float?
 

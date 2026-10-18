@@ -4,10 +4,11 @@
 //   DELOAD  = semana de deload (carga ×0,8; inclui o deload menstrual);
 //   CHOQUE  = semana de choque (carga ×mais de 1).
 // O app do aluno multiplica a carga do coach enquanto o treino tem multiplicador ≠ 1 e a data de fim (`intensityEndDate`) não passou
-// (src/components/DayWorkout/useDayWorkoutData.js). Aqui usamos a MESMA regra, na hora de finalizar o treino, para gravar a fase
-// em `WorkoutHistory.loadPhase`. Assim o histórico deixa de misturar carga leve (deload) e carga pesada (choque) com a carga normal:
-// "Puxar cargas", a sugestão de carga e o editor passam a ler a fase NORMAL como referência e a mostrar as outras separadas.
-// Registro antigo (`loadPhase` null) = NORMAL: ninguém perde histórico. Tudo aqui é função pura.
+// (src/components/DayWorkout/useDayWorkoutData.js) e, ao finalizar, devolve a carga digitada para a BASE (32 / 0,8 = 40) antes de enviar: `weight` do histórico
+// é sempre "equivalente à base". Aqui usamos a MESMA regra de ativação, na hora de finalizar, para gravar a fase em `WorkoutHistory.loadPhase` e o multiplicador
+// em `intensityApplied`. Com isso: (1) o coach vê o que o aluno de fato levantou em cada fase (base × multiplicador; lib/studentLoads.ts); (2) a sugestão de carga
+// ignora semanas de deload e de choque (não são progressão normal; lib/loadSuggest.ts); (3) dá para sugerir "subir a base" depois de um choque bem-sucedido.
+// Registro antigo (`loadPhase` null) = NORMAL e continua valendo como carga equivalente à base: ninguém perde histórico. Tudo aqui é função pura.
 
 export const PHASES = ['NORMAL', 'DELOAD', 'CHOQUE'] as const;
 export type LoadPhase = (typeof PHASES)[number];
