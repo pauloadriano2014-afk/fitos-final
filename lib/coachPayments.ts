@@ -7,7 +7,7 @@
 import { confirmPromo } from '@/lib/launchPromo';
 import { grantFounderFeaturesSafe } from '@/lib/coachFeatures';
 
-export async function markCoachPaid(db: any, coachId: string, o: { paidValue?: number; promoConfirmed?: boolean; now?: Date }): Promise<void> {
+export async function markCoachPaid(db: any, coachId: string, o: { paidValue?: number; promoConfirmed?: boolean; now?: Date }): Promise<{ firstPayment: boolean }> {
     const now = o.now ?? new Date();
     const prev = await db.user.findUnique({ where: { id: coachId }, select: { coachFirstPaidAt: true } });
     const data: any = {};
@@ -19,4 +19,5 @@ export async function markCoachPaid(db: any, coachId: string, o: { paidValue?: n
         await confirmPromo(db, coachId);
         await grantFounderFeaturesSafe(db, coachId);   // 12 out: Fundador entra com vídeo de execução + notas por voz (só na 1ª vez: lib/coachFeatures.ts)
     }
+    return { firstPayment: !prev?.coachFirstPaidAt };   // 18 out: o webhook avisa o time master só no 1º pagamento (lib/masterNotify.ts)
 }

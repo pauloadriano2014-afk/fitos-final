@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { normalizeTesterEmail } from '@/lib/androidTester';
+import { notifyAndroidTester } from '@/lib/masterNotify';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,12 @@ export async function POST(req: Request) {
             where: { id: auth.user.id },
             data: same ? {} : { androidTesterEmail: r.email, androidTesterAt: new Date(), androidTesterAddedAt: null } as any,
         });
+        if (!same) {   // 18 out: avisa o Paulo (e-mail novo ou trocado); nunca atrapalha o aluno: falha de aviso só vai para o log
+            try {
+                const rows: any[] = await prisma.user.findMany({ where: { androidTesterEmail: { not: null } }, select: { id: true, androidTesterEmail: true, androidTesterAt: true, androidTesterAddedAt: true } as any });
+                await notifyAndroidTester(prisma, auth.user.id, rows);
+            } catch (e: any) { console.error('[android-tester aviso]', e?.message); }
+        }
         return NextResponse.json({ ok: true, email: r.email, google: r.google, changed: !same });
     } catch (e: any) {
         console.error('[android-tester POST]', e?.message);

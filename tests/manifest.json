@@ -244,6 +244,9 @@
  "t_android_tester": [
   "profile:partner-android"
  ],
+ "t_master_notify": [
+  "profile:partner-android"
+ ],
  "t_real_log": [
   "build58.mjs"
  ],

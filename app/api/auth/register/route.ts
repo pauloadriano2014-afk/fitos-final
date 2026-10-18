@@ -5,23 +5,15 @@ import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { signAuthToken } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
+import { notifyMasters } from '@/lib/masterNotify';
+import { PAULO_EMAIL, ADRI_EMAIL } from '@/lib/masterIds';
 import { isAutoPlan } from '@/lib/autoPlanKinds';
 import { isSystemPlan, findOwnedActiveCoachPlan, studentFieldsFromCoachPlan, coachPlanInfoFor } from '@/lib/coachPlanLink';
 
 
-const PAULO_EMAIL = 'paulo_adriano2014@live.com';
-const ADRI_EMAIL  = 'adri.personal@hotmail.com';
-
+// 🔔 (18 out 2026) O aviso de coach novo vai para o Paulo E para a Adri (lib/masterNotify.ts)
 async function notifyMaster(title: string, bodyText: string, data: any = {}) {
-    try {
-        const master = await prisma.user.findUnique({
-            where: { email: PAULO_EMAIL },
-            select: { id: true, pushToken: true, webPushSubscription: true },
-        });
-        if (master) {
-            await sendPushToUser(master, title, bodyText, data);
-        }
-    } catch (e) { console.error('Erro push master:', e); }
+    await notifyMasters(prisma, title, bodyText, data);
 }
 
 export async function POST(req: Request) {

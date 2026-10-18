@@ -10,6 +10,7 @@ import { getPayment } from '@/lib/asaas';
 import prisma from '@/lib/prisma';
 import { BILLING_PLANS, calcBillingEnd } from '@/config/coachBillingPlans';
 import { markCoachPaid } from '@/lib/coachPayments';
+import { notifyMastersCoachPaid } from '@/lib/masterNotify';   // 18 out: aviso ao time master no 1º pagamento do coach (e vaga de Fundador)
 import { releasePromo } from '@/lib/launchPromo';
 import { revokeCoachFeaturesSafe } from '@/lib/coachFeatures';
 import { sendPushToUser } from '@/app/utils/sendNotification';
@@ -386,7 +387,8 @@ async function handleCoachCheckoutEvent(event: string, externalRef: string, chec
             } as any,
         });
         // 1º pagamento (a promoção NÃO vale pelo cartão recorrente: ela é do pagamento do período) e valor pago neste ciclo
-        await markCoachPaid(prisma, coachId, { paidValue: Number(subscription.value), promoConfirmed: false });
+        const paid = await markCoachPaid(prisma, coachId, { paidValue: Number(subscription.value), promoConfirmed: false });
+        await notifyMastersCoachPaid(prisma, coachId, { firstPayment: paid.firstPayment, planLabel: plan?.label, value: Number(subscription.value) });
 
         const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { id: true, pushToken: true, webPushSubscription: true } });
         if (coach) {
@@ -465,7 +467,8 @@ async function handleCoachSubscriptionRenewal(event: string, payment: any, local
                 accountStatus: 'ACTIVE',
             } as any,
         });
-        await markCoachPaid(prisma, localSub.userId, { paidValue: Number(payment?.value ?? localSub.value), promoConfirmed: false });
+        const paid = await markCoachPaid(prisma, localSub.userId, { paidValue: Number(payment?.value ?? localSub.value), promoConfirmed: false });
+        await notifyMastersCoachPaid(prisma, localSub.userId, { firstPayment: paid.firstPayment, planLabel: plan?.label, value: Number(payment?.value ?? localSub.value) });
         await prisma.subscription.update({ where: { id: localSub.id }, data: { nextDueDate: billingEnd } });
 
         const coach = await prisma.user.findUnique({ where: { id: localSub.userId }, select: { id: true, pushToken: true, webPushSubscription: true } });
@@ -528,10 +531,11 @@ async function handleCoachPayment(event: string, payment: any, externalRef: stri
 
         // Valor realmente pago neste período (base do crédito de um upgrade), 1º pagamento e, se foi a cobrança da promoção, a vaga vira USADA.
         // No upgrade o período novo vale o preço cheio do plano novo (crédito + diferença).
-        await markCoachPaid(prisma, coachId, {
+        const paid = await markCoachPaid(prisma, coachId, {
             paidValue: isUpgrade && plan ? plan.totalPrice : Number(payment?.value),
             promoConfirmed: isPromoCharge,
         });
+        await notifyMastersCoachPaid(prisma, coachId, { firstPayment: paid.firstPayment, planLabel: plan?.label, value: isUpgrade && plan ? plan.totalPrice : Number(payment?.value) });
 
         // Push para o coach
         const coach = await prisma.user.findUnique({ where: { id: coachId }, select: { id: true, pushToken: true, webPushSubscription: true, name: true } });

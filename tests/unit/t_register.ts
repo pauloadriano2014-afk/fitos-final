@@ -44,6 +44,12 @@ const days = (d: any) => Math.round((new Date(d).getTime() - Date.now()) / DAY);
     const r: any = await approve(req({ coachId: c.id, action: 'APPROVE', coachPlan: 'PERSONAL', partner: true })); assert.equal(r.body.partner, true);
     assert.equal(days(c.trialEndsAt), 30); assert.equal(c.partnerCoach, true); assert.equal(days(c.partnerOfferUntil), 37);
   });
+  await t('coach novo avisa o Paulo E a Adri (e se a Adri não estiver cadastrada, só o Paulo)', async () => {
+    reset(); state.users.push({ id: 'adri', email: 'adri.personal@hotmail.com', role: 'COACH' }); const r: any = await register(req(coachBody())); assert.equal(r.status, 201);
+    assert.equal(state.pushes.length, 2, 'dois avisos'); assert.ok(state.pushes.every((p: any) => p.title === '🎯 Novo Coach quer entrar!' && p.body.includes('Bia Lima')), JSON.stringify(state.pushes));
+    reset(); await register(req(coachBody({ email: 'cid@x.com' }))); assert.equal(state.pushes.length, 1, 'só o Paulo cadastrado: 1 aviso');
+    reset(); state.users.length = 0; const r2: any = await register(req(coachBody({ email: 'dani@x.com' }))); assert.equal(r2.status, 201, 'sem nenhum master cadastrado o cadastro continua funcionando'); assert.equal(state.pushes.length, 0);
+  });
   await t('as listas do master devolvem coachRequestInfo (é de lá que a etiqueta e a aba PARCEIROS leem o convite)', async () => {
     for (const f of ['coach-requests', 'coaches']) { const s = fs.readFileSync(`/home/user/wt-back/app/api/admin/${f}/route.ts`, 'utf8'); assert.ok(/coachRequestInfo:\s*true/.test(s), f); }
   });
