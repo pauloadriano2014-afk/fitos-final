@@ -13,6 +13,7 @@ import { findSimilar, loadComparison, type SimilarItem } from '@/lib/similarStud
 import { digestRoutine, diffSources, hashOf, sanitizeAnalysis, type Analysis, type Digest } from '@/lib/insightDigest';
 import { readMemory, saveMemory, countHit } from '@/lib/insightMemory';
 import { unavailableExerciseIds } from '@/lib/equipment';
+import { callTool } from '@/lib/aiTool';
 
 export const ANALYSIS_MODEL = 'claude-sonnet-5-5';
 export const MAX_SOURCES = 3;
@@ -74,14 +75,9 @@ export function targetText(t: { gender: string; level: string; objective: string
 
 async function callAI(client: any, user: string): Promise<{ input: any; usage: Usage }> {
   const t0 = Date.now();
-  const resp: any = await client.messages.create({
-    model: ANALYSIS_MODEL, max_tokens: 1600, system: SYSTEM_PROMPT, tools: [TOOL], tool_choice: { type: 'tool', name: TOOL_NAME },
-    output_config: { effort: 'medium' }, messages: [{ role: 'user', content: user }],
-  });
-  if (resp?.stop_reason === 'refusal') throw new Error('A IA recusou fazer essa análise.');
-  const block = (resp?.content || []).find((b: any) => b.type === 'tool_use' && b.name === TOOL_NAME);
-  if (!block?.input) throw new Error('A IA não devolveu a análise.');
-  return { input: block.input, usage: { model: ANALYSIS_MODEL, inputTokens: resp?.usage?.input_tokens ?? 0, outputTokens: resp?.usage?.output_tokens ?? 0, ms: Date.now() - t0 } };
+  // o claude-sonnet-5-5 não aceita forçar a ferramenta (400): ver lib/aiTool.ts
+  const r = await callTool(client, { model: ANALYSIS_MODEL, system: SYSTEM_PROMPT, tool: TOOL, user, maxTokens: 6000, refusalMsg: 'A IA recusou fazer essa análise.', missingMsg: 'A IA não devolveu a análise.' });
+  return { input: r.input, usage: { model: ANALYSIS_MODEL, inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens, ms: Date.now() - t0 } };
 }
 
 export async function analyzeStudent(db: Db, coachId: string, targetId: string, o: { client?: any; now?: Date; refresh?: boolean; onlyCached?: boolean } = {}): Promise<AnalysisResult> {
@@ -128,7 +124,7 @@ export async function analyzeStudent(db: Db, coachId: string, targetId: string, 
   // 3) IA (completa ou só o que mudou)
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!o.client && !apiKey) throw new Error('ANTHROPIC_API_KEY não configurada no servidor.');
-  const client = o.client || new Anthropic({ apiKey, timeout: 55_000, maxRetries: 1 });
+  const client = o.client || new Anthropic({ apiKey, timeout: 60_000, maxRetries: 0 });
   const prevSources = row && row.sources && typeof row.sources === 'object' ? (row.sources as Record<string, string>) : null;
   const diff = diffSources(prevSources, sources);
   const incremental = !!row && !o.refresh && !!prevSources && prevSources.__target === targetHash && !!row.result;

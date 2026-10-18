@@ -9,6 +9,7 @@ import { LEVEL_LABEL, type LevelKey } from '@/lib/studentLevel';
 import { buildRoutines } from '@/lib/similarStudents';
 import { hashOf } from '@/lib/insightDigest';
 import { readMemory, saveMemory, countHit } from '@/lib/insightMemory';
+import { callTool } from '@/lib/aiTool';
 
 export const GROUP_MODEL = 'claude-sonnet-5-5';
 export const MAX_STUDENTS = 80;
@@ -105,14 +106,12 @@ export async function groupInsights(db: Db, coachId: string, o: { client?: any; 
   if (o.onlyCached) return { ok: true, insight: row ? (row.result as GroupInsight) : null, cached: !!row, stale: !!row, updatedAt: row ? row.updatedAt : null, stats: row ? { runs: row.runs, hits: row.hits || 0 } : undefined, ...base };
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!o.client && !apiKey) throw new Error('ANTHROPIC_API_KEY não configurada no servidor.');
-  const client = o.client || new Anthropic({ apiKey, timeout: 55_000, maxRetries: 1 });
+  const client = o.client || new Anthropic({ apiKey, timeout: 60_000, maxRetries: 0 });
   const t0 = Date.now();
-  const resp: any = await client.messages.create({ model: GROUP_MODEL, max_tokens: 1800, system: GROUP_PROMPT, tools: [GROUP_TOOL], tool_choice: { type: 'tool', name: TOOL_NAME }, output_config: { effort: 'medium' }, messages: [{ role: 'user', content: groupText(groups) }] });
-  if (resp?.stop_reason === 'refusal') throw new Error('A IA recusou fazer essa leitura.');
-  const block = (resp?.content || []).find((b: any) => b.type === 'tool_use' && b.name === TOOL_NAME);
-  if (!block?.input) throw new Error('A IA não devolveu a leitura.');
-  const insight = sanitizeInsight(block.input);
-  const usage = { model: GROUP_MODEL, inputTokens: resp?.usage?.input_tokens ?? 0, outputTokens: resp?.usage?.output_tokens ?? 0, ms: Date.now() - t0 };
+  // o claude-sonnet-5-5 não aceita forçar a ferramenta (400): ver lib/aiTool.ts
+  const call = await callTool(client, { model: GROUP_MODEL, system: GROUP_PROMPT, tool: GROUP_TOOL, user: groupText(groups), maxTokens: 6000, refusalMsg: 'A IA recusou fazer essa leitura.', missingMsg: 'A IA não devolveu a leitura.' });
+  const insight = sanitizeInsight(call.input);
+  const usage = { model: GROUP_MODEL, inputTokens: call.usage.inputTokens, outputTokens: call.usage.outputTokens, ms: Date.now() - t0 };
   const saved = await saveMemory(db, coachId, 'GROUP', 'all', { fingerprint, result: insight, model: usage.model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }, row);
   try { await db.aiLog?.create?.({ data: { userId: coachId, question: 'insight-group', answer: JSON.stringify({ usage, groups: groups.length }).slice(0, 2000) } }); } catch (e) { /* só registro de uso */ }
   return { ok: true, insight, cached: false, stale: false, usage, updatedAt: now, stats: { runs: (row?.runs || 0) + 1, hits: row?.hits || 0 }, ...base, memory: saved || available };
