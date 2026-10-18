@@ -116,6 +116,9 @@
  "t_indicacao": [
   "build62.mjs"
  ],
+ "t_insight_ai": [
+  "build70.mjs"
+ ],
  "t_insights_scope": [
   "build70.mjs"
  ],

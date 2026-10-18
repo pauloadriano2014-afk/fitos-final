@@ -1,7 +1,7 @@
 // Banco em memória da AGENDA: um mini motor de consulta (igual, in, not, gt/gte/lt/lte, OR/AND/NOT, null) + únicos (P2002) + createMany/updateMany/upsert.
 // Semântica SQL onde importa: `not: valor` NÃO devolve linhas com NULL.
 const clone = (o) => (o == null ? o : JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(v) ? new Date(v) : v)));
-const MODELS = ['agendaEvent', 'agendaSeries', 'agendaSettings', 'agendaTaskSnooze', 'agendaTaskNote', 'user', 'offlineClient', 'weeklyFeedback', 'studentAlert', 'checkIn', 'workout', 'workoutShare', 'runningAnamnese', 'runningProtocol', 'workoutSession', 'workoutHistory', 'agendaTaskResolved', 'studentCoachMessage', 'equipmentReport', 'workoutExercise', 'exercise', 'anamnese', 'exerciseHistory', 'executionVideo', 'videoFeedback', 'videoRequest', 'videoPolicy', 'videoQuickReply', 'tutorialVideo', 'coachFeature', 'featureGlobal', 'diet', 'dietFeedback', 'platformConfig', 'aiLog', 'coachNote', 'coachTask'];
+const MODELS = ['insightMemory', 'agendaEvent', 'agendaSeries', 'agendaSettings', 'agendaTaskSnooze', 'agendaTaskNote', 'user', 'offlineClient', 'weeklyFeedback', 'studentAlert', 'checkIn', 'workout', 'workoutShare', 'runningAnamnese', 'runningProtocol', 'workoutSession', 'workoutHistory', 'agendaTaskResolved', 'studentCoachMessage', 'equipmentReport', 'workoutExercise', 'exercise', 'anamnese', 'exerciseHistory', 'executionVideo', 'videoFeedback', 'videoRequest', 'videoPolicy', 'videoQuickReply', 'tutorialVideo', 'coachFeature', 'featureGlobal', 'diet', 'dietFeedback', 'platformConfig', 'aiLog', 'coachNote', 'coachTask'];
 const state = { nextId: 1, failOn: {}, calls: {}, override: {} };
 MODELS.forEach((m) => { state[m] = []; });
 const DEFAULTS = {
