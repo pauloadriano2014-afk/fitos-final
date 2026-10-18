@@ -1,0 +1,26 @@
+// prisma/schema/insights.prisma
+// 🧠 (18 out 2026) MEMÓRIA DAS ANÁLISES do assistente (lib/insightMemory.ts). Guarda o resultado pronto da análise com IA para NÃO gastar IA de novo quando nada mudou:
+//   kind 'ANALYSIS' (key = id do aluno de destino): "como estão os treinos parecidos, o que aproveitar, o que mudar, qual metodologia" para ESSE aluno;
+//   kind 'GROUP'    (key = 'all'): a visão geral dos treinos de todos os alunos do coach (por gênero e nível).
+// `fingerprint` = resumo (hash) dos dados que a análise usou. Pergunta repetida com o mesmo fingerprint = resposta da memória, custo ZERO. Mudou algo (rotina nova de um parecido,
+// aparelho novo que faltou, anamnese) = recalcula, mandando para a IA só o que mudou e a análise anterior (`sources` diz o que já tinha sido visto).
+// Tabela nova, sem relação com User de propósito (como CoachFeature): só adiciona (`npx prisma db push`). Antes do push tudo funciona, só sem memória (cada pedido gasta IA).
+model InsightMemory {
+  id           String   @id @default(uuid())
+  coachId      String
+  kind         String                       // 'ANALYSIS' | 'GROUP'
+  key          String                       // ANALYSIS: id do aluno · GROUP: 'all'
+  fingerprint  String
+  result       Json
+  sources      Json?                        // ANALYSIS: { "<id da rotina>": "<hash do resumo>", "__target": "<hash do perfil do aluno>" }
+  model        String?
+  inputTokens  Int      @default(0)         // gasto da ÚLTIMA geração
+  outputTokens Int      @default(0)
+  runs         Int      @default(1)         // quantas vezes foi (re)calculada com IA
+  hits         Int      @default(0)         // quantas vezes respondeu da memória sem gastar IA
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([coachId, kind, key])
+  @@index([coachId, kind])
+}

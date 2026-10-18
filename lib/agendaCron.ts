@@ -80,10 +80,11 @@ export async function runAgendaSummary(deps: CronDeps) {
     try {
       const hoje = await buildHoje(db, coachId, now);
       const events = hoje.agenda.filter((e: any) => e.status === 'SCHEDULED' || e.status === 'DONE');
-      if (!events.length && !hoje.counts.late && !hoje.counts.today) { out.skipped++; continue; }
+      const treinos = (hoje.tasks || []).filter((t: any) => t.type === 'treino').length;   // vencem em até 3 dias ou já venceram (mesma lista da central HOJE)
+      if (!events.length && !hoje.counts.late && !hoje.counts.today && !treinos) { out.skipped++; continue; }
       const coach = await db.user.findUnique({ where: { id: coachId }, select: { id: true, pushToken: true } });
       if (!coach) { out.skipped++; continue; }
-      const t = summaryText({ events, late: hoje.counts.late, today: hoje.counts.today });
+      const t = summaryText({ events, late: hoje.counts.late, today: hoje.counts.today, treinos });
       await deps.sendToUser(coach, t.title, t.body, { type: 'agenda_summary' });
       out.sent++;
     } catch (e: any) { console.error('[agendaCron] resumo de', coachId, 'falhou:', e?.message || e); }

@@ -726,6 +726,13 @@ const block = async (name: string, fn: () => Promise<void> | void) => {
     clearPushes(); await Promise.all([CR.runAgendaSummary(deps(new Date('2026-10-14T10:30:00Z'))), CR.runAgendaSummary(deps(new Date('2026-10-14T10:30:00Z')))]);
     assert.deepStrictEqual(sentTo(), ['cB:agenda_summary']);
   });
+  await block('resumo: treino vencendo entra no resumo da manhã (mesmo sem compromisso) e sozinho já basta para mandar; sem treino vencendo nada muda', async () => {
+    assert.strictEqual(A.summaryText({ events: [], late: 0, today: 0, treinos: 2 }).body, 'Sem compromissos marcados · 2 treinos vencendo (dá para prorrogar no assistente)'); assert.strictEqual(A.summaryText({ events: [], late: 0, today: 1, treinos: 1 }).body, 'Sem compromissos marcados · 1 pendência · 1 treino vencendo (dá para prorrogar no assistente)'); assert.strictEqual(A.summaryText({ events: [], late: 0, today: 1, treinos: 0 }).body, 'Sem compromissos marcados · 1 pendência'); assert.strictEqual(A.summaryText({ events: [], late: 0, today: 1 }).body, 'Sem compromissos marcados · 1 pendência');
+    S.agendaSeries.push({ id: 'srt', coachId: 'cA', kind: 'PRESENCIAL', studentId: 's1', weekdays: [1], startTime: '07:00', durationMin: 60, startDate: '2026-12-01', endDate: null, active: true });   // cA usa a agenda, mas hoje nada marcado
+    let r = await CR.runAgendaSummary(deps(new Date('2026-10-14T10:30:00Z'))); assert.strictEqual(r.sent, 0, 'sem compromisso, sem pendência, sem treino vencendo: nada'); assert.deepStrictEqual(pushes(), []);
+    S.agendaSettings.length = 0; S.workout.push({ id: 'wv', userId: 's1', endDate: new Date('2026-10-15T20:00:00Z'), archived: false, createdAt: new Date('2026-09-20T00:00:00Z') });   // vence amanhã
+    clearPushes(); r = await CR.runAgendaSummary(deps(new Date('2026-10-14T10:30:00Z'))); assert.strictEqual(r.sent, 1); const p = pushes()[0]; assert.strictEqual(p.to, 'cA'); assert.match(p.body, /1 treino vencendo/); assert.strictEqual(p.data.type, 'agenda_summary');
+  });
   await block('cron: sem CRON_SECRET desligado (503), segredo errado 401, certo roda; task inválida 400', async () => {
     delete process.env.CRON_SECRET;
     assert.strictEqual((await call(cronPOST, '/api/cron/agenda', null)).status, 503);

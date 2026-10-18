@@ -133,6 +133,12 @@ model User {
   // mensal e o servidor recusa o relatório DELE (o coach sempre vê o do aluno). Coluna nova: só adiciona (`npx prisma db push`); padrão = desligado.
   monthlyReportOn Boolean   @default(false)
 
+  // 🧠 (18 out 2026) QUEM ENTRA NAS ANÁLISES do assistente (lib/insightsScope.ts: alunos parecidos, comparação de treinos).
+  // `insightsMode` (no ALUNO): 'INCLUDE' = entra sempre, 'EXCLUDE' = nunca entra, nulo = decide a regra automática (ativo, com gênero e 6+ treinos feitos).
+  // `insightsIncludeInactive` (no COACH): liga para também usar alunos inativados com muitos treinos. Colunas novas e opcionais: só adicionam (`npx prisma db push`).
+  insightsMode            String?
+  insightsIncludeInactive Boolean   @default(false)
+
   strategyNotes   String?   @db.Text
   lastContactDate DateTime?
   weeklyChecks    Json?

@@ -19,6 +19,7 @@ import { randomUUID } from 'crypto';
 import prisma from '@/lib/prisma';
 import { isMasterId } from '@/lib/auth';
 import { dropPersonAgenda, dropCoachAgenda } from '@/lib/agendaStore';
+import { dropMemory } from '@/lib/insightMemory';
 
 export async function anonymizeUserAccount(userId: string): Promise<{ alreadyDeleted: boolean }> {
   // 🔒 Segunda trava (a primeira é em cada rota que chama isso) — contas
@@ -91,6 +92,8 @@ export async function anonymizeUserAccount(userId: string): Promise<{ alreadyDel
   // 📅 compromissos da agenda: o aluno some dos atendimentos de quem o atendia e, se for coach, a agenda dele vai junto (melhor esforço: não trava a exclusão)
   await dropPersonAgenda(prisma, { studentId: userId });
   await dropCoachAgenda(prisma, userId);
+  // 🧠 memória das análises do assistente: some a do aluno (como destino) e, se for coach, tudo dele (melhor esforço)
+  await dropMemory(prisma, { coachId: userId, studentId: userId });
 
   return { alreadyDeleted: false };
 }

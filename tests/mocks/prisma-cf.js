@@ -1,8 +1,8 @@
 // Banco em memória da AGENDA: um mini motor de consulta (igual, in, not, gt/gte/lt/lte, OR/AND/NOT, null) + únicos (P2002) + createMany/updateMany/upsert.
 // Semântica SQL onde importa: `not: valor` NÃO devolve linhas com NULL.
 const clone = (o) => (o == null ? o : JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(v) ? new Date(v) : v)));
-const MODELS = ['agendaEvent', 'agendaSeries', 'agendaSettings', 'agendaTaskSnooze', 'agendaTaskNote', 'user', 'offlineClient', 'weeklyFeedback', 'studentAlert', 'checkIn', 'workout', 'workoutShare', 'runningAnamnese', 'runningProtocol', 'workoutSession', 'workoutHistory', 'agendaTaskResolved', 'studentCoachMessage', 'equipmentReport', 'workoutExercise', 'exercise', 'anamnese', 'exerciseHistory', 'executionVideo', 'videoFeedback', 'videoRequest', 'videoPolicy', 'videoQuickReply', 'tutorialVideo', 'coachFeature', 'featureGlobal', 'diet', 'dietFeedback', 'platformConfig', 'aiLog', 'coachNote', 'coachTask'];
-const state = { nextId: 1, failOn: {}, calls: {} };
+const MODELS = ['insightMemory', 'agendaEvent', 'agendaSeries', 'agendaSettings', 'agendaTaskSnooze', 'agendaTaskNote', 'user', 'offlineClient', 'weeklyFeedback', 'studentAlert', 'checkIn', 'workout', 'workoutShare', 'runningAnamnese', 'runningProtocol', 'workoutSession', 'workoutHistory', 'agendaTaskResolved', 'studentCoachMessage', 'equipmentReport', 'workoutExercise', 'exercise', 'anamnese', 'exerciseHistory', 'executionVideo', 'videoFeedback', 'videoRequest', 'videoPolicy', 'videoQuickReply', 'tutorialVideo', 'coachFeature', 'featureGlobal', 'diet', 'dietFeedback', 'platformConfig', 'aiLog', 'coachNote', 'coachTask'];
+const state = { nextId: 1, failOn: {}, calls: {}, override: {} };
 MODELS.forEach((m) => { state[m] = []; });
 const DEFAULTS = {
   aiLog: () => ({ createdAt: new Date() }),
@@ -84,7 +84,7 @@ function make(model) {
   };
   return api;
 }
-const prisma = { __state: state, __reset() { MODELS.forEach((m) => { state[m] = []; }); state.nextId = 1; state.failOn = {}; state.calls = {}; } };
-MODELS.forEach((m) => { Object.defineProperty(prisma, m, { get() { return make(m); } }); });
+const prisma = { __state: state, __reset() { MODELS.forEach((m) => { state[m] = []; }); state.nextId = 1; state.failOn = {}; state.calls = {}; state.override = {}; } };
+MODELS.forEach((m) => { Object.defineProperty(prisma, m, { get() { const api = make(m); return state.override[m] ? Object.assign(api, state.override[m]) : api; } }); });
 prisma.default = prisma;
 module.exports = prisma;

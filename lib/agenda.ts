@@ -258,11 +258,14 @@ export function studentReminderText(ev: { kind: string; startsAt: Date }, coachN
   return { title: `📅 Atendimento ${day} às ${hour}`, body: `${who ? 'Com ' + who + '. ' : ''}Confirme a sua presença no app.` };
 }
 
-export function summaryText(o: { events: { startsAt: Date; kind: string }[]; late: number; today: number }) {
+export function summaryText(o: { events: { startsAt: Date; kind: string }[]; late: number; today: number; treinos?: number }) {
   const n = o.events.length;
   const first = n ? ` (o primeiro às ${timeKeyBrt(o.events[0].startsAt)})` : '';
   const parts: string[] = [n ? `${n} ${n === 1 ? 'compromisso' : 'compromissos'}${first}` : 'Sem compromissos marcados'];
   const pend = o.late + o.today;
   if (pend) parts.push(`${pend} ${pend === 1 ? 'pendência' : 'pendências'}${o.late ? ` (${o.late} atrasada${o.late > 1 ? 's' : ''})` : ''}`);
+  // (18 out 2026) treinos que vencem em até 3 dias (ou já venceram): o coach prorroga em 1 toque no assistente ("Treinos vencendo")
+  const tr = o.treinos || 0;
+  if (tr > 0) parts.push(`${tr} ${tr === 1 ? 'treino vencendo' : 'treinos vencendo'} (dá para prorrogar no assistente)`);
   return { title: '☀️ Seu dia na agenda', body: parts.join(' · ') };
 }

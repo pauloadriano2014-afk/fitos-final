@@ -77,7 +77,7 @@ export function imcOf(a: any): number | null {
   return null;
 }
 
-const JOINT_BY_TEXT: Array<[RegExp, string]> = [
+export const JOINT_BY_TEXT: Array<[RegExp, string]> = [
   [/joelho|lca|menisco/, 'JOELHO'],
   [/lombar|coluna|hernia/, 'LOMBAR'],
   [/ombro|manguito/, 'OMBRO'],
