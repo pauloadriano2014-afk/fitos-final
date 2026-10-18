@@ -195,7 +195,7 @@ export interface ExerciseRow {
   substitutes: string[]; tags?: any; environments?: string[] | null;
 }
 export interface CompareDest { unavailable: Set<string>; jointRisks: string[]; env: string }
-export interface CompareExercise { exerciseId: string; name: string; category: string; sets: number; reps: string; restTime: number; technique: string | null; notes: string | null; flags: Flag[]; detail: string[]; ok: boolean; hasSwap: boolean }
+export interface CompareExercise { exerciseId: string; name: string; category: string; sets: number; reps: string; restTime: number; technique: string | null; series: string; notes: string | null; flags: Flag[]; detail: string[]; ok: boolean; hasSwap: boolean }
 export interface CompareDay { day: string; exercises: CompareExercise[]; byCategory: { category: string; count: number }[] }
 export interface Comparison {
   days: CompareDay[];
@@ -208,6 +208,41 @@ const envOk = (envs: any, env: string) => {
   return env === 'ACADEMIA_PADRAO' && list.includes('ACADEMIA');
 };
 
+
+// ───────────── leitura da linha do exercício ─────────────
+// Quem monta o treino guarda em `technique` um JSON ({ t: técnica do exercício, b: blocos [{ sets, reps, restTime, technique }], o: observação, sb: ... }) OU só o nome da técnica.
+// Aqui viram campos limpos para a tela e para a IA: séries totais, linha por série ("S1 15 · S2 12 · S3–4 10 DROPSET"), técnicas (sem "NORMAL") e a observação do coach.
+const GROUP_TECH = /^(BISET|TRISET)$/;
+const techKey = (t: any) => String(t ?? '').trim().toUpperCase().replace(/[\s_-]/g, '');
+const isNormalTech = (t: any) => { const k = techKey(t); return !k || k === 'NORMAL'; };
+const clipText = (v: any, n: number) => { const t = String(v ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+export interface RowDetail { sets: number; reps: string; restTime: number; technique: string | null; series: string; note: string | null }
+export function readRowDetail(r: { technique?: any; sets?: any; reps?: any; restTime?: any; notes?: any; category?: any }): RowDetail {
+  const raw = typeof r.technique === 'string' ? r.technique.trim() : '';
+  let j: any = null;
+  if (raw.startsWith('{')) { try { j = JSON.parse(raw); } catch { j = null; } }
+  const blocks: any[] = j && Array.isArray(j.b) ? j.b.filter((b: any) => b && typeof b === 'object') : [];
+  const techs: string[] = []; const add = (t: any) => { const v = String(t ?? '').trim(); if (v && !isNormalTech(v) && !techs.some((x) => techKey(x) === techKey(v))) techs.push(v); };
+  if (j) add(j.t); else if (raw && !raw.startsWith('{')) add(raw);   // JSON quebrado não vira "técnica"
+  blocks.forEach((b) => add(b.technique));
+  const cardio = /cardio/i.test(String(r.category || ''));
+  let series = ''; let sets = Number(r.sets) || 0; let reps = String(r.reps ?? ''); let rest = Number(r.restTime) || 0;
+  if (blocks.length && !cardio) {
+    const parts: string[] = []; let n = 0;
+    for (const b of blocks) {
+      const c = Math.max(0, parseInt(String(b.sets), 10) || 0); if (!c) continue;
+      const tag = !isNormalTech(b.technique) && !GROUP_TECH.test(techKey(b.technique)) ? ` ${String(b.technique).trim()}` : '';
+      parts.push(`${c > 1 ? `S${n + 1}–${n + c}` : `S${n + 1}`} ${b.reps == null || String(b.reps) === '' ? '?' : String(b.reps)}${tag}`); n += c;
+    }
+    series = parts.join(' · '); if (n > 0) sets = n;
+    const first = blocks.find((b) => (parseInt(String(b.sets), 10) || 0) > 0) || blocks[0];
+    if (first && first.reps != null && String(first.reps) !== '') reps = String(first.reps);
+    rest = Number(first && first.restTime) || rest;
+  }
+  const note = clipText(j ? j.o : '', 140) || clipText(r.notes, 140);
+  return { sets, reps, restTime: rest, technique: techs.length ? techs.join(' + ') : null, series, note: note || null };
+}
+
 export function compareWorkouts(rows: ExerciseRow[], dest: CompareDest): Comparison {
   const byDay = new Map<string, ExerciseRow[]>();
   for (const r of rows || []) { const d = String(r.day || 'A'); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d)!.push(r); }
@@ -218,18 +253,18 @@ export function compareWorkouts(rows: ExerciseRow[], dest: CompareDest): Compari
     const list = byDay.get(day)!.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const cats = new Map<string, number>();
     const exercises: CompareExercise[] = list.map((r) => {
-      const flags: Flag[] = []; const detail: string[] = [];
+      const flags: Flag[] = []; const detail: string[] = []; const det = readRowDetail(r);
       if (dest.unavailable.has(r.exerciseId)) { flags.push('SEM_APARELHO'); detail.push('o aluno avisou que não tem esse aparelho'); }
       const risk = arr((r.tags as any)?.jointRisk).map((x) => x.toUpperCase()).filter((j) => dest.jointRisks.includes(j));
       if (risk.length) { flags.push('LIMITACAO'); detail.push(`pesa em ${risk.map((x) => x.toLowerCase()).join(', ')}`); }
       if (!envOk(r.environments, dest.env)) { flags.push('AMBIENTE'); detail.push('exercício de outro tipo de local'); }
       const swaps = arr(r.substitutes).filter((id) => !dest.unavailable.has(id));
-      total++; setsSum += Number(r.sets) || 0;
+      total++; setsSum += det.sets;
       if (flags.length) { flagged++; flags.forEach((f) => { flagsTotal[f]++; }); toChange.push({ day, name: r.name, flags, why: detail }); }
-      const tech = r.technique && norm(r.technique) !== 'normal' ? String(r.technique) : null;
-      if (tech) techniques.set(tech, (techniques.get(tech) || 0) + 1);
+      const tech = det.technique;
+      if (tech) tech.split(' + ').forEach((t) => techniques.set(t, (techniques.get(t) || 0) + 1));
       const cat = r.category || 'OUTROS'; cats.set(cat, (cats.get(cat) || 0) + 1);
-      return { exerciseId: r.exerciseId, name: r.name, category: cat, sets: Number(r.sets) || 0, reps: String(r.reps ?? ''), restTime: Number(r.restTime) || 0, technique: tech, notes: r.notes || null, flags, detail, ok: !flags.length, hasSwap: !!flags.length && swaps.length > 0 };
+      return { exerciseId: r.exerciseId, name: r.name, category: cat, sets: det.sets, reps: det.reps, restTime: det.restTime, technique: tech, series: det.series, notes: det.note, flags, detail, ok: !flags.length, hasSwap: !!flags.length && swaps.length > 0 };
     });
     return { day, exercises, byCategory: [...cats.entries()].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category)) };
   });

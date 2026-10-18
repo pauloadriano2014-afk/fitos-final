@@ -6,7 +6,7 @@ import { GET as compareGET } from '/home/user/fitos-final/app/api/insights/compa
 import { runIntent, ruleRoute, INTENTS } from '/home/user/fitos-final/lib/coachAssistant';
 import {
   objectiveKey, placesOf, jointRisksOf, buildProfile, scoreSimilarity, buildRoutines, nextOrdinal, ordinalWindow, pickRoutine, compareWorkouts,
-  findSimilar, loadComparison, MIN_SCORE, MIN_ROUTINE_SESSIONS, MAX_SIMILAR, WEIGHTS,
+  findSimilar, loadComparison, readRowDetail, MIN_SCORE, MIN_ROUTINE_SESSIONS, MAX_SIMILAR, WEIGHTS,
 } from '/home/user/fitos-final/lib/similarStudents';
 
 const P = prisma as any; const S = P.__state;
@@ -133,6 +133,21 @@ const ids = (r: any) => r.similar.map((s: any) => s.studentId);
     assert.strictEqual(compareWorkouts([{ ...rows([{ id: '7', tags: { jointRisk: ['OMBRO'] } }])[0], substitutes: ['1'] }], { unavailable: new Set(), jointRisks: ['JOELHO'], env: 'ACADEMIA_PADRAO' }).summary.flagged, 0, 'risco em outra articulação não conta');
     assert.deepStrictEqual(compareWorkouts([], { unavailable: new Set(), jointRisks: [], env: 'X' }).summary, { daysCount: 0, exercises: 0, usable: 0, flagged: 0, avgSets: 0, techniques: [], flags: { SEM_APARELHO: 0, LIMITACAO: 0, AMBIENTE: 0 } });
     assert.strictEqual(compareWorkouts(rows([{ id: '8', env: ['ACADEMIA'] }]), { unavailable: new Set(), jointRisks: [], env: 'EM_CASA' }).summary.flagged, 1);
+  });
+  await t('linha do exercício: o JSON do Montar treino vira séries por série, técnica limpa e observação — nunca texto cru na tela nem na IA', () => {
+    const J = (o: any) => JSON.stringify(o);
+    const piramide = readRowDetail({ category: 'COSTAS', sets: 1, reps: '15', restTime: 45, technique: J({ t: 'NORMAL', b: [{ sets: '1', reps: '15', restTime: '45', technique: 'NORMAL' }, { sets: '1', reps: '12', restTime: '45', technique: 'NORMAL' }, { sets: '2', reps: '10', restTime: '45', technique: 'NORMAL' }, { sets: '1', reps: '8', restTime: '45', technique: 'DROPSET' }], o: '' }) });
+    assert.deepStrictEqual(piramide, { sets: 5, reps: '15', restTime: 45, technique: 'DROPSET', series: 'S1 15 · S2 12 · S3–4 10 · S5 8 DROPSET', note: null });
+    const bi = readRowDetail({ category: 'BICEPS', sets: 3, reps: '10', restTime: 45, technique: J({ t: 'BISET', b: [{ sets: '3', reps: '10 a 15', restTime: '45', technique: 'BISET' }], o: '10 segundin de descanso hen' }) });
+    assert.strictEqual(bi.technique, 'BISET'); assert.strictEqual(bi.series, 'S1–3 10 a 15', 'bi-set não vira etiqueta em cada série'); assert.strictEqual(bi.note, '10 segundin de descanso hen'); assert.strictEqual(bi.sets, 3);
+    const cardio = readRowDetail({ category: 'CARDIO', sets: 1, reps: '400', restTime: 0, technique: J({ t: 'Moderada', b: [{ sets: '30', reps: '400', restTime: '0', technique: 'Moderada' }], o: '' }) });
+    assert.strictEqual(cardio.series, '', 'cardio não vira "30× 400"'); assert.strictEqual(cardio.technique, 'Moderada'); assert.strictEqual(cardio.sets, 1);
+    assert.deepStrictEqual(readRowDetail({ category: 'PEITO', sets: 4, reps: '10', restTime: 60, technique: 'DROPSET', notes: 'devagar' }), { sets: 4, reps: '10', restTime: 60, technique: 'DROPSET', series: '', note: 'devagar' }, 'técnica em texto simples continua valendo');
+    for (const t of [null, '', 'normal', 'NORMAL', '{lixo', J({ t: 'NORMAL', b: [] }), J({ b: 'x' })]) { const d = readRowDetail({ category: 'PEITO', sets: 3, reps: '12', restTime: 60, technique: t as any }); assert.strictEqual(d.technique, null, String(t)); assert.strictEqual(d.sets, 3); assert.strictEqual(d.reps, '12'); assert.ok(!d.series.includes('{')); }
+    assert.strictEqual(readRowDetail({ technique: J({ t: 'NORMAL', b: [{ sets: '1', reps: '', technique: '' }] }) }).series, 'S1 ?');
+    assert.strictEqual(readRowDetail({ technique: J({ o: 'x'.repeat(300) }) }).note!.length, 140);
+    const rows = [{ exerciseId: 'a', name: 'Remada', category: 'COSTAS', sets: 1, reps: '15', restTime: 45, technique: J({ t: 'NORMAL', b: [{ sets: '1', reps: '15', technique: 'NORMAL' }, { sets: '1', reps: '8', technique: 'DROPSET' }] }), notes: null, order: 0, day: 'A', substitutes: [] }, { exerciseId: 'b', name: 'Rosca', category: 'BICEPS', sets: 3, reps: '10', restTime: 45, technique: J({ t: 'BISET', b: [{ sets: '3', reps: '10', technique: 'BISET' }] }), notes: null, order: 1, day: 'A', substitutes: [] }];
+    const c = compareWorkouts(rows as any, { unavailable: new Set(), jointRisks: [], env: 'X' }); assert.deepStrictEqual(c.summary.techniques, [{ name: 'BISET', count: 1 }, { name: 'DROPSET', count: 1 }]); assert.ok(!JSON.stringify(c).includes('"t":'), 'nada de JSON cru na resposta'); assert.strictEqual(c.days[0].exercises[0].series, 'S1 15 · S2 8 DROPSET'); assert.strictEqual(c.summary.avgSets, 2.5);
   });
   await t('comparação lida do banco: usa o aparelho que ESTE aluno não tem, a limitação dele e o local dele; mostra a rotina atual dele lado a lado', async () => {
     seed(); TARGET({}, { equipamentos: ['Academia de Condomínio'] }); REF('s', 3);

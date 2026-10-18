@@ -32,7 +32,8 @@ REGRAS
 6. "metodologia": UMA metodologia/estratégia de treino adequada ao nível e objetivo do aluno (ex.: divisão ABC, full body, bi-sets, progressão de carga...), com o porquê e como aplicar na próxima rotina.
 7. "proxima_rotina": uma ideia objetiva para a próxima rotina dele (dias, foco, volume).
 8. "alertas": cuidados com as limitações do aluno ou dados que faltam. Pode ser vazio.
-9. Seja honesto: se as referências forem poucas ou muito diferentes do aluno, diga no resumo.`;
+9. Seja honesto: se as referências forem poucas ou muito diferentes do aluno, diga no resumo.
+10. Você NÃO recebe cargas (quilos) nem histórico de treino feito: não diga que faltam dados de carga e não comente cargas; fale só de estrutura, exercícios, séries, técnicas e adequação ao nível.`;
 
 export const TOOL: any = {
   name: TOOL_NAME,

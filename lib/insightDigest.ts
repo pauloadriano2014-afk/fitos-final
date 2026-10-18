@@ -25,10 +25,13 @@ export function digestRoutine(days: CompareDay[], o: { withFlags?: boolean } = {
   for (const d of days || []) {
     const cats = (d.byCategory || []).map((c) => `${String(c.category).toUpperCase()} ${c.count}`).join(', ');
     const items = (d.exercises || []).map((e) => {
-      ex++; sets += Number(e.sets) || 0; if (e.technique) tech.add(String(e.technique));
+      ex++; sets += Number(e.sets) || 0; if (e.technique) String(e.technique).split(' + ').forEach((t) => tech.add(t));
       const fl = o.withFlags && e.flags && e.flags.length ? ` [${e.flags.map((f) => FLAG_TXT[f] || f).join('+')}]` : '';
       if (fl) flagged++;
-      return `${e.name} ${e.sets}x${e.reps}${e.technique ? ' ' + e.technique : ''}${fl}`;
+      // linha por série já traz a técnica de cada série; bi-set/tri-set (do exercício todo) entram à parte
+      const grp = String(e.technique || '').split(' + ').filter((t) => /^(BISET|TRISET)$/i.test(t.replace(/[\s_-]/g, ''))).join(' + ');
+      const body = e.series ? e.series : `${e.sets}x${e.reps}${e.technique ? ' ' + e.technique : ''}`;
+      return `${e.name} ${body}${e.series && grp ? ' ' + grp : ''}${fl}`;
     });
     lines.push(`Dia ${d.day}${cats ? ' (' + cats + ')' : ''}: ${items.join('; ')}`);
   }
