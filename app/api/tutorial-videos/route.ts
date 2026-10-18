@@ -6,19 +6,24 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, requireMaster } from '@/lib/auth';
-import { buildUpdate, isTab, toPublic } from '@/lib/tutorialVideos';
+import { buildUpdate, isTab, isCoachTab, toPublic } from '@/lib/tutorialVideos';
 
 export const dynamic = 'force-dynamic';
 const missing = (e: any) => /does not exist|P2021|P2022/i.test(String(e?.code || '') + String(e?.message || ''));
 
 export async function GET(req: Request) {
   try {
-    const auth = requireAuth(req);
-    if ('response' in auth) return auth.response;
+    // 🎓 (18 out) ?scope=coach: SÓ os 3 vídeos de primeiro acesso do coach (CoachPersonal/CoachNutri/CoachElite), SEM login: o coach que acabou de se cadastrar ainda espera a aprovação e já pode assistir.
+    // São só links de vídeo e nomes (nada de dado de pessoa), e nunca devolve os vídeos dos alunos.
+    const publicCoach = new URL(req.url).searchParams.get('scope') === 'coach';
+    if (!publicCoach) {
+      const auth = requireAuth(req);
+      if ('response' in auth) return auth.response;
+    }
     const rows: any[] = await prisma.tutorialVideo.findMany();
     const videos: Record<string, any> = {};
-    rows.filter((r) => isTab(r.tab)).forEach((r) => { videos[r.tab] = toPublic(r); });
-    return NextResponse.json({ success: true, videos }, { headers: { 'Cache-Control': 'private, max-age=60' } });
+    rows.filter((r) => (publicCoach ? isCoachTab(r.tab) : isTab(r.tab))).forEach((r) => { videos[r.tab] = toPublic(r); });
+    return NextResponse.json({ success: true, videos }, { headers: { 'Cache-Control': publicCoach ? 'public, max-age=60' : 'private, max-age=60' } });
   } catch (e: any) {
     // tabela ainda não criada (falta o `prisma db push`): o app só usa o padrão
     if (missing(e)) return NextResponse.json({ success: true, videos: {} });

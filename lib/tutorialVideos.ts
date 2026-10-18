@@ -1,10 +1,14 @@
 // lib/tutorialVideos.ts
 // 🎓 (10 out 2026) Regras puras dos vídeos do tutorial do app (sem banco, para testar): quais abas existem, o que é um link válido e como limpar capítulos e nomes que vêm da tela do master.
-export const TUTORIAL_TABS = ['Início', 'Treinos', 'Dieta', 'Evolução', 'Histórico', 'Check-in', 'Biblioteca', 'Assistente', 'Perfil'] as const;
+export const STUDENT_TUTORIAL_TABS = ['Início', 'Treinos', 'Dieta', 'Evolução', 'Histórico', 'Check-in', 'Biblioteca', 'Assistente', 'Perfil'] as const;
+// 🎓 (18 out 2026) Vídeos de "primeiro acesso" dos COACHES: um por tipo de coach (Personal, Nutricionista, Elite), na mesma tabela e na mesma tela "Vídeos do tutorial" dos alunos.
+export const COACH_TUTORIAL_TABS = ['CoachPersonal', 'CoachNutri', 'CoachElite'] as const;
+export const TUTORIAL_TABS = [...STUDENT_TUTORIAL_TABS, ...COACH_TUTORIAL_TABS] as const;
 export const MAX_CHAPTERS = 30;
 const MAX_SECONDS = 4 * 3600;
 
 export const isTab = (t: any): boolean => typeof t === 'string' && (TUTORIAL_TABS as readonly string[]).includes(t);
+export const isCoachTab = (t: any): boolean => typeof t === 'string' && (COACH_TUTORIAL_TABS as readonly string[]).includes(t);
 
 /** Só https e só dos players que o app abre (Cloudflare Stream HLS/iframe, mp4 público). Vazio = limpar. `undefined` = não mexer. */
 export function cleanUrl(v: any): string | null | undefined {

@@ -20,7 +20,7 @@ const HLS = 'https://customer-abc123.cloudflarestream.com/' + 'a'.repeat(32) + '
 
 (async () => {
   await t('regras: abas, link (só https de Cloudflare ou mp4), textos e capítulos limpos', () => {
-    assert.strictEqual(TV.TUTORIAL_TABS.length, 9); assert.ok(TV.isTab('Check-in')); assert.ok(!TV.isTab('Nada')); assert.ok(!TV.isTab(null));
+    assert.strictEqual(TV.STUDENT_TUTORIAL_TABS.length, 9); assert.strictEqual(TV.TUTORIAL_TABS.length, 12); assert.deepStrictEqual([...TV.COACH_TUTORIAL_TABS], ['CoachPersonal', 'CoachNutri', 'CoachElite']); assert.ok(TV.isTab('CoachElite') && TV.isCoachTab('CoachNutri') && !TV.isCoachTab('Dieta') && !TV.isCoachTab(null)); assert.ok(TV.isTab('Check-in')); assert.ok(!TV.isTab('Nada')); assert.ok(!TV.isTab(null));
     assert.strictEqual(TV.cleanUrl(HLS), HLS); assert.strictEqual(TV.cleanUrl('  ' + HLS + ' '), HLS); assert.strictEqual(TV.cleanUrl(''), null); assert.strictEqual(TV.cleanUrl(null), null); assert.strictEqual(TV.cleanUrl(undefined), undefined);
     assert.strictEqual(TV.cleanUrl('https://exemplo.com/v/aula.mp4'), 'https://exemplo.com/v/aula.mp4');
     for (const bad of ['http://customer-x.cloudflarestream.com/a/manifest/video.m3u8', 'javascript:alert(1)', 'https://evil.com/video', 'ftp://x.cloudflarestream.com/a', 'https://x.cloudflarestream.com.evil.com/a']) assert.throws(() => TV.cleanUrl(bad), undefined, bad);
@@ -69,6 +69,21 @@ const HLS = 'https://customer-abc123.cloudflarestream.com/' + 'a'.repeat(32) + '
     let r = await call(GET, '/api/tutorial-videos', aluno); assert.strictEqual(r.status, 200); assert.deepStrictEqual(r.json.videos, {});
     S.failOn.tutorialVideo = { message: 'The table `public.TutorialVideo` does not exist', code: 'P2021' };
     r = await call(PUT, '/api/tutorial-videos', master, put({ tab: 'Dieta', url: HLS })); assert.strictEqual(r.status, 503); assert.ok(/db push/.test(r.json.error)); delete S.failOn.tutorialVideo;
+  });
+  await t('coach: leitura pública (?scope=coach) devolve SÓ os 3 vídeos de coach, sem login; os dos alunos nunca saem por ali; o GET normal continua exigindo login', async () => {
+    S.tutorialVideo.push({ tab: 'CoachPersonal', url: HLS, title: 'Tutorial do Personal', chapters: [], durationSec: 58, updatedAt: new Date() }, { tab: 'Dieta', url: HLS, chapters: [] }, { tab: 'CoachElite', url: null, chapters: [] }, { tab: 'Lixo', url: HLS, chapters: [] });
+    const r = await call(GET, '/api/tutorial-videos?scope=coach', null); assert.strictEqual(r.status, 200); assert.deepStrictEqual(Object.keys(r.json.videos).sort(), ['CoachElite', 'CoachPersonal']); assert.strictEqual(r.json.videos.CoachPersonal.url, HLS); assert.strictEqual(r.json.videos.CoachPersonal.title, 'Tutorial do Personal'); assert.ok(!('Dieta' in r.json.videos));
+    assert.strictEqual((await call(GET, '/api/tutorial-videos', null)).status, 401, 'sem scope continua exigindo login');
+    const logged = await call(GET, '/api/tutorial-videos', coach); assert.deepStrictEqual(Object.keys(logged.json.videos).sort(), ['CoachElite', 'CoachPersonal', 'Dieta'], 'logado vê tudo (menos aba inválida)');
+    assert.strictEqual((await call(GET, '/api/tutorial-videos?scope=aluno', null)).status, 401, 'qualquer outro scope é como sem scope');
+    const rawPub = await GET(new Request('http://x/api/tutorial-videos?scope=coach')); assert.strictEqual(rawPub.headers.get('Cache-Control'), 'public, max-age=60', 'a leitura pública pode ser guardada'); const rawPriv = await GET(new Request('http://x/api/tutorial-videos', { headers: { authorization: 'Bearer ' + coach } })); assert.strictEqual(rawPriv.headers.get('Cache-Control'), 'private, max-age=60', 'a logada é só do usuário');
+  });
+  await t('coach: o master grava e apaga os vídeos de coach pela mesma rota; o coach comum não', async () => {
+    let r = await call(PUT, '/api/tutorial-videos', master, put({ tab: 'CoachNutri', url: HLS, guid: 'c'.repeat(32), durationSec: 59, title: 'Tutorial da Nutri', subtitle: 'O app em 1 minuto' })); assert.strictEqual(r.status, 200); assert.strictEqual(S.tutorialVideo[0].tab, 'CoachNutri'); assert.strictEqual(S.tutorialVideo[0].title, 'Tutorial da Nutri');
+    assert.strictEqual((await call(PUT, '/api/tutorial-videos', coach, put({ tab: 'CoachNutri', url: HLS }))).status, 403);
+    assert.strictEqual((await call(DELETE, '/api/tutorial-videos?tab=CoachNutri', coach, { method: 'DELETE' })).status, 403);
+    assert.strictEqual((await call(DELETE, '/api/tutorial-videos?tab=CoachNutri', master, { method: 'DELETE' })).status, 200); assert.strictEqual(S.tutorialVideo.length, 0);
+    assert.strictEqual((await call(PUT, '/api/tutorial-videos', master, put({ tab: 'CoachOutro', url: HLS }))).status, 400, 'tipo de coach que não existe');
   });
   console.log('\n' + ok + ' ok, ' + fails + ' falhas'); if (fails) process.exit(1);
 })();
