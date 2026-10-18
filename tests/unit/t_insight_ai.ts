@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '@/lib/prisma';
 import { POST as analyzePOST } from '/home/user/fitos-final/app/api/insights/analyze/route';
 import { POST as groupPOST } from '/home/user/fitos-final/app/api/insights/group/route';
+import { callTool, RETRY_ONLY_IF_UNDER_MS } from '@/lib/aiTool';
 import { analyzeStudent, SYSTEM_PROMPT, ANALYSIS_MODEL, MAX_SOURCES } from '/home/user/fitos-final/lib/insightAnalysis';
 import { groupInsights, aggregateGroups, loadGroupEntries, sanitizeInsight, GROUP_MODEL, ROUTINES_PER_STUDENT } from '/home/user/fitos-final/lib/insightGroup';
 import { stable, hashOf, digestRoutine, diffSources, sanitizeAnalysis, spokenAnalysis, MAX_DIGEST_CHARS } from '/home/user/fitos-final/lib/insightDigest';
@@ -56,7 +57,7 @@ const withModel = async (model: string, over: Record<string, any>, fn: () => Pro
 
   await t('análise nova: UMA chamada de IA com o perfil sem nome/contato, as referências com os avisos para ELE, e o resultado vai para a memória', async () => {
     seed(); const c = mk(); const r = await analyzeStudent(P, CA, 't', { client: c, now: NOW });
-    assert.strictEqual(c.calls.length, 1); const a = c.calls[0]; assert.strictEqual(a.model, ANALYSIS_MODEL); assert.strictEqual(a.tool_choice.name, 'registrar_analise'); assert.strictEqual(a.system, SYSTEM_PROMPT); assert.ok(!('temperature' in a));
+    assert.strictEqual(c.calls.length, 1); const a = c.calls[0]; assert.strictEqual(a.model, ANALYSIS_MODEL); assert.deepStrictEqual(a.tool_choice, { type: 'auto' }, 'o claude-sonnet-5-5 NÃO aceita forçar a ferramenta (erro 400 em produção)'); assert.ok(a.system.startsWith(SYSTEM_PROMPT) && a.system.endsWith('Responda chamando a ferramenta registrar_analise.')); assert.ok(a.max_tokens >= 4000, 'espaço para o modelo pensar e ainda escrever a análise'); assert.deepStrictEqual(a.output_config, { effort: 'medium' }); assert.ok(!('temperature' in a));
     const u = user(c); assert.match(u, /Gênero: Feminino. Nível: Intermediário. Objetivo: Emagrecimento. Frequência: 4x por semana. Local de treino: ACADEMIA/); assert.match(u, /Limitações: Joelho/); assert.match(u, /entrando na rotina nº 1 \(compara com as rotinas 1 a 3/); assert.match(u, /### Referência 1 \(parecido \d+%, rotina nº 1, 3 treinos feitos\)/); assert.match(u, /### Referência 2/);
     assert.match(u, /Leg Press 3x12 \[LIMITAÇÃO\]/); assert.match(u, /Voador 3x12 \[SEM APARELHO\]/); assert.match(u, /Supino reto 4x12 DROPSET/);
     for (const secret of ['Tatiana', 'Souza', 'Maria', 'secreto.com', '11999990000', 'r1', 'r2']) assert.ok(!u.includes(secret), 'não pode mandar: ' + secret);
@@ -139,7 +140,7 @@ const withModel = async (model: string, over: Record<string, any>, fn: () => Pro
     U('x1', { isTestAccount: true }); A('x1'); R('x1', 'x1-w', 30, 5); WE('x1-w', 'e1', 'A', 0);
     const ent = await loadGroupEntries(P, CA, NOW); assert.strictEqual(ent.students, 3, 'o aluno de teste fica fora'); assert.strictEqual(ent.entries.reduce((n, e) => n + e.routines.length, 0), 5, '3 + 1 + 1: a ficha montada e nunca treinada não conta'); const f1 = ent.entries.find((e) => e.routines.length === ROUTINES_PER_STUDENT)!; assert.strictEqual(f1.routines.length, 3); assert.strictEqual(f1.routines[0].exercises.some((x) => x.technique === 'BISET'), true, 'a 1ª rotina (sem técnica) saiu; a 2ª, com BISET, é a mais antiga das 3');
     const c = mk({ resumo: 'Mulheres treinam 2 dias.', grupos: [{ grupo: 'Mulheres · Intermediário', leitura: 'Volume baixo.', metodologia: 'ABC' }], oportunidades: ['Variar mais'], alertas: [] });
-    const r = await groupInsights(P, CA, { client: c, now: NOW }); assert.strictEqual(c.calls.length, 1); assert.strictEqual(c.calls[0].model, GROUP_MODEL); const u = user(c);
+    const r = await groupInsights(P, CA, { client: c, now: NOW }); assert.strictEqual(c.calls.length, 1); assert.strictEqual(c.calls[0].model, GROUP_MODEL); assert.deepStrictEqual(c.calls[0].tool_choice, { type: 'auto' }, 'visão geral também não força a ferramenta'); assert.ok(c.calls[0].system.endsWith('Responda chamando a ferramenta ' + c.calls[0].tools[0].name + '.')); assert.ok(c.calls[0].max_tokens >= 4000); assert.deepStrictEqual([r.usage.inputTokens, r.usage.outputTokens], [1800, 600], 'o custo registrado vem da resposta da IA'); const u = user(c);
     assert.match(u, /### Mulheres · Intermediário — 2 aluno\(s\)/); assert.match(u, /### Homens · Intermediário — 1 aluno\(s\)/); assert.match(u, /Exercícios mais repetidos: .*Supino reto/); for (const secret of ['Nome f1', 'f1', '@secreto', '11999990000']) assert.ok(!u.includes(secret), secret);
     assert.deepStrictEqual([r.ok, r.cached, r.stale, r.students, r.groups.length], [true, false, false, 3, 2]); assert.strictEqual(r.insight!.grupos[0].metodologia, 'ABC'); assert.strictEqual(S.insightMemory[0].kind, 'GROUP'); assert.strictEqual(S.insightMemory[0].key, 'all'); assert.strictEqual(S.aiLog.length, 1);
     const again = await groupInsights(P, CA, { client: c, now: NOW }); assert.strictEqual(c.calls.length, 1, 'nada mudou: sem IA'); assert.deepStrictEqual([again.cached, again.stale, again.stats], [true, false, { runs: 1, hits: 1 }]); assert.deepStrictEqual(again.insight, r.insight);
@@ -177,6 +178,24 @@ const withModel = async (model: string, over: Record<string, any>, fn: () => Pro
     const a = await post(groupPOST, {}, tok(CA)); assert.deepStrictEqual([a.status, a.json.groups.length, a.json.cached, calls], [200, 1, false, 1]); const b = await post(groupPOST, {}, tok(CA)); assert.deepStrictEqual([b.json.cached, calls], [true, 1]);
     fail = true; assert.strictEqual((await post(groupPOST, { refresh: true }, tok(CA))).status, 502);
     fail = false; let last: any = null; for (let i = 0; i < 11; i++) last = await post(groupPOST, { refresh: true }, tok(CA)); assert.strictEqual(last.status, 429); assert.strictEqual((await post(groupPOST, { onlyCached: true }, tok(CA))).status, 200);
+  });
+  await t('chamada da IA sem forçar a ferramenta: 1ª resposta só com texto -> pede de novo UMA vez; soma o custo; recusa não repete; sem ferramenta nas 2 -> erro claro', async () => {
+    const TOOLDEF = { name: 'registrar_x', description: 'x', input_schema: { type: 'object', properties: {} } };
+    const mkc = (replies: any[]) => { const c: any = { calls: [], messages: { create: async (args: any) => { c.calls.push(JSON.parse(JSON.stringify(args))); return replies[Math.min(c.calls.length - 1, replies.length - 1)]; } } }; return c; };
+    const text = { content: [{ type: 'text', text: 'Aqui vai a análise...' }], stop_reason: 'end_turn', usage: { input_tokens: 100, output_tokens: 40 } };
+    const tool = { content: [{ type: 'tool_use', name: 'registrar_x', input: { ok: 1 } }], stop_reason: 'tool_use', usage: { input_tokens: 130, output_tokens: 60 } };
+    const o = { model: 'claude-sonnet-5-5', system: 'SYS', tool: TOOLDEF, user: 'U', refusalMsg: 'RECUSOU', missingMsg: 'SEM FERRAMENTA' };
+    let c = mkc([tool]); let r = await callTool(c, o); assert.deepStrictEqual(r.input, { ok: 1 }); assert.strictEqual(c.calls.length, 1); assert.deepStrictEqual(c.calls[0].tool_choice, { type: 'auto' }); assert.strictEqual(c.calls[0].system, 'SYS\n\nResponda chamando a ferramenta registrar_x.'); assert.deepStrictEqual(r.usage, { inputTokens: 130, outputTokens: 60 });
+    c = mkc([text, tool]); r = await callTool(c, o); assert.deepStrictEqual(r.input, { ok: 1 }); assert.strictEqual(c.calls.length, 2, 'tenta de novo uma vez'); const m2 = c.calls[1].messages; assert.deepStrictEqual(m2.map((x: any) => x.role), ['user', 'assistant', 'user']); assert.strictEqual(m2[0].content, 'U'); assert.deepStrictEqual(m2[1].content, text.content); assert.ok(String(m2[2].content).includes('registrar_x') && /sem escrever texto/.test(m2[2].content)); assert.deepStrictEqual(r.usage, { inputTokens: 230, outputTokens: 100 }, 'o custo das duas chamadas é somado');
+    c = mkc([text, text]); await assert.rejects(() => callTool(c, o), /SEM FERRAMENTA/); assert.strictEqual(c.calls.length, 2, 'no máximo 2 chamadas');
+    c = mkc([{ content: [], stop_reason: 'refusal', usage: { input_tokens: 1, output_tokens: 1 } }, tool]); await assert.rejects(() => callTool(c, o), /RECUSOU/); assert.strictEqual(c.calls.length, 1, 'recusa não repete');
+    c = mkc([text, { content: [], stop_reason: 'refusal', usage: {} }]); await assert.rejects(() => callTool(c, o), /RECUSOU/); assert.strictEqual(c.calls.length, 2);
+    c = mkc([{ content: [{ type: 'text', text: 'cortado' }], stop_reason: 'max_tokens', usage: { input_tokens: 1, output_tokens: 6000 } }, tool]); await assert.rejects(() => callTool(c, o), /SEM FERRAMENTA/); assert.strictEqual(c.calls.length, 1, 'cortou por tamanho: repetir não adianta');
+    c = mkc([{ content: [{ type: 'tool_use', name: 'outra_ferramenta', input: { a: 1 } }], stop_reason: 'tool_use', usage: {} }, tool]); r = await callTool(c, o); assert.strictEqual(c.calls.length, 2, 'ferramenta com outro nome não vale'); assert.deepStrictEqual(r.input, { ok: 1 });
+    c = mkc([{ content: [{ type: 'tool_use', name: 'registrar_x', input: null }], stop_reason: 'tool_use', usage: {} }, tool]); r = await callTool(c, o); assert.strictEqual(c.calls.length, 2, 'ferramenta sem conteúdo também refaz');
+    c = mkc([text, tool]); await assert.rejects(() => callTool(c, { ...o, now: () => (c.calls.length === 0 ? 0 : RETRY_ONLY_IF_UNDER_MS) }), /SEM FERRAMENTA/); assert.strictEqual(c.calls.length, 1, 'se a 1ª já demorou demais, não repete (o Render corta em ~100 s)');
+    c = mkc([tool]); await callTool(c, { ...o, maxTokens: 1234, effort: 'low' }); assert.strictEqual(c.calls[0].max_tokens, 1234); assert.deepStrictEqual(c.calls[0].output_config, { effort: 'low' }); c = mkc([tool]); await callTool(c, o); assert.strictEqual(c.calls[0].max_tokens, 6000); assert.deepStrictEqual(c.calls[0].output_config, { effort: 'medium' });
+    assert.ok(!('thinking' in c.calls[0]) && !('temperature' in c.calls[0]), 'nada que o modelo recuse (thinking desligado, temperatura)');
   });
   console.log(ok + ' blocos ok');
 })();
