@@ -14,7 +14,7 @@ export function stable(v: any): string {
 export const hashOf = (v: any): string => createHash('sha1').update(stable(v)).digest('hex').slice(0, 16);
 
 export const MAX_DIGEST_CHARS = 1800;
-const FLAG_TXT: Record<string, string> = { SEM_APARELHO: 'SEM APARELHO', LIMITACAO: 'LIMITAÇÃO', AMBIENTE: 'OUTRO LOCAL' };
+const FLAG_TXT: Record<string, string> = { SEM_APARELHO: 'SEM APARELHO', LIMITACAO: 'LIMITAÇÃO', AMBIENTE: 'OUTRO LOCAL', NIVEL: 'AVANÇADO P/ NÍVEL' };
 
 export interface RoutineStats { days: number; exercises: number; avgSets: number; techniques: string[]; flagged: number }
 export interface Digest { text: string; hash: string; stats: RoutineStats }
@@ -51,14 +51,14 @@ export function diffSources(prev: Record<string, string> | null | undefined, nex
 const arr = (v: any, max: number, len: number): string[] => (Array.isArray(v) ? v : []).map((x) => String(x ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, max).map((s) => (s.length > len ? s.slice(0, len - 1) + '…' : s));
 const str = (v: any, len: number): string => { const s = String(v ?? '').replace(/\s+/g, ' ').trim(); return s.length > len ? s.slice(0, len - 1) + '…' : s; };
 
-export interface Analysis { resumo: string; estrutura: string[]; aproveitar: string[]; mudar: string[]; metodologia: { nome: string; porque: string; como_aplicar: string }; proxima_rotina: string; alertas: string[] }
+export interface Analysis { resumo: string; estrutura: string[]; aproveitar: string[]; mudar: string[]; cargas: string[]; metodologia: { nome: string; porque: string; como_aplicar: string }; proxima_rotina: string; alertas: string[] }
 /** Limpa o que a IA devolveu: textos e listas com tamanho máximo, tipos certos, "Referência N" trocado pelo nome do aluno-referência. */
 export function sanitizeAnalysis(raw: any, labels: Record<string, string> = {}): Analysis {
   const fix = (s: string) => s.replace(/Refer[eê]ncia\s*(\d)/gi, (m, n) => labels[n] || m);
   const f = (s: string) => fix(s);
   const m = raw && typeof raw.metodologia === 'object' && raw.metodologia ? raw.metodologia : {};
   return {
-    resumo: f(str(raw?.resumo, 480)), estrutura: arr(raw?.estrutura, 4, 220).map(f), aproveitar: arr(raw?.aproveitar, 5, 220).map(f), mudar: arr(raw?.mudar, 5, 220).map(f),
+    resumo: f(str(raw?.resumo, 480)), estrutura: arr(raw?.estrutura, 4, 220).map(f), aproveitar: arr(raw?.aproveitar, 5, 220).map(f), mudar: arr(raw?.mudar, 5, 220).map(f), cargas: arr(raw?.cargas, 4, 220).map(f),
     metodologia: { nome: f(str(m.nome, 80)), porque: f(str(m.porque, 300)), como_aplicar: f(str(m.como_aplicar, 300)) },
     proxima_rotina: f(str(raw?.proxima_rotina, 320)), alertas: arr(raw?.alertas, 3, 200).map(f),
   };
@@ -70,5 +70,6 @@ export function spokenAnalysis(a: Analysis): string {
   if (a.metodologia.nome) parts.push(`Metodologia sugerida: ${a.metodologia.nome}. ${a.metodologia.porque}`);
   if (a.aproveitar.length) parts.push(`Dá para aproveitar: ${a.aproveitar.slice(0, 2).join('; ')}.`);
   if (a.mudar.length) parts.push(`Mudar: ${a.mudar.slice(0, 2).join('; ')}.`);
+  if (a.cargas && a.cargas.length) parts.push(`Cargas: ${a.cargas.slice(0, 2).join('; ')}.`);
   return parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 }

@@ -9,7 +9,8 @@
 //   • o perfil do aluno mudou      → análise completa de novo.
 // `refresh` força completa. `onlyCached` nunca chama a IA (mostra a última análise, dizendo se já está desatualizada).
 import Anthropic from '@anthropic-ai/sdk';
-import { findSimilar, loadComparison, type SimilarItem } from '@/lib/similarStudents';
+import { findSimilar, loadComparison, buildProfile, type SimilarItem, type CompareDay } from '@/lib/similarStudents';
+import { buildPanorama, loadLoadsContext, type Panorama, type LoadsContext } from '@/lib/similarPanorama';
 import { digestRoutine, diffSources, hashOf, sanitizeAnalysis, type Analysis, type Digest } from '@/lib/insightDigest';
 import { readMemory, saveMemory, countHit } from '@/lib/insightMemory';
 import { unavailableExerciseIds } from '@/lib/equipment';
@@ -33,7 +34,8 @@ REGRAS
 7. "proxima_rotina": uma ideia objetiva para a próxima rotina dele (dias, foco, volume).
 8. "alertas": cuidados com as limitações do aluno ou dados que faltam. Pode ser vazio.
 9. Seja honesto: se as referências forem poucas ou muito diferentes do aluno, diga no resumo.
-10. Você NÃO recebe cargas (quilos) nem histórico de treino feito: não diga que faltam dados de carga e não comente cargas; fale só de estrutura, exercícios, séries, técnicas e adequação ao nível.`;
+10. Você também recebe o PANORAMA DO GRUPO (contas sobre MUITOS alunos parecidos, separadas por nível) e, quando existirem, as CARGAS do aluno. Compare a rotina atual e as referências com o que o grupo do MESMO NÍVEL do aluno faz. Se o aluno estiver acima do nível (séries demais, técnica avançada, exercício complexo), diga em "mudar" o que simplificar. Itens marcados [AVANÇADO P/ NÍVEL] devem ser trocados ou simplificados.
+11. "cargas": até 4 itens, SÓ com as cargas recebidas (nunca invente número). Diga se vale reduzir, manter ou subir, com base no que o aluno levantou, na carga típica dos parecidos do mesmo nível e no nível dele. Sem cargas registradas: lista vazia e não comente falta de carga.`;
 
 export const TOOL: any = {
   name: TOOL_NAME,
@@ -46,10 +48,11 @@ export const TOOL: any = {
       aproveitar: { type: 'array', items: { type: 'string' }, description: 'Até 5 itens: o que dá para aproveitar.' },
       mudar: { type: 'array', items: { type: 'string' }, description: 'Até 5 itens: o que mudar para este aluno e por quê.' },
       metodologia: { type: 'object', properties: { nome: { type: 'string' }, porque: { type: 'string' }, como_aplicar: { type: 'string' } }, required: ['nome', 'porque', 'como_aplicar'] },
+      cargas: { type: 'array', items: { type: 'string' }, description: 'Até 4 itens sobre carga (reduzir/manter/subir), só com as cargas recebidas. Pode ser vazio.' },
       proxima_rotina: { type: 'string', description: 'Ideia objetiva para a próxima rotina.' },
       alertas: { type: 'array', items: { type: 'string' }, description: 'Até 3 cuidados. Pode ser vazio.' },
     },
-    required: ['resumo', 'estrutura', 'aproveitar', 'mudar', 'metodologia', 'proxima_rotina', 'alertas'],
+    required: ['resumo', 'estrutura', 'aproveitar', 'mudar', 'cargas', 'metodologia', 'proxima_rotina', 'alertas'],
   },
 };
 
@@ -83,28 +86,43 @@ async function callAI(client: any, user: string): Promise<{ input: any; usage: U
 
 export async function analyzeStudent(db: Db, coachId: string, targetId: string, o: { client?: any; now?: Date; refresh?: boolean; onlyCached?: boolean } = {}): Promise<AnalysisResult> {
   const now = o.now || new Date();
-  const sim = await findSimilar(db, coachId, targetId, now);
+  const sim = await findSimilar(db, coachId, targetId, now, { wide: true });
   if (!sim.ok || !sim.target) return NONE(sim.reason === 'SEM_GENERO' ? 'SEM_GENERO' : 'NAO_ENCONTRADO');
   const { row, available } = await readMemory(db, coachId, 'ANALYSIS', targetId);
   const picked: SimilarItem[] = sim.similar.slice(0, MAX_SOURCES);
   if (!picked.length) return NONE('SEM_PARECIDOS', { memory: available, analysis: row ? (row.result as Analysis) : null, updatedAt: row ? row.updatedAt : null });
 
   // 1) o que a IA veria: resumo de cada rotina parecida, já com os avisos para ESTE aluno
-  const digests: { item: SimilarItem; digest: Digest; label: string }[] = []; let current = '';
+  const digests: { item: SimilarItem; digest: Digest; label: string }[] = []; let current = ''; let curDays: CompareDay[] | null = null;
   for (let i = 0; i < picked.length; i++) {
     const it = picked[i];
     const cmp = await loadComparison(db, coachId, targetId, it.studentId, it.routine.id);
     if (!cmp.ok || !cmp.comparison) continue;
     digests.push({ item: it, digest: digestRoutine(cmp.comparison.days, { withFlags: true }), label: `Referência ${digests.length + 1}` });
-    if (!current && cmp.target) current = digestRoutine(cmp.target.current || []).text.replace(/\n/g, ' | ');
+    if (!current && cmp.target) { current = digestRoutine(cmp.target.current || []).text.replace(/\n/g, ' | '); curDays = cmp.target.current || null; }
   }
   if (!digests.length) return NONE('SEM_PARECIDOS', { memory: available });
   const t = sim.target;
   const profile = { gender: t.gender, level: t.level.label, objective: t.objective, freq: null as number | null, limits: t.limits, places: t.places, nextOrdinal: t.nextOrdinal, window: t.window };
-  // a frequência semanal não vem em findSimilar: lida aqui da anamnese mais nova, só para o texto
-  try { const a: any[] = await db.anamnese.findMany({ where: { userId: targetId }, select: { createdAt: true, frequencia: true } }); a.sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime()); profile.freq = a[0] && Number(a[0].frequencia) > 0 ? Number(a[0].frequencia) : null; } catch (e) { /* sem anamnese */ }
-  // o que ele disse que NÃO tem também é do perfil: mudou, a análise é refeita por inteiro (as marcações de todas as referências mudam)
-  const targetHash = hashOf({ profile, current, unavailable: (await unavailableExerciseIds(targetId, db)).sort() });
+  // a anamnese mais nova: a frequência semanal (só para o texto) e o perfil para marcar o que não serve (limitação, local)
+  let anam: any = null;
+  try { const a: any[] = await db.anamnese.findMany({ where: { userId: targetId }, select: { createdAt: true, objetivo: true, nivel: true, frequencia: true, tempoDisponivel: true, limitacoes: true, cirurgias: true, equipamentos: true } }); a.sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime()); anam = a[0] || null; profile.freq = anam && Number(anam.frequencia) > 0 ? Number(anam.frequencia) : null; } catch (e) { /* sem anamnese */ }
+  const unavailable = await unavailableExerciseIds(targetId, db);
+  // PANORAMA (muitos alunos parecidos, por nível) e CARGAS: contas feitas por nós; qualquer falha aqui só tira esses blocos, a análise segue
+  let panorama: Panorama | null = null; let loads: LoadsContext | null = null;
+  try {
+    const tp = buildProfile(anam, t.level.level);
+    panorama = await buildPanorama(db, sim.panorama, { unavailable: new Set(unavailable), jointRisks: tp.jointRisks, env: tp.env, level: t.level.level }, curDays);
+  } catch (e) { panorama = null; }
+  try {
+    const curEx = (curDays || []).flatMap((d) => d.exercises).filter((e) => !/cardio/i.test(String(e.category || ''))).map((e) => ({ exerciseId: e.exerciseId, name: e.name }));
+    const peers = (sim.panorama || []).filter((x) => x.level === t.level.level).map((x) => x.studentId);
+    loads = await loadLoadsContext(db, targetId, curEx, peers, now);
+  } catch (e) { loads = null; }
+  // o que ele disse que NÃO tem também é do perfil: mudou, a análise é refeita por inteiro (as marcações de todas as referências mudam).
+  // Panorama e cargas NÃO entram na impressão digital (mudam a cada treino/aluno novo e a análise ficaria "desatualizada" toda hora): entram quando a análise é refeita
+  // (REFAZER DO ZERO, perfil novo, rotina nova). Só conta de quantos exercícios já têm carga, que muda raramente.
+  const targetHash = hashOf({ profile, current, unavailable: unavailable.slice().sort(), loadsFrom: loads ? loads.withLoad : 0 });
   const sources: Record<string, string> = { __target: targetHash };
   for (const d of digests) sources[d.item.routine.id] = d.digest.hash;
   const fingerprint = hashOf(sources);
@@ -137,7 +155,7 @@ export async function analyzeStudent(db: Db, coachId: string, targetId: string, 
     const keep = digests.filter((d) => !changedIds.has(d.item.routine.id)).map((d) => d.label);
     user = `ATUALIZE a análise anterior. O aluno destino NÃO mudou; só as referências abaixo são novas ou foram alteradas. Mantenha o que continua valendo e ajuste o resto.\n\nPERFIL DO ALUNO DESTINO\n${targetText(profile as any, current)}\n\nANÁLISE ANTERIOR (JSON)\n${JSON.stringify(row!.result)}\n\nREFERÊNCIAS NOVAS OU ALTERADAS\n${fresh.map(block).join('\n\n') || '(nenhuma: apenas saiu alguma referência)'}\n\nREFERÊNCIAS QUE CONTINUAM IGUAIS (já consideradas): ${keep.join(', ') || 'nenhuma'}\nREFERÊNCIAS QUE SAÍRAM: ${diff.removed.length}`;
   } else {
-    user = `PERFIL DO ALUNO DESTINO\n${targetText(profile as any, current)}\n\nREFERÊNCIAS (alunos parecidos, mesmo gênero)\n${digests.map(block).join('\n\n')}`;
+    user = `PERFIL DO ALUNO DESTINO\n${targetText(profile as any, current)}${panorama ? '\n\n' + panorama.text : ''}${loads && loads.text ? '\n\n' + loads.text : ''}\n\nREFERÊNCIAS (alunos parecidos, mesmo gênero)\n${digests.map(block).join('\n\n')}`;
   }
   const r = await callAI(client, user);
   const analysis = sanitizeAnalysis(r.input, labels);

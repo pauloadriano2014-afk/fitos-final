@@ -127,11 +127,11 @@ const ids = (r: any) => r.similar.map((s: any) => s.studentId);
     assert.deepStrictEqual(ex('4').flags, ['AMBIENTE']); assert.deepStrictEqual(ex('5').flags, [], 'sem ambiente marcado serve em qualquer lugar'); assert.strictEqual(ex('5').technique, null, '"normal" não conta como técnica');
     assert.strictEqual(ex('3').hasSwap, true, 'tem uma opção de troca que o aluno tem'); assert.strictEqual(ex('1').hasSwap, false); assert.strictEqual(ex('5').ok, true);
     assert.deepStrictEqual(c.days.map((d) => d.day), ['A', 'B']); assert.deepStrictEqual(c.days[0].byCategory, [{ category: 'PEITO', count: 2 }, { category: 'PERNA', count: 1 }]);
-    assert.deepStrictEqual({ ...c.summary, techniques: c.summary.techniques }, { daysCount: 2, exercises: 5, usable: 1, flagged: 4, avgSets: 3.2, techniques: [{ name: 'DROPSET', count: 1 }], flags: { SEM_APARELHO: 2, LIMITACAO: 1, AMBIENTE: 1 } });
+    assert.deepStrictEqual({ ...c.summary, techniques: c.summary.techniques }, { daysCount: 2, exercises: 5, usable: 1, flagged: 4, avgSets: 3.2, techniques: [{ name: 'DROPSET', count: 1 }], flags: { SEM_APARELHO: 2, LIMITACAO: 1, AMBIENTE: 1, NIVEL: 0 } });
     assert.deepStrictEqual(c.toChange.map((x) => [x.day, x.name]), [['A', 'E1'], ['A', 'Leg Press'], ['A', 'Crucifixo'], ['B', 'Flexão']]);
     assert.strictEqual(compareWorkouts(rows([{ id: '1', subs: ['9'] }]), { unavailable: new Set(['1', '9']), jointRisks: [], env: 'ACADEMIA_PADRAO' }).days[0].exercises[0].hasSwap, false, 'a única troca também é um aparelho que ele não tem');
     assert.strictEqual(compareWorkouts([{ ...rows([{ id: '7', tags: { jointRisk: ['OMBRO'] } }])[0], substitutes: ['1'] }], { unavailable: new Set(), jointRisks: ['JOELHO'], env: 'ACADEMIA_PADRAO' }).summary.flagged, 0, 'risco em outra articulação não conta');
-    assert.deepStrictEqual(compareWorkouts([], { unavailable: new Set(), jointRisks: [], env: 'X' }).summary, { daysCount: 0, exercises: 0, usable: 0, flagged: 0, avgSets: 0, techniques: [], flags: { SEM_APARELHO: 0, LIMITACAO: 0, AMBIENTE: 0 } });
+    assert.deepStrictEqual(compareWorkouts([], { unavailable: new Set(), jointRisks: [], env: 'X' }).summary, { daysCount: 0, exercises: 0, usable: 0, flagged: 0, avgSets: 0, techniques: [], flags: { SEM_APARELHO: 0, LIMITACAO: 0, AMBIENTE: 0, NIVEL: 0 } });
     assert.strictEqual(compareWorkouts(rows([{ id: '8', env: ['ACADEMIA'] }]), { unavailable: new Set(), jointRisks: [], env: 'EM_CASA' }).summary.flagged, 1);
   });
   await t('linha do exercício: o JSON do Montar treino vira séries por série, técnica limpa e observação — nunca texto cru na tela nem na IA', () => {
@@ -162,6 +162,11 @@ const ids = (r: any) => r.similar.map((s: any) => s.studentId);
     assert.strictEqual(r.comparison.summary.techniques[0].name, 'DROPSET'); assert.strictEqual(r.source.routine.ordinal, 1); assert.strictEqual(r.source.routine.sessions, 4); assert.strictEqual(r.source.name, 's');
     assert.deepStrictEqual(r.target.current.map((d: any) => [d.day, d.exercises.length]), [['A', 2]], 'a rotina atual dele, só a estrutura'); assert.deepStrictEqual(r.target.current[0].exercises[0].flags, []);
     assert.deepStrictEqual(r.target.limits, ['Joelho']); assert.deepStrictEqual(r.target.places, ['CONDOMINIO']);
+  });
+  await t('comparação lida do banco: o NÍVEL real do aluno de destino decide o que é "avançado demais" (iniciante marca dropset; intermediário não)', async () => {
+    const run = async (level: string, startDays: number) => { seed(); TARGET({ level, createdAt: ago(startDays), startDate: ago(startDays) }, {}); REF('s', 3); EX('e1', { name: 'Supino', environments: ['UNIVERSAL'] }); EX('e2', { name: 'Barra fixa', category: 'COSTAS', environments: ['UNIVERSAL'] }); WE('s-w1', 'e1', 'A', 0, { technique: 'DROPSET' }); WE('s-w1', 'e2', 'A', 1); const r: any = await loadComparison(P, 'cA', 't', 's', 's-w1'); return r; };
+    let r = await run('Iniciante', 10); assert.deepStrictEqual(r.comparison.days[0].exercises.map((e: any) => e.flags), [['NIVEL'], ['NIVEL']]); assert.strictEqual(r.target.level.level, 'INICIANTE'); assert.ok(r.comparison.toChange[0].why[0].includes('dropset'));
+    r = await run('Intermediário', 400); assert.deepStrictEqual(r.comparison.days[0].exercises.map((e: any) => e.flags), [[], []], 'intermediário aguenta dropset e barra fixa'); assert.strictEqual(r.target.level.level, 'INTERMEDIARIO');
   });
   await t('comparação: só da carteira, mesmo gênero, ficha tem que ser da referência', async () => {
     seed(); TARGET(); REF('s', 3); REF('h', 3, { gender: 'Masculino' }); REF('o', 3, { coachId: 'cB' }); REF('n', 3, { gender: null }); U('t2', { name: 'Outra' }); A('t2'); R('t2', 't2-w1', 20, 4);

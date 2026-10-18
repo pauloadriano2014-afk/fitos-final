@@ -129,18 +129,21 @@ export interface SimilarItem {
   routine: { id: string; name: string; ordinal: number; sessions: number; archived: boolean };
   others: { id: string; name: string; ordinal: number; sessions: number }[];
 }
+/** Aluno parecido para o PANORAMA: todas as rotinas que ele já treinou (não só as da faixa), usado para estatísticas do grupo. */
+export interface PanoramaSource { studentId: string; name: string; level: LevelKey; score: number; routines: { id: string; ordinal: number; sessions: number }[] }
 export interface SimilarResult {
   ok: boolean; reason?: 'SEM_GENERO' | 'NAO_ENCONTRADO';
   target?: { id: string; name: string; gender: Gender; level: { level: LevelKey; label: string }; routinesDone: number; nextOrdinal: number; window: [number, number]; limits: string[]; places: Place[]; objective: string };
   similar: SimilarItem[];
   pool: { considered: number; withoutRoutine: number; belowScore: number };
+  panorama?: PanoramaSource[];   // só com `wide: true`
 }
 
 type Db = any;
 const newest = <T extends { userId: string; createdAt: any }>(rows: T[]) => { const m = new Map<string, T>(); for (const r of rows) { const c = m.get(r.userId); if (!c || ts(r.createdAt) > ts(c.createdAt)) m.set(r.userId, r); } return m; };
 const group = <T extends { userId: string }>(rows: T[]) => { const m = new Map<string, T[]>(); for (const r of rows) { if (!m.has(r.userId)) m.set(r.userId, []); m.get(r.userId)!.push(r); } return m; };
 
-export async function findSimilar(db: Db, coachId: string, targetId: string, now: Date = new Date()): Promise<SimilarResult> {
+export async function findSimilar(db: Db, coachId: string, targetId: string, now: Date = new Date(), o: { wide?: boolean } = {}): Promise<SimilarResult> {
   const empty = { considered: 0, withoutRoutine: 0, belowScore: 0 };
   const t: any = await db.user.findFirst({ where: { id: targetId, role: 'USER', AND: [ownStudentScope(coachId)] }, select: { id: true, name: true, gender: true, level: true, startDate: true, createdAt: true } });
   if (!t) return { ok: false, reason: 'NAO_ENCONTRADO', similar: [], pool: empty };
@@ -163,12 +166,14 @@ export async function findSimilar(db: Db, coachId: string, targetId: string, now
   const tRoutines = buildRoutines((W.get(targetId) || []) as any, (H.get(targetId) || []) as any);
   const k = nextOrdinal(tRoutines);
 
-  let withoutRoutine = 0, belowScore = 0; const similar: SimilarItem[] = [];
+  let withoutRoutine = 0, belowScore = 0; const similar: SimilarItem[] = []; const wide: PanoramaSource[] = [];
   for (const r of refs) {
     const rLevel = r.level ? r.level.level : 'INICIANTE';
     const sim = scoreSimilarity(tProfile, buildProfile(A.get(r.id), rLevel));
     if (sim.score < MIN_SCORE) { belowScore++; continue; }
-    const picked = pickRoutine(buildRoutines((W.get(r.id) || []) as any, (H.get(r.id) || []) as any), k);
+    const all = buildRoutines((W.get(r.id) || []) as any, (H.get(r.id) || []) as any);
+    if (o.wide) { const done = all.filter((x) => x.ordinal != null); if (done.length) wide.push({ studentId: r.id, name: r.name, level: rLevel, score: sim.score, routines: done.map((x) => ({ id: x.id, ordinal: x.ordinal as number, sessions: x.sessions })) }); }
+    const picked = pickRoutine(all, k);
     if (!picked.best) { withoutRoutine++; continue; }
     const b = picked.best;
     similar.push({
@@ -184,17 +189,37 @@ export async function findSimilar(db: Db, coachId: string, targetId: string, now
     target: { id: t.id, name: t.name || 'Aluno', gender, level: { level: tLevel.level, label: tLevel.label }, routinesDone: k - 1, nextOrdinal: k, window: ordinalWindow(k), limits: tProfile.limits, places: tProfile.places, objective: tProfile.objectiveText },
     similar: similar.slice(0, MAX_SIMILAR),
     pool: { considered: refs.length, withoutRoutine, belowScore },
+    ...(o.wide ? { panorama: wide.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'pt-BR')) } : {}),
   };
 }
 
 // ─────────────────────────── comparação de treino ───────────────────────────
-export type Flag = 'SEM_APARELHO' | 'LIMITACAO' | 'AMBIENTE';
-export const FLAG_LABEL: Record<Flag, string> = { SEM_APARELHO: 'aluno não tem o aparelho', LIMITACAO: 'risco para a limitação do aluno', AMBIENTE: 'não combina com o local de treino' };
+export type Flag = 'SEM_APARELHO' | 'LIMITACAO' | 'AMBIENTE' | 'NIVEL';
+export const FLAG_LABEL: Record<Flag, string> = { SEM_APARELHO: 'aluno não tem o aparelho', LIMITACAO: 'risco para a limitação do aluno', AMBIENTE: 'não combina com o local de treino', NIVEL: 'avançado para o nível do aluno' };
+
+// ───────────── adequação ao NÍVEL (sem IA) ─────────────
+// Regra simples e editável: técnicas e exercícios que pedem mais experiência do que o aluno de destino tem. Bi-set fica fora (é comum em iniciante).
+const ADVANCED_TECH: Record<LevelKey, string[]> = {
+  INICIANTE: ['DROPSET', 'RESTPAUSE', 'CLUSTERSET', '21', 'TRISET', 'GVT', '1.5REPS', '15REPS', 'TUT'],
+  INTERMEDIARIO: ['CLUSTERSET', '21', 'GVT'],
+  AVANCADO: [],
+};
+const COMPLEX_FOR_BEGINNER: RegExp[] = [/levantamento terra/, /agachamento (livre|frontal|bulgaro|sumo|hack livre)/, /\bbarra fixa\b(?!.*(assist|gravitron|graviton))/, /\b(mergulho|paralela)\b/, /desenvolvimento.*(militar|em pe)/, /\b(arranco|arremesso|power clean|clean)\b/, /good ?morning/, /stiff.*barra|barra.*stiff/];
+const techNorm = (t: string) => t.toUpperCase().replace(/[\s_-]/g, '');
+/** Por que este exercício é pesado demais para o nível (vazio = tudo bem). */
+export function levelIssues(name: string, technique: string | null, level?: LevelKey | null): string[] {
+  if (!level) return [];
+  const out: string[] = [];
+  const bad = (technique ? technique.split(' + ') : []).filter((t) => ADVANCED_TECH[level].includes(techNorm(t)));
+  if (bad.length) out.push(`técnica avançada para o nível (${bad.map((t) => t.toLowerCase()).join(', ')})`);
+  if (level === 'INICIANTE' && COMPLEX_FOR_BEGINNER.some((re) => re.test(norm(name)))) out.push('exercício complexo para quem está começando');
+  return out;
+}
 export interface ExerciseRow {
   exerciseId: string; name: string; category: string; sets: number; reps: string; restTime: number; technique: string | null; notes: string | null; order: number; day: string;
   substitutes: string[]; tags?: any; environments?: string[] | null;
 }
-export interface CompareDest { unavailable: Set<string>; jointRisks: string[]; env: string }
+export interface CompareDest { unavailable: Set<string>; jointRisks: string[]; env: string; level?: LevelKey | null }
 export interface CompareExercise { exerciseId: string; name: string; category: string; sets: number; reps: string; restTime: number; technique: string | null; series: string; notes: string | null; flags: Flag[]; detail: string[]; ok: boolean; hasSwap: boolean }
 export interface CompareDay { day: string; exercises: CompareExercise[]; byCategory: { category: string; count: number }[] }
 export interface Comparison {
@@ -246,7 +271,7 @@ export function readRowDetail(r: { technique?: any; sets?: any; reps?: any; rest
 export function compareWorkouts(rows: ExerciseRow[], dest: CompareDest): Comparison {
   const byDay = new Map<string, ExerciseRow[]>();
   for (const r of rows || []) { const d = String(r.day || 'A'); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d)!.push(r); }
-  const flagsTotal: Record<Flag, number> = { SEM_APARELHO: 0, LIMITACAO: 0, AMBIENTE: 0 };
+  const flagsTotal: Record<Flag, number> = { SEM_APARELHO: 0, LIMITACAO: 0, AMBIENTE: 0, NIVEL: 0 };
   const techniques = new Map<string, number>(); const toChange: Comparison['toChange'] = [];
   let total = 0, flagged = 0, setsSum = 0;
   const days: CompareDay[] = [...byDay.keys()].sort().map((day) => {
@@ -258,6 +283,7 @@ export function compareWorkouts(rows: ExerciseRow[], dest: CompareDest): Compari
       const risk = arr((r.tags as any)?.jointRisk).map((x) => x.toUpperCase()).filter((j) => dest.jointRisks.includes(j));
       if (risk.length) { flags.push('LIMITACAO'); detail.push(`pesa em ${risk.map((x) => x.toLowerCase()).join(', ')}`); }
       if (!envOk(r.environments, dest.env)) { flags.push('AMBIENTE'); detail.push('exercício de outro tipo de local'); }
+      const lvl = levelIssues(r.name, det.technique, dest.level); if (lvl.length) { flags.push('NIVEL'); detail.push(...lvl); }
       const swaps = arr(r.substitutes).filter((id) => !dest.unavailable.has(id));
       total++; setsSum += det.sets;
       if (flags.length) { flagged++; flags.forEach((f) => { flagsTotal[f]++; }); toChange.push({ day, name: r.name, flags, why: detail }); }
@@ -275,11 +301,16 @@ export function compareWorkouts(rows: ExerciseRow[], dest: CompareDest): Compari
   };
 }
 
-export interface ComparisonResult { ok: boolean; reason?: 'NAO_ENCONTRADO' | 'SEM_GENERO' | 'GENERO_DIFERENTE' | 'SEM_ROTINA'; comparison?: Comparison; source?: { studentId: string; name: string; routine: { id: string; name: string; ordinal: number | null; sessions: number } }; target?: { studentId: string; name: string; current: CompareDay[] | null; limits: string[]; places: Place[] } }
+/** Linhas do banco (WorkoutExercise) + dicionário de exercícios -> linhas da comparação. */
+export function exerciseRowsFrom(list: any[], exById: Map<string, any>): ExerciseRow[] {
+  return (list || []).map((r) => { const e: any = exById.get(r.exerciseId); return { exerciseId: r.exerciseId, name: e?.name || 'Exercício', category: e?.category || '', sets: r.sets, reps: r.reps, restTime: r.restTime, technique: r.technique, notes: r.notes, order: r.order, day: r.day, substitutes: [...arr(r.substitutes), ...(r.substituteId ? [String(r.substituteId)] : [])], tags: e?.tags, environments: e?.environments }; });
+}
+
+export interface ComparisonResult { ok: boolean; reason?: 'NAO_ENCONTRADO' | 'SEM_GENERO' | 'GENERO_DIFERENTE' | 'SEM_ROTINA'; comparison?: Comparison; source?: { studentId: string; name: string; routine: { id: string; name: string; ordinal: number | null; sessions: number } }; target?: { studentId: string; name: string; current: CompareDay[] | null; limits: string[]; places: Place[]; level?: { level: LevelKey; label: string } } }
 
 /** Lê a rotina do aluno-referência e a compara com o destino. Os dois precisam ser da carteira do coach e do mesmo gênero. Só lê. */
 export async function loadComparison(db: Db, coachId: string, targetId: string, sourceId: string, workoutId: string): Promise<ComparisonResult> {
-  const sel = { id: true, name: true, gender: true } as const;
+  const sel = { id: true, name: true, gender: true, level: true, startDate: true, createdAt: true } as const;
   const users: any[] = await db.user.findMany({ where: { id: { in: [targetId, sourceId] }, role: 'USER', AND: [ownStudentScope(coachId)] }, select: sel });
   const t = users.find((u) => u.id === targetId); const s = users.find((u) => u.id === sourceId);
   if (!t || !s || targetId === sourceId) return { ok: false, reason: 'NAO_ENCONTRADO' };
@@ -289,13 +320,14 @@ export async function loadComparison(db: Db, coachId: string, targetId: string, 
   const wk: any = await db.workout.findFirst({ where: { id: workoutId, userId: sourceId }, select: { id: true, name: true, createdAt: true } });
   if (!wk) return { ok: false, reason: 'SEM_ROTINA' };
   const orderBy = [{ day: 'asc' }, { order: 'asc' }];
-  const [srcRows, anam, unavailable, tWorkouts, sWorkouts, sHist] = await Promise.all([
+  const [srcRows, anam, unavailable, tWorkouts, sWorkouts, sHist, tSessions] = await Promise.all([
     db.workoutExercise.findMany({ where: { workoutId }, orderBy }),
     db.anamnese.findMany({ where: { userId: targetId }, select: { userId: true, createdAt: true, objetivo: true, nivel: true, frequencia: true, tempoDisponivel: true, limitacoes: true, cirurgias: true, equipamentos: true } }),
     unavailableExerciseIds(targetId, db),
     db.workout.findMany({ where: { userId: targetId }, select: { id: true, name: true, createdAt: true, archived: true }, orderBy: { createdAt: 'desc' } }),
     db.workout.findMany({ where: { userId: sourceId }, select: { id: true, name: true, createdAt: true, endDate: true, archived: true } }),
     db.workoutHistory.findMany({ where: { userId: sourceId }, select: { userId: true, date: true, workoutId: true } }),
+    db.workoutHistory.count({ where: { userId: targetId } }),
   ]);
   // a rotina ATUAL do destino (a ficha mais nova não arquivada), só a estrutura, para ficar lado a lado
   const cur: any = (tWorkouts as any[]).find((w) => !w.archived) || null;
@@ -303,10 +335,12 @@ export async function loadComparison(db: Db, coachId: string, targetId: string, 
   const exIds = [...new Set([...(srcRows as any[]), ...curRows].map((r) => r.exerciseId))];
   const exs: any[] = exIds.length ? await db.exercise.findMany({ where: { id: { in: exIds } }, select: { id: true, name: true, category: true, tags: true, environments: true } }) : [];
   const exById = new Map(exs.map((e) => [e.id, e]));
-  const profile = buildProfile(newest(anam as any[]).get(targetId), 'INICIANTE');
-  const toRows = (list: any[]): ExerciseRow[] => list.map((r) => { const e = exById.get(r.exerciseId); return { exerciseId: r.exerciseId, name: e?.name || 'Exercício', category: e?.category || '', sets: r.sets, reps: r.reps, restTime: r.restTime, technique: r.technique, notes: r.notes, order: r.order, day: r.day, substitutes: [...arr(r.substitutes), ...(r.substituteId ? [String(r.substituteId)] : [])], tags: e?.tags, environments: e?.environments }; });
-  const comparison = compareWorkouts(toRows(srcRows as any[]), { unavailable: new Set(unavailable), jointRisks: profile.jointRisks, env: profile.env });
+  // o nível REAL do aluno de destino (mesma conta do findSimilar): é ele que decide o que é "avançado demais"
+  const tLevel = computeLevel({ entry: parseLevel(t.level) || parseLevel(newest(anam as any[]).get(targetId)?.nivel) || 'INICIANTE', startDate: t.startDate || t.createdAt, sessions: Number(tSessions) || 0, now: new Date() });
+  const profile = buildProfile(newest(anam as any[]).get(targetId), tLevel.level);
+  const toRows = (list: any[]): ExerciseRow[] => exerciseRowsFrom(list, exById);
+  const comparison = compareWorkouts(toRows(srcRows as any[]), { unavailable: new Set(unavailable), jointRisks: profile.jointRisks, env: profile.env, level: tLevel.level });
   const current: CompareDay[] | null = cur ? compareWorkouts(toRows(curRows), { unavailable: new Set(), jointRisks: [], env: profile.env }).days : null;
   const routines = buildRoutines(sWorkouts as any, sHist as any); const sr = routines.find((r) => r.id === workoutId);
-  return { ok: true, comparison, source: { studentId: sourceId, name: s.name || 'Aluno', routine: { id: wk.id, name: wk.name, ordinal: sr ? sr.ordinal : null, sessions: sr ? sr.sessions : 0 } }, target: { studentId: targetId, name: t.name || 'Aluno', current, limits: profile.limits, places: profile.places } };
+  return { ok: true, comparison, source: { studentId: sourceId, name: s.name || 'Aluno', routine: { id: wk.id, name: wk.name, ordinal: sr ? sr.ordinal : null, sessions: sr ? sr.sessions : 0 } }, target: { studentId: targetId, name: t.name || 'Aluno', current, limits: profile.limits, places: profile.places, level: { level: tLevel.level, label: tLevel.label } } };
 }
