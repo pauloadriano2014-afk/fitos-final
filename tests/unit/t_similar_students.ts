@@ -174,14 +174,14 @@ const ids = (r: any) => r.similar.map((s: any) => s.studentId);
   });
   await t('assistente falado: "alunos parecidos com a Tati" acha o aluno pelo nome, lista com nota e rotina, e pede desempate quando há dois', async () => {
     assert.ok((INTENTS as readonly string[]).includes('ALUNOS_PARECIDOS'));
-    for (const [q, who] of [['alunos parecidos com a Tati', 'Tati'], ['quais alunas parecidas com a Maria Souza', 'Maria Souza'], ['me mostra treinos semelhantes ao do Samuel', null], ['rotinas similares para a Ana', 'Ana'], ['parecidos com o João', 'Joao']] as const) {
+    for (const [q, who] of [['alunos parecidos com a Tati', 'Tati'], ['quais alunas parecidas com a Maria Souza', 'Maria Souza'], ['me mostra treinos semelhantes ao do Samuel', null], ['rotinas similares para a Ana', 'Ana'], ['parecidos com o João', 'Joao'], ['analise o treino da Tatiana Souza', 'Tatiana Souza'], ['analisar a rotina do Pedro', 'Pedro'], ['analisa as fichas da Ana', 'Ana']] as const) {
       const r = ruleRoute(q, {}); if (who) { assert.strictEqual(r.intent, 'ALUNOS_PARECIDOS', q); assert.strictEqual(r.params.aluno_falado, who, q); }
     }
-    assert.notStrictEqual(ruleRoute('quem está sem treinar há 10 dias', {}).intent, 'ALUNOS_PARECIDOS'); assert.strictEqual(ruleRoute('resumo da Tati', {}).intent, 'RESUMO_ALUNO');
+    assert.notStrictEqual(ruleRoute('quem está sem treinar há 10 dias', {}).intent, 'ALUNOS_PARECIDOS'); assert.notStrictEqual(ruleRoute('analise os treinos vencendo', {}).intent, 'ALUNOS_PARECIDOS'); assert.strictEqual(ruleRoute('resumo da Tati', {}).intent, 'RESUMO_ALUNO');
     seed(); TARGET({ name: 'Tati Souza' }); REF('r1', 4, { name: 'Ana Lima' }, { limitacoes: ['Joelho'] }, 3); REF('r3', 4, { name: 'Bia Costa' }, { limitacoes: ['Joelho'], frequencia: 5 });
     const a: any = await runIntent(P, 'cA', 'ALUNOS_PARECIDOS', { aluno_falado: 'Tati' }, { now: NOW });
     assert.strictEqual(a.intent, 'ALUNOS_PARECIDOS'); assert.strictEqual(a.total, 2); assert.deepStrictEqual(a.items.map((i: any) => i.id), ['r1', 'r3']); assert.match(a.items[0].detail, /^100% parecido · rotina 1 \(3 treinos\) · mesmo objetivo/);
-    assert.match(a.spoken, /Para Tati Souza, 2 alunos parecidos \(comparando as rotinas 1 a 3\): Ana, 100% e Bia, 93%/); assert.strictEqual(a.similar.targetId, 't'); assert.strictEqual(a.similar.items[0].routine.id, 'r1-w1'); assert.strictEqual(a.similar.nextOrdinal, 1); assert.deepStrictEqual(a.similar.window, [1, 3]);
+    assert.match(a.spoken, /Para Tati Souza, 2 alunos parecidos \(comparando as rotinas 1 a 3\): Ana, 100% e Bia, 93%\. Toque em um para comparar e, se quiser, analisar com a IA\./); assert.strictEqual(a.similar.targetId, 't'); assert.strictEqual(a.similar.items[0].routine.id, 'r1-w1'); assert.strictEqual(a.similar.nextOrdinal, 1); assert.deepStrictEqual(a.similar.window, [1, 3]);
     seed(); TARGET({ name: 'Maria Silva' }); U('t2', { name: 'Maria Santos' }); A('t2'); REF('r1', 3);
     const amb: any = await runIntent(P, 'cA', 'ALUNOS_PARECIDOS', { aluno_falado: 'Maria' }, { now: NOW }); assert.strictEqual(amb.title, 'Qual aluno?'); assert.deepStrictEqual(amb.ambiguous.map((x: any) => x.id).sort(), ['t', 't2']); assert.match(amb.items[0].detail, /alunos parecidos/);
     const follow: any = await runIntent(P, 'cA', 'ALUNOS_PARECIDOS', {}, { now: NOW, studentId: 't2' }); assert.strictEqual(follow.similar.targetId, 't2', 'seguimento do "qual aluno?" já traz o id');

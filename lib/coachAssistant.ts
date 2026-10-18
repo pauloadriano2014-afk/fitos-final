@@ -259,7 +259,7 @@ async function alunosParecidos(db: Db, coachId: string, p: ReturnType<typeof cle
     return answer('ALUNOS_PARECIDOS', `Parecidos com ${nm}`, `${why}`, [], 0);
   }
   const items: Item[] = r.similar.map((s) => ({ kind: 'student' as const, id: s.studentId, name: s.name, detail: `${s.score}% parecido · rotina ${s.routine.ordinal} (${s.routine.sessions} treinos)${s.reasons.length ? ' · ' + s.reasons.slice(0, 2).join(', ') : ''}`, tone: null as Item['tone'] }));
-  const spoken = `Para ${nm}, ${plural(r.similar.length, 'aluno parecido', 'alunos parecidos')} (comparando as ${fase}): ${joinNames(r.similar.map((s) => `${firstName(s.name || '') || 'Aluno'}, ${s.score}%`))}. Toque em um para ver a comparação.`;
+  const spoken = `Para ${nm}, ${plural(r.similar.length, 'aluno parecido', 'alunos parecidos')} (comparando as ${fase}): ${joinNames(r.similar.map((s) => `${firstName(s.name || '') || 'Aluno'}, ${s.score}%`))}. Toque em um para comparar e, se quiser, analisar com a IA.`;
   return answer('ALUNOS_PARECIDOS', `Parecidos com ${nm}`, spoken, items, r.similar.length, { similar: { targetId: r.target.id, targetName: nm, nextOrdinal: r.target.nextOrdinal, window: r.target.window, items: r.similar } });
 }
 
@@ -704,6 +704,8 @@ export function ruleRoute(text: string, o: { master?: boolean } = {}): Route {
     }
   }
   const similar = t.match(/(?:alunos?|alunas?|pessoas?|treinos?|rotinas?)\s+(?:parecid\w*|semelhant\w*|similares?)\s+(?:com|ao|a|da|do|de|para|pra)\s+(?:o |a )?([a-z]+(?:\s+[a-z]+)?)/) || t.match(/(?:parecid\w*|semelhant\w*|similares?)\s+(?:com|ao|a|da|do|de|para|pra)\s+(?:o |a )?([a-z]+(?:\s+[a-z]+)?)/);
+  const analise = t.match(/\banalis\w*\s+(?:os |as |o |a )?(?:treinos?|rotinas?|fichas?)\s+(?:d[ao]s?|de)\s+(?:o |a )?([a-z]+(?:\s+[a-z]+)?)/);
+  if (analise && analise[1]) return { intent: 'ALUNOS_PARECIDOS', params: { aluno_falado: analise[1].replace(/\b[a-z]/g, (c) => c.toUpperCase()) } };   // "analise o treino da Maria": abre os parecidos, onde está a ANÁLISE COM IA
   if (similar && similar[1]) return { intent: 'ALUNOS_PARECIDOS', params: { aluno_falado: similar[1].replace(/\b[a-z]/g, (c) => c.toUpperCase()) } };
   // ── pagamentos que o aluno avisou ──
   if (has(/\b(disseram|informaram|avisaram|falaram) que pagaram\b|\bja paguei\b|\bconfirmar pagamentos?\b|\bpagamentos? (para|pra) confirmar\b/)) return { intent: 'PAGAMENTOS_AGUARDANDO', params: {} };
@@ -783,7 +785,7 @@ CONSULTAS
 - CHECKIN_ATRASADO: alunos com a avaliação/check-in atrasada.
 - TESTE_GRATIS: links de teste grátis (abriram, concluíram).
 - RESUMO_ALUNO: situação de UM aluno (último treino, treino, cobrança, anotações). aluno_falado = o nome como foi dito.
-- ALUNOS_PARECIDOS: alunos com anamnese/nível/rotina parecidos com UM aluno (para aproveitar treinos). aluno_falado = o nome do aluno de DESTINO, como foi dito.
+- ALUNOS_PARECIDOS: alunos com anamnese/nível/rotina parecidos com UM aluno (para aproveitar treinos), e também "analisar o treino do aluno X" (a tela traz a análise com IA). aluno_falado = o nome do aluno de DESTINO, como foi dito.
 ${master ? ROUTER_COACH_LINES + '\n' : ''}- NENHUMA: a pergunta não cabe em nenhuma consulta acima, ou não é uma pergunta sobre os dados (ex.: "como faço X no app" não é consulta).
 Hoje é ${todayKey}. Ignore hesitações ("é", "né", "tipo"). Nunca invente consulta nova.`;
 
