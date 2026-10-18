@@ -13,12 +13,13 @@ import { buildHoje } from '@/lib/agendaHoje';
 import { getPromoState } from '@/lib/launchPromo';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { CATALOG_INTENTS } from '@/lib/assistantCatalog';
+import { findSimilar, type SimilarItem } from '@/lib/similarStudents';
 
 /** Consultas sobre os COACHES da plataforma: só o time master (Paulo/Adri). O servidor confere em `runIntent`, não só o app. */
 export const MASTER_INTENTS = ['COACHES_RESUMO', 'COACHES_PENDENTES', 'COACHES_COBRANCA', 'COACHES_ALUNOS', 'COACHES_NOVOS', 'COACHES_ORIGEM', 'COACHES_FUNDADORES', 'RESUMO_COACH'] as const;
 export const INTENTS = ['COBRANCA', 'SEM_TREINAR', 'TREINO_VENCENDO', 'FEEDBACKS', 'TAREFAS', 'AGENDA_HOJE', 'RESUMO_ALUNO', 'TOTAL_ALUNOS',
   'RESUMO_HOJE', 'NOVOS_ALUNOS', 'ANIVERSARIANTES', 'SEM_TREINO_MONTADO', 'DELOAD_CHOQUE', 'PAGAMENTOS_AGUARDANDO', 'APARELHOS', 'VIDEOS_AGUARDANDO', 'COMENTARIOS_EXERCICIO',
-  'CORRIDA_ATIVOS', 'SEM_DIETA', 'DIETA_FEEDBACKS', 'CHECKINS_AGUARDANDO', 'CHECKIN_ATRASADO', 'TESTE_GRATIS', ...MASTER_INTENTS] as const;
+  'CORRIDA_ATIVOS', 'SEM_DIETA', 'DIETA_FEEDBACKS', 'CHECKINS_AGUARDANDO', 'CHECKIN_ATRASADO', 'TESTE_GRATIS', 'ALUNOS_PARECIDOS', ...MASTER_INTENTS] as const;
 export type Intent = (typeof INTENTS)[number];
 /** Perguntas rápidas (botões prontos, sem IA): tudo menos o resumo de aluno (precisa de nome falado) */
 export const QUICK_INTENTS: readonly string[] = CATALOG_INTENTS;   // os botões do catálogo (lib/assistantCatalog.ts)
@@ -47,6 +48,8 @@ export type Answer = {
   /** Período/situação usados (a tela oferece 7/15/30 dias a partir daqui) */
   params?: { dias: number; situacao: Situacao };
   ambiguous?: { id: string; name: string }[];
+  /** ALUNOS_PARECIDOS: o destino e os alunos-referência (cada um com a rotina na fase certa) para a tela abrir a comparação */
+  similar?: { targetId: string; targetName: string; nextOrdinal: number; items: SimilarItem[] };
 };
 
 // ─────────────────────────── parâmetros ───────────────────────────
@@ -202,19 +205,23 @@ async function totalAlunos(db: Db, coachId: string): Promise<Answer> {
   return answer('TOTAL_ALUNOS', 'Seus alunos', `Você tem ${plural(students.length, 'aluno ativo', 'alunos ativos')}.`, [], students.length);
 }
 
+/** Acha UM aluno da carteira pelo id (já escolhido na lista) ou pelo nome falado. Devolve o aluno, ou a resposta pronta ("qual deles?", "não achei"). */
+function pickStudent(students: any[], p: ReturnType<typeof cleanParams>, studentId: string | null | undefined, intent: Intent, o: { title: string; ask: string; tapHint: string }): { target: any } | { reply: Answer } {
+  if (studentId) return { target: students.find((s) => s.id === studentId) || null };
+  if (!p.aluno_falado) return { reply: answer(intent, o.title, o.ask, [], 0) };
+  const cands = matchStudents(p.aluno_falado, students.map((s) => ({ id: s.id, name: String(s.name || '') })));
+  if (!cands.length) return { reply: answer(intent, o.title, `Não encontrei nenhum aluno chamado ${p.aluno_falado}.`, [], 0) };
+  const top = cands[0], tied = cands.filter((c) => c.score >= top.score - 0.0001);
+  if (tied.length > 1) return { reply: answer(intent, 'Qual aluno?', `Encontrei mais de um aluno com esse nome: ${joinNames(tied.map((c) => c.name))}. Toque no que você quer.`, tied.map((c) => ({ kind: 'student' as const, id: c.id, name: c.name, detail: o.tapHint, tone: null })), tied.length, { ambiguous: tied.map((c) => ({ id: c.id, name: c.name })) }) };
+  return { target: students.find((s) => s.id === top.id) || null };
+}
+
 /** Resumo de UM aluno: último treino, validade do treino, tarefas abertas, últimas anotações do diário (e a cobrança, fora do iPhone). */
 async function resumoAluno(db: Db, coachId: string, p: ReturnType<typeof cleanParams>, o: { todayKey: string; now: Date; noFinance: boolean; studentId?: string | null }): Promise<Answer> {
   const students = await loadStudents(db, coachId, { id: true, name: true, isFinanceActive: true, contractValue: true, paymentDueDate: true });
-  let target: any = null;
-  if (o.studentId) target = students.find((s) => s.id === o.studentId) || null;
-  else {
-    if (!p.aluno_falado) return answer('RESUMO_ALUNO', 'Resumo do aluno', 'De qual aluno você quer o resumo? Diga o nome, por exemplo: resumo do Samuel.', [], 0);
-    const cands = matchStudents(p.aluno_falado, students.map((s) => ({ id: s.id, name: String(s.name || '') })));
-    if (!cands.length) return answer('RESUMO_ALUNO', 'Resumo do aluno', `Não encontrei nenhum aluno chamado ${p.aluno_falado}.`, [], 0);
-    const top = cands[0], tied = cands.filter((c) => c.score >= top.score - 0.0001);
-    if (tied.length > 1) return answer('RESUMO_ALUNO', 'Qual aluno?', `Encontrei mais de um aluno com esse nome: ${joinNames(tied.map((c) => c.name))}. Toque no que você quer.`, tied.map((c) => ({ kind: 'student' as const, id: c.id, name: c.name, detail: 'toque para ver o resumo', tone: null })), tied.length, { ambiguous: tied.map((c) => ({ id: c.id, name: c.name })) });
-    target = students.find((s) => s.id === top.id) || null;
-  }
+  const pick = pickStudent(students, p, o.studentId, 'RESUMO_ALUNO', { title: 'Resumo do aluno', ask: 'De qual aluno você quer o resumo? Diga o nome, por exemplo: resumo do Samuel.', tapHint: 'toque para ver o resumo' });
+  if ('reply' in pick) return pick.reply;
+  const target = pick.target;
   if (!target) return answer('RESUMO_ALUNO', 'Resumo do aluno', 'Não encontrei esse aluno entre os seus.', [], 0);
   const nm = target.name || 'Aluno';
   const lines: string[] = [];
@@ -235,6 +242,26 @@ async function resumoAluno(db: Db, coachId: string, p: ReturnType<typeof cleanPa
   return answer('RESUMO_ALUNO', `Resumo: ${nm}`, spoken, items, items.length, { ambiguous: undefined });
 }
 
+
+/** ALUNOS_PARECIDOS: alunos da carteira com anamnese parecida, do mesmo gênero e com a rotina na fase certa (lib/similarStudents.ts). Só regras, sem IA. */
+async function alunosParecidos(db: Db, coachId: string, p: ReturnType<typeof cleanParams>, o: { now: Date; studentId?: string | null }): Promise<Answer> {
+  const students = await loadStudents(db, coachId, { id: true, name: true });
+  const pick = pickStudent(students, p, o.studentId, 'ALUNOS_PARECIDOS', { title: 'Alunos parecidos', ask: 'Parecidos com qual aluno? Diga o nome, por exemplo: alunos parecidos com a Maria.', tapHint: 'toque para ver alunos parecidos' });
+  if ('reply' in pick) return pick.reply;
+  if (!pick.target) return answer('ALUNOS_PARECIDOS', 'Alunos parecidos', 'Não encontrei esse aluno entre os seus.', [], 0);
+  const nm = pick.target.name || 'Aluno';
+  const r = await findSimilar(db, coachId, pick.target.id, o.now);
+  if (!r.ok && r.reason === 'SEM_GENERO') return answer('ALUNOS_PARECIDOS', `Parecidos com ${nm}`, `${nm} está sem o gênero no cadastro, e eu só comparo alunos do mesmo gênero. Preencha o gênero e pergunte de novo.`, [], 0);
+  if (!r.ok || !r.target) return answer('ALUNOS_PARECIDOS', 'Alunos parecidos', 'Não encontrei esse aluno entre os seus.', [], 0);
+  const fase = `rotinas ${r.target.window[0]} a ${r.target.window[1]}`;
+  if (!r.similar.length) {
+    const why = r.pool.considered === 0 ? 'Ainda não há outros alunos do mesmo gênero com treinos feitos para comparar.' : r.pool.withoutRoutine > 0 ? `Há ${r.pool.withoutRoutine} aluno(s) parecido(s), mas nenhum já chegou nas ${fase}.` : 'Nenhum aluno ficou parecido o bastante.';
+    return answer('ALUNOS_PARECIDOS', `Parecidos com ${nm}`, `${why}`, [], 0);
+  }
+  const items: Item[] = r.similar.map((s) => ({ kind: 'student' as const, id: s.studentId, name: s.name, detail: `${s.score}% parecido · rotina ${s.routine.ordinal} (${s.routine.sessions} treinos)${s.reasons.length ? ' · ' + s.reasons.slice(0, 2).join(', ') : ''}`, tone: null as Item['tone'] }));
+  const spoken = `Para ${nm}, ${plural(r.similar.length, 'aluno parecido', 'alunos parecidos')} (comparando as ${fase}): ${joinNames(r.similar.map((s) => `${firstName(s.name || '') || 'Aluno'}, ${s.score}%`))}. Toque em um para ver a comparação.`;
+  return answer('ALUNOS_PARECIDOS', `Parecidos com ${nm}`, spoken, items, r.similar.length, { similar: { targetId: r.target.id, targetName: nm, nextOrdinal: r.target.nextOrdinal, items: r.similar } });
+}
 
 // ─────────────────────────── consultas novas (assistente único) ───────────────────────────
 const tone = (late: boolean, today?: boolean): Item['tone'] => (late ? 'late' : today ? 'today' : 'soon');
@@ -636,6 +663,7 @@ export async function runIntent(db: Db, coachId: string, intent: Intent | 'NENHU
       case 'COACHES_ORIGEM': return withParams(await coachesOrigem(db, p, now));
       case 'COACHES_FUNDADORES': return await coachesFundadores(db, now);
       case 'RESUMO_COACH': return await resumoCoach(db, p, { todayKey, noFinance: !!o.noFinance, targetId: o.studentId });
+      case 'ALUNOS_PARECIDOS': return await alunosParecidos(db, coachId, p, { now, studentId: o.studentId });
       case 'RESUMO_ALUNO': return await resumoAluno(db, coachId, p, { todayKey, now, noFinance: !!o.noFinance, studentId: o.studentId });
     }
   } catch (e: any) {
@@ -675,6 +703,8 @@ export function ruleRoute(text: string, o: { master?: boolean } = {}): Route {
       if (has(/quantos|visao geral|resumo|total|situacao/)) return { intent: 'COACHES_RESUMO', params: {} };
     }
   }
+  const similar = t.match(/(?:alunos?|alunas?|pessoas?|treinos?|rotinas?)\s+(?:parecid\w*|semelhant\w*|similares?)\s+(?:com|ao|a|da|do|de|para|pra)\s+(?:o |a )?([a-z]+(?:\s+[a-z]+)?)/) || t.match(/(?:parecid\w*|semelhant\w*|similares?)\s+(?:com|ao|a|da|do|de|para|pra)\s+(?:o |a )?([a-z]+(?:\s+[a-z]+)?)/);
+  if (similar && similar[1]) return { intent: 'ALUNOS_PARECIDOS', params: { aluno_falado: similar[1].replace(/\b[a-z]/g, (c) => c.toUpperCase()) } };
   // ── pagamentos que o aluno avisou ──
   if (has(/\b(disseram|informaram|avisaram|falaram) que pagaram\b|\bja paguei\b|\bconfirmar pagamentos?\b|\bpagamentos? (para|pra) confirmar\b/)) return { intent: 'PAGAMENTOS_AGUARDANDO', params: {} };
   // ── o dia de hoje ──
@@ -753,6 +783,7 @@ CONSULTAS
 - CHECKIN_ATRASADO: alunos com a avaliação/check-in atrasada.
 - TESTE_GRATIS: links de teste grátis (abriram, concluíram).
 - RESUMO_ALUNO: situação de UM aluno (último treino, treino, cobrança, anotações). aluno_falado = o nome como foi dito.
+- ALUNOS_PARECIDOS: alunos com anamnese/nível/rotina parecidos com UM aluno (para aproveitar treinos). aluno_falado = o nome do aluno de DESTINO, como foi dito.
 ${master ? ROUTER_COACH_LINES + '\n' : ''}- NENHUMA: a pergunta não cabe em nenhuma consulta acima, ou não é uma pergunta sobre os dados (ex.: "como faço X no app" não é consulta).
 Hoje é ${todayKey}. Ignore hesitações ("é", "né", "tipo"). Nunca invente consulta nova.`;
 
@@ -766,7 +797,7 @@ export const routerToolDef = (master = false): any => ({
       consulta: { type: 'string', enum: [...INTENTS.filter((i) => master || !isMasterIntent(i)), 'NENHUMA'] },
       situacao: { type: ['string', 'null'], enum: ['vencendo', 'atrasada', 'todas', null], description: 'Só para COBRANCA.' },
       dias: { type: ['integer', 'null'], description: 'Janela em dias (1 a 90), quando a pergunta cita um período.' },
-      aluno_falado: { type: ['string', 'null'], description: 'Só para RESUMO_ALUNO / RESUMO_COACH: o nome como foi dito.' },
+      aluno_falado: { type: ['string', 'null'], description: 'Só para RESUMO_ALUNO / RESUMO_COACH / ALUNOS_PARECIDOS: o nome como foi dito.' },
     },
     required: ['consulta'],
   },

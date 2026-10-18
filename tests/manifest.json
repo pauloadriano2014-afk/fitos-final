@@ -214,6 +214,9 @@
   "build71.mjs",
   "build70.mjs"
  ],
+ "t_similar_students": [
+  "build70.mjs"
+ ],
  "t_subs": [
   "profile:cp-subs"
  ],

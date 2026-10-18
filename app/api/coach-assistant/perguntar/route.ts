@@ -1,7 +1,7 @@
 // app/api/coach-assistant/perguntar/route.ts
 // 🎙️ PERGUNTAS POR VOZ do coach (ver lib/coachAssistant.ts).
 //   POST { text, ios? }                      -> { ok, answer: { intent, title, spoken, items[], total, restricted?, ambiguous? }, ai }
-//   POST { intent: 'RESUMO_ALUNO', studentId } -> o resumo de um aluno já escolhido na lista de "qual deles?"
+//   POST { intent: 'RESUMO_ALUNO' | 'ALUNOS_PARECIDOS', studentId } -> o resumo (ou os alunos parecidos) de um aluno já escolhido na lista de "qual deles?"
 // SÓ LÊ. A IA (Haiku 5.5) escolhe a consulta pronta; o servidor busca os dados só da carteira do coach. `ios: true` = o app é o do iPhone: perguntas de cobrança/financeiro não são respondidas (regra da Apple).
 // Trava: coach ativo COM a chave `perguntasVoz` (no início só o time master; o master libera coach a coach no painel de chaves).
 // As perguntas RÁPIDAS (prontas, sem IA) ficam em ./rapida e valem para qualquer coach ativo.
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
     // seguimento de "qual aluno?": já vem o id (o servidor confere que é da carteira dele, dentro da consulta)
     const master = isMasterCoachId(auth.user.id);
-    if (body && (body.intent === 'RESUMO_ALUNO' || body.intent === 'RESUMO_COACH') && typeof body.studentId === 'string' && body.studentId) {
+    if (body && (body.intent === 'RESUMO_ALUNO' || body.intent === 'RESUMO_COACH' || body.intent === 'ALUNOS_PARECIDOS') && typeof body.studentId === 'string' && body.studentId) {
       const answer = await runIntent(prisma, auth.user.id, body.intent, {}, { noFinance, studentId: body.studentId });   // (RESUMO_COACH: o servidor recusa quem não é do time master)
       return NextResponse.json({ ok: true, answer, ai: false });
     }
