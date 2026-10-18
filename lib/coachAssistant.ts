@@ -49,7 +49,7 @@ export type Answer = {
   params?: { dias: number; situacao: Situacao };
   ambiguous?: { id: string; name: string }[];
   /** ALUNOS_PARECIDOS: o destino e os alunos-referência (cada um com a rotina na fase certa) para a tela abrir a comparação */
-  similar?: { targetId: string; targetName: string; nextOrdinal: number; items: SimilarItem[] };
+  similar?: { targetId: string; targetName: string; nextOrdinal: number; window: [number, number]; items: SimilarItem[] };
 };
 
 // ─────────────────────────── parâmetros ───────────────────────────
@@ -260,7 +260,7 @@ async function alunosParecidos(db: Db, coachId: string, p: ReturnType<typeof cle
   }
   const items: Item[] = r.similar.map((s) => ({ kind: 'student' as const, id: s.studentId, name: s.name, detail: `${s.score}% parecido · rotina ${s.routine.ordinal} (${s.routine.sessions} treinos)${s.reasons.length ? ' · ' + s.reasons.slice(0, 2).join(', ') : ''}`, tone: null as Item['tone'] }));
   const spoken = `Para ${nm}, ${plural(r.similar.length, 'aluno parecido', 'alunos parecidos')} (comparando as ${fase}): ${joinNames(r.similar.map((s) => `${firstName(s.name || '') || 'Aluno'}, ${s.score}%`))}. Toque em um para ver a comparação.`;
-  return answer('ALUNOS_PARECIDOS', `Parecidos com ${nm}`, spoken, items, r.similar.length, { similar: { targetId: r.target.id, targetName: nm, nextOrdinal: r.target.nextOrdinal, items: r.similar } });
+  return answer('ALUNOS_PARECIDOS', `Parecidos com ${nm}`, spoken, items, r.similar.length, { similar: { targetId: r.target.id, targetName: nm, nextOrdinal: r.target.nextOrdinal, window: r.target.window, items: r.similar } });
 }
 
 // ─────────────────────────── consultas novas (assistente único) ───────────────────────────
