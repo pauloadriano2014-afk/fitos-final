@@ -128,6 +128,9 @@
  "t_limit": [
   "profile:cp-limit"
  ],
+ "t_load_phase": [
+  "build32.mjs"
+ ],
  "t_load_side": [
   "build39.mjs"
  ],
@@ -219,6 +222,9 @@
  ],
  "t_similar_students": [
   "build70.mjs"
+ ],
+ "t_student_loads": [
+  "build32.mjs"
  ],
  "t_subs": [
   "profile:cp-subs"

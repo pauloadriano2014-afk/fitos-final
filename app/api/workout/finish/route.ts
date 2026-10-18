@@ -12,6 +12,7 @@ import { autoClientKey, cleanDay, cleanWorkoutId, findExistingFinish, isUniqueVi
 import { cleanDuration, cleanCardio } from '@/lib/workoutDuration';
 import { closeSessions } from '@/lib/workoutSessions';
 import { cleanEffort } from '@/lib/loadSuggest';
+import { phaseOf } from '@/lib/loadPhase';
 import { cleanExerciseStatus, cleanLoggedAt, notDoneNames } from '@/lib/exerciseStatus';
 
 export const dynamic = 'force-dynamic';
@@ -70,6 +71,16 @@ export async function POST(req: Request) {
     // 🧾 (7 out 2026) o que o aluno disse dos exercícios sem registro (pulou / não fez / fez parte / fez sem marcar). Opcional; app antigo = null.
     const exerciseStatus = cleanExerciseStatus(body.exerciseStatus);
 
+    // 🏷️ (18 out 2026) fase da carga (NORMAL / DELOAD / CHOQUE): a mesma regra que o app do aluno usa para multiplicar a carga do coach (lib/loadPhase.ts).
+    // Sem ficha identificada (treino avulso, app antigo) ou se a leitura falhar = null, que conta como NORMAL. Nunca atrapalha o finalizar.
+    let loadPhase: string | null = null; let intensityApplied: number | null = null;
+    if (workoutIdClean) {
+        try {
+            const w = await prisma.workout.findUnique({ where: { id: workoutIdClean }, select: { intensityMultiplier: true, intensityEndDate: true } });
+            if (w) { const ph = phaseOf(w.intensityMultiplier, w.intensityEndDate, now); loadPhase = ph.phase; intensityApplied = ph.multiplier; }
+        } catch (e) { console.error('Erro lendo a fase da carga:', e); }
+    }
+
     let xpBase = 150; 
     let xpBonus = 0;
     
@@ -99,6 +110,7 @@ export async function POST(req: Request) {
                     clientKey,
                     timeOk,
                     timeNote,
+                    ...(loadPhase ? { loadPhase, intensityApplied } : {}),   // 🏷️ fase da carga (deload/choque/normal)
                     ...(exerciseStatus ? { exerciseStatus: exerciseStatus as any } : {}),
                     xpEarned: totalXp,
                     duration: cleanDuration(duration),
