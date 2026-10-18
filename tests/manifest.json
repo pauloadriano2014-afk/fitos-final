@@ -17,6 +17,12 @@
  "t_ai_parity": [
   "build45.mjs"
  ],
+ "t_alt": [
+  "profile:cp-alt"
+ ],
+ "t_android_tester": [
+  "profile:partner-android"
+ ],
  "t_assistant_guides": [
   "build70.mjs"
  ],
@@ -57,6 +63,14 @@
  "t_contact": [
   "build26.mjs"
  ],
+ "t_contact_numbers": [
+  "none"
+ ],
+ "t_cp": [
+  "profile:cp-subs",
+  "profile:cp-alt",
+  "profile:cp-limit"
+ ],
  "t_cupom": [
   "build61.mjs"
  ],
@@ -73,6 +87,9 @@
  "t_exec_video": [
   "build66.mjs",
   "build69.mjs"
+ ],
+ "t_exercise_visibility": [
+  "build51.mjs"
  ],
  "t_feed_route": [
   "build23.mjs"
@@ -102,6 +119,9 @@
  "t_ios11_be": [
   "build70.mjs"
  ],
+ "t_limit": [
+  "profile:cp-limit"
+ ],
  "t_load_side": [
   "build39.mjs"
  ],
@@ -110,6 +130,9 @@
  ],
  "t_load_suggest_finish": [
   "build32.mjs"
+ ],
+ "t_master_notify": [
+  "profile:partner-android"
  ],
  "t_match": [
   "build.mjs"
@@ -137,6 +160,12 @@
  "t_notices_route": [
   "build5.mjs"
  ],
+ "t_partner_routes": [
+  "profile:partner-routes"
+ ],
+ "t_partner_rules": [
+  "profile:partner-lib"
+ ],
  "t_plan_clock": [
   "build45.mjs"
  ],
@@ -145,6 +174,12 @@
  ],
  "t_push_token": [
   "build23.mjs"
+ ],
+ "t_real_log": [
+  "build58.mjs"
+ ],
+ "t_register": [
+  "profile:partner-routes"
  ],
  "t_register_auto": [
   "build46.mjs"
@@ -175,6 +210,9 @@
  "t_share_group": [
   "build71.mjs",
   "build70.mjs"
+ ],
+ "t_subs": [
+  "profile:cp-subs"
  ],
  "t_taco_fix": [
   "build22.mjs"
@@ -210,6 +248,9 @@
  "t_weekly_import": [
   "build26.mjs"
  ],
+ "t_workout_extend": [
+  "build70.mjs"
+ ],
  "t_workout_share": [
   "build38.mjs",
   "build71.mjs",
@@ -217,43 +258,5 @@
  ],
  "t_workout_templates": [
   "build44.mjs"
- ],
- "t_alt": [
-  "profile:cp-alt"
- ],
- "t_cp": [
-  "profile:cp-subs",
-  "profile:cp-alt",
-  "profile:cp-limit"
- ],
- "t_limit": [
-  "profile:cp-limit"
- ],
- "t_subs": [
-  "profile:cp-subs"
- ],
- "t_partner_rules": [
-  "profile:partner-lib"
- ],
- "t_partner_routes": [
-  "profile:partner-routes"
- ],
- "t_register": [
-  "profile:partner-routes"
- ],
- "t_android_tester": [
-  "profile:partner-android"
- ],
- "t_master_notify": [
-  "profile:partner-android"
- ],
- "t_real_log": [
-  "build58.mjs"
- ],
- "t_exercise_visibility": [
-  "build51.mjs"
- ],
- "t_contact_numbers": [
-  "none"
  ]
 }
