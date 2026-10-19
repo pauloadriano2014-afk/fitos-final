@@ -14,6 +14,19 @@ import { MASTER_IDS } from '@/lib/masterIds';
 import { jointFilterIssues } from '@/lib/autoPlanQuality';
 import { unavailableExerciseIds, filterUnavailable } from '@/lib/equipment';
 import { callClaudeWorkout, isClaudeEngine, WORKOUT_TIMEOUT_MS } from '@/lib/ai/claudeWorkout';
+import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
+import { pickSwap, nameKey, type LibEx } from '@/lib/exerciseSwap';
+import { levelIssues } from '@/lib/similarStudents';
+import { computeLevel, parseLevel, LEVEL_LABEL, type LevelInfo } from '@/lib/studentLevel';
+
+// 🧠 (19 out 2026) trechos de regra que os dois modos (antigo e inteligente) usam IGUAIS
+const TECH_RULE = `TÉCNICAS (1 por dia mínimo, diferentes). ATENÇÃO — CARGA EXTERNA: DROPSET, RESTPAUSE, 21 e CLUSTERSET dependem de reduzir, pausar ou ajustar uma CARGA EXTERNA (halteres, barra, máquina, polia, anilha). NUNCA aplique nenhuma dessas em exercício de PESO CORPORAL puro (flexão de braço, prancha, abdominal, agachamento livre sem carga, etc.) — não existe carga pra reduzir/ajustar nesses casos. Pra peso corporal, use BISET, TRISET ou deixe technique="".
+   DROPSET: -20-30% carga sem pausa | RESTPAUSE: 20s pausa mesma carga
+   BISET: EXATAMENTE 2 exercícios consecutivos, um logo após o outro, ambos marcados BISET. NUNCA 3 ou mais exercícios seguidos com BISET — sempre pares fechados
+   TRISET: EXATAMENTE 3 exercícios consecutivos, um logo após o outro, todos marcados TRISET. NUNCA 2 ou 4+ exercícios seguidos com TRISET — sempre trincas fechadas
+   21: reps="21" SEMPRE | CLUSTERSET: reps="3" blocos 15s | 1_5_REPS: reps 8-12
+   TUT: cadência 3s descida (também depende de carga externa, mesma regra acima) | GVT: SEMPRE gere EXATAMENTE 10 blocos separados, cada um com sets="1", reps="10", restTime="60". NUNCA 1 bloco só`;
+const BLOCKS_RULE = (n: number) => `Nº DE BLOCOS = Nº DE SÉRIES (ERRO MAIS COMUM — LEIA COM ATENÇÃO): cada bloco do array "blocks" representa UMA série. A CONFIGURAÇÃO DO CICLO abaixo informa quantas séries cada grupo muscular deve ter (ex: "4 séries"). Você DEVE gerar exatamente essa quantidade de blocos pra CADA exercício daquele grupo — nunca apenas 1 bloco, a menos que a configuração peça 1 série. Todo bloco tem sets="1" (é sempre 1 série por bloco); é a QUANTIDADE de blocos no array que soma as séries totais. Pirâmide = mesma quantidade de blocos, mas com reps/load DIFERENTES entre eles (ex: 12/10/8/6 reps com carga crescente). Exceções com contagem própria: GVT sempre 10 blocos (regra ${n}), 21 e CLUSTERSET seguem a regra ${n}.`;
 
 export interface GenerateWorkoutInput {
   userId: string;
@@ -154,6 +167,33 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
     // 🔥 NOVO: Exercícios de mobilidade selecionados manualmente pelo coach — bypassam a IA
     const manualExercisesByDay: Record<string, Array<{ exerciseId: string; name?: string }>> = cycleConfig?.manualExercisesByDay || {};
     const hasManualOnly = !hasCycleConfig && Object.keys(manualExercisesByDay).length > 0;
+    // 🧠 (19 out 2026) MONTAGEM INTELIGENTE (lib/ai/workoutPlanner.ts): só quando o coach/plano mandou uma estrutura de ciclo. Nível real do aluno, o que fazer com cada exercício da
+    // rotina anterior (manter a âncora, trocar o acessório), candidatos já filtrados no lugar da biblioteca inteira e revisão depois da IA. `cycleConfig.smart === false` volta ao modo antigo;
+    // `cycleConfig.levelRules === false` desliga só as regras de nível.
+    const smart = !!hasCycleConfig && !hasManualOnly && cycleConfig.smart !== false;
+    const levelRules = smart && cycleConfig.levelRules !== false;
+    let levelInfo: LevelInfo | null = null;
+    const prevRoutines: PrevRoutine[] = smart ? user.workouts.map((w: any) => {
+      const days: Record<string, PrevEx[]> = {};
+      (w.exercises || []).forEach((ex: any) => {
+        const t = (ex.exercise?.tags as any) || {};
+        (days[ex.day || 'A'] = days[ex.day || 'A'] || []).push({ exerciseId: ex.exerciseId, name: ex.exercise?.name || 'Exercício', target: String(t.target || ex.exercise?.category || ''), mechanic: String(t.mechanic || ''), category: String(ex.exercise?.category || '') });
+      });
+      return { name: w.name, days };
+    }).filter((r) => Object.keys(r.days).length > 0) : [];
+    const book = new CodeBook();
+    let facts: ReturnType<typeof buildFacts> = [];
+    let cands: ReturnType<typeof buildCandidates> | null = null;
+    let techRemoved: string[] = [];
+    if (smart) {
+      let sessions = history.length;
+      try { const c = await (prisma as any).workoutHistory.count({ where: { userId } }); if (Number.isFinite(c)) sessions = c; } catch (_) { /* fica com o que veio no histórico */ }
+      levelInfo = computeLevel({ entry: parseLevel((user as any).level) || parseLevel(anamnese_?.nivel) || 'INICIANTE', startDate: (user as any).startDate || (user as any).createdAt, sessions });
+      facts = buildFacts(prevRoutines, history);
+      cands = buildCandidates({ days: cycleConfig.days, library: adminExercises as unknown as LibEx[], facts, prev: prevRoutines, level: levelInfo.level, env: trainingEnv || 'UNIVERSAL', levelRules });
+    }
+    const techFiltered = smart && levelRules && levelInfo ? techniquesForLevel(cycleConfig.techniques || [], levelInfo.level) : { kept: cycleConfig?.techniques || [], removed: [] as string[] };
+    techRemoved = techFiltered.removed;
     let cycleCtx = '';
 
     if (hasCycleConfig) {
@@ -178,7 +218,7 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
         }).join('\n');
         return `  Dia ${d.name}:\n${groupLines}`;
       }).join('\n');
-      const techList = cycleConfig.techniques?.length > 0 ? cycleConfig.techniques.join(', ') : 'Livre escolha';
+      const techList = techFiltered.kept.length > 0 ? techFiltered.kept.join(', ') : (cycleConfig.techniques?.length > 0 ? 'Nenhuma técnica avançada (nível do aluno): deixe technique="" (BISET só se combinar)' : 'Livre escolha');
       const limitationRulesCtx = cycleConfig.limitationRules?.length > 0
         ? cycleConfig.limitationRules.map((rule: any) => rule.rules.map((r: any) => {
             if (r.staticOnly) return `  - ${r.group}: APENAS estáticos. ${r.note}`;
@@ -204,7 +244,7 @@ ${limitationRulesCtx ? `LIMITAÇÕES:\n${limitationRulesCtx}` : ''}`;
 
     const alunoCtx = `ALUNO: ${user.name || 'Não informado'}
 - Objetivo: ${user.goal || anamnese_?.objetivo || 'Não informado'}
-- Nível: ${user.level || anamnese_?.nivel || 'Não informado'}
+- Nível: ${levelInfo ? `${levelInfo.label} (${levelInfo.months} meses de treino, ${levelInfo.sessions} treinos feitos)` : (user.level || anamnese_?.nivel || 'Não informado')}
 - Frequência: ${anamnese_?.frequencia ? `${anamnese_?.frequencia}x/sem` : 'Não informado'}
 - Tempo: ${anamnese_?.tempoDisponivel ? `${anamnese_?.tempoDisponivel}min` : 'Não informado'}
 - Limitações: ${anamnese_?.limitacoes?.length ? anamnese_?.limitacoes.join(', ') : 'Nenhuma'}
@@ -232,25 +272,20 @@ ${limitationRulesCtx ? `LIMITAÇÕES:\n${limitationRulesCtx}` : ''}`;
     //   - userMessage: só o que realmente varia por aluno/ciclo (antes
     //     incluía o banco inteiro também, o que quebrava qualquer chance de
     //     cache já que o resto do texto mudava a cada aluno).
-    const systemPromptStatic = `Você é um personal trainer experiente. Gere rotina NOVA e DIFERENTE do treino anterior.
+    const legacyPrompt = () => `Você é um personal trainer experiente. Gere rotina NOVA e DIFERENTE do treino anterior.
 
 REGRAS:
 1. DIAS: Use "A","B","C"... Nunca nomes descritivos.
 2. IDs: Use APENAS ids do banco abaixo. Jamais invente.
 3. VARIAÇÃO: veja "IDs usados na rotina anterior" na mensagem do aluno (se houver) — troque no mínimo 40% deles. Se não houver, crie rotina variada.
-4. TÉCNICAS (1 por dia mínimo, diferentes). ATENÇÃO — CARGA EXTERNA: DROPSET, RESTPAUSE, 21 e CLUSTERSET dependem de reduzir, pausar ou ajustar uma CARGA EXTERNA (halteres, barra, máquina, polia, anilha). NUNCA aplique nenhuma dessas em exercício de PESO CORPORAL puro (flexão de braço, prancha, abdominal, agachamento livre sem carga, etc.) — não existe carga pra reduzir/ajustar nesses casos. Pra peso corporal, use BISET, TRISET ou deixe technique="".
-   DROPSET: -20-30% carga sem pausa | RESTPAUSE: 20s pausa mesma carga
-   BISET: EXATAMENTE 2 exercícios consecutivos, um logo após o outro, ambos marcados BISET. NUNCA 3 ou mais exercícios seguidos com BISET — sempre pares fechados
-   TRISET: EXATAMENTE 3 exercícios consecutivos, um logo após o outro, todos marcados TRISET. NUNCA 2 ou 4+ exercícios seguidos com TRISET — sempre trincas fechadas
-   21: reps="21" SEMPRE | CLUSTERSET: reps="3" blocos 15s | 1_5_REPS: reps 8-12
-   TUT: cadência 3s descida (também depende de carga externa, mesma regra acima) | GVT: SEMPRE gere EXATAMENTE 10 blocos separados, cada um com sets="1", reps="10", restTime="60". NUNCA 1 bloco só
+4. ${TECH_RULE}
 5. SUBSTITUTOS (CRÍTICA): cada exercício tem "suggestedSubstitutes" no banco — já filtrados pelo ambiente ${trainingEnv || 'UNIVERSAL'}.
    - SE tiver "suggestedSubstitutes", use OBRIGATORIAMENTE o primeiro da lista
    - SE não tiver, escolha outro exercício do banco com target semelhante
    - NUNCA invente substitutos fora do banco
    - O substituto deve ser DIFERENTE do exercício principal
 6. PROGRESSÃO: lastWeight +5% a +10%, múltiplos de 2.5kg. Se o bloco tiver lastWeightUnit="cada lado", lastWeight é a carga de UM lado: mantenha a unidade no load (ex: "22.5kg cada lado"); sem lastWeightUnit, é a carga total (ex: "45kg").
-7. Nº DE BLOCOS = Nº DE SÉRIES (ERRO MAIS COMUM — LEIA COM ATENÇÃO): cada bloco do array "blocks" representa UMA série. A CONFIGURAÇÃO DO CICLO abaixo informa quantas séries cada grupo muscular deve ter (ex: "4 séries"). Você DEVE gerar exatamente essa quantidade de blocos pra CADA exercício daquele grupo — nunca apenas 1 bloco, a menos que a configuração peça 1 série. Todo bloco tem sets="1" (é sempre 1 série por bloco); é a QUANTIDADE de blocos no array que soma as séries totais. Pirâmide = mesma quantidade de blocos, mas com reps/load DIFERENTES entre eles (ex: 12/10/8/6 reps com carga crescente). Exceções com contagem própria: GVT sempre 10 blocos (regra 4), 21 e CLUSTERSET seguem a regra 4.
+7. ${BLOCKS_RULE(4)}
 8. LIMITAÇÕES: respeite jointRisk.
 9. CARDIO: sets=minutos, reps=kcal, technique=Leve/Moderada/Zona 2/Forte/HIIT.
 
@@ -288,11 +323,64 @@ FORMATO JSON — sem markdown, sem texto extra:
 
 IMPORTANTE: "observation" deve ser SEMPRE string vazia "". Não escreva observações — o personal trainer fará isso manualmente.`;
 
+    const smartPrompt = `Você é um personal trainer experiente montando a PRÓXIMA rotina de um aluno, com PROGRESSÃO em relação à anterior (não um treino aleatório).
+
+REGRAS:
+1. DIAS: Use "A","B","C"... Nunca nomes descritivos.
+2. ESTRUTURA: siga EXATAMENTE a ESTRUTURA do ciclo (grupos, quantidade de exercícios por dia e séries). Não omita grupo, não acrescente grupo, não mude os dias.
+3. CÓDIGOS: use APENAS os códigos (E001, E002...) do BANCO DE CANDIDATOS, tirando cada exercício da lista do grupo certo. Jamais invente códigos.
+4. PROGRESSÃO (a regra mais importante): a seção ROTINA ANTERIOR diz o que fazer com cada exercício. MANTER = repita o mesmo código (é a âncora: o aluno progride na carga). TROCAR = escolha OUTRO exercício do mesmo grupo, nunca um marcado "REPETIDO". Nos TROCAR varie o ângulo, a pegada ou o equipamento. Sem rotina anterior, monte a primeira rotina: compostos básicos primeiro, variada.
+5. ${TECH_RULE}
+6. NÍVEL: respeite a seção NÍVEL DO ALUNO (técnicas proibidas, exercícios complexos, faixa de repetições). Técnica avançada só em exercício que combine, nos exercícios finais do grupo, nunca em todos.
+7. ${BLOCKS_RULE(5)}
+8. ORDEM: dentro de cada grupo, o exercício composto vem antes do isolado; siga a ordem dos grupos da ESTRUTURA.
+9. LIMITAÇÕES: os candidatos já saem filtrados pelo risco articular e pelo ambiente ${trainingEnv || 'UNIVERSAL'}; respeite também as LIMITAÇÕES do ciclo.
+10. CARDIO: sets=minutos, reps=kcal, technique=Leve/Moderada/Zona 2/Forte/HIIT.
+11. CARGAS: escreva "load" só nos exercícios que têm "alvo" na ROTINA ANTERIOR (use o alvo; se o bloco tiver mais séries que o alvo, repita a última carga). Se a carga for "cada lado", mantenha a unidade (ex: "22.5kg cada lado"); sem unidade é carga total (ex: "45kg"). Exercício novo, sem histórico: load "" (o aluno descobre a carga certa no primeiro treino).
+
+FORMATO JSON — sem markdown, sem texto extra:
+{
+  "workoutName": "Nome",
+  "workoutModel": "CARGA",
+  "reasoning": "Máximo 3 linhas: o que foi mantido (âncoras), o que foi trocado e a técnica de cada dia.",
+  "exercisesByDay": {
+    "A": [
+      {
+        "exerciseId": "E001",
+        "title": "nome-exato",
+        "category": "Categoria",
+        "subCategory": "SubCategoria",
+        "observation": "",
+        "blocks": [
+          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" }
+        ]
+      }
+    ]
+  }
+}
+// ☝️ Exemplo com 4 blocos = 4 séries (porque a ESTRUTURA pediu 4 séries pra esse grupo). Se a ESTRUTURA pedir outra quantidade, gere essa quantidade de blocos — não sempre 4.
+
+IMPORTANTE: "observation" deve ser SEMPRE string vazia "". Não escreva observações — o personal trainer fará isso manualmente.`;
+    const systemPromptStatic = smart ? smartPrompt : legacyPrompt();
+
     const variationClause = latestIds.size > 0
       ? `IDs usados na rotina anterior: ${Array.from(latestIds).join(', ')} — troque no mínimo 40%.`
       : 'Sem rotina anterior — crie variada.';
 
-    const userMessage = `${alunoCtx}${workoutsCtx}${cycleCtx}
+    // 🧠 modo inteligente: a mensagem leva o nível, o que fazer com cada exercício da rotina anterior e SÓ os candidatos de cada grupo (códigos curtos); o modo antigo segue igual
+    const userMessage = smart && cands && levelInfo
+      ? `${alunoCtx}
+
+${rotationText(prevRoutines, facts, book)}
+${cycleCtx}
+
+${levelRules ? `${levelPolicy(levelInfo.level, cycleConfig.phase).text}\n\n` : ''}${candidatesText(cands, cycleConfig.days, facts, book, trainingEnv || 'UNIVERSAL')}
+
+Responda APENAS com JSON válido.`.trim()
+      : `${alunoCtx}${workoutsCtx}${cycleCtx}
 
 ${variationClause}
 
@@ -452,17 +540,32 @@ Responda APENAS com JSON válido.`.trim();
       return exs;
     };
 
+    // 🧠 substituto de um exercício: o da biblioteca (defaultSubstitutes) primeiro, depois o que a IA escolheu; no modo inteligente, sem nenhum dos dois, o servidor escolhe um do mesmo músculo
+    const subFor = (exId: string, iaSubId?: string) => {
+      let substitute: any = null;
+      const preCalc = substitutesByExercise[exId];
+      if (preCalc?.length > 0) { const dbSub = exerciseMap.get(preCalc[0].id); if (dbSub) substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' }; }
+      else if (iaSubId && exerciseMap.has(iaSubId)) { const dbSub = exerciseMap.get(iaSubId)!; substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' }; }
+      if (!substitute && smart) {
+        const orig = exerciseMap.get(exId) as unknown as LibEx | undefined;
+        if (orig && String(orig.category || '').toUpperCase() !== 'CARDIO') {
+          const p = pickSwap(orig, adminExercises as unknown as LibEx[], { unavailable: bannedIds, jointRisks: excludeRisks, env: trainingEnv || 'UNIVERSAL', level: levelRules && levelInfo ? levelInfo.level : null, usedNames: new Set<string>(), envOk: () => true, levelIssues });
+          if (p) substitute = { id: p.id, name: p.name, videoUrl: p.videoUrl || '' };
+        }
+      }
+      return substitute;
+    };
+    const fixReps = (r: string, t: string) => t === '21' ? '21' : t === 'CLUSTERSET' ? '3' : t === 'GVT' ? '10' : r;
+    const fixSets = (s: string, t: string) => t === 'GVT' ? '1' : s;
+    const rawDays: Record<string, any[]> = {};
     for (const [day, exercises] of Object.entries(parsed.exercisesByDay || {})) {
-      let dayExercises = (exercises as any[])
+      rawDays[day] = (Array.isArray(exercises) ? (exercises as any[]) : [])
+        .filter(Boolean)
+        .map((ex) => ({ ...ex, exerciseId: book.resolve(ex.exerciseId), substitute: ex.substitute ? { ...ex.substitute, exerciseId: book.resolve(ex.substitute.exerciseId) } : ex.substitute }))
         .filter((ex) => { const ok = exerciseMap.has(ex.exerciseId); if (!ok) { ghostCount++; console.warn(`fantasma: ${ex.exerciseId}`); } return ok; })
         .map((ex) => {
           const dbEx = exerciseMap.get(ex.exerciseId)!;
-          let substitute = null;
-          const preCalc = substitutesByExercise[ex.exerciseId];
-          if (preCalc?.length > 0) { const dbSub = exerciseMap.get(preCalc[0].id); if (dbSub) substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' }; }
-          else if (ex.substitute?.exerciseId && exerciseMap.has(ex.substitute.exerciseId)) { const dbSub = exerciseMap.get(ex.substitute.exerciseId)!; substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' }; }
-          const fixReps = (r: string, t: string) => t === '21' ? '21' : t === 'CLUSTERSET' ? '3' : t === 'GVT' ? '10' : r;
-          const fixSets = (s: string, t: string) => t === 'GVT' ? '1' : s;
+          const substitute = subFor(ex.exerciseId, ex.substitute?.exerciseId);
 
           let rawBlocks = (ex.blocks || []).map((b: any) => {
             const tech = b.technique || '';
@@ -478,7 +581,27 @@ Responda APENAS com JSON válido.`.trim();
             blocks: rawBlocks,
           };
         });
+    }
 
+    // 🧠 REVISÃO depois da IA (lib/ai/workoutPlanner.ts → refineWorkout): completa o que faltou, tira o que passou, ajusta séries/repetições/técnicas pelo nível,
+    // troca o que repetiu da rotina anterior (ou de outro dia), e só deixa carga onde o aluno já treinou o exercício.
+    let reviewedDays: Record<string, any[]> = rawDays;
+    let quality: Quality | null = null;
+    if (smart && cands && levelInfo) {
+      const loaded = new Set<string>();
+      for (const h of history as any[]) for (const dd of h.details || []) if (Number(dd.weight) > 0) loaded.add(dd.exerciseId);
+      const r = refineWorkout(rawDays as Record<string, GenEx[]>, {
+        days: cycleConfig.days, phase: String(cycleConfig.phase || ''), level: levelInfo.level, levelRules,
+        lib: exerciseMap as unknown as Map<string, LibEx>, pool: adminExercises as unknown as LibEx[], cands, facts, hasPrev: prevRoutines.length > 0,
+        env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded,
+        makeEx: (e, blocks) => ({ exerciseId: e.id, title: e.name, videoUrl: e.videoUrl || '', category: e.category, subCategory: e.subCategory, observation: '', substitute: subFor(e.id), blocks }),
+      });
+      reviewedDays = r.byDay; quality = r.quality;
+      if (techRemoved.length) quality.fixes.unshift(`Técnicas tiradas do ciclo pelo nível ${levelInfo.label}: ${techRemoved.join(', ')}`);
+    }
+
+    for (const [day, list] of Object.entries(reviewedDays)) {
+      let dayExercises = list as any[];
       // 🔥 Corrige cadeias de técnicas que agrupam exercícios (BI-SET=2,
       // TRI-SET=3, ...): só podem existir em grupos FECHADOS do tamanho
       // certo, consecutivos. Generalizado a partir da correção original que
@@ -519,7 +642,7 @@ Responda APENAS com JSON válido.`.trim();
 
     // 📊 registro de custo (não pode derrubar a geração)
     if (genUsage) {
-      try { await (prisma as any).aiLog.create({ data: { userId: adminId, question: `gerar-treino:${selectedAI}`, answer: JSON.stringify({ ...genUsage, ms: genUsage.ms ?? Date.now() - genT0, studentId: userId, bankExercises: adminExercises.length, days: workoutTabs.length, exercises: totalExercises, ghosts: ghostCount }).slice(0, 2000) } }); } catch (e) { /* sem registro */ }
+      try { await (prisma as any).aiLog.create({ data: { userId: adminId, question: `gerar-treino:${selectedAI}`, answer: JSON.stringify({ ...genUsage, ms: genUsage.ms ?? Date.now() - genT0, studentId: userId, bankExercises: adminExercises.length, days: workoutTabs.length, exercises: totalExercises, ghosts: ghostCount, ...(quality ? { smart: true, score: quality.score, newPct: quality.stats.newPct, swapped: quality.stats.swapped, filled: quality.stats.filled, candidates: book.size } : {}) }).slice(0, 2000) } }); } catch (e) { /* sem registro */ }
     }
 
     return {
@@ -532,6 +655,8 @@ Responda APENAS com JSON válido.`.trim();
         trainingEnvironment: trainingEnv || 'UNIVERSAL',
         exercisesByDay: validatedDays,
         workoutTabs,
+        // 🧠 revisão automática (só no modo inteligente): nota, o que foi ajustado e o que ainda merece o olhar do coach
+        ...(quality && levelInfo ? { quality, levelInfo: { level: levelInfo.level, label: levelInfo.label, months: levelInfo.months, sessions: levelInfo.sessions } } : {}),
         ...(excludeRisks.length ? { jointFilter: { risks: excludeRisks, excluded: allAdminExercises.length - afterJoint.length } } : {}),
         ...(avoidedNames.length ? { avoidedUnavailable: avoidedNames } : {}),
       },

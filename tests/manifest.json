@@ -266,6 +266,9 @@
  "t_workout_extend": [
   "build70.mjs"
  ],
+ "t_workout_planner": [
+  "build70.mjs"
+ ],
  "t_workout_share": [
   "build38.mjs",
   "build71.mjs",

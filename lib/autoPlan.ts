@@ -520,6 +520,9 @@ async function doWorkouts(ctx: Ctx): Promise<string[]> {
       if (chk.blocking.length) throw new Error(`Treino fora do padrão: ${chk.blocking.join('; ')}`);
       ctx.quality.workout.push(...chk.notes.map((n) => `${phase.key} · ${n}`));
       ctx.quality.repairs += chk.repairs;
+      // 🧠 (19 out 2026) a revisão automática da montagem (lib/ai/workoutPlanner.ts) conserta ANTES desta conferência: o que ela mudou também entra no resumo
+      const rq = res.body.quality;
+      if (rq) { ctx.quality.workout.push(...(rq.fixes || []).map((n: string) => `${phase.key} · ${n}`), ...(rq.issues || []).map((n: string) => `${phase.key} · atenção: ${n}`)); ctx.quality.repairs += Number(rq.stats?.repairs) || 0; }
       return chk.body;
     });
     // sem nenhum treino registrado, a carga que a IA escreveria seria chute: em branco, o aluno acha a dele no primeiro treino

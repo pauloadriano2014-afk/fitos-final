@@ -207,7 +207,9 @@ const ADVANCED_TECH: Record<LevelKey, string[]> = {
   AVANCADO: [],
 };
 const COMPLEX_FOR_BEGINNER: RegExp[] = [/levantamento terra/, /agachamento (livre|frontal|bulgaro|sumo|hack livre)/, /\bbarra fixa\b(?!.*(assist|gravitron|graviton))/, /\b(mergulho|paralela)\b/, /desenvolvimento.*(militar|em pe)/, /\b(arranco|arremesso|power clean|clean)\b/, /good ?morning/, /stiff.*barra|barra.*stiff/];
-const techNorm = (t: string) => t.toUpperCase().replace(/[\s_-]/g, '');
+export const techNorm = (t: string) => t.toUpperCase().replace(/[\s_-]/g, '');
+/** Técnicas que ainda são avançadas demais para o nível (já normalizadas: sem espaço, "_" nem "-"). */
+export const advancedTechsFor = (level: LevelKey): string[] => ADVANCED_TECH[level] || [];
 /** O que, neste exercício, pede mais nível do que o aluno tem: as técnicas avançadas (para tirar) e se o exercício em si é complexo (para trocar). */
 export function levelFix(name: string, technique: string | null, level?: LevelKey | null): { techs: string[]; complex: boolean } {
   if (!level) return { techs: [], complex: false };
