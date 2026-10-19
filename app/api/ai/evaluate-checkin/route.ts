@@ -6,6 +6,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
+import { callArgon, ARGON_LABEL } from '@/lib/ai/argon';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
@@ -22,11 +24,12 @@ const MASTER_IDS = [
 
 const ADRI_ID = 'b7c0c181-41fd-4156-b8fe-963a267759a3';
 
-export type AIModelKey = 'gemini-flash' | 'gemini-pro' | 'claude-haiku' | 'gpt-4o-mini';
+export type AIModelKey = 'gemini-flash' | 'gemini-pro' | 'gemini-argon' | 'claude-haiku' | 'gpt-4o-mini';
 
 const MODEL_LABELS: Record<AIModelKey, string> = {
     'gemini-flash': 'Gemini 2.5 Flash',
     'gemini-pro':   'Gemini 2.5 Pro',
+    'gemini-argon': 'Gemini 4 Argon (teste)',
     'claude-haiku': 'Claude Haiku 4.5',
     'gpt-4o-mini':  'GPT-4o mini',
 };
@@ -167,7 +170,7 @@ export async function POST(req: Request) {
 
         // Masters podem escolher o modelo; parceiros ficam sempre no flash
         const isMasterRequest = MASTER_IDS.includes(coachId ?? '');
-        const selectedModel: AIModelKey = isMasterRequest
+        const selectedModel: AIModelKey = isMasterRequest && Object.prototype.hasOwnProperty.call(MODEL_LABELS, aiModel)
             ? (aiModel as AIModelKey)
             : 'gemini-flash';
 
@@ -408,12 +411,23 @@ ${signatureBlock}`;
 
         // ── 10. CHAMADA AO MODELO ESCOLHIDO ─────────────────────────────────
         let analysisText = '';
+        let argonUsage: any = null;
 
         if (selectedModel === 'gemini-flash' || selectedModel === 'gemini-pro') {
             const geminiId   = selectedModel === 'gemini-flash' ? 'gemini-2.5-flash' : 'gemini-2.5-pro';
             const imageParts = (await Promise.all(validUrls.map(imageUrlToBase64))).filter(Boolean);
             if (!imageParts.length) throw new Error('Falha ao processar imagens para o Gemini.');
             analysisText = await callGemini(geminiId, finalPrompt, imageParts);
+        } else if (selectedModel === 'gemini-argon') {
+            // 🧪 (19 out 2026) Gemini 4 Argon, motor de TESTE só para masters (lib/ai/argon.ts). Limite de 50 s porque esta rota fecha em 60 s.
+            const imageParts = (await Promise.all(validUrls.map(imageUrlToBase64))).filter(Boolean);
+            if (!imageParts.length) throw new Error('Falha ao processar imagens para o Gemini.');
+            const apiKey = process.env.GOOGLE_AI_KEY || process.env.GEMINI_API_KEY;
+            if (!apiKey) throw new Error('GOOGLE_AI_KEY não configurada.');
+            const out = await callArgon(new GoogleGenAI({ apiKey }), { user: finalPrompt, images: imageParts, timeoutMs: 50_000, retries: 1 });
+            analysisText = out.text;
+            argonUsage = out.usage;
+            console.log(`✅ ${ARGON_LABEL}: ${out.usage.inputTokens} in / ${out.usage.outputTokens}+${out.usage.thinkingTokens} out | ${out.usage.ms} ms | ~US$ ${out.usage.usd}`);
         } else if (selectedModel === 'claude-haiku') {
             const rawImages = (await Promise.all(validUrls.map(imageUrlToRawBase64))).filter(Boolean) as Array<{ data: string; mimeType: string }>;
             if (!rawImages.length) throw new Error('Falha ao processar imagens para o Claude.');
@@ -439,7 +453,12 @@ ${signatureBlock}`;
             }).catch(e => console.warn('⚠️ Falha ao gravar aiEvaluatedAt:', e.message));
         }
 
-        return NextResponse.json({ analysis: analysisText, isFinal: isFinalCheckIn, modelUsed: MODEL_LABELS[selectedModel] });
+        // 📊 (19 out 2026) o que o Argon gastou em cada avaliação fica no AiLog — é o que mostra, com número real, quanto custa em relação ao Flash (não pode derrubar a avaliação)
+        if (argonUsage) {
+            try { await (prisma as any).aiLog.create({ data: { userId: auth.user.id, question: 'avaliar-checkin:gemini-argon', answer: JSON.stringify({ ...argonUsage, photos: validUrls.length, studentId: checkIn?.userId ?? null, chars: analysisText.length }).slice(0, 2000) } }); } catch (e) { /* sem registro */ }
+        }
+
+        return NextResponse.json({ analysis: analysisText, isFinal: isFinalCheckIn, modelUsed: MODEL_LABELS[selectedModel], ...(argonUsage ? { usage: argonUsage } : {}) });
 
     } catch (error: any) {
         console.error('❌ Erro FATAL evaluate-checkin:', error);

@@ -164,7 +164,7 @@ export function buildSplit(spec: PlanSpec, gender?: string | null): Day[] {
   const letters = 'ABCDEFGHIJKLMNOP';
 
   if (spec.fatLoss) {
-    const seq = FAT_LOSS_SEQUENCES[clamp(spec.freq, 2, 5)].map((l) => (l === 'LAST' ? (fem ? 'Glúteos Foco' : 'Quadríceps Isolado') : l));
+    const seq = FAT_LOSS_SEQUENCES[clamp(spec.freq, 2, 5)].map((l) => (l === 'LAST' ? (fem ? 'Glúteos Foco' : 'Quadríceps') : l));
     const strength = ensureCoverage(seq.map((label, i) => ({ id: String(i + 1), name: letters[i], groups: groupsOf(label) })));
     // dias só de cardio (desafio de 21 dias): 2 exercícios de cardio, em abas depois das de musculação
     const cardio: Day[] = Array.from({ length: spec.cardioDays || 0 }, (_, i) => ({ id: String(strength.length + i + 1), name: letters[strength.length + i], groups: [{ id: 'CARDIO', qty: 2 }] }));

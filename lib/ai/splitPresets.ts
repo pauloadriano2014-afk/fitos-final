@@ -59,28 +59,47 @@ export const DEFAULT_LIMITATION_RULES = [
   },
 ];
 
+// 📊 (19 out 2026) MODELOS DE DIA BASEADOS NO HISTÓRICO REAL. Saíram de uma análise dos treinos ativos que o Paulo e a Adri montaram (consulta só de leitura no banco):
+// para cada dia de treino, contei quantos exercícios havia de cada grupo e agrupei os dias parecidos. `seen` = quantos dias dos treinos ATUAIS têm esse perfil (um por aluno(a),
+// o treino mais recente de cada uma). Modelos sem `seen` são básicos (não apareceram sozinhos no histórico) e continuam por serem úteis para poucos dias na semana.
+export const ANALISE_TREINOS = {
+  data: '19/10/2026',
+  feminino:  { treinos: 209, pessoas: 52 },
+  masculino: { treinos: 109, pessoas: 28 },
+};
+
 export const buildPresets = (gender) => {
   const isFem = gender === 'Feminino';
+  if (isFem) return [
+    { category: 'Pernas', label: 'Quadríceps + Glúteos', seen: 45, groups: [{ id: 'QUADRICEPS', qty: 4 }, { id: 'GLUTEOS', qty: 2 }, { id: 'PANTURRILHA', qty: 1 }] },
+    { category: 'Pernas', label: 'Pernas Completo', seen: 42, groups: [{ id: 'QUADRICEPS', qty: 2 }, { id: 'POSTERIORES', qty: 2 }, { id: 'GLUTEOS', qty: 2 }, { id: 'PANTURRILHA', qty: 1 }] },
+    { category: 'Pernas', label: 'Glúteos Foco', seen: 17, groups: [{ id: 'GLUTEOS', qty: 4 }, { id: 'QUADRICEPS', qty: 2 }, { id: 'POSTERIORES', qty: 1 }, { id: 'PANTURRILHA', qty: 1 }] },
+    { category: 'Pernas', label: 'Posteriores + Glúteos', seen: 16, groups: [{ id: 'POSTERIORES', qty: 3 }, { id: 'GLUTEOS', qty: 2 }, { id: 'QUADRICEPS', qty: 2 }, { id: 'PANTURRILHA', qty: 1 }] },
+    { category: 'Superiores', label: 'Costas + Ombros', seen: 35, groups: [{ id: 'COSTAS_PUXADA', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'OMBRO_MULTI', qty: 1 }, { id: 'OMBRO_FRONTAL', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 1 }] },
+    { category: 'Superiores', label: 'Costas + Braços', seen: 16, groups: [{ id: 'COSTAS_PUXADA', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'BICEPS', qty: 1 }, { id: 'TRICEPS', qty: 1 }, { id: 'ABDOMEN', qty: 2 }] },
+    { category: 'Superiores', label: 'Ombros + Braços', seen: 14, groups: [{ id: 'OMBRO_MULTI', qty: 1 }, { id: 'OMBRO_FRONTAL', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 1 }, { id: 'OMBRO_POST', qty: 1 }, { id: 'BICEPS', qty: 1 }, { id: 'TRICEPS', qty: 1 }] },
+    { category: 'Superiores', label: 'Peito + Ombros', seen: 9, groups: [{ id: 'PEITO', qty: 2 }, { id: 'OMBRO_MULTI', qty: 1 }, { id: 'OMBRO_FRONTAL', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 1 }, { id: 'BICEPS', qty: 2 }, { id: 'TRICEPS', qty: 2 }] },
+    { category: 'Superiores', label: 'Costas Completa', seen: 6, groups: [{ id: 'COSTAS_PUXADA', qty: 3 }, { id: 'COSTAS_REMADA', qty: 3 }, { id: 'OMBRO_POST', qty: 1 }] },
+    { category: 'Combinados', label: 'Superior Geral', groups: [{ id: 'PEITO', qty: 2 }, { id: 'COSTAS_PUXADA', qty: 1 }, { id: 'COSTAS_REMADA', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 1 }, { id: 'BICEPS', qty: 1 }, { id: 'TRICEPS', qty: 1 }] },
+    { category: 'Combinados', label: 'Full Body', groups: [{ id: 'QUADRICEPS', qty: 2 }, { id: 'GLUTEOS', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'PEITO', qty: 2 }, { id: 'ABDOMEN', qty: 1 }] },
+    { category: 'Isolados', label: 'Abdômen', seen: 24, groups: [{ id: 'ABDOMEN', qty: 4 }] },
+    { category: 'Isolados', label: 'Cardio', groups: [{ id: 'CARDIO', qty: 1 }] },
+  ];
   return [
-    { category: 'Pernas', label: 'Pernas Completo', groups: [{ id: 'QUADRICEPS', qty: 3 }, { id: 'POSTERIORES', qty: 2 }, { id: 'GLUTEOS', qty: 2 }, { id: 'PANTURRILHA', qty: 2 }, { id: 'ADUTOR', qty: 1 }, { id: 'ABDUTOR', qty: 1 }] },
-    { category: 'Pernas', label: 'Quadríceps Isolado', groups: [{ id: 'QUADRICEPS', qty: 5 }, { id: 'PANTURRILHA', qty: 2 }] },
-    { category: 'Pernas', label: 'Posteriores Isolado', groups: [{ id: 'POSTERIORES', qty: 4 }, { id: 'PANTURRILHA', qty: 2 }] },
-    ...(isFem ? [
-      { category: 'Pernas', label: 'Glúteos Foco', groups: [{ id: 'GLUTEOS', qty: 5 }, { id: 'ABDUTOR', qty: 2 }, { id: 'PANTURRILHA', qty: 1 }] },
-      { category: 'Pernas', label: 'Glúteos + Post.', groups: [{ id: 'GLUTEOS', qty: 4 }, { id: 'POSTERIORES', qty: 3 }, { id: 'PANTURRILHA', qty: 1 }] },
-    ] : []),
-    { category: 'Superiores', label: 'Costas Completa', groups: [{ id: 'COSTAS_PUXADA', qty: 3 }, { id: 'COSTAS_REMADA', qty: 3 }, { id: 'TRAPEZIO', qty: 1 }] },
-    { category: 'Superiores', label: 'Peito Isolado', groups: [{ id: 'PEITO', qty: 4 }, { id: 'TRICEPS', qty: 2 }] },
-    { category: 'Superiores', label: 'Ombros Completo', groups: [{ id: 'OMBRO_MULTI', qty: 2 }, { id: 'OMBRO_FRONTAL', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 2 }, { id: 'OMBRO_POST', qty: 1 }, { id: 'TRAPEZIO', qty: 1 }] },
-    { category: 'Superiores', label: 'Braços Isolado', groups: [{ id: 'BICEPS', qty: 3 }, { id: 'TRICEPS', qty: 3 }, { id: 'ABDOMEN', qty: 2 }] },
-    { category: 'Superiores', label: 'Costas + Ombros', groups: [{ id: 'COSTAS_PUXADA', qty: 3 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'OMBRO_MULTI', qty: 2 }, { id: 'TRAPEZIO', qty: 1 }] },
-    ...(isFem ? [] : [
-      { category: 'Superiores', label: 'Peito + Tríceps', groups: [{ id: 'PEITO', qty: 3 }, { id: 'TRICEPS', qty: 3 }, { id: 'ABDOMEN', qty: 2 }] },
-      { category: 'Superiores', label: 'Costas + Bíceps', groups: [{ id: 'COSTAS_PUXADA', qty: 3 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'BICEPS', qty: 3 }] },
-    ]),
+    { category: 'Pernas', label: 'Quadríceps', seen: 22, groups: [{ id: 'QUADRICEPS', qty: 5 }] },
+    { category: 'Pernas', label: 'Posteriores + Panturrilha', seen: 17, groups: [{ id: 'POSTERIORES', qty: 3 }, { id: 'PANTURRILHA', qty: 2 }, { id: 'QUADRICEPS', qty: 1 }] },
+    { category: 'Pernas', label: 'Pernas Completo', groups: [{ id: 'QUADRICEPS', qty: 3 }, { id: 'POSTERIORES', qty: 2 }, { id: 'GLUTEOS', qty: 1 }, { id: 'PANTURRILHA', qty: 2 }] },
+    { category: 'Superiores', label: 'Peito + Ombros + Bíceps', seen: 19, groups: [{ id: 'PEITO', qty: 5 }, { id: 'OMBRO_MULTI', qty: 1 }, { id: 'OMBRO_FRONTAL', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 2 }, { id: 'BICEPS', qty: 3 }] },
+    { category: 'Superiores', label: 'Peito + Ombros', seen: 19, groups: [{ id: 'PEITO', qty: 4 }, { id: 'OMBRO_MULTI', qty: 1 }, { id: 'OMBRO_FRONTAL', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 2 }] },
+    { category: 'Superiores', label: 'Peito + Tríceps + Abdômen', seen: 9, groups: [{ id: 'PEITO', qty: 5 }, { id: 'TRICEPS', qty: 3 }, { id: 'ABDOMEN', qty: 2 }] },
+    { category: 'Superiores', label: 'Costas + Ombros', seen: 12, groups: [{ id: 'COSTAS_PUXADA', qty: 2 }, { id: 'COSTAS_REMADA', qty: 4 }, { id: 'OMBRO_POST', qty: 1 }, { id: 'TRAPEZIO', qty: 1 }] },
+    { category: 'Superiores', label: 'Costas + Bíceps', seen: 8, groups: [{ id: 'COSTAS_PUXADA', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'OMBRO_POST', qty: 1 }, { id: 'BICEPS', qty: 3 }] },
+    { category: 'Superiores', label: 'Ombros + Abdômen', seen: 12, groups: [{ id: 'OMBRO_MULTI', qty: 1 }, { id: 'OMBRO_FRONTAL', qty: 2 }, { id: 'OMBRO_LATERAL', qty: 2 }, { id: 'OMBRO_POST', qty: 1 }, { id: 'TRAPEZIO', qty: 1 }, { id: 'ABDOMEN', qty: 3 }] },
+    { category: 'Superiores', label: 'Braços + Abdômen', seen: 6, groups: [{ id: 'BICEPS', qty: 4 }, { id: 'TRICEPS', qty: 3 }, { id: 'ABDOMEN', qty: 3 }] },
+    { category: 'Superiores', label: 'Costas Completa', seen: 5, groups: [{ id: 'COSTAS_PUXADA', qty: 3 }, { id: 'COSTAS_REMADA', qty: 3 }, { id: 'TRAPEZIO', qty: 1 }] },
     { category: 'Combinados', label: 'Superior Geral', groups: [{ id: 'PEITO', qty: 2 }, { id: 'COSTAS_PUXADA', qty: 2 }, { id: 'OMBRO_LATERAL', qty: 2 }, { id: 'BICEPS', qty: 2 }, { id: 'TRICEPS', qty: 2 }] },
-    { category: 'Combinados', label: 'Full Body', groups: [{ id: 'QUADRICEPS', qty: 2 }, { id: isFem ? 'GLUTEOS' : 'POSTERIORES', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'PEITO', qty: 2 }, { id: 'ABDOMEN', qty: 1 }] },
-    { category: 'Isolados', label: 'Abdômen Isolado', groups: [{ id: 'ABDOMEN', qty: 5 }] },
+    { category: 'Combinados', label: 'Full Body', groups: [{ id: 'QUADRICEPS', qty: 2 }, { id: 'POSTERIORES', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'PEITO', qty: 2 }, { id: 'ABDOMEN', qty: 1 }] },
+    { category: 'Isolados', label: 'Abdômen', groups: [{ id: 'ABDOMEN', qty: 4 }] },
     { category: 'Isolados', label: 'Cardio', groups: [{ id: 'CARDIO', qty: 1 }] },
   ];
 };
@@ -102,22 +121,24 @@ export const buildDefaultDays = (freq) => {
 // quantidade de dias/gênero -- é só um PONTO DE PARTIDA razoável: a tela de
 // revisão (ComparisonModal → MontarTreinoAdmin) continua existindo depois,
 // então o coach ainda pode ajustar tudo antes de qualquer coisa ser salva.
+// (19 out 2026) As sequências abaixo seguem o que o Paulo e a Adri realmente montam (análise do histórico, ver ANALISE_TREINOS em _constants.js): mulheres com pernas em
+// 2 a 3 dias separados (quadríceps/glúteos e posteriores/glúteos) e dia só de abdômen; homens com costas+ombros, dois dias de peito e pernas separadas em quadríceps e posteriores.
 const DEFAULT_SPLIT_SEQUENCES = {
   masculino: {
     1: ['Full Body'],
     2: ['Superior Geral', 'Pernas Completo'],
-    3: ['Peito + Tríceps', 'Costas + Bíceps', 'Pernas Completo'],
-    4: ['Peito + Tríceps', 'Costas + Bíceps', 'Pernas Completo', 'Ombros Completo'],
-    5: ['Peito + Tríceps', 'Costas + Bíceps', 'Pernas Completo', 'Ombros Completo', 'Braços Isolado'],
-    6: ['Peito + Tríceps', 'Costas + Bíceps', 'Pernas Completo', 'Ombros Completo', 'Braços Isolado', 'Quadríceps Isolado'],
+    3: ['Peito + Tríceps + Abdômen', 'Costas + Bíceps', 'Pernas Completo'],
+    4: ['Peito + Ombros + Bíceps', 'Costas + Ombros', 'Quadríceps', 'Posteriores + Panturrilha'],
+    5: ['Costas + Ombros', 'Peito + Tríceps + Abdômen', 'Peito + Ombros + Bíceps', 'Quadríceps', 'Posteriores + Panturrilha'],
+    6: ['Costas + Ombros', 'Peito + Tríceps + Abdômen', 'Peito + Ombros + Bíceps', 'Quadríceps', 'Posteriores + Panturrilha', 'Braços + Abdômen'],
   },
   feminino: {
     1: ['Full Body'],
     2: ['Superior Geral', 'Pernas Completo'],
-    3: ['Superior Geral', 'Glúteos Foco', 'Pernas Completo'],
-    4: ['Costas Completa', 'Pernas Completo', 'Peito Isolado', 'Glúteos + Post.'],
-    5: ['Costas Completa', 'Peito Isolado', 'Pernas Completo', 'Glúteos Foco', 'Ombros Completo'],
-    6: ['Costas Completa', 'Peito Isolado', 'Glúteos Foco', 'Pernas Completo', 'Ombros Completo', 'Glúteos + Post.'],
+    3: ['Superior Geral', 'Quadríceps + Glúteos', 'Posteriores + Glúteos'],
+    4: ['Costas + Ombros', 'Quadríceps + Glúteos', 'Peito + Ombros', 'Posteriores + Glúteos'],
+    5: ['Costas + Ombros', 'Quadríceps + Glúteos', 'Peito + Ombros', 'Posteriores + Glúteos', 'Abdômen'],
+    6: ['Costas + Ombros', 'Quadríceps + Glúteos', 'Peito + Ombros', 'Posteriores + Glúteos', 'Costas + Braços', 'Glúteos Foco'],
   },
 };
 

@@ -23,6 +23,9 @@
  "t_android_tester": [
   "profile:partner-android"
  ],
+ "t_argon": [
+  "build72.mjs"
+ ],
  "t_assistant_guides": [
   "build70.mjs"
  ],
