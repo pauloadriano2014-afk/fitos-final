@@ -50,8 +50,9 @@ export async function POST(req: Request) {
       updated++;
     };
     for (const c of changes) { const r = byId.get(String(c?.id)); if (r) await save(r, cleanExtraPatch(c)); }
+    const edited = new Set(changes.map((c) => String(c?.id || '')));
     for (const id of approve) {
-      const r = byId.get(id); if (!r) continue;
+      const r = byId.get(id); if (!r || edited.has(id)) continue;   // o que o coach acabou de editar à mão não é sobrescrito pela sugestão
       const ef = effectiveExtra(r);
       await save(r, { impact: ef.impact, avoid: ef.avoid });
     }
