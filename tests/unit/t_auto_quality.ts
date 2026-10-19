@@ -212,7 +212,9 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
         return { text: JSON.stringify({ reasoning: 'ok', meals }), usageMetadata: { promptTokenCount: 3000, candidatesTokenCount: 1500 } };
       }
       cfg.wCalls++;
+      // modo inteligente: candidatos por grupo ("## GRUPO" e linhas "E001 | nome | ..."); modo antigo (cycleConfig.smart=false): JSON do banco
       const bankM = text.match(/BANCO \(ambiente [^)]*\):\n(\[.*\])\n/); const bank: any[] = bankM ? JSON.parse(bankM[1]) : [];
+      if (!bankM) { let tg = ''; for (const line of text.split('\n')) { const h = line.match(/^## ([A-Z_]+)/); if (h) { tg = h[1]; continue; } const m = line.match(/^(E\d{3}) \| (.+?) \| /); if (m && tg) bank.push({ id: m[1], name: m[2], target: tg }); } }
       const byTarget: Record<string, any[]> = {}; for (const b of bank) (byTarget[b.target] = byTarget[b.target] || []).push(b);
       const exercisesByDay: any = {};
       for (const [, d, body] of text.matchAll(/Dia ([A-Z]):\n((?:    - .*\n?)*)/g)) {
@@ -286,7 +288,8 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
   const techOf = (txt: string) => (txt.match(/TÉCNICAS: (.*)\n/) || [])[1];
   assert.equal(techOf(wc[0]), 'BISET'); assert.equal(techOf(wc[1]), 'BISET', 'fase de choque no modo seguro: só BISET (sem DROPSET/RESTPAUSE)');
   assert.ok(wc[0].includes('- CARDIO: carga LEVE. Intensidade leve a moderada (Zona 2), sem HIIT nem tiros.') && wc[0].includes('- GERAL: observação: "Cargas moderadas, execução controlada e sem levar nenhuma série à falha."'), 'regra de cardio leve e cargas moderadas chega à IA, nos formatos que a IA já entende: ' + wc[0].slice(wc[0].indexOf('LIMITAÇÕES')));
-  const bankIds = (txt: string) => JSON.parse((txt.match(/BANCO \(ambiente [^)]*\):\n(\[.*\])\n/) || [])[1]).map((b: any) => b.id);
+  // quais exercícios (pelo nome "GRUPO n" da biblioteca de teste) chegaram à IA como candidatos
+  const bankIds = (txt: string) => [...txt.matchAll(/^E\d{3} \| ([A-Z_]+) (\d+) \| /gm)].map((m) => exId(m[1], Number(m[2])));
   for (const txt of wc) { const ids = bankIds(txt); for (let n = 1; n <= 3; n++) assert.ok(!ids.includes(exId('QUADRICEPS', n)), 'exercício de risco para joelho não chega à IA'); assert.ok(ids.includes(exId('QUADRICEPS', 4)) && ids.includes(exId('PEITO', 1)), 'os demais ficam (peito marcado só para ombro)'); }
   assert.ok(savedRows().every((e: any) => ![1, 2, 3].some((n) => e.exerciseId === exId('QUADRICEPS', n))), 'e não entram no treino salvo');
   assert.deepEqual(rs.summary.safety, { conservative: ['Hipertensão', 'Limitações/cirurgias: Joelho'], excludeJointRisk: ['JOELHO'] }); assert.ok(G.__pushes.find((p: any) => p.to === PAULO_ID && p.data.type === 'auto_plan_done').body.includes('modo seguro'), 'o coach sabe que foi modo seguro');
@@ -313,20 +316,71 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
     const seen: any[] = [];
     G.__LLM = async ({ model, args }: any) => { seen.push({ model, args }); const text = String(args.system[0].text) + '\n\n' + String(args.messages[0].content); const r = await G.__GEMINI({ contents: text }); return { content: [{ type: 'text', text: r.text }] }; };
     const res: any = await generateWorkoutPlan({ userId: 'q1', adminId: PAULO_ID, cycleConfig: mk('HAIKU') }); assert.equal(res.status, 200); assert.ok(Object.keys(res.body.exercisesByDay).length >= 2 && res.body.workoutTabs.length >= 2, 'treino montado e validado');
-    assert.equal(seen.length, 1); assert.equal(seen[0].model, 'claude-haiku-5-5'); const a = seen[0].args; assert.deepEqual(a.system[0].cache_control, { type: 'ephemeral' }, 'prompt fixo em cache'); assert.ok(String(a.system[0].text).includes('BANCO (ambiente') && !String(a.messages[0].content).includes('BANCO ('), 'biblioteca no prompt fixo, aluno na mensagem'); assert.deepEqual(a.output_config, { effort: 'low' }); assert.equal(a.max_tokens, 16000); assert.ok(!('tool_choice' in a) && !('temperature' in a), 'nada forçado');
+    assert.equal(seen.length, 1); assert.equal(seen[0].model, 'claude-haiku-5-5'); const a = seen[0].args; assert.deepEqual(a.system[0].cache_control, { type: 'ephemeral' }, 'prompt fixo em cache'); assert.ok(!String(a.system[0].text).includes('BANCO DE CANDIDATOS (ambiente') && String(a.messages[0].content).includes('BANCO DE CANDIDATOS (ambiente'), 'regras no prompt fixo; aluno, rotina anterior e candidatos na mensagem'); assert.deepEqual(a.output_config, { effort: 'low' }); assert.equal(a.max_tokens, 20000); assert.deepEqual(a.thinking, { type: 'disabled' }, 'Haiku: sem pensamento (gastava o limite e cortava o treino)'); assert.ok(!('tool_choice' in a) && !('temperature' in a), 'nada forçado');
     const log = db.aiLog.filter((l: any) => l.question === 'gerar-treino:HAIKU'); assert.equal(log.length, 1, 'custo registrado'); assert.equal(log[0].userId, PAULO_ID); const lj = JSON.parse(log[0].answer); assert.equal(lj.model, 'claude-haiku-5-5'); assert.equal(lj.inputTokens, 1500); assert.equal(lj.outputTokens, 700); assert.equal(lj.studentId, 'q1'); assert.ok(lj.bankExercises > 10 && lj.exercises > 0 && lj.days >= 2 && lj.usd > 0);
-    seen.length = 0; const res2: any = await generateWorkoutPlan({ userId: 'q1', adminId: PAULO_ID, cycleConfig: mk('CLAUDE') }); assert.equal(res2.status, 200); assert.equal(seen[0].model, 'claude-sonnet-5-5'); assert.deepEqual(seen[0].args.output_config, { effort: 'medium' }); assert.equal(db.aiLog.filter((l: any) => l.question === 'gerar-treino:CLAUDE').length, 1);
+    seen.length = 0; const res2: any = await generateWorkoutPlan({ userId: 'q1', adminId: PAULO_ID, cycleConfig: mk('CLAUDE') }); assert.equal(res2.status, 200); assert.equal(seen[0].model, 'claude-sonnet-5-5'); assert.deepEqual(seen[0].args.output_config, { effort: 'medium' }); assert.deepEqual(seen[0].args.thinking, { type: 'between_tools' }, 'Sonnet 5.5 recusa thinking disabled'); assert.equal(db.aiLog.filter((l: any) => l.question === 'gerar-treino:CLAUDE').length, 1);
     // parceiro (não é do time master) não escolhe HAIKU: cai no Gemini Flash
     db.user.push({ id: 'coach-x', role: 'ADMIN', email: 'x@x.com', name: 'Parceiro', accountStatus: 'ACTIVE', active: true }); db.user.find((u: any) => u.id === 'q1').coachId = 'coach-x'; for (const e of db.exercise) e.coachId = 'coach-x';
     seen.length = 0; G.__AI_CALLS.length = 0; const res3: any = await generateWorkoutPlan({ userId: 'q1', adminId: 'coach-x', cycleConfig: mk('HAIKU') }); assert.equal(res3.status, 200); assert.equal(seen.length, 0, 'parceiro: a Anthropic nem foi chamada'); assert.ok(G.__AI_CALLS.length >= 1, 'foi para o Gemini');
     G.__LLM = null; }
   console.log('OK  motores Anthropic: Haiku e Sonnet montam treino pelo mesmo prompt e validação, prompt fixo em cache, custo registrado, parceiro não escolhe');
 
+  // 🧠 montagem inteligente (lib/ai/workoutPlanner.ts) de ponta a ponta: nível, rotina anterior (MANTER/TROCAR), candidatos com códigos curtos, revisão depois da IA
+  { const mkCfg = (over: any = {}) => ({ selectedAI: 'GEMINI', phase: 'HIPERTROFIA', techniques: ['BISET'], techniqueScope: 'CYCLE', gender: 'Feminino', trainingEnvironment: 'ACADEMIA_PADRAO', manualExercisesByDay: {}, limitationRules: [],
+      days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 3, sets: 3, rest: 60 }, { id: 'BICEPS', qty: 2, sets: 3, rest: 30 }] }, { name: 'B', groups: [{ id: 'COSTAS_REMADA', qty: 3, sets: 3, rest: 60 }, { id: 'TRICEPS', qty: 2, sets: 3, rest: 30 }] }], ...over });
+    const prevRoutine = () => {
+      db.workout.push({ id: 'wp', userId: 'q1', name: 'Ficha anterior', workoutModel: 'CARGA', createdAt: new Date(Date.now() - 5000) }); let o = 0;
+      const row = (day: string, g: string, n: number) => db.workoutExercise.push({ id: `we-${day}-${g}-${n}`, workoutId: 'wp', exerciseId: exId(g, n), day, order: o++, sets: 3, reps: '10', restTime: 60, technique: JSON.stringify({ t: '', b: [{ sets: '1', reps: '10', restTime: '60', technique: '' }] }) });
+      [1, 2, 3].forEach((n) => row('A', 'PEITO', n)); [1, 2].forEach((n) => row('A', 'BICEPS', n)); [1, 2, 3].forEach((n) => row('B', 'COSTAS_REMADA', n)); [1, 2].forEach((n) => row('B', 'TRICEPS', n));
+    };
+    const lastPrompt = () => String(G.__AI_CALLS.at(-1).contents);
+    const gen = async (cc: any) => { const r: any = await quiet(() => generateWorkoutPlan({ userId: 'q1', adminId: PAULO_ID, cycleConfig: cc })); assert.equal(r.status, 200, JSON.stringify(r.body)); return r; };
+    const idsOf = (r: any, day: string) => r.body.exercisesByDay[day].map((e: any) => e.exerciseId);
+
+    // 1) a IA obedece: prompt com códigos, rotina anterior com MANTER/TROCAR, candidatos; ids verdadeiros nunca vão para a IA; a resposta volta com ids verdadeiros
+    seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); prevRoutine(); let r = await gen(mkCfg()); let p = lastPrompt();
+    assert.ok(p.includes('ROTINA ANTERIOR "Ficha anterior"') && p.includes('→ MANTER') && p.includes('→ TROCAR') && p.includes('BANCO DE CANDIDATOS (ambiente ACADEMIA_PADRAO)') && p.includes('## PEITO — vagas por dia (A:3)'), p.slice(p.indexOf('ALUNO:'), p.indexOf('ALUNO:') + 1500));
+    assert.ok(!p.includes('ex-peito-1') && /E001/.test(p) && !p.includes('GUIA DE VARIAÇÕES') && !p.includes('"suggestedSubstitutes"'), 'só códigos curtos, sem a biblioteca inteira em JSON'); assert.ok(p.includes('Nível: Intermediário') && p.includes('NÍVEL DO ALUNO: Intermediário'));
+    assert.ok(/Dia A:\n    - PEITO: 3 exercício\(s\), 3 séries \(exceto GVT=10\), descanso 60s/.test(p), 'a estrutura do ciclo segue na mensagem');
+    assert.deepEqual(idsOf(r, 'A').slice(0, 2), [exId('PEITO', 1), exId('PEITO', 2)], 'âncoras (MANTER) repetidas'); assert.ok(!idsOf(r, 'A').includes(exId('PEITO', 3)) && !idsOf(r, 'A').includes(exId('BICEPS', 1)) && !idsOf(r, 'A').includes(exId('BICEPS', 2)), 'os TROCAR saíram');
+    assert.equal(r.body.levelInfo.level, 'INTERMEDIARIO'); assert.equal(r.body.quality.stats.kept, 4, 'PEITO 1–2 e COSTAS 1–2'); assert.equal(r.body.quality.stats.newPct, 60); assert.equal(r.body.quality.stats.swapped, 0); assert.equal(r.body.quality.score, 100 - 10 * r.body.quality.issues.length);
+    assert.ok(idsOf(r, 'A').every((id: string) => id.startsWith('ex-')), 'ids verdadeiros no resultado'); assert.equal(r.body.exercisesByDay.A.length, 5); assert.equal(r.body.exercisesByDay.B.length, 5);
+    const lg = JSON.parse(db.aiLog.filter((l: any) => l.question === 'gerar-treino:GEMINI').at(-1).answer); assert.equal(lg.smart, true); assert.equal(lg.score, r.body.quality.score); assert.equal(lg.newPct, 60); assert.ok(lg.candidates > 10);
+
+    // 2) a IA desobedece e repete um TROCAR + inventa um código: a revisão troca e completa
+    seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); prevRoutine(); cfg.workout = (byDay: any) => { byDay.A[2].exerciseId = exId('PEITO', 3); byDay.A[0].exerciseId = 'E999'; byDay.B[4].exerciseId = exId('TRICEPS', 1); return byDay; };
+    r = await gen(mkCfg()); let q = r.body.quality; assert.ok(!idsOf(r, 'A').includes(exId('PEITO', 3)) && !idsOf(r, 'A').includes('E999'), idsOf(r, 'A').join()); assert.equal(r.body.exercisesByDay.A.filter((e: any) => /PEITO/.test(e.title)).length, 3, 'o código inventado foi tirado e a vaga completada');
+    assert.ok(q.fixes.some((f: string) => f.includes('Dia A: a IA deixou PEITO incompleto')) && q.fixes.some((f: string) => f.includes('"PEITO 3" →') && f.includes('repetido da rotina anterior')) && q.fixes.some((f: string) => f.includes('"TRICEPS 1" →')), q.fixes.join(' | '));
+    assert.equal(q.stats.filled, 1); assert.equal(q.stats.swapped, 2); assert.ok(r.body.exercisesByDay.A.every((e: any) => e.blocks.length === 3 && e.blocks.every((b: any) => b.load === '')), 'sem histórico de carga: tudo em branco');
+
+    // 3) iniciante: técnica avançada sai do ciclo e da resposta; a IA pode teimar, a revisão tira; modo antigo e modo "sem regras de nível" voltam ao de antes
+    seed({}, { objetivo: 'Hipertrofia', frequencia: 4, nivel: 'Iniciante' }); cfg.workout = (byDay: any) => { byDay.A[0].blocks = byDay.A[0].blocks.map((b: any) => ({ ...b, technique: 'DROPSET' })); return byDay; };
+    r = await gen(mkCfg({ techniques: ['DROPSET', 'BISET'] })); p = lastPrompt(); assert.equal(r.body.levelInfo.level, 'INICIANTE');
+    assert.equal((p.match(/TÉCNICAS: (.*)\n/) || [])[1], 'BISET', 'DROPSET nem chega à IA'); assert.ok(p.includes('Técnicas PROIBIDAS para este nível: DROPSET') && p.includes('NADA de exercício técnico'));
+    assert.equal(r.body.quality.fixes[0], 'Técnicas tiradas do ciclo pelo nível Iniciante: DROPSET'); assert.ok(r.body.exercisesByDay.A.every((e: any) => e.blocks.every((b: any) => b.technique === '')), 'a revisão tirou o DROPSET que a IA mandou mesmo assim');
+    r = await gen(mkCfg({ techniques: ['DROPSET', 'BISET'], levelRules: false })); p = lastPrompt(); assert.equal((p.match(/TÉCNICAS: (.*)\n/) || [])[1], 'DROPSET, BISET', 'regras de nível desligadas'); assert.ok(!p.includes('PROIBIDAS')); assert.ok(r.body.exercisesByDay.A[0].blocks.every((b: any) => b.technique === 'DROPSET'));
+    r = await gen(mkCfg({ techniques: ['DROPSET'] })); assert.equal((lastPrompt().match(/TÉCNICAS: (.*)\n/) || [])[1], 'Nenhuma técnica avançada (nível do aluno): deixe technique="" (BISET só se combinar)');
+    cfg.workout = null; r = await gen(mkCfg({ smart: false })); p = lastPrompt(); assert.ok(p.includes('BANCO (ambiente ACADEMIA_PADRAO)') && p.includes('GUIA DE VARIAÇÕES') && !p.includes('BANCO DE CANDIDATOS') && !p.includes('NÍVEL DO ALUNO') && !('quality' in r.body) && !('levelInfo' in r.body), 'smart:false = modo antigo, corpo igual ao de sempre');
+
+    // 4) cargas: exercício que o aluno já treinou mantém a carga-alvo (ficou fácil → sobe); o novo fica em branco
+    seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); prevRoutine();
+    db.workoutHistory.push({ id: 'hh1', userId: 'q1', date: new Date(Date.now() - 2 * 86400000), details: [1, 2, 3].map((s) => ({ exerciseId: exId('PEITO', 1), exerciseName: 'PEITO 1', setNumber: s, weight: 40, perSide: false, effort: 'FACIL' })) });
+    cfg.workout = (byDay: any) => { byDay.A[0].blocks = byDay.A[0].blocks.map((b: any) => ({ ...b, load: '5kg' })); return byDay; };
+    r = await gen(mkCfg()); p = lastPrompt(); assert.ok(/PEITO 1 · \[âncora, 1 rotina seguidas\] · ficou fácil; última carga 40\/40\/40 kg · → MANTER · alvo 42\.5\/42\.5\/42\.5 kg \(subir\)|PEITO 1 .*alvo \d/.test(p), p.slice(p.indexOf('ROTINA ANTERIOR'), p.indexOf('ROTINA ANTERIOR') + 600));
+    const peito1 = r.body.exercisesByDay.A.find((e: any) => e.exerciseId === exId('PEITO', 1)); assert.ok(peito1.blocks.every((b: any) => /^4\d(\.5)?kg$/.test(b.load)), 'IA pôs 5kg, o alvo manda: ' + JSON.stringify(peito1.blocks.map((b: any) => b.load)));
+    assert.ok(r.body.exercisesByDay.A.filter((e: any) => e.exerciseId !== exId('PEITO', 1)).every((e: any) => e.blocks.every((b: any) => b.load === '')), 'o resto nunca foi treinado');
+    // 5) substituto: o servidor escolhe um do mesmo músculo quando a biblioteca não tem
+    seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); db.exercise.forEach((e: any) => { e.defaultSubstitutes = []; }); r = await gen(mkCfg());
+    assert.ok(r.body.exercisesByDay.A.filter((e: any) => e.category !== 'Cardio').every((e: any) => e.substitute && e.substitute.id !== e.exerciseId && String(e.substitute.id).startsWith('ex-' + String(e.subCategory).toLowerCase())), 'substituto do mesmo músculo, escolhido pelo servidor: ' + JSON.stringify(r.body.exercisesByDay.A.map((e: any) => e.substitute?.id)));
+    cfg.workout = null;
+  }
+  console.log('OK  montagem inteligente: prompt com códigos curtos e rotina anterior (MANTER/TROCAR), nível tira técnica, revisão troca repetido e completa, carga-alvo, modo antigo preservado');
+
   // IA ruim: treino
   seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); cfg.workout = (byDay: any, n: number) => (n === 1 ? { ...byDay, A: byDay.A.slice(0, 1) } : byDay);
-  rs = await quiet(() => start()); assert.equal(rs.status, 'DONE', 'a segunda tentativa saiu certa'); assert.equal(cfg.wCalls, 3, '1 ruim + 1 refeita + fase 2'); assert.ok(savedRows().length >= 20);
-  seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); cfg.workout = (byDay: any) => ({ ...byDay, A: byDay.A.slice(0, 1) });
-  rs = await quiet(() => start()); assert.equal(rs.status, 'FAILED'); assert.equal(rs.attempts, 1); assert.ok(rs.error.includes('Treino fora do padrão') && rs.error.includes('Dia A: só 1 de'), rs.error); assert.equal(cfg.wCalls, 2, '2 tentativas dentro da corrida'); assert.equal(savedRows().length, 0, 'treino ruim nunca é salvo'); assert.ok(rs.dietId, 'a dieta boa fica');
+  rs = await quiet(() => start()); assert.equal(rs.status, 'DONE', 'a revisão automática completou o dia que a IA deixou incompleto'); assert.equal(cfg.wCalls, 2, 'sem precisar refazer na IA: 1 chamada por fase (antes eram 3 com a refeita)'); assert.ok(savedRows().length >= 20, 'dia A completo'); assert.ok(rs.summary.quality.workout.some((n: string) => n.includes('Dia A: a IA deixou') && n.includes('incompleto')), JSON.stringify(rs.summary.quality.workout));
+  seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); cfg.workout = (byDay: any) => ({ ...byDay, A: [] });   // dia inteiro vazio: a revisão não inventa o dia todo, quem decide é o coach
+  rs = await quiet(() => start()); assert.equal(rs.status, 'FAILED'); assert.equal(rs.attempts, 1); assert.ok(rs.error.includes('Treino fora do padrão') && rs.error.includes('Dia A veio sem exercícios'), rs.error); assert.equal(cfg.wCalls, 2, '2 tentativas dentro da corrida'); assert.equal(savedRows().length, 0, 'treino ruim nunca é salvo'); assert.ok(rs.dietId, 'a dieta boa fica');
   await quiet(async () => { await AP.executeRun(rs.id); await AP.executeRun(rs.id); }); rs = (await AP.runStore.get(rs.id)) as any; assert.equal(rs.attempts, 3); assert.equal(rs.status, 'FAILED'); assert.equal(savedRows().length, 0);
   const pf = G.__pushes.filter((p: any) => p.to === PAULO_ID); assert.equal(pf.length, 1, 'só avisa o coach na última tentativa'); assert.equal(pf[0].data.type, 'auto_plan_failed'); assert.equal(G.__pushes.filter((p: any) => p.to === 'q1').length, 0, 'aluno não recebe plano ruim nem "pronto"');
   // sem cardio no desafio
@@ -340,7 +394,7 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
   // cargas: sem histórico em branco; com histórico mantém
   seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); rs = await start(); const loadsOf = () => savedRows().filter((e: any) => JSON.parse(e.technique).t !== 'Moderada' && e.sets !== 30).flatMap((e: any) => JSON.parse(e.technique).b.map((b: any) => b.load));
   assert.ok(loadsOf().length > 20 && loadsOf().every((l: string) => l === ''), 'aluno sem nenhum treino: cargas em branco');
-  seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); db.workoutHistory.push({ id: 'h1', userId: 'q1', date: new Date(), details: [] }); rs = await start(); assert.ok(loadsOf().some((l: string) => l === '20kg'), 'quem já treinou mantém a sugestão da IA');
+  seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); db.workoutHistory.push({ id: 'h1', userId: 'q1', date: new Date(), details: [{ exerciseId: exId('PEITO', 1), exerciseName: 'PEITO 1', setNumber: 1, weight: 20, perSide: false }] }); rs = await start(); assert.ok(loadsOf().some((l: string) => l === '20kg'), 'exercício que o aluno já treinou com carga mantém a sugestão da IA'); assert.ok(loadsOf().some((l: string) => l === ''), 'exercício que ele nunca fez fica com a carga em branco (a IA não chuta carga)');
   seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); db.workoutHistory.push({ id: 'hx', userId: 'outro-aluno', date: new Date(), details: [] }); rs = await start(); assert.ok(loadsOf().length > 20 && loadsOf().every((l: string) => l === ''), 'o histórico de OUTRO aluno não conta');
   console.log('OK  conferência do treino no pipeline: refaz dia incompleto/sem cardio, conserta séries/repetido/dia inventado, cargas em branco sem histórico, aluno nunca recebe plano ruim');
 

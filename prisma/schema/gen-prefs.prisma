@@ -1,0 +1,29 @@
+// prisma/schema/gen-prefs.prisma
+// 🎛️ (19 out 2026) FILTROS DE EXERCÍCIOS DA GERAÇÃO DE TREINO (lib/genRules.ts).
+//   GenPrefs  = o que o coach liberou/bloqueou/fixou para UM aluno (1 linha por aluno): `rules` = { excludeIds, pinIds, excludeEquipment, excludeJointRisk, noHighImpact, avoidProfiles }.
+//   GenPreset = conjunto de regras com nome, do COACH, para aplicar em vários alunos ("Condomínio sem máquina", "Joelho sensível"...). Aplicar COPIA para o aluno.
+// Tabelas novas, SEM relação com User/Exercise de propósito (como InsightMemory e CoachFeature): só adicionam (`npx prisma db push`), nada é apagado.
+// Antes do push o app e a geração continuam funcionando normalmente, só sem filtros salvos (as rotas novas avisam que falta o push).
+model GenPrefs {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  coachId   String
+  rules     Json
+  presetId  String?                       // de qual preset as regras vieram (só para mostrar; as regras são uma cópia)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([coachId])
+}
+
+model GenPreset {
+  id        String   @id @default(uuid())
+  coachId   String
+  name      String
+  rules     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([coachId, name])
+  @@index([coachId])
+}

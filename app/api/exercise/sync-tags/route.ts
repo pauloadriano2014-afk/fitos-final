@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireMaster } from '@/lib/auth';
+import { mergeTags } from '@/lib/exerciseTags';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,7 +95,8 @@ export async function GET(req: Request) {
 
     for (const ex of exercises) {
       const novaSubCategoria = guessSubCategory(ex.name, ex.category);
-      const novasTags = generateTags(ex.name, ex.category);
+      // 🏷️ (19 out 2026) regera as automáticas, mas guarda as marcações novas feitas à mão (impacto, evitar para, favorito)
+      const novasTags = mergeTags(generateTags(ex.name, ex.category), ex.tags);
 
       // Migra environments antigos para novos IDs
       let environments = ex.environments || [];

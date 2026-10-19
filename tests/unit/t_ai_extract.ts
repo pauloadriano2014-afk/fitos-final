@@ -31,7 +31,8 @@ function seed() {
   db.workoutExercise.push({ id: 'we1', workoutId: 'w1', exerciseId: 'ex-PEITO-1', day: 'A', sets: 3, reps: '10', restTime: 60, technique: JSON.stringify({ t: 'BISET', b: [{ sets: '1', reps: '10', restTime: '60', technique: 'BISET' }], o: '' }), order: 0 });
 }
 const DAYS = (names: string[]) => names.map((n) => ({ name: n, groups: [{ id: 'PEITO', qty: 3, sets: 4, rest: 60 }, { id: 'BICEPS', qty: 2, sets: 3, rest: 30 }] }));
-const cfg = (over: any = {}) => ({ selectedAI: 'GEMINI', phase: 'HIPERTROFIA', techniques: ['BISET', 'GVT'], techniqueScope: 'CYCLE', gender: 'Feminino', trainingEnvironment: 'ACADEMIA_PADRAO', days: DAYS(['A', 'B']), manualExercisesByDay: {}, limitationRules: [{ rules: [{ group: 'QUADRICEPS', addNote: true, note: 'cuidado' }] }], cardioTarget: null, ...over });
+// smart:false = modo ANTIGO: esta comparação é a paridade do código extraído da rota com o original; o modo inteligente tem testes próprios (t_workout_planner)
+const cfg = (over: any = {}) => ({ smart: false, selectedAI: 'GEMINI', phase: 'HIPERTROFIA', techniques: ['BISET', 'GVT'], techniqueScope: 'CYCLE', gender: 'Feminino', trainingEnvironment: 'ACADEMIA_PADRAO', days: DAYS(['A', 'B']), manualExercisesByDay: {}, limitationRules: [{ rules: [{ group: 'QUADRICEPS', addNote: true, note: 'cuidado' }] }], cardioTarget: null, ...over });
 const wk = (id: string, tech = '', n = 4) => ({ exerciseId: id, title: id, blocks: Array.from({ length: n }, () => ({ sets: '1', reps: '12', load: '20kg', restTime: '60', technique: tech })), substitute: { exerciseId: 'ex-BICEPS-2' } });
 
 (async () => {

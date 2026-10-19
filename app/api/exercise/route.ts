@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { PAULO_ID, ADRI_ID, MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
 import { visibleLibraryWhere, hiddenFlagFromBody } from '@/lib/exerciseVisibility';
+import { mergeTags, cleanExtraPatch } from '@/lib/exerciseTags';
 
 export const dynamic = 'force-dynamic';
 
@@ -194,7 +195,8 @@ export async function POST(req: Request) {
     const cat = body.muscleGroup || body.category || "Geral";
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
     const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
-    const tags = generateTags(body.name, cat);
+    // 🏷️ (19 out 2026) tags novas (impacto, evitar para, favorito) vêm de `body.extraTags`; as automáticas (músculo, equipamento...) seguem pelo nome
+    const tags = mergeTags(generateTags(body.name, cat), null, cleanExtraPatch(body.extraTags));
     const adminId = body.adminId;
 
     if (!adminId) return NextResponse.json({ error: "Acesso Negado: Faltando Admin ID" }, { status: 403 });
@@ -268,7 +270,9 @@ export async function PUT(req: Request) {
     const cat = body.muscleGroup || body.category || "Geral";
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
     const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
-    const tags = generateTags(body.name, cat);
+    // 🏷️ (19 out 2026) editar o exercício REGERA as tags automáticas pelo nome, mas NÃO pode apagar as marcações novas feitas à mão (impacto, evitar para, favorito)
+    const current = await prisma.exercise.findUnique({ where: { id }, select: { tags: true } });
+    const tags = mergeTags(generateTags(body.name, cat), current?.tags, cleanExtraPatch(body.extraTags));
     // 🙈 Só o time master muda "só o Paulo vê"; sem o campo no corpo, o valor atual é mantido.
     const hidden = hiddenFlagFromBody(body, adminId);
 

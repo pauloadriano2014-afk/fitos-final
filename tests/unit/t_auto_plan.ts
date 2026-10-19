@@ -189,7 +189,7 @@ function installAI(opts: { failDiet?: () => boolean; failWorkout?: () => boolean
   // IA: 2 chamadas de treino (uma por fase) + 2 de dieta (treino e descanso)
   const calls = G.__AI_CALLS.map((c: any) => String(c.contents)); assert.equal(calls.filter((c: string) => c.includes('Nutricionista Especialista')).length, 2); assert.equal(calls.filter((c: string) => c.includes('CONFIGURAÇÃO DO CICLO')).length, 2);
   const wCalls = calls.filter((c: string) => c.includes('CONFIGURAÇÃO DO CICLO')); assert.ok(wCalls[0].includes('Hipertrofia — volume moderado') && wCalls[1].includes('Choque — volume alto'), 'fase 1 hipertrofia, fase 2 choque');
-  assert.ok(wCalls[1].includes('IDs usados na rotina anterior'), 'a fase 2 enxerga a fase 1 e troca exercícios');
+  assert.ok(wCalls[1].includes('ROTINA ANTERIOR "'), 'a fase 2 enxerga a fase 1 e troca exercícios');
   assert.ok(wCalls[0].includes('Joelho') || wCalls[0].includes('joelho'), 'limitação do aluno chega na IA');
   assert.ok(calls.some((c: string) => c.includes('Ficha de 8 semanas com foco em glúteos')), 'instrução da dieta chega na IA');
   // avisos

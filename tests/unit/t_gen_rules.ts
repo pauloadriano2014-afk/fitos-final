@@ -1,0 +1,233 @@
+import assert from 'assert';
+import jwt from 'jsonwebtoken';
+import prisma from '@/lib/prisma';
+import { PAULO_ID } from '/home/user/fitos-final/lib/masterIds';
+import { generateWorkoutPlan } from '/home/user/fitos-final/lib/ai/workoutGen';
+import { suggestImpact, suggestAvoid, pickExtra, cleanExtraPatch, mergeTags, effectiveExtra, EXTRA_KEYS } from '/home/user/fitos-final/lib/exerciseTags';
+import { cleanRules, emptyRules, isEmptyRules, mergeRules, describeRules, removalReason, applyRules, removedSummary, loadStudentRules, MAX_IDS } from '/home/user/fitos-final/lib/genRules';
+import { GET as prefsGET, PUT as prefsPUT, DELETE as prefsDEL } from '/home/user/fitos-final/app/api/gen-prefs/route';
+import { POST as previewPOST } from '/home/user/fitos-final/app/api/gen-prefs/preview/route';
+import { GET as presetsGET, POST as presetsPOST, DELETE as presetsDEL } from '/home/user/fitos-final/app/api/gen-presets/route';
+import { GET as tagsGET, POST as tagsPOST } from '/home/user/fitos-final/app/api/exercise/tags-review/route';
+import { PUT as exercisePUT } from '/home/user/fitos-final/app/api/exercise/route';
+import { GET as syncTags } from '/home/user/fitos-final/app/api/exercise/sync-tags/route';
+
+const db: any = (prisma as any).__db; const G: any = globalThis;
+const quiet = async <T,>(fn: () => Promise<T>) => { const w = console.warn, e = console.error, l = console.log; console.warn = console.error = console.log = () => {}; try { return await fn(); } finally { console.warn = w; console.error = e; console.log = l; } };
+const SECRET = 'dev-only-troque-isso-configurando-JWT_SECRET-no-env';
+const tok = (id: string, role = 'COACH') => jwt.sign({ id, role, coachId: null }, SECRET);
+const call = async (fn: any, as: string | null, o: { method?: string; path?: string; body?: any } = {}) => {
+  const headers: any = { 'content-type': 'application/json' }; if (as) headers.authorization = 'Bearer ' + as;
+  const r = await fn(new Request('http://x' + (o.path || '/api'), { method: o.method || 'GET', headers, body: o.body ? JSON.stringify(o.body) : undefined })); let j: any = null; try { j = await r.json(); } catch {} return { status: r.status, json: j };
+};
+let ok = 0; const t = async (name: string, fn: () => Promise<void> | void) => { try { await fn(); ok++; console.log('  ok  ' + name); } catch (e: any) { console.log('FALHOU  ' + name + '\n' + String(e?.stack || e).split('\n').slice(0, 6).join('\n')); process.exitCode = 1; } };
+
+const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = 'MAQUINA', o: any = {}): any => ({ id, name, category: target === 'CARDIO' ? 'Cardio' : 'Musculação', subCategory: target, videoUrl: 'v', tags: { target, mechanic: mech, equipment: eq, jointRisk: o.risk || [], ...(o.extra || {}) }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+
+(async () => {
+  // ═════ 1) tags novas (puro) ═════
+  await t('suggestImpact/suggestAvoid: pulo e corrida são alto impacto; prancha/supino reto/terra/barra fixa têm perfis a evitar; o resto fica livre', () => {
+    for (const n of ['Agachamento com salto', 'Burpee', 'Pular corda', 'Polichinelo', 'Corrida na esteira', 'Box jump', 'Mountain climber']) assert.equal(suggestImpact(n), 'ALTO', n);
+    for (const n of ['Tríceps corda', 'Supino reto', 'Rosca direta', 'Cadeira extensora', 'Leg press 45', 'Elevação pélvica']) assert.equal(suggestImpact(n), 'BAIXO', n);
+    assert.deepEqual(suggestAvoid('Prancha frontal'), ['GESTANTE']); assert.deepEqual(suggestAvoid('Levantamento terra'), ['GESTANTE', 'TERCEIRA_IDADE']); assert.deepEqual(suggestAvoid('Supino reto com barra'), ['GESTANTE']);
+    assert.deepEqual(suggestAvoid('Supino inclinado com halteres'), [], 'inclinado fica de fora'); assert.deepEqual(suggestAvoid('Barra fixa'), ['TERCEIRA_IDADE']); assert.deepEqual(suggestAvoid('Rosca direta'), []);
+    assert.deepEqual(suggestAvoid('Agachamento com salto'), ['GESTANTE', 'TERCEIRA_IDADE'], 'alto impacto vale para os dois'); assert.ok(!suggestAvoid('Terra').includes('POS_CIRURGIA'), 'pós-cirurgia só à mão');
+    assert.equal(suggestImpact('Pulldown frontal'), 'BAIXO', '"pull" não é pulo'); assert.deepEqual(suggestAvoid('Abdominal supra'), ['GESTANTE']);
+  });
+  await t('pickExtra/cleanExtraPatch/mergeTags: só valores válidos; editar não perde marcação à mão; null apaga e volta à sugestão', () => {
+    assert.deepEqual(EXTRA_KEYS, ['impact', 'avoid', 'favorite']);
+    assert.deepEqual(pickExtra({ target: 'PEITO', impact: 'ALTO', avoid: ['gestante', 'XPTO', 'GESTANTE'], favorite: true }), { impact: 'ALTO', avoid: ['GESTANTE'], favorite: true });
+    assert.deepEqual(pickExtra({ impact: 'MEDIO', avoid: 'x', favorite: 'sim' }), {}); assert.deepEqual(pickExtra(null), {}); assert.deepEqual(pickExtra('texto'), {});
+    assert.deepEqual(cleanExtraPatch({ impact: 'baixo' }), { impact: null }, 'minúscula não vale: apaga'); assert.deepEqual(cleanExtraPatch({ impact: 'BAIXO', avoid: ['TERCEIRA_IDADE', 'zzz'], favorite: 1 }), { impact: 'BAIXO', avoid: ['TERCEIRA_IDADE'], favorite: false });
+    assert.deepEqual(cleanExtraPatch({ avoid: 'x' }), { avoid: null }); assert.deepEqual(cleanExtraPatch({}), {}); assert.deepEqual(cleanExtraPatch(undefined), {});
+    const gen = { target: 'PEITO', mechanic: 'COMPOSTO', equipment: 'BARRA', jointRisk: [] };
+    assert.deepEqual(mergeTags(gen, { target: 'X', impact: 'ALTO', favorite: true, avoid: [] }), { ...gen, impact: 'ALTO', favorite: true, avoid: [] }, 'automáticas regeradas, marcações à mão mantidas');
+    assert.deepEqual(mergeTags(gen, { impact: 'ALTO' }, { impact: null, favorite: true }), { ...gen, favorite: true }, 'null apaga'); assert.deepEqual(mergeTags(gen, null), gen);
+    assert.deepEqual(mergeTags(gen, undefined, { avoid: ['GESTANTE'] }), { ...gen, avoid: ['GESTANTE'] });
+  });
+  await t('effectiveExtra: a marcação à mão vence a sugestão (e diz de onde veio)', () => {
+    const sug = effectiveExtra({ name: 'Pular corda', tags: {} }); assert.equal(sug.impact, 'ALTO'); assert.deepEqual(sug.source, { impact: 'SUGESTAO', avoid: 'SUGESTAO' }); assert.deepEqual(sug.avoid, ['GESTANTE', 'TERCEIRA_IDADE']); assert.equal(sug.favorite, false);
+    const hand = effectiveExtra({ name: 'Pular corda', tags: { impact: 'BAIXO', avoid: [], favorite: true } }); assert.equal(hand.impact, 'BAIXO'); assert.deepEqual(hand.avoid, [], 'lista vazia à mão = "serve para todos"'); assert.equal(hand.favorite, true); assert.deepEqual(hand.source, { impact: 'TAG', avoid: 'TAG' });
+    assert.equal(effectiveExtra({ tags: undefined }).impact, 'BAIXO');
+  });
+
+  // ═════ 2) regras de filtro (puro) ═════
+  await t('cleanRules: valor desconhecido some, sem repetição, bloqueado nunca fica fixado, teto de ids', () => {
+    const r = cleanRules({ excludeIds: ['a', 'a', ' b ', '', null], pinIds: ['b', 'c', 'c'], excludeEquipment: ['maquina', 'xx', 'POLIA'], excludeJointRisk: ['joelho', 'PUNHO'], noHighImpact: 'sim', avoidProfiles: ['gestante', 'ALIEN'] });
+    assert.deepEqual(r, { excludeIds: ['a', 'b'], pinIds: ['c'], excludeEquipment: ['MAQUINA', 'POLIA'], excludeJointRisk: ['JOELHO'], noHighImpact: false, avoidProfiles: ['GESTANTE'] });
+    assert.deepEqual(cleanRules(null), emptyRules()); assert.deepEqual(cleanRules('x'), emptyRules()); assert.equal(cleanRules({ noHighImpact: true }).noHighImpact, true);
+    assert.equal(cleanRules({ excludeIds: Array.from({ length: 900 }, (_, i) => 'id' + i) }).excludeIds.length, MAX_IDS);
+    assert.ok(isEmptyRules(emptyRules()) && !isEmptyRules(cleanRules({ pinIds: ['x'] })) && !isEmptyRules(cleanRules({ noHighImpact: true })));
+  });
+  await t('mergeRules + describeRules: soma sem repetir e fala em português', () => {
+    const m = mergeRules(cleanRules({ excludeIds: ['a'], excludeEquipment: ['MAQUINA'], avoidProfiles: ['GESTANTE'] }), cleanRules({ excludeIds: ['a', 'b'], pinIds: ['p'], noHighImpact: true, excludeJointRisk: ['LOMBAR'] }));
+    assert.deepEqual(m, { excludeIds: ['a', 'b'], pinIds: ['p'], excludeEquipment: ['MAQUINA'], excludeJointRisk: ['LOMBAR'], noHighImpact: true, avoidProfiles: ['GESTANTE'] });
+    assert.deepEqual(describeRules(m), ['sem máquina', 'poupa lombar', 'sem alto impacto', 'perfil: gestante', '2 exercícios bloqueados', '1 exercício fixado']); assert.deepEqual(describeRules(emptyRules()), []);
+    assert.deepEqual(describeRules(cleanRules({ excludeIds: ['a'], excludeEquipment: ['PESO_CORPORAL', 'POLIA'] })), ['sem peso do corpo, polia', '1 exercício bloqueado']);
+  });
+  await t('removalReason: bloqueado > fixado > equipamento > articulação > impacto > perfil; máquina também pelo nome (a tag da biblioteca mente)', () => {
+    const ex = (o: any = {}) => lib('e1', o.name || 'Supino', 'PEITO', 'COMPOSTO', o.eq || 'BARRA', { risk: o.risk, extra: o.extra });
+    const R = (o: any) => cleanRules(o);
+    assert.equal(removalReason(ex(), R({ excludeIds: ['e1'] })), 'excluded'); assert.equal(removalReason(ex(), R({ pinIds: ['e1'], excludeEquipment: ['BARRA'], noHighImpact: true })), null, 'fixar vence as regras');
+    assert.equal(removalReason(ex(), R({ excludeEquipment: ['BARRA'] })), 'equipment'); assert.equal(removalReason(ex({ eq: 'LIVRE', name: 'Cadeira abdutora' }), R({ excludeEquipment: ['MAQUINA'] })), 'equipment', 'cadeira abdutora está como LIVRE na biblioteca');
+    assert.equal(removalReason(ex({ eq: 'LIVRE', name: 'Flexão' }), R({ excludeEquipment: ['MAQUINA'] })), null);
+    assert.equal(removalReason(ex({ risk: ['OMBRO'] }), R({ excludeJointRisk: ['OMBRO'] })), 'joint'); assert.equal(removalReason(ex({ risk: ['OMBRO'] }), R({ excludeJointRisk: ['JOELHO'] })), null);
+    assert.equal(removalReason(ex({ name: 'Burpee' }), R({ noHighImpact: true })), 'impact'); assert.equal(removalReason(ex({ name: 'Burpee', extra: { impact: 'BAIXO' } }), R({ noHighImpact: true })), null, 'marcado à mão como baixo: fica');
+    assert.equal(removalReason(ex({ name: 'Prancha' }), R({ avoidProfiles: ['GESTANTE'] })), 'profile'); assert.equal(removalReason(ex({ name: 'Prancha' }), R({ avoidProfiles: ['TERCEIRA_IDADE'] })), null);
+    assert.equal(removalReason(ex({ name: 'Rosca', extra: { avoid: ['POS_CIRURGIA'] } }), R({ avoidProfiles: ['POS_CIRURGIA'] })), 'profile', 'marcado à mão');
+    assert.equal(removalReason(ex({ risk: ['OMBRO'], name: 'Burpee' }), R({ excludeJointRisk: ['OMBRO'], noHighImpact: true })), 'joint', 'a primeira regra que bate conta');
+    assert.equal(removalReason(ex(), { ...emptyRules(), excludeIds: ['e1'], pinIds: ['e1'] }), 'excluded', 'se (por erro) vier bloqueado e fixado, bloqueado vence');
+  });
+  await t('applyRules: conta o que cada filtro tirou, devolve fixados presentes e os que sumiram', () => {
+    const L = [lib('a', 'Remada baixa', 'PEITO', 'COMPOSTO', 'BARRA'), lib('b', 'Crucifixo máquina', 'PEITO', 'ISOLADO', 'MAQUINA'), lib('c', 'Burpee', 'CARDIO', 'COMPOSTO', 'LIVRE'), lib('d', 'Prancha', 'ABDOMEN', 'ISOLADO', 'PESO_CORPORAL', { risk: [] }), lib('e', 'Rosca', 'BICEPS', 'ISOLADO', 'HALTER')];
+    const r = applyRules(L, cleanRules({ excludeIds: ['e'], excludeEquipment: ['MAQUINA'], noHighImpact: true, avoidProfiles: ['GESTANTE'], pinIds: ['b', 'zzz'] }));
+    assert.deepEqual(r.list.map((x) => x.id), ['a', 'b'], 'b fixado sobrevive ao filtro de máquina'); assert.deepEqual(r.removed, { excluded: 1, equipment: 0, joint: 0, impact: 1, profile: 1 }); assert.equal(r.removedTotal, 3);
+    assert.deepEqual(r.pinned, ['b']); assert.deepEqual(r.droppedPins, ['zzz']); assert.equal(r.active, true); assert.equal(removedSummary(r.removed), '1 bloqueados à mão, 1 por alto impacto, 1 pelo perfil');
+    const none = applyRules(L, emptyRules()); assert.equal(none.list.length, 5); assert.equal(none.active, false); assert.equal(none.removedTotal, 0); assert.deepEqual(none.list, L);
+  });
+
+  // ═════ 3) rotas ═════
+  const seed = () => {
+    for (const k of Object.keys(db)) db[k].length = 0; G.__AI_CALLS = [];
+    db.user.push(
+      { id: PAULO_ID, role: 'ADMIN', email: 'paulo@x.com', name: 'Paulo', accountStatus: 'ACTIVE', active: true },
+      { id: 'c1', role: 'COACH', email: 'c1@x.com', name: 'Coach 1', accountStatus: 'ACTIVE', active: true }, { id: 'c2', role: 'COACH', email: 'c2@x.com', name: 'Coach 2', accountStatus: 'ACTIVE', active: true },
+      { id: 's1', role: 'USER', name: 'Aluna 1', coachId: 'c1', gender: 'Feminino' }, { id: 's2', role: 'USER', name: 'Aluna 2', coachId: 'c2', gender: 'Feminino' },
+    );
+  };
+  const C1 = tok('c1'), C2 = tok('c2'), P = tok(PAULO_ID, 'ADMIN'), S1 = tok('s1', 'USER');
+  await t('filtros do aluno (rota): só o coach dele ou o master; o próprio aluno não mexe; a limpeza é feita no servidor; sem tabela avisa', async () => {
+    seed(); const P_ = '/api/gen-prefs?userId=s1';
+    assert.equal((await call(prefsGET, null, { path: P_ })).status, 401); assert.equal((await call(prefsGET, C1, { path: '/api/gen-prefs' })).status, 400); assert.equal((await call(prefsGET, C1, { path: '/api/gen-prefs?userId=nada' })).status, 404);
+    assert.equal((await call(prefsGET, C2, { path: P_ })).status, 403, 'coach de outro aluno'); assert.equal((await call(prefsGET, S1, { path: P_ })).status, 403, 'o aluno não mexe nos filtros dele');
+    const g0 = await call(prefsGET, C1, { path: P_ }); assert.equal(g0.status, 200); assert.deepEqual(g0.json.rules, emptyRules()); assert.equal(g0.json.saved, false); assert.equal(g0.json.available, true);
+    assert.equal((await call(prefsPUT, C2, { method: 'PUT', body: { userId: 's1', rules: {} } })).status, 403);
+    const put = await call(prefsPUT, C1, { method: 'PUT', body: { userId: 's1', presetId: 'p-1', rules: { excludeIds: ['x', 'x'], pinIds: ['x', 'y'], excludeEquipment: ['maquina', 'foo'], noHighImpact: true } } });
+    assert.equal(put.status, 200); assert.deepEqual(put.json.rules, { excludeIds: ['x'], pinIds: ['y'], excludeEquipment: ['MAQUINA'], excludeJointRisk: [], noHighImpact: true, avoidProfiles: [] }); assert.deepEqual(put.json.summary, ['sem máquina', 'sem alto impacto', '1 exercício bloqueado', '1 exercício fixado']);
+    assert.equal(db.genPrefs.length, 1); assert.equal(db.genPrefs[0].coachId, 'c1'); const g1 = await call(prefsGET, P, { path: P_ }); assert.equal(g1.json.saved, true); assert.equal(g1.json.presetId, 'p-1'); assert.deepEqual(g1.json.rules.excludeIds, ['x']);
+    await call(prefsPUT, P, { method: 'PUT', body: { userId: 's1', rules: { noHighImpact: false } } }); assert.equal(db.genPrefs.length, 1, 'salvar de novo troca, não duplica'); assert.equal(db.genPrefs[0].presetId, null);
+    assert.equal((await call(prefsDEL, C2, { method: 'DELETE', path: P_ })).status, 403); assert.equal((await call(prefsDEL, C1, { method: 'DELETE', path: P_ })).status, 200); assert.equal(db.genPrefs.length, 0);
+    const saved = (prisma as any).genPrefs; (prisma as any).genPrefs = undefined;   // simula "antes do db push"
+    try { const g = await call(prefsGET, C1, { path: P_ }); assert.equal(g.status, 200); assert.equal(g.json.available, false); assert.deepEqual(g.json.rules, emptyRules()); const p = await call(prefsPUT, C1, { method: 'PUT', body: { userId: 's1', rules: {} } }); assert.equal(p.status, 503); assert.equal(p.json.code, 'SEM_TABELA'); assert.equal((await call(prefsDEL, C1, { method: 'DELETE', path: P_ })).status, 200); assert.deepEqual((await loadStudentRules(prisma, 's1')).rules, emptyRules()); } finally { (prisma as any).genPrefs = saved; }
+  });
+  await t('presets do coach (rota): cria, mesmo nome atualiza, renomear sem repetir, cada coach vê só os seus, apagar só o dono, limite de 30', async () => {
+    seed(); const post = (as: string, body: any) => call(presetsPOST, as, { method: 'POST', body });
+    assert.equal((await call(presetsGET, null)).status, 401); assert.equal((await post(C1, { name: '  ', rules: {} })).status, 400);
+    const a = await post(C1, { name: 'Condomínio  sem máquina', rules: { excludeEquipment: ['MAQUINA'], excludeIds: ['z'] } }); assert.equal(a.status, 200); assert.equal(a.json.preset.name, 'Condomínio sem máquina', 'espaços acertados'); assert.deepEqual(a.json.preset.summary, ['sem máquina', '1 exercício bloqueado']); assert.equal(a.json.updated, false);
+    const again = await post(C1, { name: 'Condomínio sem máquina', rules: { noHighImpact: true } }); assert.equal(again.json.updated, true); assert.equal(db.genPreset.length, 1); assert.deepEqual(again.json.preset.rules.excludeEquipment, [], 'trocou as regras do mesmo preset');
+    const b = await post(C1, { name: 'Joelho sensível', rules: { excludeJointRisk: ['JOELHO'] } }); assert.equal(db.genPreset.length, 2);
+    assert.equal((await post(C1, { id: b.json.preset.id, name: 'Condomínio sem máquina', rules: {} })).status, 409, 'nome já usado'); const ren = await post(C1, { id: b.json.preset.id, name: 'Joelho ruim', rules: { excludeJointRisk: ['JOELHO', 'LOMBAR'] } }); assert.equal(ren.status, 200); assert.equal(ren.json.preset.name, 'Joelho ruim'); assert.equal(db.genPreset.length, 2);
+    assert.equal((await post(C2, { id: b.json.preset.id, name: 'x', rules: {} })).status, 404, 'preset de outro coach não se mexe');
+    const l1 = await call(presetsGET, C1); assert.deepEqual(l1.json.presets.map((p: any) => p.name), ['Condomínio sem máquina', 'Joelho ruim']); assert.equal((await call(presetsGET, C2)).json.presets.length, 0); assert.equal((await call(presetsGET, C2, { path: '/api/gen-presets?coachId=c1' })).status, 403); assert.equal((await call(presetsGET, P, { path: '/api/gen-presets?coachId=c1' })).json.presets.length, 2, 'master vê');
+    assert.equal((await call(presetsDEL, C2, { method: 'DELETE', path: '/api/gen-presets?id=' + b.json.preset.id })).status, 403); assert.equal((await call(presetsDEL, C1, { method: 'DELETE', path: '/api/gen-presets?id=' + b.json.preset.id })).status, 200); assert.equal(db.genPreset.length, 1); assert.equal((await call(presetsDEL, C1, { method: 'DELETE', path: '/api/gen-presets?id=nao-existe' })).status, 200);
+    for (let i = 0; i < 29; i++) assert.equal((await post(C1, { name: 'P' + i, rules: {} })).status, 200); assert.equal(db.genPreset.length, 30); assert.equal((await post(C1, { name: 'um a mais', rules: {} })).status, 400, 'limite'); assert.equal((await post(C1, { name: 'P3', rules: { noHighImpact: true } })).status, 200, 'atualizar um existente continua valendo no limite');
+    const saved = (prisma as any).genPreset; (prisma as any).genPreset = undefined;
+    try { const g = await call(presetsGET, C1); assert.deepEqual(g.json, { presets: [], available: false }); const p = await post(C1, { name: 'x', rules: {} }); assert.equal(p.status, 503); assert.equal(p.json.code, 'SEM_TABELA'); } finally { (prisma as any).genPreset = saved; }
+  });
+  await t('prévia dos filtros (rota): conta a mesma biblioteca da geração, mostra o que cada filtro tirou e avisa grupo que ficaria sem opção', async () => {
+    seed();
+    const add = (id: string, name: string, target: string, mech: string, eq: string, extra: any = {}) => db.exercise.push({ ...lib(id, name, target, mech, eq, extra), coachId: 'c1' });
+    for (let n = 1; n <= 4; n++) add('pe' + n, 'Peito ' + n, 'PEITO', 'COMPOSTO', n <= 3 ? 'MAQUINA' : 'BARRA'); add('bi1', 'Rosca 1', 'BICEPS', 'ISOLADO', 'HALTER'); add('bi2', 'Rosca 2', 'BICEPS', 'ISOLADO', 'HALTER'); add('bu', 'Burpee', 'CARDIO', 'COMPOSTO', 'LIVRE');
+    const days = [{ name: 'A', groups: [{ id: 'PEITO', qty: 2 }, { id: 'BICEPS', qty: 2 }] }];
+    const q = (rules: any, as = C1, extra: any = {}) => call(previewPOST, as, { method: 'POST', body: { userId: 's1', rules, days, ...extra } });
+    const base = await q({}); assert.equal(base.status, 200); assert.equal(base.json.total, 7); assert.equal(base.json.allowed, 7); assert.equal(base.json.ok, true); assert.deepEqual(base.json.coverage.find((c: any) => c.group === 'PEITO'), { group: 'PEITO', before: 4, after: 4, need: 2 });
+    const r1 = await q({ excludeEquipment: ['MAQUINA'], noHighImpact: true, pinIds: ['pe1', 'nada'] }); assert.equal(r1.json.allowed, 4, 'tira 2 máquinas (a fixada fica) e o burpee'); assert.equal(r1.json.removed.equipment, 2); assert.equal(r1.json.removed.impact, 1); assert.deepEqual(r1.json.pinned, [{ id: 'pe1', name: 'Peito 1' }]); assert.deepEqual(r1.json.droppedPins, [{ id: 'nada', name: 'nada' }]); assert.equal(r1.json.removedText, '2 pelo equipamento, 1 por alto impacto'); assert.equal(r1.json.ok, true);
+    const r2 = await q({ excludeEquipment: ['MAQUINA'] }); assert.equal(r2.json.coverage.find((c: any) => c.group === 'PEITO').after, 1); assert.equal(r2.json.ok, false); assert.ok(r2.json.issues[0].startsWith('PEITO: sobraram 1 de 4'), r2.json.issues.join());
+    db.equipmentReport.push({ id: 'eq1', userId: 's1', exerciseId: 'pe4', status: 'OPEN' }); db.equipmentReport.push({ id: 'eq2', userId: 's1', exerciseId: 'bi1', status: 'RETURNED' });
+    const un = await q({}); assert.equal(un.json.afterSafety, 6, 'o aparelho que a aluna disse não ter (aviso em aberto) já sai da conta, como na geração; aviso de "voltou a ter" não conta'); assert.equal(un.json.allowed, 6); db.equipmentReport.length = 0;
+    const r3 = await q({ excludeIds: ['bi1'] }); assert.ok(r3.json.issues[0].startsWith('BICEPS: sobraram 1 de 2'));
+    assert.equal((await q({}, C2)).status, 403, 'coach de outro aluno'); assert.equal((await q({}, S1)).status, 403); assert.equal((await call(previewPOST, C1, { method: 'POST', body: {} })).status, 400); assert.equal((await call(previewPOST, null, { method: 'POST', body: { userId: 's1' } })).status, 401);
+    db.exercise.push({ ...lib('x', 'Peito do outro', 'PEITO'), coachId: 'c2' }); assert.equal((await q({})).json.total, 7, 'só a biblioteca do coach');
+    const ok = await q({}, P, { adminId: 'c1' }); assert.equal(ok.json.total, 7, 'master vê a do coach pedido');
+  });
+  await t('revisão das tags (rota): mostra o valor que vale e de onde veio; coach só edita os próprios; aprovar sugestão grava; editar o exercício e o sync não apagam a marcação', async () => {
+    seed();
+    const add = (id: string, name: string, coach: string, extra: any = {}) => db.exercise.push({ ...lib(id, name, 'PEITO', 'COMPOSTO', 'LIVRE', { extra }), coachId: coach, category: 'Peito', environments: ['ACADEMIA_PADRAO'], instructions: 'x' });
+    add('t1', 'Burpee', 'c1'); add('t2', 'Supino reto', 'c1', { impact: 'BAIXO', avoid: [], favorite: true }); add('t3', 'Rosca direta', 'c2'); add('t4', 'Prancha', PAULO_ID);
+    const g = await call(tagsGET, C1, { path: '/api/exercise/tags-review' }); assert.equal(g.status, 200); const by = (id: string) => g.json.items.find((i: any) => i.id === id);
+    assert.ok(by('t1') && by('t2') && !by('t3'), 'só a biblioteca visível ao coach'); assert.equal(by('t1').impact, 'ALTO'); assert.deepEqual(by('t1').source, { impact: 'SUGESTAO', avoid: 'SUGESTAO' }); assert.equal(by('t1').editable, true);
+    assert.equal(by('t2').impact, 'BAIXO'); assert.deepEqual(by('t2').source, { impact: 'TAG', avoid: 'TAG' }); assert.equal(by('t2').favorite, true); assert.equal(g.json.summary.favorites, 1); assert.equal(g.json.summary.highImpact, 1); assert.equal(g.json.summary.pending, 1, 'só o t1 ainda depende de sugestão (o t4 do Paulo não aparece para o coach)');
+    assert.equal((await call(tagsGET, C2, { path: '/api/exercise/tags-review?adminId=c1' })).status, 403); assert.equal((await call(tagsGET, null)).status, 401);
+    assert.equal((await call(tagsPOST, C1, { method: 'POST', body: {} })).status, 400);
+    const p1 = await call(tagsPOST, C1, { method: 'POST', body: { changes: [{ id: 't1', impact: 'BAIXO', favorite: true }, { id: 't3', impact: 'ALTO' }, { id: 'nao-existe', impact: 'ALTO' }] } }); assert.deepEqual({ updated: p1.json.updated, denied: p1.json.denied }, { updated: 1, denied: 1 });
+    const t1 = db.exercise.find((e: any) => e.id === 't1'); assert.equal(t1.tags.impact, 'BAIXO'); assert.equal(t1.tags.favorite, true); assert.equal(t1.tags.target, 'PEITO', 'as outras tags ficam'); assert.equal(db.exercise.find((e: any) => e.id === 't3').tags.impact, undefined, 'exercício de outro coach não muda');
+    await call(tagsPOST, C1, { method: 'POST', body: { changes: [{ id: 't1', impact: null, favorite: false, avoid: ['POS_CIRURGIA'] }] } }); assert.deepEqual({ impact: t1.tags.impact, favorite: t1.tags.favorite, avoid: t1.tags.avoid }, { impact: undefined, favorite: undefined, avoid: ['POS_CIRURGIA'] }, 'null apaga e volta à sugestão');
+    add('t5', 'Pular corda', 'c1'); const ap = await call(tagsPOST, C1, { method: 'POST', body: { approveIds: ['t5', 't2'] } }); assert.equal(ap.json.updated, 2); const t5 = db.exercise.find((e: any) => e.id === 't5'); assert.equal(t5.tags.impact, 'ALTO'); assert.deepEqual(t5.tags.avoid, ['GESTANTE', 'TERCEIRA_IDADE']); assert.equal(db.exercise.find((e: any) => e.id === 't2').tags.impact, 'BAIXO', 'o que já estava marcado à mão é mantido');
+    const both = await call(tagsPOST, C1, { method: 'POST', body: { changes: [{ id: 't1', impact: 'BAIXO' }], approveIds: ['t1'] } }); assert.equal(both.json.updated, 1, 'editado e "aprovado" no mesmo pedido: vale a edição'); assert.equal(db.exercise.find((e: any) => e.id === 't1').tags.impact, 'BAIXO', 'Burpee: a sugestão diria ALTO, mas o coach acabou de marcar BAIXO');
+    const mp = await call(tagsPOST, P, { method: 'POST', body: { changes: [{ id: 't3', favorite: true }] } }); assert.equal(mp.json.updated, 1, 'master edita qualquer um'); assert.equal(db.exercise.find((e: any) => e.id === 't3').tags.favorite, true);
+    // editar o exercício regera as tags automáticas mas mantém as marcações novas
+    const e5 = db.exercise.find((e: any) => e.id === 't5'); e5.tags.equipment = 'ERRADO';
+    const put = await call(exercisePUT, C1, { method: 'PUT', body: { id: 't5', adminId: 'c1', name: 'Pular corda', category: 'Cardio', environments: ['UNIVERSAL'] } }); assert.equal(put.status, 200);
+    assert.equal(e5.tags.impact, 'ALTO'); assert.deepEqual(e5.tags.avoid, ['GESTANTE', 'TERCEIRA_IDADE']); assert.notEqual(e5.tags.equipment, 'ERRADO', 'as automáticas foram regeradas');
+    await call(exercisePUT, C1, { method: 'PUT', body: { id: 't5', adminId: 'c1', name: 'Pular corda', category: 'Cardio', extraTags: { favorite: true, impact: 'BAIXO' } } }); assert.equal(e5.tags.favorite, true); assert.equal(e5.tags.impact, 'BAIXO', 'o formulário de edição também pode marcar');
+    e5.tags.equipment = 'ERRADO'; const sy = await quiet(() => call(syncTags, P, { path: '/api/exercise/sync-tags' })); assert.equal(sy.status, 200); assert.equal(e5.tags.favorite, true); assert.equal(e5.tags.impact, 'BAIXO'); assert.notEqual(e5.tags.equipment, 'ERRADO', 'o sync-tags regera as automáticas, sem apagar as marcações');
+  });
+
+  // ═════ 4) a geração de treino respeita os filtros ═════
+  const TG = ['PEITO', 'BICEPS', 'COSTAS_REMADA'];
+  const groups = (qty = 2) => [{ name: 'A', groups: [{ id: 'PEITO', qty, sets: 3, rest: 60 }, { id: 'BICEPS', qty, sets: 3, rest: 30 }] }, { name: 'B', groups: [{ id: 'COSTAS_REMADA', qty, sets: 3, rest: 60 }] }];
+  const seedGen = () => {
+    seed(); db.user.find((u: any) => u.id === 's1').coachId = PAULO_ID;
+    for (const tg of TG) for (let n = 1; n <= 6; n++) db.exercise.push({ id: `${tg.toLowerCase()}-${n}`, coachId: PAULO_ID, name: `${tg} ${n}`, category: 'Musculação', subCategory: tg, videoUrl: 'v', tags: { target: tg, equipment: n <= 3 ? 'MAQUINA' : 'HALTER', mechanic: n === 1 ? 'COMPOSTO' : 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    db.anamnese.push({ id: 'a', userId: 's1', objetivo: 'Hipertrofia', nivel: 'Intermediário', frequencia: 3, limitacoes: [], cirurgias: [], createdAt: new Date() });
+    let hook: ((byDay: any) => any) | null = null;
+    G.__GEMINI = async ({ contents }: any) => {
+      const text = String(contents); const bank: Record<string, Array<{ code: string; name: string }>> = {}; let cur = '';
+      for (const line of text.split('\n')) { const h = line.match(/^## ([A-Z_]+)/); if (h) { cur = h[1]; bank[cur] = []; continue; } const m = line.match(/^(E\d{3}) \| (.+?) \| /); if (m && cur) bank[cur].push({ code: m[1], name: m[2] }); }
+      // modo antigo (cycleConfig.smart=false): a biblioteca vem em JSON no "BANCO (ambiente ...)"
+      const jm = text.match(/BANCO \(ambiente [^)]*\):\n(\[.*\])\n/); if (jm) for (const b of JSON.parse(jm[1])) (bank[b.target] = bank[b.target] || []).push({ code: b.id, name: b.name });
+      const out: any = {};
+      for (const [, d, body] of text.matchAll(/Dia ([A-Z]):\n((?:    - .*\n?)*)/g)) { out[d] = []; for (const [, g, qty, sets] of (body as string).matchAll(/- ([A-Z_]+): (\d+) exercício\(s\), (\d+) séries/g)) for (let n = 0; n < Number(qty); n++) { const b = (bank[g] || [])[n]; if (b) out[d].push({ exerciseId: b.code, title: b.name, subCategory: g, blocks: Array.from({ length: Number(sets) }, () => ({ sets: '1', reps: '10', load: '', restTime: '60', technique: '' })) }); } }
+      return { text: JSON.stringify({ workoutName: 'R', workoutModel: 'CARGA', reasoning: 'x', exercisesByDay: hook ? hook(out) : out }) };
+    };
+    return { setHook: (h: any) => { hook = h; } };
+  };
+  const gen = async (cycleConfig: any) => quiet(() => generateWorkoutPlan({ userId: 's1', adminId: PAULO_ID, cycleConfig: { selectedAI: 'GEMINI', phase: 'HIPERTROFIA', techniques: ['BISET'], techniqueScope: 'CYCLE', gender: 'Feminino', trainingEnvironment: 'ACADEMIA_PADRAO', manualExercisesByDay: {}, limitationRules: [], days: groups(), ...cycleConfig } })) as Promise<any>;
+  const idsOf = (r: any) => Object.values<any[]>(r.body.exercisesByDay).flat().map((e: any) => e.exerciseId);
+  const lastPrompt = () => String(G.__AI_CALLS.at(-1).contents);
+
+  await t('geração: o que o coach bloqueou não chega à IA nem ao treino; o filtro vem no corpo da resposta e no registro de custo', async () => {
+    seedGen(); const base = await gen({}); assert.equal(base.status, 200); assert.ok(!('filters' in base.body), 'sem filtros: corpo igual ao de sempre');
+    const r = await gen({ genRules: { excludeIds: ['peito-2', 'peito-3'], excludeEquipment: ['MAQUINA'] } }); assert.equal(r.status, 200);
+    const p = lastPrompt();
+    for (const n of [1, 2, 3]) assert.ok(!new RegExp(`\\| (PEITO|BICEPS|COSTAS_REMADA) ${n} \\|`).test(p), 'máquinas (1–3) fora dos candidatos: ' + n);
+    assert.ok(idsOf(r).every((id: string) => /-[456]$/.test(id)), idsOf(r).join()); assert.deepEqual(r.body.filters.summary, ['sem máquina', '2 exercícios bloqueados']); assert.equal(r.body.filters.removedTotal, 9, '9 máquinas (3 por músculo), 2 delas bloqueadas à mão');
+    assert.equal(r.body.filters.removed.excluded, 2); assert.equal(r.body.filters.removed.equipment, 7, '9 máquinas − as 2 já bloqueadas à mão'); assert.equal(r.body.filters.pinned, 0);
+    const lg = JSON.parse(db.aiLog.filter((l: any) => l.question === 'gerar-treino:GEMINI').at(-1).answer); assert.equal(lg.rulesRemoved, 9);
+  });
+  await t('geração: sem `genRules` no pedido vale o que está salvo no aluno; `genRules` (até vazio) vale mais; modo antigo (smart:false) também filtra', async () => {
+    seedGen(); db.genPrefs.push({ id: 'g', userId: 's1', coachId: PAULO_ID, rules: { excludeIds: ['biceps-4'], excludeEquipment: [] }, presetId: null });
+    let r = await gen({}); assert.equal(r.status, 200, JSON.stringify(r.body)); assert.ok(!idsOf(r).includes('biceps-4') && !new RegExp('\\| BICEPS 4 \\|').test(lastPrompt()), 'filtro salvo vale (plano automático também)'); assert.deepEqual(r.body.filters.summary, ['1 exercício bloqueado']);
+    r = await gen({ genRules: {} }); assert.ok(!('filters' in r.body), 'a tela mandou "sem filtros": ignora o salvo'); assert.ok(new RegExp('\\| BICEPS 4 \\|').test(lastPrompt()));
+    r = await gen({ smart: false, genRules: { excludeIds: ['peito-1'] } }); assert.ok(!idsOf(r).includes('peito-1') && !lastPrompt().includes('"id":"peito-1"'), 'modo antigo: biblioteca já sem o bloqueado'); assert.equal(r.body.filters.removedTotal, 1);
+    const saved = (prisma as any).genPrefs; (prisma as any).genPrefs = undefined; try { r = await gen({}); assert.equal(r.status, 200, 'sem a tabela a geração segue normal'); assert.ok(!('filters' in r.body)); } finally { (prisma as any).genPrefs = saved; }
+  });
+  await t('geração: exercício FIXADO entra mesmo se a IA não escolher (no lugar de um acessório do mesmo músculo), nunca é trocado pela rotação, e aparece como FIXADO para a IA', async () => {
+    const ctl = seedGen(); ctl.setHook((byDay: any) => byDay);   // a IA devolve os 2 primeiros de cada grupo
+    let r = await gen({ genRules: { pinIds: ['biceps-6'] } }); assert.equal(r.status, 200, JSON.stringify(r.body)); const p = lastPrompt(); assert.ok(/E\d{3} \| BICEPS 6 \| ISOLADO\/HALTER \| FIXADO pelo coach \(obrigatório\)/.test(p), 'marcado FIXADO para a IA');
+    assert.ok(idsOf(r).includes('biceps-6'), 'a IA recebeu o fixado no topo e usou'); assert.ok(/BICEPS 6/.test(p.slice(p.indexOf('## BICEPS')).split('\n')[1]), 'o fixado é o 1º da lista do músculo (sem o fixar ele seria o último)'); assert.equal(r.body.filters.pinned, 1);
+    // a IA ignora o fixado: o servidor põe
+    ctl.setHook((byDay: any) => { byDay.A = byDay.A.filter((e: any) => !/BICEPS 6/.test(e.title)); return byDay; });
+    db.workoutHistory.length = 0; r = await gen({ genRules: { pinIds: ['biceps-6'] } }); assert.ok(idsOf(r).includes('biceps-6')); assert.equal(r.body.exercisesByDay.A.filter((e: any) => e.subCategory === 'BICEPS').length, 2, 'continua com 2 bíceps: entrou no lugar de um');
+    ctl.setHook((byDay: any) => { let k = 0; byDay.A = byDay.A.map((e: any) => (e.subCategory === 'BICEPS' ? { ...e, exerciseId: `biceps-${++k}`, title: `BICEPS ${k}` } : e)); return byDay; });   // IA completa, mas sem o fixado
+    r = await gen({ genRules: { pinIds: ['biceps-6'] } }); assert.ok(idsOf(r).includes('biceps-6'), idsOf(r).join()); assert.ok(r.body.quality.fixes.some((f: string) => f.includes('"BICEPS 6" (fixado por você) entrou no lugar de')), r.body.quality.fixes.join(' | ')); assert.equal(r.body.quality.stats.pinned >= 1, true);
+    // fixado que o aluno não pode usar (fora do ambiente): aviso claro
+    db.exercise.find((e: any) => e.id === 'peito-5').environments = ['EM_CASA']; r = await gen({ genRules: { pinIds: ['peito-5'] } }); assert.deepEqual(r.body.filters.droppedPins, [{ id: 'peito-5', name: 'PEITO 5' }]); assert.ok(r.body.quality.issues.some((i: string) => i.includes('"PEITO 5" fixado não está disponível')), r.body.quality.issues.join()); assert.equal(r.body.quality.score, 100 - 10 * r.body.quality.issues.length);
+  });
+  await t('geração: o fixado repete mesmo que a rotação mandasse trocar (e o fixado de outro músculo sem vaga no plano vira aviso)', async () => {
+    const ctl = seedGen(); ctl.setHook((b: any) => b);
+    db.workout.push({ id: 'wp', userId: 's1', name: 'Anterior', workoutModel: 'CARGA', createdAt: new Date(Date.now() - 5000) }); let o = 0;
+    for (const [d, g, n] of [['A', 'peito', 1], ['A', 'peito', 2], ['A', 'biceps', 2], ['B', 'costas_remada', 1]] as const) db.workoutExercise.push({ id: `w-${g}-${n}`, workoutId: 'wp', exerciseId: `${g}-${n}`, day: d, order: o++, sets: 3, reps: '10', restTime: 60, technique: JSON.stringify({ t: '', b: [{ sets: '1', reps: '10', restTime: '60', technique: '' }] }) });
+    let r = await gen({}); assert.ok(!idsOf(r).includes('biceps-2'), 'acessório da rotina anterior gira'); assert.ok(/BICEPS 2 · \[acessório, 1 rotina seguidas\].* → TROCAR/.test(lastPrompt()), lastPrompt().slice(lastPrompt().indexOf('ROTINA ANTERIOR'), lastPrompt().indexOf('ROTINA ANTERIOR') + 500)); r = await gen({ genRules: { pinIds: ['biceps-2'] } }); assert.ok(idsOf(r).includes('biceps-2'), 'fixado repete: ' + idsOf(r).join()); assert.ok(/BICEPS 2 · \[acessório, 1 rotina seguidas\].* → MANTER/.test(lastPrompt()), 'a IA lê o fixado como MANTER, não como TROCAR');
+    ctl.setHook((b: any) => { b.A = [...b.A, { exerciseId: 'biceps-2', title: 'BICEPS 2', blocks: b.A[0].blocks }]; return b; }); r = await gen({ genRules: { pinIds: ['biceps-2'] } }); assert.equal(idsOf(r).filter((id: string) => id === 'biceps-2').length, 1, 'sem duplicar');
+    ctl.setHook((b: any) => b); db.exercise.push({ id: 'perna-1', coachId: PAULO_ID, name: 'PERNA 1', category: 'Musculação', subCategory: 'QUADRICEPS', videoUrl: 'v', tags: { target: 'QUADRICEPS', equipment: 'LIVRE', mechanic: 'COMPOSTO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    r = await gen({ genRules: { pinIds: ['perna-1'] } }); assert.ok(!idsOf(r).includes('perna-1')); assert.ok(r.body.quality.issues.some((i: string) => i.includes('"PERNA 1" fixado não coube')), r.body.quality.issues.join());
+  });
+  await t('geração: filtros que esvaziam um grupo param antes da IA (BANCO_INSUFICIENTE) e a IA nem é chamada; favorito sobe na lista', async () => {
+    seedGen(); let r = await gen({ genRules: { excludeEquipment: ['MAQUINA'], excludeIds: ['peito-4', 'peito-5'] } }); assert.equal(r.status, 422); assert.equal(r.body.code, 'BANCO_INSUFICIENTE'); assert.ok(r.body.error.includes('PEITO: sobraram 1 de 6'), r.body.error); assert.equal(G.__AI_CALLS.length, 0, 'IA não foi chamada');
+    seedGen(); db.exercise.find((e: any) => e.id === 'costas_remada-6').tags.favorite = true; r = await gen({}); assert.equal(r.status, 200); const p = lastPrompt(); const sec = p.slice(p.indexOf('## COSTAS_REMADA')); assert.ok(sec.indexOf('COSTAS_REMADA 6') < sec.indexOf('COSTAS_REMADA 2'), 'favorito do coach sobe na lista (sem a marca, o 2 vem antes do 6 pela ordem do nome): ' + sec.slice(0, 400));
+    seedGen(); r = await gen({ genRules: { excludeJointRisk: [], noHighImpact: true, avoidProfiles: ['GESTANTE'] } }); assert.equal(r.status, 200); assert.ok(r.body.filters.summary.includes('sem alto impacto'));
+  });
+
+  console.log(`\n${ok} verificações dos filtros de exercícios`);
+})();
