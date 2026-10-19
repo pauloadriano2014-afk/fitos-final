@@ -16,6 +16,7 @@ import { looksLikeMachine, nameKey, pickSwap, type LibEx } from '@/lib/exerciseS
 import { LEVEL_LABEL, type LevelKey } from '@/lib/studentLevel';
 import { sessionsOf, suggestLoad } from '@/lib/loadSuggest';
 import { sideValue } from '@/lib/exerciseLoad';
+import { shapeReps } from '@/lib/ai/repSchemes';
 
 export interface PlanGroup { id: string; qty: number; sets?: number; rest?: number }
 export interface PlanDay { name: string; groups: PlanGroup[] }
@@ -256,7 +257,7 @@ export interface RefineCtx {
 }
 export interface Quality {
   score: number; fixes: string[]; issues: string[];
-  stats: { pinned: number; repairs: number; exercises: number; newPct: number | null; kept: number; swapped: number; filled: number; trimmed: number; techStripped: number; loadsFixed: number; groupSets: Record<string, number> };
+  stats: { pinned: number; repairs: number; exercises: number; newPct: number | null; kept: number; swapped: number; filled: number; trimmed: number; techStripped: number; loadsFixed: number; repsShaped: number; groupSets: Record<string, number> };
 }
 
 const OWN_BLOCKS = new Set(['GVT', '21', 'CLUSTERSET', 'DROPSET', 'RESTPAUSE']);
@@ -279,7 +280,7 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
   const fixes: string[] = [], issues: string[] = [];
   let repairs = 0;
   const fix = (msg: string) => { repairs++; fixes.push(msg); };
-  const st = { swapped: 0, filled: 0, trimmed: 0, techStripped: 0, loadsFixed: 0 };
+  const st = { swapped: 0, filled: 0, trimmed: 0, techStripped: 0, loadsFixed: 0, repsShaped: 0 };
   let pinnedIn = 0;
   const out: Record<string, GenEx[]> = { ...byDay };
   const lvl = ctx.levelRules ? ctx.level : null;
@@ -342,7 +343,7 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
   // ── b) série/repetição/técnica de cada exercício, pelo grupo e pelo nível ──
   for (const d of ctx.days) {
     if (!Array.isArray(out[d.name])) continue;
-    out[d.name] = out[d.name].map((ex) => {
+    out[d.name] = out[d.name].map((ex, exIdx) => {
       if (exCardio(ex)) return ex;
       const g = groupOf.get(ex); const lib = libOf(ex);
       let blocks = ex.blocks.map((b) => ({ ...b }));
@@ -356,6 +357,8 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
         blocks = blocks.length > want ? blocks.slice(0, want) : [...blocks, ...Array.from({ length: want - blocks.length }, () => ({ ...blocks[blocks.length - 1] }))];
       }
       blocks = blocks.map((b) => (SPECIAL_REPS.has(techOfBlock(b)) ? b : { ...b, reps: clampReps(b.reps, reps) }));
+      // 🔺 séries todas com a mesma repetição viram pirâmide da fase (15-12-10, 12-10-8...), como o Paulo e a Adri montam; quem já veio variando fica
+      { const sh = shapeReps(blocks, { phase: ctx.phase, range: reps, compound: !!lib && mechOf(lib) === 'COMPOSTO', idx: exIdx }); if (sh !== blocks) { st.repsShaped++; blocks = sh; } }
       const nx = { ...ex, blocks }; if (g) groupOf.set(nx, g);   // objeto novo: o grupo vai junto
       return nx;
     });

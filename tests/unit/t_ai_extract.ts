@@ -14,8 +14,8 @@ const post = async (fn: any, as: string | null, body: any) => {
   const headers: any = { 'content-type': 'application/json' }; if (as) headers.authorization = 'Bearer ' + tok(as, as === 'parceiro' ? 'COACH' : 'ADMIN');
   const r = await fn(new Request('http://x/api', { method: 'POST', headers, body: JSON.stringify(body) })); let j: any = null; try { j = await r.json(); } catch {} return { status: r.status, json: j };
 };
-// uuids aleatórios (id da refeição e uniqueId do item) não entram na comparação
-const strip = (o: any): any => Array.isArray(o) ? o.map(strip) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).filter(([k]) => !['uniqueId'].includes(k) && !(k === 'id' && typeof o[k] === 'string' && /^[0-9a-f-]{36}$/.test(o[k]))).map(([k, v]) => [k, strip(v)])) : o;
+// uuids aleatórios (id da refeição e uniqueId do item) não entram na comparação. `reps` também não: desde 19 out 2026 o treino novo transforma séries de repetição igual em pirâmide (lib/ai/repSchemes.ts, testada em t_rep_schemes), o que a rota antiga não fazia
+const strip = (o: any): any => Array.isArray(o) ? o.map(strip) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).filter(([k]) => !['uniqueId', 'reps'].includes(k) && !(k === 'id' && typeof o[k] === 'string' && /^[0-9a-f-]{36}$/.test(o[k]))).map(([k, v]) => [k, strip(v)])) : o;
 
 function seed() {
   for (const k of Object.keys(db)) db[k].length = 0;
@@ -53,6 +53,10 @@ const wk = (id: string, tech = '', n = 4) => ({ exerciseId: id, title: id, block
   for (const [name, body, ai] of treinoCases) {
     seed(); ai(); const a = await quiet(() => post(oldTreino, PAULO_ID, body)); seed(); ai(); const b = await quiet(() => post(newTreino, PAULO_ID, body));
     assert.equal(b.status, a.status, `treino "${name}": status ${a.status} x ${b.status}`); assert.deepEqual(strip(b.json), strip(a.json), `treino "${name}": corpo diferente`);
+    if (name === 'ok') { // 🔺 o treino novo (modo antigo) põe pirâmide onde a IA mandou tudo igual; a rota antiga deixava 12-12-12-12
+      const reps = (j: any) => j.exercisesByDay.A.find((e: any) => e.exerciseId === 'ex-PEITO-1').blocks.map((x: any) => x.reps).join('-');
+      assert.equal(reps(a.json), '12-12-12-12'); assert.equal(reps(b.json), '12-10-8-8', 'composto (PEITO 1 é o 1º do dia): o esquema mais pesado'); assert.ok(b.json.exercisesByDay.A.filter((e: any) => !e.blocks[0].technique && e.blocks.length > 1).every((e: any) => new Set(e.blocks.map((x: any) => x.reps)).size > 1), 'nenhuma série comum fica com repetição toda igual');
+    }
   }
   // sanidade: o caso "ok" de fato gerou algo (senão a comparação seria vazia)
   seed(); G.__GEMINI = treinoCases[0][2] && (async () => ({ text: JSON.stringify({ exercisesByDay: { A: [wk('ex-PEITO-1')] } }) })); const sane = await quiet(() => post(newTreino, PAULO_ID, treinoCases[0][1])); assert.equal(sane.status, 200); assert.equal(sane.json.exercisesByDay.A.length, 1);
