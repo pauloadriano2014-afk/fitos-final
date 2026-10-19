@@ -3,6 +3,7 @@
 // (regras + biblioteca = parte que NÃO muda de aluno para aluno, mais a mensagem do aluno) e devolve o texto com o JSON do treino. Quem monta o prompt e valida a resposta é
 // lib/ai/workoutGen.ts (ids inventados saem, bi-set é consertado...). Aqui só a chamada:
 //   • o prompt fixo vai com `cache_control` (cache de 5 min da Anthropic): gerar treino para várias alunas seguidas paga a biblioteca com ~90% de desconto a partir da 2ª;
+//   • pensamento desligado (gastava o limite de escrita e cortava o treino);
 //   • sem forçar ferramenta (o Sonnet 5.5 recusa `tool_choice` forçado) e sem prefill; só pede JSON no texto, como os outros motores;
 //   • limite de 90 s (o Render corta a requisição em ~100 s): estourou, o coach recebe um aviso claro em vez de erro genérico;
 //   • devolve os tokens gastos para o registro de custo (AiLog).
@@ -11,7 +12,8 @@ export type ClaudeEngine = keyof typeof WORKOUT_CLAUDE_MODELS;
 export const isClaudeEngine = (x: any): x is ClaudeEngine => x === 'HAIKU' || x === 'CLAUDE';
 export const WORKOUT_LABEL: Record<ClaudeEngine, string> = { HAIKU: 'O Claude Haiku', CLAUDE: 'O Claude Sonnet' };
 export const WORKOUT_TIMEOUT_MS = 90_000;
-export const WORKOUT_MAX_TOKENS = 16_000;
+// 20 mil é o teto para chamada sem streaming (acima disso o SDK recusa). O pensamento do modelo conta como texto escrito: por isso ele vai desligado (ver abaixo).
+export const WORKOUT_MAX_TOKENS = 20_000;
 /** US$ por milhão de tokens (entrada, saída) — só para a estimativa do registro de custo. */
 export const WORKOUT_PRICE: Record<ClaudeEngine, [number, number]> = { HAIKU: [0.1, 0.5], CLAUDE: [2, 10] };
 
@@ -31,6 +33,8 @@ export async function callClaudeWorkout(client: any, o: { engine: ClaudeEngine; 
       system: [{ type: 'text', text: o.system, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: o.user }],
       output_config: { effort: o.engine === 'HAIKU' ? 'low' : 'medium' },
+      // 🧠 (19 out 2026) Pensamento desligado: ele gasta o limite de escrita e o treino saía cortado ("ficou grande demais" no Haiku). Haiku 5.5 aceita `disabled`; o Sonnet 5.5 recusa `disabled` (400) e usa `between_tools`.
+      thinking: o.engine === 'HAIKU' ? { type: 'disabled' } : { type: 'between_tools' },
     });
   } catch (e: any) {
     if (e?.name === 'APIConnectionTimeoutError' || /time(d)? ?out/i.test(String(e?.message || ''))) throw new Error(`${who} demorou demais para montar o treino. Tente de novo ou escolha outro motor.`);
