@@ -27,15 +27,17 @@ export const estimateArgonUsd = (u: { inputTokens: number; outputTokens: number;
   return Math.round(((fresh * pin + u.cacheReadTokens * pin * 0.1 + (u.outputTokens + u.thinkingTokens) * pout) / 1e6) * 100000) / 100000;
 };
 
+/** Erro cuja mensagem já é um aviso pronto para o coach (a rota devolve no campo `message`, que o app mostra). */
+const warn = (msg: string): Error => Object.assign(new Error(msg), { userMessage: true });
 const statusOf = (e: any): number => Number(e?.status ?? e?.code ?? e?.error?.code ?? e?.response?.status) || 0;
 const textOf = (e: any): string => String(e?.message || e?.error?.message || e || '');
 /** Traduz o erro do Google para um aviso que o coach entende. Erro que não é conhecido passa como veio. */
 export function argonError(e: any, who: string = ARGON_LABEL): Error {
   const st = statusOf(e); const msg = textOf(e);
-  if (e?.name === 'AbortError' || e?.name === 'TimeoutError' || /time(d)? ?out|deadline/i.test(msg)) return new Error(`${who} demorou demais. Tente de novo ou escolha outro motor.`);
-  if (st === 404 || /not found|is not supported|unknown model|no such model|does not exist/i.test(msg)) return new Error(`${who} ainda não está liberado para a chave do Gemini deste servidor (o Google está liberando por etapas). Escolha outro motor.`);
-  if (st === 429 || /quota|resource.?exhausted|rate.?limit|credit|billing|prepayment/i.test(msg)) return new Error(`A chave do Gemini está sem saldo ou no limite de uso agora (${who}). Veja o painel do Google AI Studio ou escolha outro motor.`);
-  if (st === 401 || st === 403 || /api key|permission|unauthori[sz]ed|forbidden/i.test(msg)) return new Error(`A chave do Gemini não tem permissão para usar o ${who}. Escolha outro motor.`);
+  if (e?.name === 'AbortError' || e?.name === 'TimeoutError' || /time(d)? ?out|deadline/i.test(msg)) return warn(`${who} demorou demais. Tente de novo ou escolha outro motor.`);
+  if (st === 404 || /not found|is not supported|unknown model|no such model|does not exist/i.test(msg)) return warn(`${who} ainda não está liberado para a chave do Gemini deste servidor (o Google está liberando por etapas). Escolha outro motor.`);
+  if (st === 429 || /quota|resource.?exhausted|rate.?limit|credit|billing|prepayment/i.test(msg)) return warn(`A chave do Gemini está sem saldo ou no limite de uso agora (${who}). Veja o painel do Google AI Studio ou escolha outro motor.`);
+  if (st === 401 || st === 403 || /api key|permission|unauthori[sz]ed|forbidden/i.test(msg)) return warn(`A chave do Gemini não tem permissão para usar o ${who}. Escolha outro motor.`);
   return e instanceof Error ? e : new Error(msg);
 }
 const retryable = (e: any) => { const st = statusOf(e); return st === 503 || st === 500 || /unavailable|overloaded|try again/i.test(textOf(e)); };
@@ -92,8 +94,8 @@ export async function callArgon(client: any, o: ArgonCall): Promise<{ text: stri
   }
   const cand = Array.isArray(r?.candidates) ? r.candidates[0] : null;
   const reason = String(cand?.finishReason || '');
-  if (r?.promptFeedback?.blockReason || reason === 'SAFETY' || reason === 'PROHIBITED_CONTENT' || reason === 'BLOCKLIST') throw new Error(`${ARGON_LABEL} recusou este pedido. Tente outro motor.`);
-  if (reason === 'MAX_TOKENS') throw new Error(`${ARGON_LABEL} não terminou de escrever (ficou grande demais). Tente de novo ou escolha outro motor.`);
+  if (r?.promptFeedback?.blockReason || reason === 'SAFETY' || reason === 'PROHIBITED_CONTENT' || reason === 'BLOCKLIST') throw warn(`${ARGON_LABEL} recusou este pedido. Tente outro motor.`);
+  if (reason === 'MAX_TOKENS') throw warn(`${ARGON_LABEL} não terminou de escrever (ficou grande demais). Tente de novo ou escolha outro motor.`);
   // `r.text` do SDK junta só as partes de texto (o pensamento vem separado)
   const text = String(r?.text ?? '');
   const u = r?.usageMetadata || {};

@@ -462,6 +462,7 @@ ${signatureBlock}`;
 
     } catch (error: any) {
         console.error('❌ Erro FATAL evaluate-checkin:', error);
-        return NextResponse.json({ error: 'Falha interna no servidor', details: error.message }, { status: 500 });
+        // (19 out 2026) aviso pronto do Argon (ex.: "ainda não está liberado"): vai em `message`, que é o que o app mostra
+        return NextResponse.json({ error: 'Falha interna no servidor', details: error.message, ...(error?.userMessage ? { message: error.message } : {}) }, { status: 500 });
     }
 }

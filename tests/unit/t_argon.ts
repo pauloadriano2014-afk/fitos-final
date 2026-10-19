@@ -47,7 +47,7 @@ let ok = 0; const t = async (name: string, fn: () => Promise<void> | void) => { 
     await assert.rejects(() => run(err(403, 'API key not valid')), /não tem permissão para usar o Gemini Argon/); await assert.rejects(() => run(err(401, 'x')), /não tem permissão/);
     await assert.rejects(() => run(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })), /demorou demais/);
     await assert.rejects(() => run(new Error('Deadline exceeded')), /demorou demais/);
-    const odd = new Error('falha estranha 123'); assert.strictEqual(argonError(odd), odd, 'erro desconhecido: o mesmo erro'); await assert.rejects(() => run(odd), /falha estranha 123/);
+    const odd = new Error('falha estranha 123'); assert.strictEqual(argonError(odd), odd, 'erro desconhecido: o mesmo erro'); assert.ok(!(odd as any).userMessage); assert.equal((argonError(err(404, 'x')) as any).userMessage, true); await assert.rejects(() => run(odd), /falha estranha 123/);
   });
 
   await t('tempo limite: passou do prazo cancela a chamada e avisa; nenhuma tentativa extra para erro que não é "indisponível"', async () => {
@@ -95,8 +95,8 @@ let ok = 0; const t = async (name: string, fn: () => Promise<void> | void) => { 
 
   await t('avaliação: Argon fora do ar (não liberado / sem saldo) devolve erro com o aviso em português e não grava custo; falha ao gravar o custo não derruba a avaliação', async () => {
     reset(); G.__ARGON = async () => { throw err(404, 'models/gemini-4-argon is not found'); }; const a = await post(PAULO_ID, { coachId: PAULO_ID, aiModel: 'gemini-argon', customCurrentPhotos: photos });
-    assert.equal(a.status, 500); assert.match(a.json.details, /Gemini Argon ainda não está liberado/); assert.equal(db.aiLog.length, 0);
-    reset(); G.__ARGON = async () => { throw err(429, 'RESOURCE_EXHAUSTED'); }; const b = await post(PAULO_ID, { coachId: PAULO_ID, aiModel: 'gemini-argon', customCurrentPhotos: photos }); assert.equal(b.status, 500); assert.match(b.json.details, /sem saldo ou no limite/);
+    assert.equal(a.status, 500); assert.match(a.json.details, /Gemini Argon ainda não está liberado/); assert.equal(a.json.message, a.json.details, 'o app mostra o campo message'); assert.equal(db.aiLog.length, 0);
+    reset(); G.__ARGON = async () => { throw err(429, 'RESOURCE_EXHAUSTED'); }; const b = await post(PAULO_ID, { coachId: PAULO_ID, aiModel: 'gemini-argon', customCurrentPhotos: photos }); assert.equal(b.status, 500); assert.match(b.json.details, /sem saldo ou no limite/); assert.match(b.json.message, /sem saldo/);
     reset(); G.__LOG_FAIL = true; const c = await post(PAULO_ID, { coachId: PAULO_ID, aiModel: 'gemini-argon', customCurrentPhotos: photos }); assert.equal(c.status, 200, 'o registro de custo nunca derruba a avaliação'); assert.ok(c.json.analysis);
     reset(); let n503 = 0; G.__ARGON = async () => { if (++n503 === 1) throw err(503, 'The model is overloaded'); return GOOD; }; const e503 = await post(PAULO_ID, { coachId: PAULO_ID, aiModel: 'gemini-argon', customCurrentPhotos: photos }); assert.equal(e503.status, 200, JSON.stringify(e503.json)); assert.equal(G.__ARGON_CALLS.length, 2, 'Google "indisponível": a avaliação tenta mais uma vez');
     reset(); G.__ARGON = async () => ({ ...GOOD, text: '' }); const d = await post(PAULO_ID, { coachId: PAULO_ID, aiModel: 'gemini-argon', customCurrentPhotos: photos }); assert.equal(d.status, 503, 'resposta vazia: o aviso de motor indisponível de sempre'); assert.equal(d.json.error, 'ai_unavailable');
