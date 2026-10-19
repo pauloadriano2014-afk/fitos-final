@@ -1,7 +1,7 @@
 // Banco em memória para o teste do plano automático (lib/autoPlan.ts). Implementa só o que o pipeline usa.
 const { randomUUID } = require('crypto');
 const T = (globalThis.__DB = {
-  user: [], anamnese: [], workout: [], workoutExercise: [], diet: [], meal: [], foodItem: [], foodItemMeta: [], exercise: [], autoPlanRun: [], food: [], dietDayScheme: [], workoutHistory: [], aiLog: [], dailyCheckin: [], challengeCheckin: [], templateCollection: [], workoutTemplate: [],
+  user: [], anamnese: [], workout: [], workoutExercise: [], diet: [], meal: [], foodItem: [], foodItemMeta: [], exercise: [], autoPlanRun: [], food: [], dietDayScheme: [], workoutHistory: [], aiLog: [], dailyCheckin: [], challengeCheckin: [], templateCollection: [], workoutTemplate: [], genPrefs: [], genPreset: [], equipmentReport: [],
 });
 const get = (o, k) => o?.[k];
 function match(row, where) {
@@ -60,6 +60,7 @@ function table(name, defaults = () => ({})) {
     },
     updateMany: async ({ where, data }) => { const hit = rows.filter((r) => match(r, where)); hit.forEach((r) => { applyData(r, data); stamp(r); }); return { count: hit.length }; },
     deleteMany: async ({ where } = {}) => { const hit = rows.filter((r) => match(r, where)); hit.forEach((r) => rows.splice(rows.indexOf(r), 1)); return { count: hit.length }; },
+    delete: async ({ where }) => { const row = rows.find((r) => match(r, where)); if (!row) throw Object.assign(new Error('not found'), { code: 'P2025' }); rows.splice(rows.indexOf(row), 1); return row; },
     upsert: async ({ where, create, update }) => { const row = rows.find((r) => match(r, where)); if (row) { applyData(row, update); return row; } const n = stamp({ id: randomUUID(), ...create }); rows.push(n); return n; },
   };
 }
@@ -98,6 +99,9 @@ const prisma = {
   challengeCheckin: table('challengeCheckin', () => ({ done: [] })),
   templateCollection: table('templateCollection'),
   workoutTemplate: table('workoutTemplate'),
+  genPrefs: table('genPrefs'),
+  genPreset: table('genPreset'),
+  equipmentReport: table('equipmentReport'),
   autoPlanRun: table('autoPlanRun', () => ({ status: 'PENDING', step: null, attempts: 0, error: null, workoutIds: [], dietId: null, summary: null, startedAt: null, finishedAt: null })),
   $transaction: async (fn) => fn(prisma),
 };

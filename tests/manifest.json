@@ -110,6 +110,9 @@
   "build.mjs",
   "build6.mjs"
  ],
+ "t_gen_rules": [
+  "build44.mjs"
+ ],
  "t_ibge_comp": [
   "build22.mjs"
  ],

@@ -17,6 +17,8 @@ import { callClaudeWorkout, isClaudeEngine, WORKOUT_TIMEOUT_MS } from '@/lib/ai/
 import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
 import { pickSwap, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
+import { loadAdminLibrary } from '@/lib/genLibrary';
+import { applyRules, cleanRules, describeRules, emptyRules, loadStudentRules, type GenRules } from '@/lib/genRules';
 import { computeLevel, parseLevel, LEVEL_LABEL, type LevelInfo } from '@/lib/studentLevel';
 
 // 🧠 (19 out 2026) trechos de regra que os dois modos (antigo e inteligente) usam IGUAIS
@@ -42,25 +44,9 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
   {
     const isMasterCoach = MASTER_IDS.includes(adminId);
     const trainingEnv = cycleConfig?.trainingEnvironment || null;
-    const envFilter = trainingEnv && trainingEnv !== 'UNIVERSAL' ? { hasSome: ['UNIVERSAL', trainingEnv] } : undefined;
 
-    const currentAdmin = await prisma.user.findUnique({ where: { id: adminId }, select: { email: true } });
-    const isAdri = currentAdmin?.email?.toLowerCase() === 'adri.personal@hotmail.com';
-    let coachFilter: any = { coachId: adminId };
-
-    if (isAdri) {
-      const masterAdmin = await prisma.user.findFirst({
-        where: { role: 'ADMIN', email: { not: 'adri.personal@hotmail.com' } },
-        select: { id: true }
-      });
-      if (masterAdmin) coachFilter = { OR: [{ coachId: adminId }, { coachId: masterAdmin.id }] };
-    }
-
-    const allAdminExercises = await prisma.exercise.findMany({
-      where: { ...coachFilter, ...(envFilter ? { environments: envFilter } : {}) },
-      select: { id: true, name: true, category: true, subCategory: true, videoUrl: true, tags: true, environments: true, defaultSubstitutes: true },
-      orderBy: { name: 'asc' },
-    });
+    // (lib/genLibrary.ts: a mesma biblioteca que a prévia dos filtros conta)
+    const allAdminExercises = await loadAdminLibrary(prisma, adminId, trainingEnv);
 
     // 🛡️ (4 out 2026) Só o plano automático usa: aluno com dor/cirurgia numa articulação (JOELHO, LOMBAR, OMBRO) NÃO vê, na biblioteca que a IA recebe,
     // os exercícios que a própria biblioteca marca como de risco para ela. Sem a opção, nada muda (rota do coach intacta).
@@ -71,12 +57,23 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
     // de 2 exercícios dele), o exercício volta para a lista: um treino completo vale mais do que o aviso (o coach vê a observação no resumo).
     const bannedIds = new Set<string>(await unavailableExerciseIds(userId).catch(() => [] as string[]));
     const eq = filterUnavailable(afterJoint, bannedIds);
-    const adminExercises = eq.list;
+    // 🎛️ (19 out 2026) FILTROS DO COACH (lib/genRules.ts): o que ele bloqueou/fixou/poupou (tela do Protocolo ELITE → `cycleConfig.genRules`; sem isso, o que está salvo no aluno).
+    // Só atuam quando há estrutura de ciclo; não derrubam a geração se a tabela ainda não existe. Fixar vence as regras; os filtros de segurança acima (articulação, aparelho do aluno) continuam valendo.
+    let genRules: GenRules = emptyRules();
+    if (cycleConfig && Array.isArray(cycleConfig.days) && cycleConfig.days.length) genRules = 'genRules' in cycleConfig ? cleanRules(cycleConfig.genRules) : (await loadStudentRules(prisma, userId)).rules;
+    const applied = applyRules(eq.list as any, genRules);
+    const adminExercises = applied.list as typeof eq.list;
     const avoidedNames = eq.avoided;
     if (excludeRisks.length && cycleConfig?.days?.length) {
       const targetOf = (ex: any) => String((ex.tags as any)?.target || ex.category || '').toUpperCase();
       const issues = jointFilterIssues(cycleConfig.days, allAdminExercises.map(targetOf), afterJoint.map(targetOf));
       if (issues.length) return { status: 422, body: { error: `Biblioteca insuficiente depois de tirar os exercícios de risco (${excludeRisks.join(', ')}): ${issues.join('; ')}`, code: 'BANCO_INSUFICIENTE' } };
+    }
+
+    if (applied.active && cycleConfig?.days?.length) {
+      const tgt = (ex: any) => String((ex.tags as any)?.target || ex.category || '').toUpperCase();
+      const issues = jointFilterIssues(cycleConfig.days, eq.list.map(tgt), adminExercises.map(tgt));
+      if (issues.length) return { status: 422, body: { error: `Os filtros de exercícios deixaram poucas opções: ${issues.join('; ')}. Afrouxe os filtros ou libere mais exercícios.`, code: 'BANCO_INSUFICIENTE' } };
     }
 
     if (adminExercises.length === 0) {
@@ -181,7 +178,13 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
       });
       return { name: w.name, days };
     }).filter((r) => Object.keys(r.days).length > 0) : [];
+    // nomes dos fixados que NÃO estão disponíveis para este aluno (ambiente, limitação, aparelho): o coach lê o nome, não o id
+    const pinNames = new Map<string, string>((allAdminExercises as any[]).map((e) => [e.id, e.name]));
+    const lostPins = applied.droppedPins.filter((id) => !pinNames.has(id));
+    if (lostPins.length) { try { const rows: any[] = await prisma.exercise.findMany({ where: { id: { in: lostPins } }, select: { id: true, name: true } }); rows.forEach((r) => pinNames.set(r.id, r.name)); } catch (_) { /* fica o id */ } }
+    const droppedPinsView = applied.droppedPins.map((id) => ({ id, name: pinNames.get(id) || id }));
     const book = new CodeBook();
+    const pinSet = new Set<string>(applied.pinned);
     let facts: ReturnType<typeof buildFacts> = [];
     let cands: ReturnType<typeof buildCandidates> | null = null;
     let techRemoved: string[] = [];
@@ -189,8 +192,9 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
       let sessions = history.length;
       try { const c = await (prisma as any).workoutHistory.count({ where: { userId } }); if (Number.isFinite(c)) sessions = c; } catch (_) { /* fica com o que veio no histórico */ }
       levelInfo = computeLevel({ entry: parseLevel((user as any).level) || parseLevel(anamnese_?.nivel) || 'INICIANTE', startDate: (user as any).startDate || (user as any).createdAt, sessions });
-      facts = buildFacts(prevRoutines, history);
-      cands = buildCandidates({ days: cycleConfig.days, library: adminExercises as unknown as LibEx[], facts, prev: prevRoutines, level: levelInfo.level, env: trainingEnv || 'UNIVERSAL', levelRules });
+      // fixado pelo coach = âncora: repete mesmo que a rotação mandasse trocar
+      facts = buildFacts(prevRoutines, history).map((f) => (pinSet.has(f.exerciseId) ? { ...f, plan: 'MANTER' as const, why: 'fixado pelo coach' } : f));
+      cands = buildCandidates({ days: cycleConfig.days, library: adminExercises as unknown as LibEx[], facts, prev: prevRoutines, level: levelInfo.level, env: trainingEnv || 'UNIVERSAL', levelRules, pins: pinSet });
     }
     const techFiltered = smart && levelRules && levelInfo ? techniquesForLevel(cycleConfig.techniques || [], levelInfo.level) : { kept: cycleConfig?.techniques || [], removed: [] as string[] };
     techRemoved = techFiltered.removed;
@@ -329,7 +333,7 @@ REGRAS:
 1. DIAS: Use "A","B","C"... Nunca nomes descritivos.
 2. ESTRUTURA: siga EXATAMENTE a ESTRUTURA do ciclo (grupos, quantidade de exercícios por dia e séries). Não omita grupo, não acrescente grupo, não mude os dias.
 3. CÓDIGOS: use APENAS os códigos (E001, E002...) do BANCO DE CANDIDATOS, tirando cada exercício da lista do grupo certo. Jamais invente códigos.
-4. PROGRESSÃO (a regra mais importante): a seção ROTINA ANTERIOR diz o que fazer com cada exercício. MANTER = repita o mesmo código (é a âncora: o aluno progride na carga). TROCAR = escolha OUTRO exercício do mesmo grupo, nunca um marcado "REPETIDO". Nos TROCAR varie o ângulo, a pegada ou o equipamento. Sem rotina anterior, monte a primeira rotina: compostos básicos primeiro, variada.
+4. PROGRESSÃO (a regra mais importante): a seção ROTINA ANTERIOR diz o que fazer com cada exercício. MANTER = repita o mesmo código (é a âncora: o aluno progride na carga). TROCAR = escolha OUTRO exercício do mesmo grupo, nunca um marcado "REPETIDO". Nos TROCAR varie o ângulo, a pegada ou o equipamento. Exercícios marcados FIXADO pelo coach entram obrigatoriamente (no grupo certo). Sem rotina anterior, monte a primeira rotina: compostos básicos primeiro, variada.
 5. ${TECH_RULE}
 6. NÍVEL: respeite a seção NÍVEL DO ALUNO (técnicas proibidas, exercícios complexos, faixa de repetições). Técnica avançada só em exercício que combine, nos exercícios finais do grupo, nunca em todos.
 7. ${BLOCKS_RULE(5)}
@@ -377,7 +381,7 @@ IMPORTANTE: "observation" deve ser SEMPRE string vazia "". Não escreva observa�
 ${rotationText(prevRoutines, facts, book)}
 ${cycleCtx}
 
-${levelRules ? `${levelPolicy(levelInfo.level, cycleConfig.phase).text}\n\n` : ''}${candidatesText(cands, cycleConfig.days, facts, book, trainingEnv || 'UNIVERSAL')}
+${levelRules ? `${levelPolicy(levelInfo.level, cycleConfig.phase).text}\n\n` : ''}${candidatesText(cands, cycleConfig.days, facts, book, trainingEnv || 'UNIVERSAL', pinSet)}
 
 Responda APENAS com JSON válido.`.trim()
       : `${alunoCtx}${workoutsCtx}${cycleCtx}
@@ -593,10 +597,14 @@ Responda APENAS com JSON válido.`.trim();
       const r = refineWorkout(rawDays as Record<string, GenEx[]>, {
         days: cycleConfig.days, phase: String(cycleConfig.phase || ''), level: levelInfo.level, levelRules,
         lib: exerciseMap as unknown as Map<string, LibEx>, pool: adminExercises as unknown as LibEx[], cands, facts, hasPrev: prevRoutines.length > 0,
-        env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded,
+        env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded, pins: pinSet,
         makeEx: (e, blocks) => ({ exerciseId: e.id, title: e.name, videoUrl: e.videoUrl || '', category: e.category, subCategory: e.subCategory, observation: '', substitute: subFor(e.id), blocks }),
       });
       reviewedDays = r.byDay; quality = r.quality;
+      if (applied.droppedPins.length) {
+        for (const id of applied.droppedPins) quality.issues.push(`"${pinNames.get(id) || id}" fixado não está disponível para este aluno (local, limitação ou aparelho)`);
+        quality.score = Math.max(0, 100 - 10 * quality.issues.length);
+      }
       if (techRemoved.length) quality.fixes.unshift(`Técnicas tiradas do ciclo pelo nível ${levelInfo.label}: ${techRemoved.join(', ')}`);
     }
 
@@ -642,7 +650,7 @@ Responda APENAS com JSON válido.`.trim();
 
     // 📊 registro de custo (não pode derrubar a geração)
     if (genUsage) {
-      try { await (prisma as any).aiLog.create({ data: { userId: adminId, question: `gerar-treino:${selectedAI}`, answer: JSON.stringify({ ...genUsage, ms: genUsage.ms ?? Date.now() - genT0, studentId: userId, bankExercises: adminExercises.length, days: workoutTabs.length, exercises: totalExercises, ghosts: ghostCount, ...(quality ? { smart: true, score: quality.score, newPct: quality.stats.newPct, swapped: quality.stats.swapped, filled: quality.stats.filled, candidates: book.size } : {}) }).slice(0, 2000) } }); } catch (e) { /* sem registro */ }
+      try { await (prisma as any).aiLog.create({ data: { userId: adminId, question: `gerar-treino:${selectedAI}`, answer: JSON.stringify({ ...genUsage, ms: genUsage.ms ?? Date.now() - genT0, studentId: userId, bankExercises: adminExercises.length, days: workoutTabs.length, exercises: totalExercises, ghosts: ghostCount, ...(quality ? { smart: true, score: quality.score, newPct: quality.stats.newPct, swapped: quality.stats.swapped, filled: quality.stats.filled, candidates: book.size } : {}), ...(applied.active ? { rulesRemoved: applied.removedTotal, pinned: applied.pinned.length } : {}) }).slice(0, 2000) } }); } catch (e) { /* sem registro */ }
     }
 
     return {
@@ -656,6 +664,7 @@ Responda APENAS com JSON válido.`.trim();
         exercisesByDay: validatedDays,
         workoutTabs,
         // 🧠 revisão automática (só no modo inteligente): nota, o que foi ajustado e o que ainda merece o olhar do coach
+        ...(applied.active ? { filters: { summary: describeRules(genRules), removed: applied.removed, removedTotal: applied.removedTotal, pinned: applied.pinned.length, droppedPins: droppedPinsView } } : {}),
         ...(quality && levelInfo ? { quality, levelInfo: { level: levelInfo.level, label: levelInfo.label, months: levelInfo.months, sessions: levelInfo.sessions } } : {}),
         ...(excludeRisks.length ? { jointFilter: { risks: excludeRisks, excluded: allAdminExercises.length - afterJoint.length } } : {}),
         ...(avoidedNames.length ? { avoidedUnavailable: avoidedNames } : {}),

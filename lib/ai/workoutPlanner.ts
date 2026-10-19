@@ -145,7 +145,7 @@ export class CodeBook {
 }
 
 // ───────────────────────────── 3) CANDIDATOS ─────────────────────────────
-export interface CandCtx { days: PlanDay[]; library: LibEx[]; facts: ExFact[]; prev: PrevRoutine[]; level: LevelKey | null; env: string; levelRules: boolean }
+export interface CandCtx { days: PlanDay[]; library: LibEx[]; facts: ExFact[]; prev: PrevRoutine[]; level: LevelKey | null; env: string; levelRules: boolean; /** exercícios que o coach fixou: sempre no topo da lista do grupo */ pins?: Set<string> }
 export interface Candidates { byGroup: Map<string, LibEx[]>; notes: string[]; latestNames: Set<string>; olderNames: Set<string> }
 
 export function recentNames(prev: PrevRoutine[]): { latestNames: Set<string>; olderNames: Set<string> } {
@@ -159,6 +159,7 @@ export function buildCandidates(c: CandCtx): Candidates {
   const notes: string[] = []; const byGroup = new Map<string, LibEx[]>();
   const { latestNames, olderNames } = recentNames(c.prev);
   const keep = new Set(c.facts.filter((f) => f.plan === 'MANTER' && !f.cardio).map((f) => f.exerciseId));
+  const pins = c.pins || new Set<string>();
   const light = c.env === 'CONDOMINIO' || c.env === 'EM_CASA';
   const groups = new Map<string, { total: number; maxDay: number }>();
   for (const d of c.days) for (const g of d.groups) {
@@ -183,7 +184,8 @@ export function buildCandidates(c: CandCtx): Candidates {
     const restType = groupInfo(gid)?.restType;
     const score = (e: LibEx) => {
       const k = nameKey(e.name); let s = 0;
-      if (keep.has(e.id)) s += 10; else if (latestNames.has(k)) s -= 6;
+      if (pins.has(e.id)) s += 20; else if (keep.has(e.id)) s += 10; else if (latestNames.has(k)) s -= 6;
+      if ((e.tags as any)?.favorite === true) s += 2;   // favorito do coach
       if (olderNames.has(k)) s -= 2;
       if (!GENERIC_TARGETS.has(targetOf(e))) s += 4;   // exercício do músculo certo antes do rótulo genérico (PERNAS no lugar de glúteo)
       if (e.videoUrl) s += 1;
@@ -209,13 +211,13 @@ export function buildCandidates(c: CandCtx): Candidates {
 // ───────────────────────────── texto para a IA ─────────────────────────────
 const dayQty = (days: PlanDay[], gid: string) => days.map((d) => { const g = d.groups.find((x) => x.id === gid); return g ? `${d.name}:${g.qty}` : null; }).filter(Boolean).join(', ');
 
-export function candidatesText(c: Candidates, days: PlanDay[], facts: ExFact[], book: CodeBook, env: string): string {
+export function candidatesText(c: Candidates, days: PlanDay[], facts: ExFact[], book: CodeBook, env: string, pins: Set<string> = new Set()): string {
   const keep = new Set(facts.filter((f) => f.plan === 'MANTER' && !f.cardio).map((f) => f.exerciseId));
   const lines: string[] = [`BANCO DE CANDIDATOS (ambiente ${env}) — código | nome | tipo/equipamento | aviso`];
   for (const [gid, list] of c.byGroup) {
     lines.push(`## ${gid} — vagas por dia (${dayQty(days, gid)})`);
     for (const e of list) {
-      const tag = keep.has(e.id) ? 'MANTER' : c.latestNames.has(nameKey(e.name)) ? 'REPETIDO do ciclo anterior (evite)' : '';
+      const tag = pins.has(e.id) ? 'FIXADO pelo coach (obrigatório)' : keep.has(e.id) ? 'MANTER' : c.latestNames.has(nameKey(e.name)) ? 'REPETIDO do ciclo anterior (evite)' : '';
       lines.push(`${book.code(e.id)} | ${e.name} | ${mechOf(e) || '?'}/${equipOf(e) || '?'}${tag ? ` | ${tag}` : ''}`);
     }
   }
@@ -248,11 +250,13 @@ export interface RefineCtx {
   env: string; jointRisks: string[]; unavailable: Set<string>;
   /** exercícios que o aluno já fez com carga (só neles a carga escrita vale) */
   loaded: Set<string>;
+  /** exercícios que o coach fixou: entram na rotina (no lugar de um acessório do mesmo músculo) e nunca são trocados pela rotação */
+  pins?: Set<string>;
   makeEx: (e: LibEx, blocks: GenBlock[]) => GenEx;
 }
 export interface Quality {
   score: number; fixes: string[]; issues: string[];
-  stats: { repairs: number; exercises: number; newPct: number | null; kept: number; swapped: number; filled: number; trimmed: number; techStripped: number; loadsFixed: number; groupSets: Record<string, number> };
+  stats: { pinned: number; repairs: number; exercises: number; newPct: number | null; kept: number; swapped: number; filled: number; trimmed: number; techStripped: number; loadsFixed: number; groupSets: Record<string, number> };
 }
 
 const OWN_BLOCKS = new Set(['GVT', '21', 'CLUSTERSET', 'DROPSET', 'RESTPAUSE']);
@@ -276,6 +280,7 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
   let repairs = 0;
   const fix = (msg: string) => { repairs++; fixes.push(msg); };
   const st = { swapped: 0, filled: 0, trimmed: 0, techStripped: 0, loadsFixed: 0 };
+  let pinnedIn = 0;
   const out: Record<string, GenEx[]> = { ...byDay };
   const lvl = ctx.levelRules ? ctx.level : null;
   const reps = repRange(ctx.phase, lvl);
@@ -357,8 +362,26 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
   }
   for (const list of Object.values(out)) if (Array.isArray(list)) for (const ex of list) routineNames.add(nameKey(ex.title));
 
-  // ── c) rotação: o que a rotina anterior mandava TROCAR (e repetição entre dias) vira outro exercício do mesmo músculo ──
   const factOf = new Map(ctx.facts.map((f) => [f.exerciseId, f]));
+  // ── b2) fixados pelo coach: se a IA não pôs, entra no lugar de um acessório do mesmo músculo (nunca no lugar de outro fixado) ──
+  const pins = ctx.pins || new Set<string>();
+  for (const id of pins) {
+    const pl = ctx.lib.get(id); if (!pl) continue;
+    if (Object.values(out).some((l) => Array.isArray(l) && l.some((e) => e.exerciseId === id))) continue;
+    const t = targetOf(pl); let done = false;
+    for (const d of ctx.days) {
+      const list = out[d.name]; if (!Array.isArray(list) || !list.length) continue;
+      const groups = d.groups.filter((g) => g.id !== 'MOBILIDADE' && g.id !== 'CARDIO');
+      const g = groups.find((x) => x.id === t) || groups.find((x) => aliasesOf(x.id).includes(t)); if (!g) continue;
+      const members = list.filter((e) => groupOf.get(e) === g && !pins.has(e.exerciseId));
+      const victim = [...members].reverse().find((e) => factOf.get(e.exerciseId)?.plan !== 'MANTER') ?? members[members.length - 1]; if (!victim) continue;
+      const novo = ctx.makeEx(pl, victim.blocks.map((b) => ({ ...b, load: '' }))); groupOf.set(novo, g);
+      out[d.name] = list.map((e) => (e === victim ? novo : e)); routineNames.add(nameKey(pl.name)); pinnedIn++; done = true;
+      fix(`Dia ${d.name}: "${pl.name}" (fixado por você) entrou no lugar de "${victim.title}"`); break;
+    }
+    if (!done) issues.push(`"${pl.name}" fixado não coube: o plano não tem vaga de ${t} sem tirar outro fixado`);
+  }
+  // ── c) rotação: o que a rotina anterior mandava TROCAR (e repetição entre dias) vira outro exercício do mesmo músculo ──
   const swapCtx = (used: Set<string>) => ({ unavailable: ctx.unavailable, jointRisks: ctx.jointRisks, env: ctx.env, level: lvl, usedNames: used, envOk: () => true, levelIssues });
   const swap = (ex: GenEx, why: string, day: string): GenEx | null => {
     const orig = libOf(ex); if (!orig) return null;
@@ -378,6 +401,7 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
     out[d.name] = list.map((ex) => {
       if (exCardio(ex)) return ex;
       const k = nameKey(ex.title); const f = factOf.get(ex.exerciseId); const g = groupOf.get(ex);
+      if (pins.has(ex.exerciseId) && !seen.has(k)) { seen.add(k); return ex; }   // fixado pelo coach: a rotação não mexe
       let why = '';
       if (seen.has(k)) why = 'já aparece em outro dia da rotina';
       else if (ctx.hasPrev && f && f.plan === 'TROCAR') why = `repetido da rotina anterior — ${f.why}`;
@@ -422,5 +446,5 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
   if (push >= 8 && pull < push * 0.7) issues.push(`Mais empurrar (${push} séries) do que puxar (${pull}): atenção aos ombros`);
   if (newPct !== null && newPct < 50) issues.push(`Só ${newPct}% dos exercícios são novos em relação à rotina anterior`);
   const score = Math.max(0, 100 - 10 * issues.length);
-  return { byDay: out, quality: { score, fixes: fixes.slice(0, 30), issues: issues.slice(0, 12), stats: { repairs, exercises: total, newPct, kept, ...st, groupSets } } };
+  return { byDay: out, quality: { score, fixes: fixes.slice(0, 30), issues: issues.slice(0, 12), stats: { pinned: pinnedIn, repairs, exercises: total, newPct, kept, ...st, groupSets } } };
 }

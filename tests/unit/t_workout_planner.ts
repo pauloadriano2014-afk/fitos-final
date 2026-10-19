@@ -211,6 +211,22 @@ const hist = (rows: Array<{ id: string; sets: number[]; effort?: string; perSide
     assert.equal(A.find((e) => e.exerciseId !== 'q2')!.blocks.length, 3, 'a troca herda séries e repetições');
     const av = refineWorkout({ A: [gx(QUAD[0]), gx(QUAD[1])] }, mk({ level: 'AVANCADO' }, day, QUAD)); assert.ok(av.byDay.A.some((e) => e.exerciseId === 'q1'), 'avançado mantém');
   });
+  await t('refineWorkout: FIXADOS — entram no lugar do acessório (só tira âncora se não sobrar acessório; nunca tira outro fixado), a rotação e a regra de nível não mexem neles, sem vaga vira aviso', () => {
+    const prev: PrevRoutine = { name: 'F', days: { A: [PEITO[0], PEITO[5]].map(prevEx) } }; const facts = buildFacts([prev], []);   // p1 = âncora (MANTER), p6 = acessório (TROCAR)
+    const base = (pins: string[], input = [gx(PEITO[0]), gx(PEITO[1]), gx(BICEPS[0]), gx(BICEPS[1])]) => refineWorkout({ A: input }, mk({ hasPrev: true, pins: new Set(pins) }, DAYS, LIB, [prev], facts));
+    let r = base(['p3'], [gx(PEITO[0]), gx(PEITO[5]), gx(BICEPS[0]), gx(BICEPS[1])]); assert.deepEqual(r.byDay.A.filter((e) => tg(e) === 'PEITO').map((e) => e.exerciseId).sort(), ['p1', 'p3'], 'entrou no lugar do acessório p6, a âncora p1 ficou'); assert.equal(r.quality.stats.pinned, 1); assert.ok(r.quality.fixes.some((f) => f.includes('"Peito 3" (fixado por você) entrou no lugar de "Peito 6"')), r.quality.fixes.join());
+    assert.ok(r.byDay.A.find((e) => e.exerciseId === 'p3')!.blocks.every((b) => b.load === ''), 'o fixado novo começa com a carga em branco');
+    r = base(['p3', 'p4'], [gx(PEITO[0]), gx(PEITO[5]), gx(BICEPS[0]), gx(BICEPS[1])]); assert.deepEqual(r.byDay.A.filter((e) => tg(e) === 'PEITO').map((e) => e.exerciseId).sort(), ['p3', 'p4'], 'dois fixados para duas vagas: sem acessório sobrando, o fixado vale mais que a âncora automática'); assert.equal(r.quality.stats.pinned, 2);
+    r = base(['p3', 'p4', 'p5'], [gx(PEITO[0]), gx(PEITO[5]), gx(BICEPS[0]), gx(BICEPS[1])]); assert.equal(r.byDay.A.filter((e) => tg(e) === 'PEITO').length, 2, 'a vaga é do plano'); assert.ok(r.quality.issues.some((i) => i.includes('fixado não coube')), 'o terceiro fixado não cabe em 2 vagas: ' + r.quality.issues.join());
+    r = base(['p3'], [gx(PEITO[2]), gx(PEITO[5]), gx(BICEPS[0]), gx(BICEPS[1])]); assert.ok(r.byDay.A.some((e) => e.exerciseId === 'p3') && !r.byDay.A.some((e) => e.exerciseId === 'p6' && false), 'já estava na rotina: nada a fazer'); assert.equal(r.quality.stats.pinned, 0);
+    const day: PlanDay[] = [{ name: 'A', groups: [{ id: 'QUADRICEPS', qty: 2, sets: 3 }] }];
+    const mkq = (pins: string[]) => mk({ level: 'INICIANTE', pins: new Set(pins) }, day, QUAD);
+    assert.ok(refineWorkout({ A: [gx(QUAD[0]), gx(QUAD[1])] }, mkq(['q1'])).byDay.A.some((e) => e.exerciseId === 'q1'), 'fixado pelo coach vale mais que "complexo para iniciante"');
+    assert.ok(!refineWorkout({ A: [gx(QUAD[0]), gx(QUAD[1])] }, mkq([])).byDay.A.some((e) => e.exerciseId === 'q1'), 'sem fixar, sai');
+    const c = buildCandidates({ days: DAYS, library: LIB, facts: [], prev: [], level: null, env: 'X', levelRules: false, pins: new Set(['p6']) }); assert.equal(c.byGroup.get('PEITO')![0].id, 'p6', 'fixado no topo da lista do grupo');
+    assert.ok(candidatesText(c, DAYS, [], new CodeBook(), 'X', new Set(['p6'])).includes('| FIXADO pelo coach (obrigatório)'));
+    const fav = buildCandidates({ days: DAYS, library: [lib('f1', 'Aaa comum', 'BICEPS', 'ISOLADO', 'HALTER'), (() => { const x = lib('f2', 'Zzz favorito', 'BICEPS', 'ISOLADO', 'HALTER'); x.tags.favorite = true; return x; })()], facts: [], prev: [], level: null, env: 'X', levelRules: false }).byGroup.get('BICEPS')!.map((e) => e.id); assert.deepEqual(fav, ['f2', 'f1'], 'favorito do coach sobe');
+  });
   await t('refineWorkout: ROTAÇÃO — o acessório que repetiu da rotina anterior vira outro; a âncora MANTER fica; carga do novo em branco', () => {
     const prev: PrevRoutine = { name: 'F', days: { A: [PEITO[0], PEITO[5], BICEPS[0], BICEPS[1]].map(prevEx) } };
     const facts = buildFacts([prev], hist([[{ id: 'p1', sets: [40, 40, 40] }], [{ id: 'p1', sets: [35, 35, 35] }]]));
