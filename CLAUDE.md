@@ -21,4 +21,4 @@ npx prisma db push
 - PWA (`FIT-OS-FRONTEND`, Render): publica a branch **`main`**.
 - App do iPhone/Android: atualização de JavaScript por `eas update`, ligada à versão do app (`runtimeVersion` = versão do `app.json`). `main` = versão 1.0.0 (app 1.0 da loja); `ios-1.1` = versão 1.1.0.
 - `ios-1.1` e `main` divergem. Correção urgente para quem usa a PWA ou o app 1.0 deve sair em uma branch criada a partir da `main`, só com a correção.
-- Não rodar `eas update` da 1.1.0 enquanto a Apple estiver revisando a versão.
+- **A Apple JÁ revisou e aprovou o app.** Não existe revisão em andamento. NUNCA mais perguntar, avisar ou segurar o `eas update` por causa de revisão da Apple. Só voltar a tratar disso quando o Paulo disser que vai mandar uma nova versão para revisar.
