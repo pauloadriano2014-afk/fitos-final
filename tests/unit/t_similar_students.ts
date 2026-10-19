@@ -1,12 +1,13 @@
 import assert from 'assert';
 import jwt from 'jsonwebtoken';
 import prisma from '@/lib/prisma';
+import { pickSwap, nameKey } from '@/lib/exerciseSwap';
 import { GET as similarGET } from '/home/user/fitos-final/app/api/insights/similar/route';
 import { GET as compareGET } from '/home/user/fitos-final/app/api/insights/compare/route';
 import { runIntent, ruleRoute, INTENTS } from '/home/user/fitos-final/lib/coachAssistant';
 import {
   objectiveKey, placesOf, jointRisksOf, buildProfile, scoreSimilarity, buildRoutines, nextOrdinal, ordinalWindow, pickRoutine, compareWorkouts,
-  findSimilar, loadComparison, readRowDetail, MIN_SCORE, MIN_ROUTINE_SESSIONS, MAX_SIMILAR, WEIGHTS,
+  findSimilar, loadComparison, readRowDetail, levelFix, MIN_SCORE, MIN_ROUTINE_SESSIONS, MAX_SIMILAR, WEIGHTS,
 } from '/home/user/fitos-final/lib/similarStudents';
 
 const P = prisma as any; const S = P.__state;
@@ -167,6 +168,35 @@ const ids = (r: any) => r.similar.map((s: any) => s.studentId);
     const run = async (level: string, startDays: number) => { seed(); TARGET({ level, createdAt: ago(startDays), startDate: ago(startDays) }, {}); REF('s', 3); EX('e1', { name: 'Supino', environments: ['UNIVERSAL'] }); EX('e2', { name: 'Barra fixa', category: 'COSTAS', environments: ['UNIVERSAL'] }); WE('s-w1', 'e1', 'A', 0, { technique: 'DROPSET' }); WE('s-w1', 'e2', 'A', 1); const r: any = await loadComparison(P, 'cA', 't', 's', 's-w1'); return r; };
     let r = await run('Iniciante', 10); assert.deepStrictEqual(r.comparison.days[0].exercises.map((e: any) => e.flags), [['NIVEL'], ['NIVEL']]); assert.strictEqual(r.target.level.level, 'INICIANTE'); assert.ok(r.comparison.toChange[0].why[0].includes('dropset'));
     r = await run('Intermediário', 400); assert.deepStrictEqual(r.comparison.days[0].exercises.map((e: any) => e.flags), [[], []], 'intermediário aguenta dropset e barra fixa'); assert.strictEqual(r.target.level.level, 'INTERMEDIARIO');
+  });
+  const LX = (id: string, name: string, target: string, o: any = {}) => ({ id, name, category: o.cat || 'Tríceps', subCategory: o.sub ?? 'Geral', videoUrl: o.video ?? null, environments: o.env || ['UNIVERSAL'], tags: { target, mechanic: o.mech || 'ISOLADO', equipment: o.eq || 'LIVRE', jointRisk: o.risk || [] } });
+  const CTX = (o: any = {}) => ({ unavailable: new Set<string>(), jointRisks: [] as string[], env: 'ACADEMIA_PADRAO', level: 'INTERMEDIARIO' as any, usedNames: new Set<string>(), envOk: (e: any) => { const l = (e || []).map((x: string) => x.toUpperCase()); return !l.length || l.includes('UNIVERSAL') || l.includes(o.env || 'ACADEMIA_PADRAO'); }, levelIssues: (n: string, t: any, lv: any) => (lv === 'INICIANTE' && /barra fixa/i.test(n) ? ['complexo'] : []), ...o });
+  await t('troca automática: mesmo músculo, serve ao local, à limitação e ao nível; nunca repete nem o que o aluno não tem; prefere o mesmo movimento e, em condomínio, o que usa menos aparelho', () => {
+    const orig = LX('o', 'Tríceps banco máquina', 'TRICEPS', { eq: 'MAQUINA', env: ['GETGYM'] });
+    const pool = [LX('a', 'Tríceps corda na polia', 'TRICEPS', { eq: 'POLIA', env: ['ACADEMIA_PADRAO', 'CONDOMINIO'] }), LX('b', 'Tríceps francês com halter', 'TRICEPS', { eq: 'HALTER', env: ['UNIVERSAL'], video: 'v' }), LX('c', 'Supino fechado', 'PEITO', { cat: 'Peito' }), LX('d', 'Tríceps na máquina GETGYM', 'TRICEPS', { eq: 'MAQUINA', env: ['GETGYM'] }), LX('o', 'Tríceps banco máquina', 'TRICEPS'), LX('e', 'Tríceps banco máquina ', 'TRICEPS')];
+    assert.strictEqual(pickSwap(orig, pool, CTX({ env: 'CONDOMINIO' }))!.name, 'Tríceps francês com halter', 'condomínio: halter antes de polia'); assert.deepStrictEqual(Object.keys(pickSwap(orig, pool, CTX())!), ['id', 'name', 'videoUrl', 'category', 'subCategory']);
+    assert.strictEqual(pickSwap(orig, pool, CTX({ usedNames: new Set([nameKey('Tríceps francês com halter')]) }))!.name, 'Tríceps corda na polia', 'já está na rotina: pula'); assert.strictEqual(pickSwap(orig, pool, CTX({ unavailable: new Set(['b', 'a']) })), null, 'o aluno disse que não tem os dois e os outros não são do mesmo músculo ou local');
+    assert.strictEqual(pickSwap(orig, [LX('x', 'Tríceps testa', 'TRICEPS', { risk: ['COTOVELO'] })], CTX({ jointRisks: ['COTOVELO'] })), null, 'limitação'); assert.strictEqual(pickSwap(orig, [LX('x', 'Tríceps no cross', 'TRICEPS', { env: ['SMARTFIT'] })], CTX()), null, 'outro local'); assert.strictEqual(pickSwap(orig, [LX('x', 'Barra fixa fechada', 'TRICEPS')], CTX({ level: 'INICIANTE' })), null, 'pede mais nível');
+    assert.strictEqual(pickSwap(orig, [LX('x', 'Tríceps A', 'TRICEPS', { mech: 'COMPOSTO' }), LX('y', 'Tríceps B', 'TRICEPS', { mech: 'ISOLADO' })], CTX())!.name, 'Tríceps B', 'mesmo movimento (isolado) vence'); assert.strictEqual(pickSwap(LX('o2', 'Remada', 'COSTAS', { cat: 'Costas' }), [LX('z', 'Elevação lateral', 'OMBRO', { cat: 'Costas' })], CTX()), null, 'outro músculo nunca');
+    assert.strictEqual(pickSwap({ id: 'n', name: 'Sem tag', category: 'Abdômen' }, [{ id: 'm', name: 'Prancha', category: 'Abdômen', environments: [] }, { id: 'k', name: 'Perna', category: 'Pernas' }] as any, CTX())!.name, 'Prancha', 'sem tag de músculo: mesma categoria'); assert.strictEqual(pickSwap(orig, [], CTX()), null); assert.strictEqual(pickSwap(orig, null as any, CTX()), null);
+    assert.deepStrictEqual(levelFix('Barra fixa', 'DROPSET + BISET', 'INICIANTE'), { techs: ['DROPSET'], complex: true }); assert.deepStrictEqual(levelFix('Supino', 'DROPSET', undefined), { techs: [], complex: false });
+  });
+  await t('comparação com troca: o que não serve ganha `swapTo`; exercício bom não; duas trocas nunca repetem o mesmo; vem o id da linha e o que corrigir', () => {
+    const row = (id: string, ex: string, name: string, o: any = {}) => ({ id, exerciseId: ex, name, category: 'Tríceps', subCategory: 'Geral', sets: 3, reps: '12', restTime: 60, technique: o.tech ?? null, notes: null, order: o.order ?? 0, day: 'A', substitutes: [], tags: { target: 'TRICEPS', mechanic: 'ISOLADO', equipment: 'MAQUINA', jointRisk: [] }, environments: o.env || ['GETGYM'] });
+    const pool = [LX('p1', 'Tríceps francês com halter', 'TRICEPS', { eq: 'HALTER' }), LX('p2', 'Tríceps corda na polia', 'TRICEPS', { eq: 'POLIA', env: ['ACADEMIA_PADRAO'] })];
+    const c = compareWorkouts([row('r1', 'x1', 'Tríceps A máquina'), row('r2', 'x2', 'Tríceps B máquina', { order: 1 }), row('r3', 'x3', 'Tríceps C máquina', { order: 2 }), row('r4', 'x4', 'Tríceps livre', { order: 3, env: ['UNIVERSAL'], tech: 'DROPSET' })] as any, { unavailable: new Set(), jointRisks: [], env: 'ACADEMIA_PADRAO', level: 'INICIANTE', pool });
+    const ex = c.days[0].exercises; assert.deepStrictEqual(ex.map((e) => e.rowId), ['r1', 'r2', 'r3', 'r4']); assert.deepStrictEqual(ex.map((e) => e.flags), [['AMBIENTE'], ['AMBIENTE'], ['AMBIENTE'], ['NIVEL']]);
+    assert.deepStrictEqual(ex.slice(0, 3).map((e) => e.swapTo && e.swapTo.id), ['p2', 'p1', null], 'cada troca usa um exercício diferente; acabou a biblioteca, fica sem troca'); assert.strictEqual(ex[3].swapTo, null, 'só a técnica: não troca, tira a técnica'); assert.deepStrictEqual(ex[3].fix, { techs: ['DROPSET'], complex: false }); assert.strictEqual(ex[0].fix, null);
+    assert.ok(ex.every((e) => 'swapTo' in e)); const none = compareWorkouts([row('r1', 'x1', 'Tríceps A máquina')] as any, { unavailable: new Set(), jointRisks: [], env: 'ACADEMIA_PADRAO' }).days[0].exercises[0]; assert.strictEqual(none.swapTo, null, 'sem biblioteca: sem troca');
+  });
+  await t('comparação do banco: a troca sai da biblioteca que o coach enxerga (parceiro não vê "só o Paulo vê") e respeita o local do aluno', async () => {
+    const run = async (coach: string) => { seed(); S.user.push({ id: 'cP', role: 'COACH', coachId: null }); TARGET({ coachId: coach, level: 'Iniciante', createdAt: ago(10), startDate: ago(10) }, { equipamentos: ['Academia de Condomínio'], limitacoes: [] }); U('s', { coachId: coach }); A('s'); R('s', 's-w1', 90, 4);
+      S.exercise.push({ id: 'o1', name: 'Tríceps banco máquina', category: 'Tríceps', subCategory: 'Geral', tags: { target: 'TRICEPS', mechanic: 'ISOLADO', equipment: 'MAQUINA', jointRisk: [] }, environments: ['GETGYM'], coachId: null, hiddenFromCoaches: false },
+        { id: 'k1', name: 'Tríceps francês com halter', category: 'Tríceps', subCategory: 'Geral', tags: { target: 'TRICEPS', mechanic: 'ISOLADO', equipment: 'HALTER', jointRisk: [] }, environments: ['UNIVERSAL'], coachId: 'cP', hiddenFromCoaches: true },
+        { id: 'k2', name: 'Tríceps corda na polia', category: 'Tríceps', subCategory: 'Geral', tags: { target: 'TRICEPS', mechanic: 'ISOLADO', equipment: 'POLIA', jointRisk: [] }, environments: ['ACADEMIA_PADRAO', 'CONDOMINIO'], coachId: null, hiddenFromCoaches: false },
+        { id: 'k3', name: 'Tríceps no cross SMARTFIT', category: 'Tríceps', subCategory: 'Geral', tags: { target: 'TRICEPS', mechanic: 'ISOLADO', equipment: 'POLIA', jointRisk: [] }, environments: ['SMARTFIT'], coachId: null, hiddenFromCoaches: false });
+      WE('s-w1', 'o1', 'A', 0, { id: 'row-1' }); const r: any = await loadComparison(P, coach, 't', 's', 's-w1'); return r.comparison.days[0].exercises[0]; };
+    let e = await run('cA'); assert.deepStrictEqual(e.flags, ['AMBIENTE']); assert.strictEqual(e.rowId, 'row-1'); assert.strictEqual(e.swapTo.name, 'Tríceps corda na polia', 'parceiro não enxerga o halter escondido; o de outro local também não serve');
   });
   await t('comparação: só da carteira, mesmo gênero, ficha tem que ser da referência', async () => {
     seed(); TARGET(); REF('s', 3); REF('h', 3, { gender: 'Masculino' }); REF('o', 3, { coachId: 'cB' }); REF('n', 3, { gender: null }); U('t2', { name: 'Outra' }); A('t2'); R('t2', 't2-w1', 20, 4);

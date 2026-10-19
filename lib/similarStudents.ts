@@ -13,6 +13,8 @@ import { JOINT_BY_TEXT } from '@/lib/autoPlanQuality';
 import { deriveTrainingEnvironment } from '@/lib/ai/splitPresets';
 import { ownStudentScope } from '@/lib/agendaStore';
 import { unavailableExerciseIds } from '@/lib/equipment';
+import { pickSwap, nameKey, type LibEx, type SwapTarget } from '@/lib/exerciseSwap';
+import { visibleLibraryWhere } from '@/lib/exerciseVisibility';
 
 export const MIN_ROUTINE_SESSIONS = 3;   // treinos feitos para uma ficha contar como "rotina"
 export const MIN_SCORE = 40;             // abaixo disso não é "parecido"
@@ -206,21 +208,27 @@ const ADVANCED_TECH: Record<LevelKey, string[]> = {
 };
 const COMPLEX_FOR_BEGINNER: RegExp[] = [/levantamento terra/, /agachamento (livre|frontal|bulgaro|sumo|hack livre)/, /\bbarra fixa\b(?!.*(assist|gravitron|graviton))/, /\b(mergulho|paralela)\b/, /desenvolvimento.*(militar|em pe)/, /\b(arranco|arremesso|power clean|clean)\b/, /good ?morning/, /stiff.*barra|barra.*stiff/];
 const techNorm = (t: string) => t.toUpperCase().replace(/[\s_-]/g, '');
+/** O que, neste exercício, pede mais nível do que o aluno tem: as técnicas avançadas (para tirar) e se o exercício em si é complexo (para trocar). */
+export function levelFix(name: string, technique: string | null, level?: LevelKey | null): { techs: string[]; complex: boolean } {
+  if (!level) return { techs: [], complex: false };
+  const techs = (technique ? technique.split(' + ') : []).filter((t) => ADVANCED_TECH[level].includes(techNorm(t)));
+  return { techs, complex: level === 'INICIANTE' && COMPLEX_FOR_BEGINNER.some((re) => re.test(norm(name))) };
+}
 /** Por que este exercício é pesado demais para o nível (vazio = tudo bem). */
 export function levelIssues(name: string, technique: string | null, level?: LevelKey | null): string[] {
-  if (!level) return [];
-  const out: string[] = [];
-  const bad = (technique ? technique.split(' + ') : []).filter((t) => ADVANCED_TECH[level].includes(techNorm(t)));
-  if (bad.length) out.push(`técnica avançada para o nível (${bad.map((t) => t.toLowerCase()).join(', ')})`);
-  if (level === 'INICIANTE' && COMPLEX_FOR_BEGINNER.some((re) => re.test(norm(name)))) out.push('exercício complexo para quem está começando');
+  const f = levelFix(name, technique, level); const out: string[] = [];
+  if (f.techs.length) out.push(`técnica avançada para o nível (${f.techs.map((t) => t.toLowerCase()).join(', ')})`);
+  if (f.complex) out.push('exercício complexo para quem está começando');
   return out;
 }
+
+// ─────────────────────────── comparação de treino (continuação) ───────────────────────────
 export interface ExerciseRow {
-  exerciseId: string; name: string; category: string; sets: number; reps: string; restTime: number; technique: string | null; notes: string | null; order: number; day: string;
-  substitutes: string[]; tags?: any; environments?: string[] | null;
+  id?: string; exerciseId: string; name: string; category: string; sets: number; reps: string; restTime: number; technique: string | null; notes: string | null; order: number; day: string;
+  substitutes: string[]; tags?: any; environments?: string[] | null; subCategory?: string | null;
 }
-export interface CompareDest { unavailable: Set<string>; jointRisks: string[]; env: string; level?: LevelKey | null }
-export interface CompareExercise { exerciseId: string; name: string; category: string; sets: number; reps: string; restTime: number; technique: string | null; series: string; notes: string | null; flags: Flag[]; detail: string[]; ok: boolean; hasSwap: boolean }
+export interface CompareDest { unavailable: Set<string>; jointRisks: string[]; env: string; level?: LevelKey | null; pool?: LibEx[] }
+export interface CompareExercise { exerciseId: string; name: string; category: string; sets: number; reps: string; restTime: number; technique: string | null; series: string; notes: string | null; flags: Flag[]; detail: string[]; ok: boolean; hasSwap: boolean; rowId?: string | null; fix?: { techs: string[]; complex: boolean } | null; swapTo?: SwapTarget | null }
 export interface CompareDay { day: string; exercises: CompareExercise[]; byCategory: { category: string; count: number }[] }
 export interface Comparison {
   days: CompareDay[];
@@ -270,6 +278,7 @@ export function readRowDetail(r: { technique?: any; sets?: any; reps?: any; rest
 
 export function compareWorkouts(rows: ExerciseRow[], dest: CompareDest): Comparison {
   const byDay = new Map<string, ExerciseRow[]>();
+  const usedNames = new Set<string>((rows || []).map((r) => nameKey(r.name)));   // a troca nunca repete um exercício que já está na rotina
   for (const r of rows || []) { const d = String(r.day || 'A'); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d)!.push(r); }
   const flagsTotal: Record<Flag, number> = { SEM_APARELHO: 0, LIMITACAO: 0, AMBIENTE: 0, NIVEL: 0 };
   const techniques = new Map<string, number>(); const toChange: Comparison['toChange'] = [];
@@ -284,13 +293,19 @@ export function compareWorkouts(rows: ExerciseRow[], dest: CompareDest): Compari
       if (risk.length) { flags.push('LIMITACAO'); detail.push(`pesa em ${risk.map((x) => x.toLowerCase()).join(', ')}`); }
       if (!envOk(r.environments, dest.env)) { flags.push('AMBIENTE'); detail.push('exercício de outro tipo de local'); }
       const lvl = levelIssues(r.name, det.technique, dest.level); if (lvl.length) { flags.push('NIVEL'); detail.push(...lvl); }
+      const fx = levelFix(r.name, det.technique, dest.level);
+      let swapTo: SwapTarget | null = null;
+      if (dest.pool && (flags.some((f) => f === 'SEM_APARELHO' || f === 'AMBIENTE' || f === 'LIMITACAO') || fx.complex)) {
+        swapTo = pickSwap({ id: r.exerciseId, name: r.name, category: r.category, subCategory: r.subCategory, tags: r.tags, environments: r.environments }, dest.pool, { unavailable: dest.unavailable, jointRisks: dest.jointRisks, env: dest.env, level: dest.level, usedNames, envOk: (e: any) => envOk(e, dest.env), levelIssues });
+        if (swapTo) usedNames.add(nameKey(swapTo.name));
+      }
       const swaps = arr(r.substitutes).filter((id) => !dest.unavailable.has(id));
       total++; setsSum += det.sets;
       if (flags.length) { flagged++; flags.forEach((f) => { flagsTotal[f]++; }); toChange.push({ day, name: r.name, flags, why: detail }); }
       const tech = det.technique;
       if (tech) tech.split(' + ').forEach((t) => techniques.set(t, (techniques.get(t) || 0) + 1));
       const cat = r.category || 'OUTROS'; cats.set(cat, (cats.get(cat) || 0) + 1);
-      return { exerciseId: r.exerciseId, name: r.name, category: cat, sets: det.sets, reps: det.reps, restTime: det.restTime, technique: tech, series: det.series, notes: det.note, flags, detail, ok: !flags.length, hasSwap: !!flags.length && swaps.length > 0 };
+      return { exerciseId: r.exerciseId, name: r.name, category: cat, sets: det.sets, reps: det.reps, restTime: det.restTime, technique: tech, series: det.series, notes: det.note, flags, detail, ok: !flags.length, rowId: r.id ?? null, fix: fx.techs.length || fx.complex ? fx : null, swapTo, hasSwap: !!flags.length && swaps.length > 0 };
     });
     return { day, exercises, byCategory: [...cats.entries()].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category)) };
   });
@@ -303,7 +318,7 @@ export function compareWorkouts(rows: ExerciseRow[], dest: CompareDest): Compari
 
 /** Linhas do banco (WorkoutExercise) + dicionário de exercícios -> linhas da comparação. */
 export function exerciseRowsFrom(list: any[], exById: Map<string, any>): ExerciseRow[] {
-  return (list || []).map((r) => { const e: any = exById.get(r.exerciseId); return { exerciseId: r.exerciseId, name: e?.name || 'Exercício', category: e?.category || '', sets: r.sets, reps: r.reps, restTime: r.restTime, technique: r.technique, notes: r.notes, order: r.order, day: r.day, substitutes: [...arr(r.substitutes), ...(r.substituteId ? [String(r.substituteId)] : [])], tags: e?.tags, environments: e?.environments }; });
+  return (list || []).map((r) => { const e: any = exById.get(r.exerciseId); return { id: r.id, exerciseId: r.exerciseId, name: e?.name || 'Exercício', category: e?.category || '', subCategory: e?.subCategory ?? null, sets: r.sets, reps: r.reps, restTime: r.restTime, technique: r.technique, notes: r.notes, order: r.order, day: r.day, substitutes: [...arr(r.substitutes), ...(r.substituteId ? [String(r.substituteId)] : [])], tags: e?.tags, environments: e?.environments }; });
 }
 
 export interface ComparisonResult { ok: boolean; reason?: 'NAO_ENCONTRADO' | 'SEM_GENERO' | 'GENERO_DIFERENTE' | 'SEM_ROTINA'; comparison?: Comparison; source?: { studentId: string; name: string; routine: { id: string; name: string; ordinal: number | null; sessions: number } }; target?: { studentId: string; name: string; current: CompareDay[] | null; limits: string[]; places: Place[]; level?: { level: LevelKey; label: string } } }
@@ -333,13 +348,17 @@ export async function loadComparison(db: Db, coachId: string, targetId: string, 
   const cur: any = (tWorkouts as any[]).find((w) => !w.archived) || null;
   const curRows: any[] = cur ? await db.workoutExercise.findMany({ where: { workoutId: cur.id }, orderBy }) : [];
   const exIds = [...new Set([...(srcRows as any[]), ...curRows].map((r) => r.exerciseId))];
-  const exs: any[] = exIds.length ? await db.exercise.findMany({ where: { id: { in: exIds } }, select: { id: true, name: true, category: true, tags: true, environments: true } }) : [];
+  const exs: any[] = exIds.length ? await db.exercise.findMany({ where: { id: { in: exIds } }, select: { id: true, name: true, category: true, subCategory: true, tags: true, environments: true } }) : [];
   const exById = new Map(exs.map((e) => [e.id, e]));
   // o nível REAL do aluno de destino (mesma conta do findSimilar): é ele que decide o que é "avançado demais"
   const tLevel = computeLevel({ entry: parseLevel(t.level) || parseLevel(newest(anam as any[]).get(targetId)?.nivel) || 'INICIANTE', startDate: t.startDate || t.createdAt, sessions: Number(tSessions) || 0, now: new Date() });
   const profile = buildProfile(newest(anam as any[]).get(targetId), tLevel.level);
   const toRows = (list: any[]): ExerciseRow[] => exerciseRowsFrom(list, exById);
-  const comparison = compareWorkouts(toRows(srcRows as any[]), { unavailable: new Set(unavailable), jointRisks: profile.jointRisks, env: profile.env, level: tLevel.level });
+  // biblioteca do coach, só das categorias da rotina: de onde sai a troca automática dos exercícios que não servem para este aluno
+  const cats = [...new Set((srcRows as any[]).map((r) => exById.get(r.exerciseId)?.category).filter(Boolean))];
+  let pool: LibEx[] = [];
+  try { pool = cats.length ? await db.exercise.findMany({ where: { AND: [{ category: { in: cats } }, visibleLibraryWhere(coachId)] }, select: { id: true, name: true, category: true, subCategory: true, videoUrl: true, tags: true, environments: true } }) : []; } catch (e) { pool = []; }
+  const comparison = compareWorkouts(toRows(srcRows as any[]), { unavailable: new Set(unavailable), jointRisks: profile.jointRisks, env: profile.env, level: tLevel.level, pool });
   const current: CompareDay[] | null = cur ? compareWorkouts(toRows(curRows), { unavailable: new Set(), jointRisks: [], env: profile.env }).days : null;
   const routines = buildRoutines(sWorkouts as any, sHist as any); const sr = routines.find((r) => r.id === workoutId);
   return { ok: true, comparison, source: { studentId: sourceId, name: s.name || 'Aluno', routine: { id: wk.id, name: wk.name, ordinal: sr ? sr.ordinal : null, sessions: sr ? sr.sessions : 0 } }, target: { studentId: targetId, name: t.name || 'Aluno', current, limits: profile.limits, places: profile.places, level: { level: tLevel.level, label: tLevel.label } } };
