@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import * as AP from '/home/user/fitos-final/lib/autoPlan';
 import * as Q from '/home/user/fitos-final/lib/autoPlanQuality';
 import { generateWorkoutPlan } from '/home/user/fitos-final/lib/ai/workoutGen';
+import { estimateArgonUsd } from '/home/user/fitos-final/lib/ai/argon';
 import { PAULO_ID, ADRI_ID } from '/home/user/fitos-final/lib/masterIds';
 
 const db: any = (prisma as any).__db;
@@ -324,6 +325,31 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
     seen.length = 0; G.__AI_CALLS.length = 0; const res3: any = await generateWorkoutPlan({ userId: 'q1', adminId: 'coach-x', cycleConfig: mk('HAIKU') }); assert.equal(res3.status, 200); assert.equal(seen.length, 0, 'parceiro: a Anthropic nem foi chamada'); assert.ok(G.__AI_CALLS.length >= 1, 'foi para o Gemini');
     G.__LLM = null; }
   console.log('OK  motores Anthropic: Haiku e Sonnet montam treino pelo mesmo prompt e validação, prompt fixo em cache, custo registrado, parceiro não escolhe');
+
+  // 🧪 motor ARGON (Gemini 4 Argon, só masters): mesmo prompt e validação, pensamento no nível pedido, tokens + custo no registro; parceiro não escolhe; erro do Google vira aviso claro
+  { seed({}, { objetivo: 'Hipertrofia', frequencia: 4 });
+    const spec = AP.planSpec('FICHA_8S', { objetivo: 'Hipertrofia', nivel: 'Intermediário', frequencia: 4 }); const mk = (ai: string) => { const cc: any = AP.buildCycleConfig(spec, spec.phases[0], base, 'Feminino'); cc.selectedAI = ai; return cc; };
+    const baseGemini = G.__GEMINI; const argonSeen: any[] = []; let argonFail: any = null;
+    G.__GEMINI = async (args: any) => {
+      if (args.model !== 'gemini-4-argon') return baseGemini(args);
+      argonSeen.push(args); await new Promise((r) => setTimeout(r, 25)); if (argonFail) throw argonFail;   // 25 ms de demora: limite de tempo curto demais derrubaria a geração
+      const r = await baseGemini({ model: args.model, contents: String(args.config.systemInstruction) + '\n\n' + String(args.contents[0].parts[0].text) });
+      return { ...r, candidates: [{ finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 60000, candidatesTokenCount: 8000, thoughtsTokenCount: 5000, cachedContentTokenCount: 0 } };
+    };
+    const res: any = await quiet(() => generateWorkoutPlan({ userId: 'q1', adminId: PAULO_ID, cycleConfig: mk('ARGON') })); assert.equal(res.status, 200, JSON.stringify(res.body)); assert.ok(res.body.workoutTabs.length >= 2 && res.body.quality && typeof res.body.quality.score === 'number', 'treino montado, validado e com nota');
+    assert.equal(argonSeen.length, 1); const a = argonSeen[0]; assert.equal(a.model, 'gemini-4-argon'); assert.equal(a.config.thinkingConfig.thinkingLevel, 'MEDIUM', 'pensamento no padrão do Google'); assert.equal(a.config.maxOutputTokens, 48000);
+    assert.ok(!String(a.config.systemInstruction).includes('BANCO DE CANDIDATOS (ambiente') && String(a.contents[0].parts[0].text).includes('BANCO DE CANDIDATOS (ambiente'), 'regras na instrução fixa; aluno e candidatos na mensagem'); assert.ok(a.config.abortSignal, 'tempo limite com cancelamento');
+    const log = db.aiLog.filter((l: any) => l.question === 'gerar-treino:ARGON'); assert.equal(log.length, 1, 'custo registrado'); assert.equal(log[0].userId, PAULO_ID); const lj = JSON.parse(log[0].answer);
+    assert.equal(lj.model, 'gemini-4-argon'); assert.equal(lj.thinking, 'medium'); assert.equal(lj.inputTokens, 60000); assert.equal(lj.outputTokens, 8000); assert.equal(lj.thinkingTokens, 5000); assert.equal(lj.usd, estimateArgonUsd({ inputTokens: 60000, outputTokens: 8000, thinkingTokens: 5000, cacheReadTokens: 0 }), 'custo = entrada + (texto + pensamento) pelo preço do dia'); assert.ok(lj.usd > 0.2 && lj.usd < 0.6); assert.equal(lj.score, res.body.quality.score, 'nota guardada junto do custo, para comparar com os outros motores'); assert.equal(lj.studentId, 'q1');
+    // erro do Google (modelo ainda não liberado na chave) -> aviso claro, nada salvo; sem saldo -> aviso claro
+    argonFail = Object.assign(new Error('models/gemini-4-argon is not found for API version v1beta'), { status: 404 }); await assert.rejects(() => quiet(() => generateWorkoutPlan({ userId: 'q1', adminId: PAULO_ID, cycleConfig: mk('ARGON') })), /Gemini Argon ainda não está liberado/);
+    argonFail = Object.assign(new Error('RESOURCE_EXHAUSTED: prepayment credits are depleted'), { status: 429 }); await assert.rejects(() => quiet(() => generateWorkoutPlan({ userId: 'q1', adminId: PAULO_ID, cycleConfig: mk('ARGON') })), /sem saldo ou no limite/); argonFail = null;
+    assert.equal(db.aiLog.filter((l: any) => l.question === 'gerar-treino:ARGON').length, 1, 'falha não gera registro de custo');
+    // parceiro (não é do time master) não escolhe ARGON: cai no Gemini Flash
+    db.user.push({ id: 'coach-y', role: 'ADMIN', email: 'y@y.com', name: 'Parceiro Y', accountStatus: 'ACTIVE', active: true }); db.user.find((u: any) => u.id === 'q1').coachId = 'coach-y'; for (const e of db.exercise) e.coachId = 'coach-y';
+    argonSeen.length = 0; G.__AI_CALLS.length = 0; const res3: any = await quiet(() => generateWorkoutPlan({ userId: 'q1', adminId: 'coach-y', cycleConfig: mk('ARGON') })); assert.equal(res3.status, 200); assert.equal(argonSeen.length, 0, 'parceiro: o Argon nem foi chamado'); assert.ok(G.__AI_CALLS.length >= 1 && G.__AI_CALLS.every((c: any) => c.model !== 'gemini-4-argon'), 'foi para o Gemini Flash');
+    G.__GEMINI = baseGemini; }
+  console.log('OK  motor Argon: masters escolhem, mesmo prompt e validação, nível de pensamento, tokens e custo no registro com a nota; parceiro não escolhe; erros viram aviso claro');
 
   // 🧠 montagem inteligente (lib/ai/workoutPlanner.ts) de ponta a ponta: nível, rotina anterior (MANTER/TROCAR), candidatos com códigos curtos, revisão depois da IA
   { const mkCfg = (over: any = {}) => ({ selectedAI: 'GEMINI', phase: 'HIPERTROFIA', techniques: ['BISET'], techniqueScope: 'CYCLE', gender: 'Feminino', trainingEnvironment: 'ACADEMIA_PADRAO', manualExercisesByDay: {}, limitationRules: [],

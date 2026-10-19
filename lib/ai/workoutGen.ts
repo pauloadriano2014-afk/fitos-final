@@ -14,6 +14,7 @@ import { MASTER_IDS } from '@/lib/masterIds';
 import { jointFilterIssues } from '@/lib/autoPlanQuality';
 import { unavailableExerciseIds, filterUnavailable } from '@/lib/equipment';
 import { callClaudeWorkout, isClaudeEngine, WORKOUT_TIMEOUT_MS } from '@/lib/ai/claudeWorkout';
+import { callArgon } from '@/lib/ai/argon';
 import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
 import { pickSwap, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
@@ -403,7 +404,7 @@ Responda APENAS com JSON válido.`.trim();
 
     // ─── ROTEAMENTO ───
     let selectedAI = cycleConfig?.selectedAI || 'GEMINI_FLASH';
-    if (!isMasterCoach && ['GEMINI', 'GEMINI_PRO', 'GPT', 'CLAUDE', 'HAIKU'].includes(selectedAI)) selectedAI = 'GEMINI_FLASH';
+    if (!isMasterCoach && ['GEMINI', 'GEMINI_PRO', 'GPT', 'CLAUDE', 'HAIKU', 'ARGON'].includes(selectedAI)) selectedAI = 'GEMINI_FLASH';
     // 📊 (19 out 2026) o que cada geração gastou (tokens) fica no AiLog — é o que mostra, com número real, quanto custa cada motor
     let genUsage: any = null; const genT0 = Date.now();
 
@@ -473,6 +474,11 @@ Responda APENAS com JSON válido.`.trim();
       // 🧠 (19 out 2026) HAIKU (Claude Haiku 5.5) e CLAUDE (Claude Sonnet 5.5): ver lib/ai/claudeWorkout.ts (cache do prompt fixo, limite de 90 s, tokens para o registro de custo)
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: WORKOUT_TIMEOUT_MS, maxRetries: 0 });
       const out = await callClaudeWorkout(anthropic, { engine: selectedAI, system: systemPromptStatic, user: userMessage });
+      rawText = out.text; genUsage = out.usage;
+
+    } else if (selectedAI === 'ARGON') {
+      // 🧪 (19 out 2026) Gemini 4 Argon, motor de TESTE só para masters: ver lib/ai/argon.ts (nível de pensamento, limite de 85 s, aviso claro se a chave ainda não enxerga o modelo, tokens e custo para o AiLog)
+      const out = await callArgon(geminiClient, { system: systemPromptStatic, user: userMessage, timeoutMs: WORKOUT_TIMEOUT_MS - 5000 });
       rawText = out.text; genUsage = out.usage;
     }
 
