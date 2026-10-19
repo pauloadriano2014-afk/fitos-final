@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
     const rules = cleanRules(body.rules);
     const env = body.trainingEnvironment ? String(body.trainingEnvironment) : null;
-    const library = await loadAdminLibrary(prisma, adminId, env);
+    const library = await loadAdminLibrary(prisma, adminId, env, rules.includeEnvironments);
     const banned = new Set<string>(await unavailableExerciseIds(userId).catch(() => [] as string[]));
     const safe = filterUnavailable(library, banned).list;
     const applied = applyRules(safe as any, rules);

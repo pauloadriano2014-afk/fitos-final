@@ -3,14 +3,17 @@
 // para a prévia dos filtros (app/api/gen-prefs/preview) contar exatamente os mesmos exercícios que a IA vai receber.
 //   • ambiente: só exercícios do ambiente (ou UNIVERSAL); sem ambiente/UNIVERSAL = todos;
 //   • coach: os próprios; a Adri enxerga também os do master (lista base compartilhada).
+import { effectiveEnvironments } from '@/lib/genRules';
 type Db = any;
 
 export const GEN_LIBRARY_SELECT = { id: true, name: true, category: true, subCategory: true, videoUrl: true, tags: true, environments: true, defaultSubstitutes: true } as const;
 
 export interface GenLibRow { id: string; name: string; category: string; subCategory: string | null; videoUrl: string | null; tags: any; environments: string[]; defaultSubstitutes: string[] }
 
-export async function loadAdminLibrary(db: Db, adminId: string, trainingEnv: string | null | undefined): Promise<GenLibRow[]> {
-  const envFilter = trainingEnv && trainingEnv !== 'UNIVERSAL' ? { hasSome: ['UNIVERSAL', trainingEnv] } : undefined;
+export async function loadAdminLibrary(db: Db, adminId: string, trainingEnv: string | null | undefined, includeEnvironments?: string[] | null): Promise<GenLibRow[]> {
+  // 🏢 (19 out 2026) o coach pode escolher de quais LOCAIS vêm os exercícios (filtros do Protocolo ELITE); sem escolha, vale o de sempre: Universal + o local do aluno
+  const envs = effectiveEnvironments({ includeEnvironments: includeEnvironments || [] }, trainingEnv);
+  const envFilter = envs ? { hasSome: envs } : undefined;
   const currentAdmin = await db.user.findUnique({ where: { id: adminId }, select: { email: true } });
   const isAdri = currentAdmin?.email?.toLowerCase() === 'adri.personal@hotmail.com';
   let coachFilter: any = { coachId: adminId };
