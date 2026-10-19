@@ -15,7 +15,7 @@ import { jointFilterIssues } from '@/lib/autoPlanQuality';
 import { unavailableExerciseIds, filterUnavailable } from '@/lib/equipment';
 import { callClaudeWorkout, isClaudeEngine, WORKOUT_TIMEOUT_MS } from '@/lib/ai/claudeWorkout';
 import { callArgon } from '@/lib/ai/argon';
-import { shapeReps } from '@/lib/ai/repSchemes';
+import { shapeReps, cleanRepChoice, describeRepChoice } from '@/lib/ai/repSchemes';
 import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, repRange, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
 import { pickSwap, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
@@ -241,7 +241,7 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
 CONFIGURAÇÃO DO CICLO
 ══════════════════════════════════════════
 FASE: ${phaseLabels[cycleConfig.phase] || cycleConfig.phase}
-TÉCNICAS: ${techList}
+${describeRepChoice(cleanRepChoice(cycleConfig.repScheme)) ? `REPETIÇÕES (escolha do coach — OBRIGATÓRIO, vale mais que a regra geral de repetições): ${describeRepChoice(cleanRepChoice(cycleConfig.repScheme))}\n` : ''}TÉCNICAS: ${techList}
 ESCOPO: ${cycleConfig.techniqueScope === 'DAY' ? 'Técnicas DIFERENTES por dia' : 'Distribua ao longo do ciclo'}
 AMBIENTE: ${envLabel}
 ${genderRules}
@@ -589,7 +589,7 @@ Responda APENAS com JSON válido.`.trim();
           // 🔥 Corrige GVT: garante exatamente 10 blocos de 1x10 com 60s, mesmo se a IA mandou só 1 bloco
           rawBlocks = expandBlocksForTechnique(rawBlocks);
           // 🔺 séries todas com a mesma repetição viram pirâmide da fase (modo inteligente faz o mesmo na revisão; aqui cobre o modo antigo)
-          rawBlocks = shapeReps(rawBlocks, { phase: cycleConfig?.phase, range: repRange(cycleConfig?.phase, null), compound: String((dbEx as any).tags?.mechanic || '').toUpperCase() === 'COMPOSTO', idx: exIdx });
+          rawBlocks = shapeReps(rawBlocks, { phase: cycleConfig?.phase, range: repRange(cycleConfig?.phase, null), compound: String((dbEx as any).tags?.mechanic || '').toUpperCase() === 'COMPOSTO', idx: exIdx, choice: cleanRepChoice(cycleConfig?.repScheme) });
 
           return {
             exerciseId: ex.exerciseId, title: dbEx.name, videoUrl: dbEx.videoUrl || '',
@@ -609,7 +609,7 @@ Responda APENAS com JSON válido.`.trim();
       const r = refineWorkout(rawDays as Record<string, GenEx[]>, {
         days: cycleConfig.days, phase: String(cycleConfig.phase || ''), level: levelInfo.level, levelRules,
         lib: exerciseMap as unknown as Map<string, LibEx>, pool: adminExercises as unknown as LibEx[], cands, facts, hasPrev: prevRoutines.length > 0,
-        env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded, pins: pinSet,
+        env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded, pins: pinSet, repChoice: cleanRepChoice(cycleConfig?.repScheme),
         makeEx: (e, blocks) => ({ exerciseId: e.id, title: e.name, videoUrl: e.videoUrl || '', category: e.category, subCategory: e.subCategory, observation: '', substitute: subFor(e.id), blocks }),
       });
       reviewedDays = r.byDay; quality = r.quality;

@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { pyramidReps, shapeReps, variantFor } from '/home/user/fitos-final/lib/ai/repSchemes';
+import { pyramidReps, shapeReps, variantFor, cleanRepChoice, choiceReps, describeRepChoice } from '/home/user/fitos-final/lib/ai/repSchemes';
 import { refineWorkout, repRange, type GenEx, type RefineCtx, type PlanDay } from '/home/user/fitos-final/lib/ai/workoutPlanner';
 let ok = 0; const t = async (name: string, fn: () => Promise<void> | void) => { try { await fn(); ok++; console.log('  ok  ' + name); } catch (e: any) { console.log('FALHOU  ' + name + '\n' + String(e?.stack || e).split('\n').slice(0, 6).join('\n')); process.exitCode = 1; } };
 const B = (reps: string[], tech = '', sets = '1') => reps.map((r) => ({ sets, reps: r, load: '', restTime: '60', technique: tech }));
@@ -39,6 +39,38 @@ const H: [number, number] = [8, 15];
     const fora = refineWorkout({ A: exs.map((e) => gx(e, ['20', '20', '20', '20'])) }, base as RefineCtx).byDay.A; assert.ok(fora.every((e) => e.blocks.every((b) => Number(b.reps) >= 8 && Number(b.reps) <= 15)) && new Set(rp(fora[1]).split('-')).size > 1, 'a faixa da fase continua mandando: 20 vira 15 e depois pirâmide');
     const deload = refineWorkout({ A: exs.map((e) => gx(e, ['15', '15', '15', '15'])) }, { ...base, phase: 'DELOAD' } as RefineCtx).byDay.A; assert.ok(deload.every((e) => new Set(e.blocks.map((b) => b.reps)).size === 1), 'deload: repetição igual é o esperado');
     const forca = refineWorkout({ A: exs.map((e) => gx(e, ['5', '5', '5', '5'])) }, { ...base, phase: 'FORCA' } as RefineCtx).byDay.A; assert.equal(rp(forca[1]), '6-5-4-4'); assert.deepEqual(repRange('FORCA', null), [3, 6]);
+  });
+  await t('a revisão do treino respeita a escolha do coach em todos os exercícios (reta 10 e faixa 15→8), inclusive no deload; sem escolha continua a pirâmide automática', () => {
+    const lib = (id: string, name: string, mech: string) => ({ id, name, category: 'Musculação', subCategory: 'PEITO', videoUrl: '', tags: { target: 'PEITO', mechanic: mech, equipment: 'MAQUINA' }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    const exs = [lib('p1', 'Supino', 'COMPOSTO'), lib('p2', 'Crucifixo', 'ISOLADO'), lib('p3', 'Peck deck', 'ISOLADO')];
+    const gx = (e: any, reps: string[], tech = ''): GenEx => ({ exerciseId: e.id, title: e.name, videoUrl: '', category: e.category, subCategory: e.subCategory, observation: '', substitute: null, blocks: B(reps, tech) });
+    const days: PlanDay[] = [{ name: 'A', groups: [{ id: 'PEITO', qty: 3, sets: 4, rest: 60 }] }];
+    const base: any = { days, phase: 'HIPERTROFIA', level: 'INTERMEDIARIO', levelRules: false, lib: new Map(exs.map((e) => [e.id, e])), pool: exs, cands: { byGroup: new Map([['PEITO', exs]]), latestNames: new Set(), olderNames: new Set() }, facts: [], hasPrev: false, env: 'UNIVERSAL', jointRisks: [], unavailable: new Set(), loaded: new Set(), pins: new Set(), makeEx: (e: any, blocks: any[]) => gx(e, blocks.map((b) => b.reps)) };
+    const rp = (ex: GenEx) => ex.blocks.map((b) => b.reps).join('-'); const run = (ctx: any, input: GenEx[]) => refineWorkout({ A: input }, { ...base, ...ctx } as RefineCtx).byDay.A;
+    const mixed = () => [gx(exs[0], ['15', '12', '10', '8']), gx(exs[1], ['12', '12', '12', '12']), gx(exs[2], ['10', '10', '10', '10'], 'DROPSET')];
+    const reta = run({ repChoice: { mode: 'RETA', flat: 10 } }, mixed()); assert.equal(rp(reta[0]), '10-10-10-10'); assert.equal(rp(reta[1]), '10-10-10-10'); assert.equal(rp(reta[2]), '10-10-10-10', 'drop-set manteve a repetição da técnica');
+    const faixa = run({ repChoice: { mode: 'FAIXA', from: 15, to: 8 } }, mixed()); assert.equal(rp(faixa[0]), '15-12-10-8'); assert.equal(rp(faixa[1]), '15-12-10-8'); assert.equal(rp(faixa[2]), '10-10-10-10');
+    const dl = run({ phase: 'DELOAD', repChoice: { mode: 'PESADA' } }, [gx(exs[0], ['15', '15', '15', '15']), gx(exs[1], ['15', '15', '15', '15']), gx(exs[2], ['15', '15', '15', '15'])]); assert.equal(rp(dl[1]), '12-10-8-8', 'escolha explícita vence o deload');
+    const auto = run({}, [gx(exs[0], ['12', '12', '12', '12']), gx(exs[1], ['12', '12', '12', '12']), gx(exs[2], ['12', '12', '12', '12'])]); assert.equal(rp(auto[0]), '12-10-8-8'); assert.equal(rp(auto[1]), '15-12-10-8', 'sem escolha: pirâmide automática de antes');
+  });
+  await t('escolha do coach: lê o que vem da tela (quebrado/antigo vira AUTO), limita 3–30, inverte faixa ao contrário, faixa de um número vira reta', () => {
+    assert.deepEqual(cleanRepChoice(undefined), { mode: 'AUTO' }); assert.deepEqual(cleanRepChoice('lixo'), { mode: 'AUTO' }); assert.deepEqual(cleanRepChoice({ mode: 'banana' }), { mode: 'AUTO' }); assert.deepEqual(cleanRepChoice({ mode: 'leve' }), { mode: 'LEVE' }); assert.deepEqual(cleanRepChoice({ mode: 'PESADA', flat: 99 }), { mode: 'PESADA' });
+    assert.deepEqual(cleanRepChoice({ mode: 'RETA', flat: 12 }), { mode: 'RETA', flat: 12 }); assert.deepEqual(cleanRepChoice({ mode: 'RETA' }), { mode: 'RETA', flat: 12 }, 'sem número: 12'); assert.deepEqual(cleanRepChoice({ mode: 'RETA', flat: 500 }), { mode: 'RETA', flat: 30 }); assert.deepEqual(cleanRepChoice({ mode: 'RETA', flat: 1 }), { mode: 'RETA', flat: 3 });
+    assert.deepEqual(cleanRepChoice({ mode: 'FAIXA', from: 15, to: 8 }), { mode: 'FAIXA', from: 15, to: 8 }); assert.deepEqual(cleanRepChoice({ mode: 'FAIXA', from: 8, to: 15 }), { mode: 'FAIXA', from: 15, to: 8 }, 'ao contrário: inverte'); assert.deepEqual(cleanRepChoice({ mode: 'FAIXA', from: 10, to: 10 }), { mode: 'RETA', flat: 10 }); assert.deepEqual(cleanRepChoice({ mode: 'FAIXA', from: 'x', to: 8 }), { mode: 'AUTO' });
+  });
+  await t('repetições da escolha: leve 15-12-10(-8), pesada 12-10-8(-8), reta, e faixa A→B com números redondos (15→8: 15-12-10-8); AUTO não decide nada', () => {
+    assert.deepEqual(choiceReps({ mode: 'LEVE' }, 3), ['15', '12', '10']); assert.deepEqual(choiceReps({ mode: 'LEVE' }, 4), ['15', '12', '10', '8']); assert.deepEqual(choiceReps({ mode: 'PESADA' }, 3), ['12', '10', '8']); assert.deepEqual(choiceReps({ mode: 'PESADA' }, 4), ['12', '10', '8', '8']); assert.equal(choiceReps({ mode: 'LEVE' }, 8)!.length, 8);
+    assert.deepEqual(choiceReps({ mode: 'RETA', flat: 10 }, 4), ['10', '10', '10', '10']); assert.deepEqual(choiceReps({ mode: 'FAIXA', from: 15, to: 8 }, 4), ['15', '12', '10', '8']); assert.deepEqual(choiceReps({ mode: 'FAIXA', from: 15, to: 10 }, 3), ['15', '12', '10']); assert.deepEqual(choiceReps({ mode: 'FAIXA', from: 20, to: 12 }, 4), ['20', '15', '15', '12']); assert.deepEqual(choiceReps({ mode: 'FAIXA', from: 12, to: 6 }, 2), ['12', '6']);
+    assert.equal(choiceReps({ mode: 'AUTO' }, 4), null); assert.equal(choiceReps(undefined, 4), null); assert.equal(choiceReps({ mode: 'RETA', flat: 10 }, 1), null, '1 série: nada a fazer');
+    assert.equal(describeRepChoice({ mode: 'AUTO' }), ''); assert.match(describeRepChoice({ mode: 'RETA', flat: 12 }), /MESMA repetição.*: 12/); assert.match(describeRepChoice({ mode: 'FAIXA', from: 15, to: 8 }), /de 15 até 8.*15\/12\/10\/8/); assert.match(describeRepChoice({ mode: 'PESADA' }), /PESADA/);
+  });
+  await t('shapeReps com escolha explícita: vale mesmo se a IA já variou, no deload e na faixa fora da fase; técnica com repetição própria e bloco com várias séries ficam', () => {
+    const v = B(['15', '12', '10', '8']); assert.deepEqual(shapeReps(v, { phase: 'HIPERTROFIA', range: H, choice: { mode: 'RETA', flat: 10 } }).map((b) => b.reps), ['10', '10', '10', '10'], 'reta vale sobre a pirâmide que a IA mandou');
+    assert.deepEqual(shapeReps(B(['15', '15', '15']), { phase: 'DELOAD', range: [15, 20], choice: { mode: 'PESADA' } }).map((b) => b.reps), ['12', '10', '8'], 'escolha explícita vence o deload'); assert.deepEqual(shapeReps(B(['12', '12', '12']), { phase: 'HIPERTROFIA', range: H, choice: { mode: 'FAIXA', from: 20, to: 12 } }).map((b) => b.reps), ['20', '15', '12'], 'e a faixa da fase (8–15)');
+    const same = B(['15', '12', '10']); assert.strictEqual(shapeReps(same, { phase: 'HIPERTROFIA', range: H, choice: { mode: 'LEVE' } }), same, 'já está certo: mesmo objeto');
+    for (const tech of ['DROPSET', 'RESTPAUSE', '21', 'CLUSTERSET', 'GVT']) { const b = B(['10', '10', '10'], tech); assert.strictEqual(shapeReps(b, { phase: 'HIPERTROFIA', range: H, choice: { mode: 'RETA', flat: 15 } }), b, tech); }
+    const multi = B(['12', '12'], '', '3'); assert.strictEqual(shapeReps(multi, { phase: 'HIPERTROFIA', range: H, choice: { mode: 'LEVE' } }), multi); assert.deepEqual(shapeReps(B(['10', '10'], 'BISET'), { phase: 'HIPERTROFIA', range: H, choice: { mode: 'RETA', flat: 12 } }).map((b) => b.reps), ['12', '12']);
+    assert.deepEqual(shapeReps(B(['12', '12', '12']), { phase: 'HIPERTROFIA', range: H, choice: { mode: 'AUTO' } }).map((b) => b.reps), ['15', '12', '10'], 'AUTO = comportamento de antes');
   });
   console.log(`\n${ok} blocos ok`);
 })();

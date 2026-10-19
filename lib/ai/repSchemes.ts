@@ -39,12 +39,56 @@ export function pyramidReps(n: number, phase: string | null | undefined, range: 
 /** Qual das variações usar: composto → o mais pesado; nos demais alterna (1 a cada 3 usa a variação), para o treino não ficar todo igual. */
 export const variantFor = (compound: boolean, idx: number): number => (compound ? 1 : (idx % 3 === 2 ? 2 : 0));
 
+// ───────── ESCOLHA DO COACH (tela do Protocolo ELITE: quadradinho "Repetições") ─────────
+// AUTO = o que está acima (pirâmide do histórico, pela fase); LEVE/PESADA = pirâmide fixa para TODOS os exercícios; RETA = mesma repetição em todas as séries; FAIXA = pirâmide de A até B.
+// Escolha explícita do coach vale mais que a faixa da fase e que o deload; só as técnicas com repetição própria (dropset, rest-pause, 21, cluster, GVT...) ficam de fora.
+export type RepMode = 'AUTO' | 'LEVE' | 'PESADA' | 'RETA' | 'FAIXA';
+export interface RepChoice { mode: RepMode; flat?: number; from?: number; to?: number }
+const SNAP = [3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30];
+const snap = (v: number) => SNAP.reduce((best, x) => (Math.abs(x - v) < Math.abs(best - v) ? x : best), SNAP[0]);
+const rep = (v: any, lo = 3, hi = 30): number | null => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : null; };
+
+/** Lê a escolha vinda da tela (pode faltar, vir quebrada ou de versão antiga) — sempre devolve algo válido; sem escolha = AUTO. */
+export function cleanRepChoice(raw: any): RepChoice {
+  const mode = String(raw && raw.mode || 'AUTO').toUpperCase();
+  if (mode === 'LEVE' || mode === 'PESADA') return { mode };
+  if (mode === 'RETA') return { mode: 'RETA', flat: rep(raw.flat) ?? 12 };
+  if (mode === 'FAIXA') {
+    let a = rep(raw.from), b = rep(raw.to); if (a === null || b === null) return { mode: 'AUTO' };
+    if (a < b) [a, b] = [b, a]; if (a === b) return { mode: 'RETA', flat: a };
+    return { mode: 'FAIXA', from: a, to: b };
+  }
+  return { mode: 'AUTO' };
+}
+
+/** Repetições (uma por série) da escolha do coach para `n` séries; null no AUTO (quem decide é a fase). */
+export function choiceReps(choice: RepChoice | null | undefined, n: number): string[] | null {
+  const c = cleanRepChoice(choice); const k = Math.round(n); if (c.mode === 'AUTO' || k < 2) return null;
+  if (c.mode === 'RETA') return Array.from({ length: k }, () => String(c.flat));
+  if (c.mode === 'FAIXA') return Array.from({ length: k }, (_, i) => String(i === 0 ? c.from : i === k - 1 ? c.to : snap(c.from! - ((c.from! - c.to!) * i) / (k - 1))));
+  const base = HIPERTROFIA[Math.min(k, 6)][c.mode === 'PESADA' ? 1 : 0];
+  return k > 6 ? [...base, ...Array.from({ length: k - 6 }, () => base[base.length - 1])] : base.slice();
+}
+
+/** Frase para a IA (só quando o coach escolheu algo): vale mais que a regra geral de repetições. */
+export function describeRepChoice(choice: RepChoice | null | undefined): string {
+  const c = cleanRepChoice(choice);
+  if (c.mode === 'LEVE') return 'pirâmide LEVE em todos os exercícios — 3 séries 15/12/10, 4 séries 15/12/10/8, 5 séries 15/12/12/10/10';
+  if (c.mode === 'PESADA') return 'pirâmide PESADA em todos os exercícios — 3 séries 12/10/8, 4 séries 12/10/8/8, 5 séries 12/10/10/8/8';
+  if (c.mode === 'RETA') return `a MESMA repetição em todas as séries de todos os exercícios: ${c.flat} (nada de pirâmide)`;
+  if (c.mode === 'FAIXA') return `pirâmide decrescente de ${c.from} até ${c.to} repetições em todos os exercícios (ex.: 4 séries = ${choiceReps(c, 4)!.join('/')}; 3 séries = ${choiceReps(c, 3)!.join('/')})`;
+  return '';
+}
+
 interface BlockLike { sets?: string; reps?: string; technique?: string; [k: string]: any }
 
 /** Se todas as séries do exercício têm a MESMA repetição (e são só séries comuns), devolve os blocos com a pirâmide da fase; senão devolve os mesmos blocos. */
-export function shapeReps<B extends BlockLike>(blocks: B[], ctx: { phase: string | null | undefined; range: RepRange; compound?: boolean; idx?: number }): B[] {
+export function shapeReps<B extends BlockLike>(blocks: B[], ctx: { phase: string | null | undefined; range: RepRange; compound?: boolean; idx?: number; choice?: RepChoice | null }): B[] {
   if (!Array.isArray(blocks) || blocks.length < 2) return blocks;
   if (blocks.some((b) => !TECH_OK.has(String(b.technique || '').toUpperCase().replace(/[^A-Z0-9_]/g, '')) || String(b.sets ?? '1').trim() !== '1')) return blocks;
+  // escolha explícita do coach: vale para todas as séries comuns do exercício, mesmo que a IA tenha variado
+  const picked = choiceReps(ctx.choice, blocks.length);
+  if (picked) return picked.every((r, i) => String(blocks[i].reps ?? '').trim() === r) ? blocks : blocks.map((b, i) => ({ ...b, reps: picked[i] }));
   const reps = blocks.map((b) => String(b.reps ?? '').trim());
   if (!reps.every((r) => /^\d+$/.test(r)) || new Set(reps).size !== 1) return blocks;
   const scheme = pyramidReps(blocks.length, ctx.phase, ctx.range, variantFor(!!ctx.compound, ctx.idx || 0));

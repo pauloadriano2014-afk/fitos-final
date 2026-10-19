@@ -50,6 +50,11 @@ const wk = (id: string, tech = '', n = 4) => ({ exerciseId: id, title: id, block
     ['chave própria inválida', { userId: 'al', adminId: PAULO_ID, cycleConfig: cfg({ selectedAI: 'OWN_KEY', customKey: 'abc' }) }, () => {}],
     ['adri vê os da master', { userId: 'al', adminId: ADRI_ID, cycleConfig: cfg() }, () => { G.__GEMINI = async () => ({ text: JSON.stringify({ exercisesByDay: { A: [wk('ex-adri'), wk('ex-PEITO-1')] } }) }); }],
   ];
+  // 🔺 escolha de repetições do coach (cycleConfig.repScheme) no modo antigo: vai para o texto da IA e vale na resposta
+  { const prompts: string[] = []; const run = async (scheme: any) => { seed(); prompts.length = 0; G.__GEMINI = async (a: any) => { prompts.push(String(a.contents)); return { text: JSON.stringify({ workoutName: 'X', exercisesByDay: { A: [wk('ex-PEITO-1'), wk('ex-BICEPS-1')] } }) }; }; const r = await quiet(() => post(newTreino, PAULO_ID, { userId: 'al', adminId: PAULO_ID, cycleConfig: cfg(scheme ? { repScheme: scheme } : {}) })); assert.equal(r.status, 200, JSON.stringify(r.json)); return r.json.exercisesByDay.A.map((e: any) => e.blocks.map((x: any) => x.reps).join('-')); };
+    assert.deepEqual(await run({ mode: 'RETA', flat: 10 }), ['10-10-10-10', '10-10-10-10']); assert.ok(prompts[0].includes('REPETIÇÕES (escolha do coach') && prompts[0].includes('MESMA repetição em todas as séries'), 'a escolha vai para o texto da IA');
+    assert.deepEqual(await run({ mode: 'FAIXA', from: 15, to: 8 }), ['15-12-10-8', '15-12-10-8']); assert.ok(prompts[0].includes('de 15 até 8'));
+    assert.deepEqual(await run({ mode: 'banana' }), ['12-10-8-8', '12-10-8-8'], 'escolha quebrada = automático (os dois são compostos na biblioteca de teste)'); assert.ok(!prompts[0].includes('REPETIÇÕES (escolha do coach'), 'automático: nada extra no texto'); assert.deepEqual(await run(null), ['12-10-8-8', '12-10-8-8']); }
   for (const [name, body, ai] of treinoCases) {
     seed(); ai(); const a = await quiet(() => post(oldTreino, PAULO_ID, body)); seed(); ai(); const b = await quiet(() => post(newTreino, PAULO_ID, body));
     assert.equal(b.status, a.status, `treino "${name}": status ${a.status} x ${b.status}`); assert.deepEqual(strip(b.json), strip(a.json), `treino "${name}": corpo diferente`);

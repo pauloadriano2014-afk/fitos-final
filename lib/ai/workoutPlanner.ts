@@ -16,7 +16,7 @@ import { looksLikeMachine, nameKey, pickSwap, type LibEx } from '@/lib/exerciseS
 import { LEVEL_LABEL, type LevelKey } from '@/lib/studentLevel';
 import { sessionsOf, suggestLoad } from '@/lib/loadSuggest';
 import { sideValue } from '@/lib/exerciseLoad';
-import { shapeReps } from '@/lib/ai/repSchemes';
+import { shapeReps, type RepChoice } from '@/lib/ai/repSchemes';
 
 export interface PlanGroup { id: string; qty: number; sets?: number; rest?: number }
 export interface PlanDay { name: string; groups: PlanGroup[] }
@@ -253,6 +253,8 @@ export interface RefineCtx {
   loaded: Set<string>;
   /** exercícios que o coach fixou: entram na rotina (no lugar de um acessório do mesmo músculo) e nunca são trocados pela rotação */
   pins?: Set<string>;
+  /** escolha de repetições do coach (quadradinho "Repetições" da tela); sem escolha = pirâmide automática pela fase */
+  repChoice?: RepChoice;
   makeEx: (e: LibEx, blocks: GenBlock[]) => GenEx;
 }
 export interface Quality {
@@ -358,7 +360,7 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
       }
       blocks = blocks.map((b) => (SPECIAL_REPS.has(techOfBlock(b)) ? b : { ...b, reps: clampReps(b.reps, reps) }));
       // 🔺 séries todas com a mesma repetição viram pirâmide da fase (15-12-10, 12-10-8...), como o Paulo e a Adri montam; quem já veio variando fica
-      { const sh = shapeReps(blocks, { phase: ctx.phase, range: reps, compound: !!lib && mechOf(lib) === 'COMPOSTO', idx: exIdx }); if (sh !== blocks) { st.repsShaped++; blocks = sh; } }
+      { const sh = shapeReps(blocks, { phase: ctx.phase, range: reps, compound: !!lib && mechOf(lib) === 'COMPOSTO', idx: exIdx, choice: ctx.repChoice }); if (sh !== blocks) { st.repsShaped++; blocks = sh; } }
       const nx = { ...ex, blocks }; if (g) groupOf.set(nx, g);   // objeto novo: o grupo vai junto
       return nx;
     });
