@@ -45,8 +45,13 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
     const isMasterCoach = MASTER_IDS.includes(adminId);
     const trainingEnv = cycleConfig?.trainingEnvironment || null;
 
+    // 🎛️ (19 out 2026) FILTROS DO COACH (lib/genRules.ts): o que ele bloqueou/fixou/poupou e de quais LOCAIS podem vir os exercícios (tela do Protocolo ELITE → `cycleConfig.genRules`; sem isso,
+    // o que está salvo no aluno). Só atuam quando há estrutura de ciclo; não derrubam a geração se a tabela ainda não existe. Lidos ANTES da biblioteca porque os locais mudam quais exercícios entram.
+    let genRules: GenRules = emptyRules();
+    if (cycleConfig && Array.isArray(cycleConfig.days) && cycleConfig.days.length) genRules = 'genRules' in cycleConfig ? cleanRules(cycleConfig.genRules) : (await loadStudentRules(prisma, userId)).rules;
+
     // (lib/genLibrary.ts: a mesma biblioteca que a prévia dos filtros conta)
-    const allAdminExercises = await loadAdminLibrary(prisma, adminId, trainingEnv);
+    const allAdminExercises = await loadAdminLibrary(prisma, adminId, trainingEnv, genRules.includeEnvironments);
 
     // 🛡️ (4 out 2026) Só o plano automático usa: aluno com dor/cirurgia numa articulação (JOELHO, LOMBAR, OMBRO) NÃO vê, na biblioteca que a IA recebe,
     // os exercícios que a própria biblioteca marca como de risco para ela. Sem a opção, nada muda (rota do coach intacta).
@@ -57,10 +62,7 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
     // de 2 exercícios dele), o exercício volta para a lista: um treino completo vale mais do que o aviso (o coach vê a observação no resumo).
     const bannedIds = new Set<string>(await unavailableExerciseIds(userId).catch(() => [] as string[]));
     const eq = filterUnavailable(afterJoint, bannedIds);
-    // 🎛️ (19 out 2026) FILTROS DO COACH (lib/genRules.ts): o que ele bloqueou/fixou/poupou (tela do Protocolo ELITE → `cycleConfig.genRules`; sem isso, o que está salvo no aluno).
-    // Só atuam quando há estrutura de ciclo; não derrubam a geração se a tabela ainda não existe. Fixar vence as regras; os filtros de segurança acima (articulação, aparelho do aluno) continuam valendo.
-    let genRules: GenRules = emptyRules();
-    if (cycleConfig && Array.isArray(cycleConfig.days) && cycleConfig.days.length) genRules = 'genRules' in cycleConfig ? cleanRules(cycleConfig.genRules) : (await loadStudentRules(prisma, userId)).rules;
+    // Fixar vence as regras; os filtros de segurança acima (articulação, aparelho do aluno) continuam valendo.
     const applied = applyRules(eq.list as any, genRules);
     const adminExercises = applied.list as typeof eq.list;
     const avoidedNames = eq.avoided;

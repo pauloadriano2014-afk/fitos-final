@@ -11,13 +11,23 @@ import { looksLikeMachine, type LibEx } from '@/lib/exerciseSwap';
 export const EQUIPMENTS = ['MAQUINA', 'POLIA', 'BARRA', 'HALTER', 'LIVRE', 'PESO_CORPORAL', 'CANELEIRA'] as const;
 export const JOINTS = ['JOELHO', 'LOMBAR', 'OMBRO'] as const;
 export const MAX_IDS = 600;
+/** Locais de treino que o coach marca nos exercícios (Exercise.environments). */
+export const ENVIRONMENT_IDS = ['UNIVERSAL', 'CONDOMINIO', 'ACADEMIA_PADRAO', 'SMARTFIT', 'GETGYM', 'OVERALL', 'BRAVES', 'SEVENPLAY', 'EM_CASA'] as const;
 
 export interface GenRules {
   excludeIds: string[]; pinIds: string[];
   excludeEquipment: string[]; excludeJointRisk: string[];
   noHighImpact: boolean; avoidProfiles: Profile[];
+  /** de quais LOCAIS podem vir os exercícios; vazio = automático (Universal + o local do aluno) */
+  includeEnvironments: string[];
 }
-export const emptyRules = (): GenRules => ({ excludeIds: [], pinIds: [], excludeEquipment: [], excludeJointRisk: [], noHighImpact: false, avoidProfiles: [] });
+export const emptyRules = (): GenRules => ({ excludeIds: [], pinIds: [], excludeEquipment: [], excludeJointRisk: [], noHighImpact: false, avoidProfiles: [], includeEnvironments: [] });
+
+/** Locais que valem para a geração: o que o coach marcou ou, sem marcação, Universal + o local do aluno (null = sem filtro de local). */
+export function effectiveEnvironments(rules: Pick<GenRules, 'includeEnvironments'>, trainingEnv: string | null | undefined): string[] | null {
+  if (rules.includeEnvironments && rules.includeEnvironments.length) return rules.includeEnvironments;
+  return trainingEnv && trainingEnv !== 'UNIVERSAL' ? ['UNIVERSAL', trainingEnv] : null;
+}
 
 const uniq = <T,>(a: T[]) => [...new Set(a)];
 const strs = (v: any, max = MAX_IDS): string[] => (Array.isArray(v) ? uniq(v.map((x) => String(x ?? '').trim()).filter(Boolean)).slice(0, max) : []);
@@ -35,10 +45,11 @@ export function cleanRules(raw: any): GenRules {
     excludeJointRisk: upperIn(r.excludeJointRisk, JOINTS),
     noHighImpact: r.noHighImpact === true,
     avoidProfiles: upperIn(r.avoidProfiles, PROFILES) as Profile[],
+    includeEnvironments: upperIn(r.includeEnvironments, ENVIRONMENT_IDS),
   };
 }
 
-export const isEmptyRules = (r: GenRules) => !r.excludeIds.length && !r.pinIds.length && !r.excludeEquipment.length && !r.excludeJointRisk.length && !r.noHighImpact && !r.avoidProfiles.length;
+export const isEmptyRules = (r: GenRules) => !r.excludeIds.length && !r.pinIds.length && !r.excludeEquipment.length && !r.excludeJointRisk.length && !r.noHighImpact && !r.avoidProfiles.length && !r.includeEnvironments.length;
 
 /** Junta duas regras (usado para somar um preset ao que o aluno já tinha). */
 export function mergeRules(a: GenRules, b: GenRules): GenRules {
@@ -46,10 +57,12 @@ export function mergeRules(a: GenRules, b: GenRules): GenRules {
     excludeIds: [...a.excludeIds, ...b.excludeIds], pinIds: [...a.pinIds, ...b.pinIds],
     excludeEquipment: [...a.excludeEquipment, ...b.excludeEquipment], excludeJointRisk: [...a.excludeJointRisk, ...b.excludeJointRisk],
     noHighImpact: a.noHighImpact || b.noHighImpact, avoidProfiles: [...a.avoidProfiles, ...b.avoidProfiles],
+    includeEnvironments: [...a.includeEnvironments, ...b.includeEnvironments],
   });
 }
 
 const EQ_LABEL: Record<string, string> = { MAQUINA: 'máquina', POLIA: 'polia', BARRA: 'barra', HALTER: 'halter', LIVRE: 'livre', PESO_CORPORAL: 'peso do corpo', CANELEIRA: 'caneleira' };
+const ENV_TXT: Record<string, string> = { UNIVERSAL: 'universal', CONDOMINIO: 'condomínio', ACADEMIA_PADRAO: 'academia padrão', SMARTFIT: 'SmartFit', GETGYM: 'GetGym', OVERALL: 'Overall', BRAVES: 'Braves', SEVENPLAY: 'SevenPlay', EM_CASA: 'em casa' };
 const PROFILE_TXT: Record<string, string> = { GESTANTE: 'gestante', TERCEIRA_IDADE: '3ª idade', POS_CIRURGIA: 'pós-cirurgia' };
 /** Frase curta em português para mostrar ao coach. */
 export function describeRules(r: GenRules): string[] {
@@ -58,6 +71,7 @@ export function describeRules(r: GenRules): string[] {
   if (r.excludeJointRisk.length) out.push(`poupa ${r.excludeJointRisk.map((j) => j.toLowerCase()).join(', ')}`);
   if (r.noHighImpact) out.push('sem alto impacto');
   if (r.avoidProfiles.length) out.push(`perfil: ${r.avoidProfiles.map((p) => PROFILE_TXT[p] || p).join(', ')}`);
+  if (r.includeEnvironments.length) out.push(`locais: ${r.includeEnvironments.map((e) => ENV_TXT[e] || e.toLowerCase()).join(', ')}`);
   if (r.excludeIds.length) out.push(`${r.excludeIds.length} ${r.excludeIds.length === 1 ? 'exercício bloqueado' : 'exercícios bloqueados'}`);
   if (r.pinIds.length) out.push(`${r.pinIds.length} ${r.pinIds.length === 1 ? 'exercício fixado' : 'exercícios fixados'}`);
   return out;

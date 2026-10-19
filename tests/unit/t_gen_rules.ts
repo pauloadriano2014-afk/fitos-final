@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 import { PAULO_ID } from '/home/user/fitos-final/lib/masterIds';
 import { generateWorkoutPlan } from '/home/user/fitos-final/lib/ai/workoutGen';
 import { suggestImpact, suggestAvoid, pickExtra, cleanExtraPatch, mergeTags, effectiveExtra, EXTRA_KEYS } from '/home/user/fitos-final/lib/exerciseTags';
-import { cleanRules, emptyRules, isEmptyRules, mergeRules, describeRules, removalReason, applyRules, removedSummary, loadStudentRules, MAX_IDS } from '/home/user/fitos-final/lib/genRules';
+import { effectiveEnvironments, cleanRules, emptyRules, isEmptyRules, mergeRules, describeRules, removalReason, applyRules, removedSummary, loadStudentRules, MAX_IDS } from '/home/user/fitos-final/lib/genRules';
 import { GET as prefsGET, PUT as prefsPUT, DELETE as prefsDEL } from '/home/user/fitos-final/app/api/gen-prefs/route';
 import { POST as previewPOST } from '/home/user/fitos-final/app/api/gen-prefs/preview/route';
 import { GET as presetsGET, POST as presetsPOST, DELETE as presetsDEL } from '/home/user/fitos-final/app/api/gen-presets/route';
@@ -54,14 +54,14 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
   // ═════ 2) regras de filtro (puro) ═════
   await t('cleanRules: valor desconhecido some, sem repetição, bloqueado nunca fica fixado, teto de ids', () => {
     const r = cleanRules({ excludeIds: ['a', 'a', ' b ', '', null], pinIds: ['b', 'c', 'c'], excludeEquipment: ['maquina', 'xx', 'POLIA'], excludeJointRisk: ['joelho', 'PUNHO'], noHighImpact: 'sim', avoidProfiles: ['gestante', 'ALIEN'] });
-    assert.deepEqual(r, { excludeIds: ['a', 'b'], pinIds: ['c'], excludeEquipment: ['MAQUINA', 'POLIA'], excludeJointRisk: ['JOELHO'], noHighImpact: false, avoidProfiles: ['GESTANTE'] });
+    assert.deepEqual(r, { excludeIds: ['a', 'b'], pinIds: ['c'], excludeEquipment: ['MAQUINA', 'POLIA'], excludeJointRisk: ['JOELHO'], noHighImpact: false, avoidProfiles: ['GESTANTE'], includeEnvironments: [] });
     assert.deepEqual(cleanRules(null), emptyRules()); assert.deepEqual(cleanRules('x'), emptyRules()); assert.equal(cleanRules({ noHighImpact: true }).noHighImpact, true);
     assert.equal(cleanRules({ excludeIds: Array.from({ length: 900 }, (_, i) => 'id' + i) }).excludeIds.length, MAX_IDS);
     assert.ok(isEmptyRules(emptyRules()) && !isEmptyRules(cleanRules({ pinIds: ['x'] })) && !isEmptyRules(cleanRules({ noHighImpact: true })));
   });
   await t('mergeRules + describeRules: soma sem repetir e fala em português', () => {
     const m = mergeRules(cleanRules({ excludeIds: ['a'], excludeEquipment: ['MAQUINA'], avoidProfiles: ['GESTANTE'] }), cleanRules({ excludeIds: ['a', 'b'], pinIds: ['p'], noHighImpact: true, excludeJointRisk: ['LOMBAR'] }));
-    assert.deepEqual(m, { excludeIds: ['a', 'b'], pinIds: ['p'], excludeEquipment: ['MAQUINA'], excludeJointRisk: ['LOMBAR'], noHighImpact: true, avoidProfiles: ['GESTANTE'] });
+    assert.deepEqual(m, { excludeIds: ['a', 'b'], pinIds: ['p'], excludeEquipment: ['MAQUINA'], excludeJointRisk: ['LOMBAR'], noHighImpact: true, avoidProfiles: ['GESTANTE'], includeEnvironments: [] });
     assert.deepEqual(describeRules(m), ['sem máquina', 'poupa lombar', 'sem alto impacto', 'perfil: gestante', '2 exercícios bloqueados', '1 exercício fixado']); assert.deepEqual(describeRules(emptyRules()), []);
     assert.deepEqual(describeRules(cleanRules({ excludeIds: ['a'], excludeEquipment: ['PESO_CORPORAL', 'POLIA'] })), ['sem peso do corpo, polia', '1 exercício bloqueado']);
   });
@@ -103,7 +103,7 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     const g0 = await call(prefsGET, C1, { path: P_ }); assert.equal(g0.status, 200); assert.deepEqual(g0.json.rules, emptyRules()); assert.equal(g0.json.saved, false); assert.equal(g0.json.available, true);
     assert.equal((await call(prefsPUT, C2, { method: 'PUT', body: { userId: 's1', rules: {} } })).status, 403);
     const put = await call(prefsPUT, C1, { method: 'PUT', body: { userId: 's1', presetId: 'p-1', rules: { excludeIds: ['x', 'x'], pinIds: ['x', 'y'], excludeEquipment: ['maquina', 'foo'], noHighImpact: true } } });
-    assert.equal(put.status, 200); assert.deepEqual(put.json.rules, { excludeIds: ['x'], pinIds: ['y'], excludeEquipment: ['MAQUINA'], excludeJointRisk: [], noHighImpact: true, avoidProfiles: [] }); assert.deepEqual(put.json.summary, ['sem máquina', 'sem alto impacto', '1 exercício bloqueado', '1 exercício fixado']);
+    assert.equal(put.status, 200); assert.deepEqual(put.json.rules, { excludeIds: ['x'], pinIds: ['y'], excludeEquipment: ['MAQUINA'], excludeJointRisk: [], noHighImpact: true, avoidProfiles: [], includeEnvironments: [] }); assert.deepEqual(put.json.summary, ['sem máquina', 'sem alto impacto', '1 exercício bloqueado', '1 exercício fixado']);
     assert.equal(db.genPrefs.length, 1); assert.equal(db.genPrefs[0].coachId, 'c1'); const g1 = await call(prefsGET, P, { path: P_ }); assert.equal(g1.json.saved, true); assert.equal(g1.json.presetId, 'p-1'); assert.deepEqual(g1.json.rules.excludeIds, ['x']);
     await call(prefsPUT, P, { method: 'PUT', body: { userId: 's1', rules: { noHighImpact: false } } }); assert.equal(db.genPrefs.length, 1, 'salvar de novo troca, não duplica'); assert.equal(db.genPrefs[0].presetId, null);
     assert.equal((await call(prefsDEL, C2, { method: 'DELETE', path: P_ })).status, 403); assert.equal((await call(prefsDEL, C1, { method: 'DELETE', path: P_ })).status, 200); assert.equal(db.genPrefs.length, 0);
@@ -213,6 +213,30 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     r = await gen({ genRules: { pinIds: ['biceps-6'] } }); assert.ok(idsOf(r).includes('biceps-6'), idsOf(r).join()); assert.ok(r.body.quality.fixes.some((f: string) => f.includes('"BICEPS 6" (fixado por você) entrou no lugar de')), r.body.quality.fixes.join(' | ')); assert.equal(r.body.quality.stats.pinned >= 1, true);
     // fixado que o aluno não pode usar (fora do ambiente): aviso claro
     db.exercise.find((e: any) => e.id === 'peito-5').environments = ['EM_CASA']; r = await gen({ genRules: { pinIds: ['peito-5'] } }); assert.deepEqual(r.body.filters.droppedPins, [{ id: 'peito-5', name: 'PEITO 5' }]); assert.ok(r.body.quality.issues.some((i: string) => i.includes('"PEITO 5" fixado não está disponível')), r.body.quality.issues.join()); assert.equal(r.body.quality.score, 100 - 10 * r.body.quality.issues.length);
+  });
+  await t('locais (de onde vêm os exercícios): sem escolha vale Universal + o local do aluno (como sempre); com escolha vale a lista do coach; limpeza, resumo e junção de presets', async () => {
+    assert.deepEqual(cleanRules({ includeEnvironments: ['condominio', 'ACADEMIA_PADRAO', 'MARTE', 'condominio'] }).includeEnvironments, ['CONDOMINIO', 'ACADEMIA_PADRAO'], 'desconhecido some, sem repetição');
+    assert.deepEqual(cleanRules({}).includeEnvironments, []); assert.equal(isEmptyRules(cleanRules({ includeEnvironments: ['OVERALL'] })), false, 'escolher locais já conta como filtro');
+    assert.deepEqual(describeRules(cleanRules({ includeEnvironments: ['CONDOMINIO', 'ACADEMIA_PADRAO', 'UNIVERSAL'] })), ['locais: condomínio, academia padrão, universal']);
+    assert.deepEqual(mergeRules(cleanRules({ includeEnvironments: ['CONDOMINIO'] }), cleanRules({ includeEnvironments: ['CONDOMINIO', 'UNIVERSAL'] })).includeEnvironments, ['CONDOMINIO', 'UNIVERSAL']);
+    assert.deepEqual(effectiveEnvironments(emptyRules(), 'CONDOMINIO'), ['UNIVERSAL', 'CONDOMINIO']); assert.equal(effectiveEnvironments(emptyRules(), 'UNIVERSAL'), null); assert.equal(effectiveEnvironments(emptyRules(), null), null);
+    assert.deepEqual(effectiveEnvironments(cleanRules({ includeEnvironments: ['OVERALL'] }), 'CONDOMINIO'), ['OVERALL'], 'a escolha do coach manda');
+  });
+  await t('locais na geração e na prévia: Newtech (só Overall) não entra para aluno de condomínio; o coach pode somar Academia padrão; a prévia conta igual', async () => {
+    const ctl = seedGen(); ctl.setHook((b: any) => b);
+    const env = (id: string, e: string[]) => { db.exercise.find((x: any) => x.id === id).environments = e; };
+    env('peito-1', ['OVERALL']); env('peito-2', ['OVERALL']); env('peito-3', ['ACADEMIA_PADRAO', 'OVERALL']); env('peito-4', ['ACADEMIA_PADRAO']); env('peito-5', ['CONDOMINIO']); env('peito-6', ['UNIVERSAL']);
+    const has = (id: string) => new RegExp('\\| ' + id.replace('-', ' ').toUpperCase() + ' \\|').test(lastPrompt());
+    let r = await gen({ trainingEnvironment: 'CONDOMINIO', days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 3, rest: 60 }] }] }); assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.ok(has('peito-5') && has('peito-6'), 'condomínio e universal entram'); assert.ok(!has('peito-1') && !has('peito-2') && !has('peito-3') && !has('peito-4'), 'Overall e Academia padrão ficam de fora (comportamento de sempre)');
+    r = await gen({ trainingEnvironment: 'CONDOMINIO', days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 3, rest: 60 }] }], genRules: { includeEnvironments: ['CONDOMINIO', 'ACADEMIA_PADRAO', 'UNIVERSAL'] } }); assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.ok(has('peito-3') && has('peito-4') && has('peito-5') && has('peito-6'), 'coach somou a Academia padrão'); assert.ok(!has('peito-1') && !has('peito-2'), 'o que é só Overall continua fora'); assert.deepEqual(r.body.filters.summary, ['locais: condomínio, academia padrão, universal']);
+    r = await gen({ trainingEnvironment: 'CONDOMINIO', days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 3, rest: 60 }] }], genRules: { includeEnvironments: ['OVERALL', 'UNIVERSAL'] } }); assert.ok(has('peito-1') && has('peito-2') && has('peito-6') && !has('peito-5'), 'escolheu Overall + Universal: Overall entra e Condomínio sai');
+    db.genPrefs.push({ id: 'ge', userId: 's1', coachId: PAULO_ID, rules: { includeEnvironments: ['ACADEMIA_PADRAO', 'UNIVERSAL'] }, presetId: null }); r = await gen({ trainingEnvironment: 'CONDOMINIO', days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 3, rest: 60 }] }] }); assert.ok(has('peito-4') && !has('peito-5'), 'o que está salvo no aluno vale quando a tela não manda genRules'); db.genPrefs.length = 0;
+    // prévia: mesma conta
+    const pv = (rules: any) => call(previewPOST, tok(PAULO_ID), { method: 'POST', body: { userId: 's1', adminId: PAULO_ID, trainingEnvironment: 'CONDOMINIO', rules } });
+    const a = await pv({}); const b = await pv({ includeEnvironments: ['CONDOMINIO', 'ACADEMIA_PADRAO', 'UNIVERSAL'] }); const c = await pv({ includeEnvironments: ['OVERALL'] });
+    assert.equal(a.status, 200, JSON.stringify(a.json)); assert.ok(b.json.total > a.json.total, 'somar a Academia padrão aumenta o total'); assert.ok(c.json.total < b.json.total && c.json.total >= 2, 'só Overall: poucos'); assert.equal(b.json.total - a.json.total, 2, 'entram o peito-3 (Academia padrão + Overall) e o peito-4 (Academia padrão)');
   });
   await t('geração: o fixado repete mesmo que a rotação mandasse trocar (e o fixado de outro músculo sem vaga no plano vira aviso)', async () => {
     const ctl = seedGen(); ctl.setHook((b: any) => b);
