@@ -16,6 +16,8 @@ import { unavailableExerciseIds, filterUnavailable } from '@/lib/equipment';
 import { callClaudeWorkout, isClaudeEngine, WORKOUT_TIMEOUT_MS } from '@/lib/ai/claudeWorkout';
 import { callArgon } from '@/lib/ai/argon';
 import { shapeReps, cleanRepChoice, describeRepChoice } from '@/lib/ai/repSchemes';
+import { compactToFull } from '@/lib/ai/compactOutput';
+import { MUSCLE_GROUPS } from '@/lib/ai/splitPresets';
 import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, repRange, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
 import { pickSwap, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
@@ -31,7 +33,9 @@ const TECH_RULE = `TÉCNICAS (1 por dia mínimo, diferentes). ATENÇÃO — CARG
    TRISET: EXATAMENTE 3 exercícios consecutivos, um logo após o outro, todos marcados TRISET. NUNCA 2 ou 4+ exercícios seguidos com TRISET — sempre trincas fechadas
    21: reps="21" SEMPRE | CLUSTERSET: reps="3" blocos 15s | 1_5_REPS: reps 8-12
    TUT: cadência 3s descida (também depende de carga externa, mesma regra acima) | GVT: SEMPRE gere EXATAMENTE 10 blocos separados, cada um com sets="1", reps="10", restTime="60". NUNCA 1 bloco só`;
-const BLOCKS_RULE = (n: number) => `Nº DE BLOCOS = Nº DE SÉRIES (ERRO MAIS COMUM — LEIA COM ATENÇÃO): cada bloco do array "blocks" representa UMA série. A CONFIGURAÇÃO DO CICLO abaixo informa quantas séries cada grupo muscular deve ter (ex: "4 séries"). Você DEVE gerar exatamente essa quantidade de blocos pra CADA exercício daquele grupo — nunca apenas 1 bloco, a menos que a configuração peça 1 série. Todo bloco tem sets="1" (é sempre 1 série por bloco); é a QUANTIDADE de blocos no array que soma as séries totais. Pirâmide = mesma quantidade de blocos, mas com reps/load DIFERENTES entre eles (ex: 12/10/8/6 reps com carga crescente). REPETIÇÕES (como o treino real do Paulo e da Adri): NÃO repita o mesmo número em todas as séries do exercício; use pirâmide decrescente dentro da faixa da fase — 3 séries = 15/12/10 (12/10/8 nos compostos pesados ou 15/12/12), 4 séries = 15/12/10/8 (ou 12/10/8/8), 5 séries = 15/12/12/10/10. Só mantenha a mesma repetição em todas as séries na fase DELOAD ou nas técnicas que têm repetição própria. Exceções com contagem própria: GVT sempre 10 blocos (regra ${n}), 21 e CLUSTERSET seguem a regra ${n}.`;
+const REPS_TEXT = `REPETIÇÕES (como o treino real do Paulo e da Adri): NÃO repita o mesmo número em todas as séries do exercício; use pirâmide decrescente dentro da faixa da fase — 3 séries = 15/12/10 (12/10/8 nos compostos pesados ou 15/12/12), 4 séries = 15/12/10/8 (ou 12/10/8/8), 5 séries = 15/12/12/10/10. Só mantenha a mesma repetição em todas as séries na fase DELOAD ou nas técnicas que têm repetição própria.`;
+const COMPACT_RULE = `Nº DE SÉRIES = TAMANHO DA LISTA "reps" (ERRO MAIS COMUM — LEIA COM ATENÇÃO): cada exercício leva uma lista de repetições com UMA entrada por série (4 séries = [15,12,10,8]). A CONFIGURAÇÃO DO CICLO abaixo informa quantas séries cada grupo muscular deve ter (ex: "4 séries"): escreva exatamente essa quantidade de entradas para CADA exercício daquele grupo, nunca uma só (a menos que a configuração peça 1 série). ${REPS_TEXT} TÉCNICA: campo "t" (omita se for normal). DROPSET e RESTPAUSE valem só para a ÚLTIMA série; BISET, TRISET, TUT, 21, CLUSTERSET e GVT valem para todas as séries do exercício (GVT: basta "reps":[10] — o servidor monta as 10 séries; 21: "reps":[21]; CLUSTERSET: "reps":[3]).`;
+const BLOCKS_RULE = (n: number) => `Nº DE BLOCOS = Nº DE SÉRIES (ERRO MAIS COMUM — LEIA COM ATENÇÃO): cada bloco do array "blocks" representa UMA série. A CONFIGURAÇÃO DO CICLO abaixo informa quantas séries cada grupo muscular deve ter (ex: "4 séries"). Você DEVE gerar exatamente essa quantidade de blocos pra CADA exercício daquele grupo — nunca apenas 1 bloco, a menos que a configuração peça 1 série. Todo bloco tem sets="1" (é sempre 1 série por bloco); é a QUANTIDADE de blocos no array que soma as séries totais. Pirâmide = mesma quantidade de blocos, mas com reps/load DIFERENTES entre eles (ex: 12/10/8/6 reps com carga crescente). ${REPS_TEXT} Exceções com contagem própria: GVT sempre 10 blocos (regra ${n}), 21 e CLUSTERSET seguem a regra ${n}.`;
 
 export interface GenerateWorkoutInput {
   userId: string;
@@ -341,38 +345,25 @@ REGRAS:
 4. PROGRESSÃO (a regra mais importante): a seção ROTINA ANTERIOR diz o que fazer com cada exercício. MANTER = repita o mesmo código (é a âncora: o aluno progride na carga). TROCAR = escolha OUTRO exercício do mesmo grupo, nunca um marcado "REPETIDO". Nos TROCAR varie o ângulo, a pegada ou o equipamento. Exercícios marcados FIXADO pelo coach entram obrigatoriamente (no grupo certo). Sem rotina anterior, monte a primeira rotina: compostos básicos primeiro, variada.
 5. ${TECH_RULE}
 6. NÍVEL: respeite a seção NÍVEL DO ALUNO (técnicas proibidas, exercícios complexos, faixa de repetições). Técnica avançada só em exercício que combine, nos exercícios finais do grupo, nunca em todos.
-7. ${BLOCKS_RULE(5)}
+7. ${COMPACT_RULE}
 8. ORDEM: dentro de cada grupo, o exercício composto vem antes do isolado; siga a ordem dos grupos da ESTRUTURA.
 9. LIMITAÇÕES: os candidatos já saem filtrados pelo risco articular e pelo ambiente ${trainingEnv || 'UNIVERSAL'}; respeite também as LIMITAÇÕES do ciclo.
-10. CARDIO: sets=minutos, reps=kcal, technique=Leve/Moderada/Zona 2/Forte/HIIT.
-11. CARGAS: escreva "load" só nos exercícios que têm "alvo" na ROTINA ANTERIOR (use o alvo; se o bloco tiver mais séries que o alvo, repita a última carga). Se a carga for "cada lado", mantenha a unidade (ex: "22.5kg cada lado"); sem unidade é carga total (ex: "45kg"). Exercício novo, sem histórico: load "" (o aluno descobre a carga certa no primeiro treino).
+10. CARDIO (única exceção ao formato compacto): use "blocks" com sets=minutos, reps=kcal, technique=Leve/Moderada/Zona 2/Forte/HIIT.
+11. CARGAS, DESCANSO, NOME E SUBSTITUTO: NÃO escreva — o servidor coloca a carga-alvo (só em quem o aluno já treinou), o descanso do grupo, o nome e o substituto.
 
-FORMATO JSON — sem markdown, sem texto extra:
+FORMATO JSON COMPACTO — sem markdown, sem texto extra. Por exercício escreva SÓ o código, as repetições (uma por série) e, se houver, a técnica:
 {
   "workoutName": "Nome",
-  "workoutModel": "CARGA",
   "reasoning": "Máximo 3 linhas: o que foi mantido (âncoras), o que foi trocado e a técnica de cada dia.",
   "exercisesByDay": {
     "A": [
-      {
-        "exerciseId": "E001",
-        "title": "nome-exato",
-        "category": "Categoria",
-        "subCategory": "SubCategoria",
-        "observation": "",
-        "blocks": [
-          { "sets": "1", "reps": "15", "load": "20kg", "restTime": "60", "technique": "" },
-          { "sets": "1", "reps": "12", "load": "22.5kg", "restTime": "60", "technique": "" },
-          { "sets": "1", "reps": "10", "load": "25kg", "restTime": "60", "technique": "" },
-          { "sets": "1", "reps": "8", "load": "27.5kg", "restTime": "60", "technique": "" }
-        ]
-      }
+      { "id": "E001", "reps": [15, 12, 10, 8] },
+      { "id": "E014", "reps": [12, 10, 8], "t": "DROPSET" },
+      { "id": "E077", "blocks": [{ "sets": "20", "reps": "200", "technique": "Moderada" }] }
     ]
   }
 }
-// ☝️ Exemplo com 4 blocos = 4 séries em pirâmide 15/12/10/8 (porque a ESTRUTURA pediu 4 séries pra esse grupo). Se a ESTRUTURA pedir outra quantidade, gere essa quantidade de blocos e uma pirâmide do mesmo jeito — não sempre 4.
-
-IMPORTANTE: "observation" deve ser SEMPRE string vazia "". Não escreva observações — o personal trainer fará isso manualmente.`;
+// ☝️ Exemplo: E001 = 4 séries em pirâmide 15/12/10/8; E014 = 3 séries com drop-set na última; E077 = cardio (20 min, 200 kcal). Se a ESTRUTURA pedir outra quantidade de séries, escreva essa quantidade de repetições — não sempre 4.`;
     const systemPromptStatic = smart ? smartPrompt : legacyPrompt();
 
     const variationClause = latestIds.size > 0
@@ -408,12 +399,17 @@ Responda APENAS com JSON válido.`.trim();
     if (!isMasterCoach && ['GEMINI', 'GEMINI_PRO', 'GPT', 'CLAUDE', 'HAIKU', 'ARGON'].includes(selectedAI)) selectedAI = 'GEMINI_FLASH';
     // 📊 (19 out 2026) o que cada geração gastou (tokens) fica no AiLog — é o que mostra, com número real, quanto custa cada motor
     let genUsage: any = null; const genT0 = Date.now();
+    // 📊 (19 out 2026) geração que FALHA também fica no registro (`gerar-treino:<motor>:falhou`): o Google/OpenAI cobram os tokens mesmo quando o treino não sai, e antes isso não aparecia em lugar nenhum
+    const logFail = async (error: any, extra: any = {}) => {
+      try { await (prisma as any).aiLog.create({ data: { userId: adminId, question: `gerar-treino:${selectedAI}:falhou`, answer: JSON.stringify({ error: String(error?.message || error).slice(0, 300), ...(genUsage || {}), ms: genUsage?.ms ?? Date.now() - genT0, studentId: userId, ...extra }).slice(0, 2000) } }); } catch (e) { /* sem registro */ }
+    };
 
     let rawText = '';
     console.log(`[gerar-treino] Modelo: ${selectedAI} | Ambiente: ${trainingEnv || 'UNIVERSAL'}`);
 
     // 🔥 MODO MANUAL PURO: se o coach só selecionou exercícios de mobilidade
     // (sem grupos musculares para a IA gerar), pula a chamada de IA inteiramente
+    try {
     if (hasManualOnly) {
       console.log('[gerar-treino] Modo manual puro (sem IA) — apenas mobilidade selecionada.');
       rawText = JSON.stringify({
@@ -482,6 +478,7 @@ Responda APENAS com JSON válido.`.trim();
       const out = await callArgon(geminiClient, { system: systemPromptStatic, user: userMessage, timeoutMs: WORKOUT_TIMEOUT_MS - 5000 });
       rawText = out.text; genUsage = out.usage;
     }
+    } catch (e: any) { await logFail(e, { stage: 'ia' }); throw e; }
 
     // 🔥 EXTRAI JSON: tenta regex primeiro (mais robusto que replace)
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
@@ -496,6 +493,7 @@ Responda APENAS com JSON válido.`.trim();
       console.error(`[gerar-treino] JSON inválido (${selectedAI}). Tamanho: ${cleanJson.length}`);
       console.error('Início:', cleanJson.substring(0, 500));
       console.error('Fim:', cleanJson.substring(Math.max(0, cleanJson.length - 300)));
+      await logFail('resposta em formato inválido (não é JSON)', { stage: 'json', chars: cleanJson.length });
       return { status: 500, body: { error: `A IA (${selectedAI}) retornou formato inválido. Tente novamente ou use outra IA.` } };
     }
 
@@ -575,6 +573,14 @@ Responda APENAS com JSON válido.`.trim();
     for (const [day, exercises] of Object.entries(parsed.exercisesByDay || {})) {
       rawDays[day] = (Array.isArray(exercises) ? (exercises as any[]) : [])
         .filter(Boolean)
+        // 📉 formato compacto (ver lib/ai/compactOutput.ts): { id, reps:[...], t } vira o exercício completo, com descanso e séries do GRUPO a que ele pertence; resposta no formato antigo passa igual
+        .map((ex) => {
+          const rid = book.resolve(ex?.exerciseId ?? ex?.id);
+          const dayCfg = (cycleConfig?.days || []).find((d: any) => d.name === day);
+          const grp = cands && dayCfg ? (dayCfg.groups || []).find((g: any) => (cands.byGroup.get(g.id) || []).some((e: any) => e.id === rid)) : null;
+          const defRest = MUSCLE_GROUPS.find((m: any) => m.id === grp?.id)?.defaultRest;
+          return compactToFull({ ...ex, exerciseId: rid }, { rest: String(grp?.rest ?? defRest ?? 60), sets: Number(grp?.sets) > 0 ? Number(grp.sets) : null, isCardio: String(exerciseMap.get(rid)?.category || '').toLowerCase() === 'cardio' });
+        })
         .map((ex) => ({ ...ex, exerciseId: book.resolve(ex.exerciseId), substitute: ex.substitute ? { ...ex.substitute, exerciseId: book.resolve(ex.substitute.exerciseId) } : ex.substitute }))
         .filter((ex) => { const ok = exerciseMap.has(ex.exerciseId); if (!ok) { ghostCount++; console.warn(`fantasma: ${ex.exerciseId}`); } return ok; })
         .map((ex, exIdx) => {
@@ -666,7 +672,7 @@ Responda APENAS com JSON válido.`.trim();
     }
     const workoutTabs = Object.keys(validatedDays);
     const totalExercises = workoutTabs.reduce((acc, d) => acc + validatedDays[d].length, 0);
-    if (totalExercises === 0) return { status: 500, body: { error: 'A IA não gerou exercícios válidos. Tente novamente.' } };
+    if (totalExercises === 0) { await logFail('a IA não gerou nenhum exercício válido', { stage: 'validacao', ghosts: ghostCount }); return { status: 500, body: { error: 'A IA não gerou exercícios válidos. Tente novamente.' } }; }
 
     // 📊 registro de custo (não pode derrubar a geração)
     if (genUsage) {

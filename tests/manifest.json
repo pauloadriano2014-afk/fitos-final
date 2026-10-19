@@ -63,6 +63,9 @@
  "t_coach_plans": [
   "build31.mjs"
  ],
+ "t_compact_output": [
+  "build70.mjs"
+ ],
  "t_contact": [
   "build26.mjs"
  ],
