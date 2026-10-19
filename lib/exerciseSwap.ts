@@ -17,6 +17,8 @@ const norm = (s: any) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, ''
 export const nameKey = norm;
 const arr = (v: any): string[] => (Array.isArray(v) ? v.map((x) => String(x)) : []);
 const LIGHT = ['HALTER', 'LIVRE', 'PESO_CORPORAL', 'CANELEIRA', 'BARRA'];
+// A tag `equipment` da biblioteca nem sempre diz a verdade ("Cadeira abdutora" está como LIVRE). Pelo nome dá para desconfiar de máquina: em condomínio/casa é o último recurso.
+export const looksLikeMachine = (name: string) => /\b(cadeira|maquina|mesa flexora|leg ?press|hack|smith|pec ?deck|articulad[ao]|projetad[ao]|reclinad[ao]|newtech|extensora|flexora|panturrilha em pe)\b/.test(norm(name));
 const tg = (e: LibEx) => String(e.tags?.target || '').toUpperCase();
 
 /** O melhor substituto da biblioteca para `orig` (ou null se nada serve). */
@@ -38,7 +40,7 @@ export function pickSwap(orig: LibEx, pool: LibEx[], ctx: SwapCtx): SwapTarget |
     let score = 0;
     if (origMech && String(c.tags?.mechanic || '').toUpperCase() === origMech) score += 3;
     if (c.subCategory && norm(c.subCategory) !== 'geral' && norm(c.subCategory) === norm(orig.subCategory)) score += 1;
-    if (light) { if (LIGHT.includes(eq)) score += 2; else if (eq === 'POLIA') score += 1; } else if (origEq && eq === origEq) score += 1;
+    if (light) { if (eq === 'MAQUINA' || looksLikeMachine(c.name)) score -= 3; else if (LIGHT.includes(eq)) score += 2; else if (eq === 'POLIA') score += 1; } else if (origEq && eq === origEq) score += 1;
     if (c.videoUrl) score += 1;
     if (!best || score > best.score || (score === best.score && norm(c.name) < norm(best.c.name))) best = { c, score };
   }

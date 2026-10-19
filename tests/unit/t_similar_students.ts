@@ -1,7 +1,7 @@
 import assert from 'assert';
 import jwt from 'jsonwebtoken';
 import prisma from '@/lib/prisma';
-import { pickSwap, nameKey } from '@/lib/exerciseSwap';
+import { pickSwap, nameKey, looksLikeMachine } from '@/lib/exerciseSwap';
 import { GET as similarGET } from '/home/user/fitos-final/app/api/insights/similar/route';
 import { GET as compareGET } from '/home/user/fitos-final/app/api/insights/compare/route';
 import { runIntent, ruleRoute, INTENTS } from '/home/user/fitos-final/lib/coachAssistant';
@@ -180,6 +180,15 @@ const ids = (r: any) => r.similar.map((s: any) => s.studentId);
     assert.strictEqual(pickSwap(orig, [LX('x', 'Tríceps A', 'TRICEPS', { mech: 'COMPOSTO' }), LX('y', 'Tríceps B', 'TRICEPS', { mech: 'ISOLADO' })], CTX())!.name, 'Tríceps B', 'mesmo movimento (isolado) vence'); assert.strictEqual(pickSwap(LX('o2', 'Remada', 'COSTAS', { cat: 'Costas' }), [LX('z', 'Elevação lateral', 'OMBRO', { cat: 'Costas' })], CTX()), null, 'outro músculo nunca');
     assert.strictEqual(pickSwap({ id: 'n', name: 'Sem tag', category: 'Abdômen' }, [{ id: 'm', name: 'Prancha', category: 'Abdômen', environments: [] }, { id: 'k', name: 'Perna', category: 'Pernas' }] as any, CTX())!.name, 'Prancha', 'sem tag de músculo: mesma categoria'); assert.strictEqual(pickSwap(orig, [], CTX()), null); assert.strictEqual(pickSwap(orig, null as any, CTX()), null);
     assert.deepStrictEqual(levelFix('Barra fixa', 'DROPSET + BISET', 'INICIANTE'), { techs: ['DROPSET'], complex: true }); assert.deepStrictEqual(levelFix('Supino', 'DROPSET', undefined), { techs: [], complex: false });
+  });
+  await t('troca em condomínio/casa: desconfia de máquina pelo NOME (a tag diz "livre" na cadeira abdutora) e prefere caneleira/halter; fora do condomínio a máquina volta a valer', () => {
+    for (const n of ['Cadeira abdutora', 'Abdutora projetada NEWTECH', 'Abdutora articulada', 'Leg Press 45', 'Agachamento Hack MATRIX', 'Mesa Flexora', 'Panturrilha máquina', 'Pec deck']) assert.strictEqual(looksLikeMachine(n), true, n);
+    for (const n of ['Abdução em pé com caneleira', 'Tríceps francês com halter', 'Elevação lateral', 'Prancha']) assert.strictEqual(looksLikeMachine(n), false, n);
+    const orig = LX('o', 'Abdutora máquina em pé', 'GLUTEOS', { cat: 'Pernas', eq: 'MAQUINA', env: ['OVERALL', 'SEVENPLAY'] });
+    const pool = [LX('c1', 'Cadeira abdutora', 'GLUTEOS', { cat: 'Pernas', eq: 'LIVRE', env: ['ACADEMIA_PADRAO', 'CONDOMINIO'], video: 'v' }), LX('c2', 'Abdução em pé com caneleira', 'GLUTEOS', { cat: 'Pernas', eq: 'CANELEIRA', env: ['UNIVERSAL'] }), LX('c3', 'Abdução na polia com caneleira', 'GLUTEOS', { cat: 'Pernas', eq: 'POLIA', env: ['ACADEMIA_PADRAO', 'CONDOMINIO'] })];
+    assert.strictEqual(pickSwap(orig, pool, CTX({ env: 'CONDOMINIO' }))!.name, 'Abdução em pé com caneleira', 'condomínio: caneleira antes da cadeira (mesmo com vídeo)');
+    assert.strictEqual(pickSwap(orig, [pool[0]], CTX({ env: 'CONDOMINIO' }))!.name, 'Cadeira abdutora', 'se só sobrou a máquina, ainda é melhor que nada (o coach confere)');
+    assert.strictEqual(pickSwap(orig, pool, CTX({ env: 'ACADEMIA_PADRAO' }))!.name, 'Cadeira abdutora', 'academia completa: sem a regra da máquina, vence o que tem vídeo');
   });
   await t('comparação com troca: o que não serve ganha `swapTo`; exercício bom não; duas trocas nunca repetem o mesmo; vem o id da linha e o que corrigir', () => {
     const row = (id: string, ex: string, name: string, o: any = {}) => ({ id, exerciseId: ex, name, category: 'Tríceps', subCategory: 'Geral', sets: 3, reps: '12', restTime: 60, technique: o.tech ?? null, notes: null, order: o.order ?? 0, day: 'A', substitutes: [], tags: { target: 'TRICEPS', mechanic: 'ISOLADO', equipment: 'MAQUINA', jointRisk: [] }, environments: o.env || ['GETGYM'] });
