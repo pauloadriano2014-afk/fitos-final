@@ -18,6 +18,7 @@ import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy,
 import { pickSwap, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
 import { loadAdminLibrary } from '@/lib/genLibrary';
+import { buildConcerns, concernIssues } from '@/lib/exerciseConcerns';
 import { applyRules, cleanRules, describeRules, emptyRules, loadStudentRules, type GenRules } from '@/lib/genRules';
 import { computeLevel, parseLevel, LEVEL_LABEL, type LevelInfo } from '@/lib/studentLevel';
 
@@ -646,6 +647,14 @@ Responda APENAS com JSON válido.`.trim();
     });
 
     if (ghostCount > 0) console.warn(`[gerar-treino] ${ghostCount} fantasmas removidos.`);
+    // 🩺 (19 out 2026) o que a aluna escreveu sobre um exercício (dor, "não senti o músculo", "muito difícil") e que VOLTOU neste treino: avisa o coach em "Para você conferir" (nunca troca sozinho)
+    if (quality) {
+      try {
+        const inPlan = new Set<string>(Object.values(validatedDays).flat().map((e: any) => String(e.exerciseId)));
+        const msgs = concernIssues(buildConcerns(history as any), inPlan);
+        if (msgs.length) quality.issues.push(...msgs);
+      } catch (_) { /* o alerta nunca derruba a geração */ }
+    }
     const workoutTabs = Object.keys(validatedDays);
     const totalExercises = workoutTabs.reduce((acc, d) => acc + validatedDays[d].length, 0);
     if (totalExercises === 0) return { status: 500, body: { error: 'A IA não gerou exercícios válidos. Tente novamente.' } };

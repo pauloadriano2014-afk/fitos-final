@@ -7,6 +7,8 @@ import { suggestImpact, suggestAvoid, pickExtra, cleanExtraPatch, mergeTags, eff
 import { effectiveEnvironments, cleanRules, emptyRules, isEmptyRules, mergeRules, describeRules, removalReason, applyRules, removedSummary, loadStudentRules, MAX_IDS } from '/home/user/fitos-final/lib/genRules';
 import { GET as prefsGET, PUT as prefsPUT, DELETE as prefsDEL } from '/home/user/fitos-final/app/api/gen-prefs/route';
 import { POST as previewPOST } from '/home/user/fitos-final/app/api/gen-prefs/preview/route';
+import { classifyNote, buildConcerns, concernIssues } from '/home/user/fitos-final/lib/exerciseConcerns';
+import { GET as concernsGET } from '/home/user/fitos-final/app/api/gen-prefs/concerns/route';
 import { GET as presetsGET, POST as presetsPOST, DELETE as presetsDEL } from '/home/user/fitos-final/app/api/gen-presets/route';
 import { GET as tagsGET, POST as tagsPOST } from '/home/user/fitos-final/app/api/exercise/tags-review/route';
 import { PUT as exercisePUT } from '/home/user/fitos-final/app/api/exercise/route';
@@ -237,6 +239,49 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     const pv = (rules: any) => call(previewPOST, tok(PAULO_ID), { method: 'POST', body: { userId: 's1', adminId: PAULO_ID, trainingEnvironment: 'CONDOMINIO', rules } });
     const a = await pv({}); const b = await pv({ includeEnvironments: ['CONDOMINIO', 'ACADEMIA_PADRAO', 'UNIVERSAL'] }); const c = await pv({ includeEnvironments: ['OVERALL'] });
     assert.equal(a.status, 200, JSON.stringify(a.json)); assert.ok(b.json.total > a.json.total, 'somar a Academia padrão aumenta o total'); assert.ok(c.json.total < b.json.total && c.json.total >= 2, 'só Overall: poucos'); assert.equal(b.json.total - a.json.total, 2, 'entram o peito-3 (Academia padrão + Overall) e o peito-4 (Academia padrão)');
+  });
+  await t('observações da aluna: dor, "não senti o músculo" e "muito difícil" são lidos; elogio ("sem dor", "não doeu") e texto vazio não alertam; articulação é reconhecida', () => {
+    const k = (x: any) => classifyNote(x);
+    assert.deepEqual(k('Tive dor no joelho nessa série'), { kind: 'DOR', joint: 'joelho', jointRule: 'JOELHO' }); assert.deepEqual(k('doeu o ombro direito'), { kind: 'DOR', joint: 'ombro', jointRule: 'OMBRO' }); assert.equal(k('Fisgada na lombar')!.jointRule, 'LOMBAR'); assert.deepEqual(k('senti desconforto no punho'), { kind: 'DOR', joint: 'punho', jointRule: null });
+    assert.equal(k('NÃO SENTI O MÚSCULO')!.kind, 'SEM_ALVO'); assert.equal(k('não sinto o glúteo trabalhando')!.kind, 'SEM_ALVO'); assert.equal(k('sinto mais na lombar do que no glúteo')!.kind, 'SEM_ALVO'); assert.equal(k('muito difícil, não consigo fazer')!.kind, 'DIFICIL'); assert.equal(k('não gostei desse')!.kind, 'DIFICIL');
+    for (const ok of ['sem dor', 'Não senti dor nenhuma', 'não doeu hoje', 'tudo certo, sem desconforto', 'Treino ótimo!', '', null, undefined, 'ok', '12kg']) assert.equal(k(ok), null, String(ok));
+    assert.equal(k('não senti dor mas não senti o músculo')!.kind, 'SEM_ALVO', 'o elogio não esconde o outro problema'); assert.equal(k('dor no joelho e muito difícil')!.kind, 'DOR', 'o mais grave manda');
+  });
+  await t('observações da aluna: agrupa por exercício, vale o mais grave, só os últimos 120 dias, tratado vs pendente, ordem; frases do "Para você conferir"', () => {
+    const now = new Date('2026-10-19T12:00:00Z'); const day = (n: number) => new Date(now.getTime() - n * 86400000);
+    const hist = [
+      { date: day(2), details: [{ exerciseId: 'q2', exerciseName: 'Leg press 45', note: 'não senti o músculo', resolvedAt: null }, { exerciseId: 'p1', exerciseName: 'Supino', note: 'sem dor, ótimo' }, { exerciseId: 'p2', exerciseName: 'Crucifixo', note: '   ' }] },
+      { date: day(9), details: [{ exerciseId: 'q2', exerciseName: 'Leg press 45', note: 'dor no joelho', resolvedAt: new Date() }, { exerciseId: 'b1', exerciseName: 'Rosca', note: 'muito pesado, não consegui', coachReplyAt: null }] },
+      { date: day(30), details: [{ exerciseId: 'q2', exerciseName: 'Leg press 45', note: 'doeu o joelho de novo' }] },
+      { date: day(200), details: [{ exerciseId: 'c1', exerciseName: 'Remada', note: 'dor nas costas' }] },
+    ];
+    const c = buildConcerns(hist as any, { now }); assert.deepEqual(c.map((x) => [x.exerciseId, x.kind, x.count, x.handled]), [['q2', 'DOR', 3, false], ['b1', 'DIFICIL', 1, false]], 'Remada (200 dias) fora; Supino "sem dor" fora; o mais grave vence');
+    const q2 = c[0]; assert.equal(q2.joint, 'joelho'); assert.equal(q2.last.text, 'não senti o músculo', 'a mais recente é a última'); assert.deepEqual(q2.texts, ['não senti o músculo', 'dor no joelho', 'doeu o joelho de novo']); assert.equal(q2.handled, false, 'a mais recente ainda não foi tratada');
+    const inv = buildConcerns([...hist].reverse() as any, { now })[0]; assert.equal(inv.last.text, 'não senti o músculo', 'a ordem de entrada não importa: vale a data'); assert.equal(inv.handled, false);
+    assert.equal(buildConcerns([{ date: day(1), details: [{ exerciseId: 'x', exerciseName: 'X', note: 'dor', resolvedAt: new Date() }] }] as any, { now })[0].handled, true);
+    const issues = concernIssues(c, new Set(['q2'])); assert.equal(issues.length, 1); assert.ok(issues[0].startsWith('"Leg press 45" voltou no treino, mas a aluna anotou em 17/10 (dor ou desconforto, joelho): "não senti o músculo"') && issues[0].endsWith('Vale trocar?'), issues[0]);
+    assert.deepEqual(concernIssues(c, new Set(['zzz'])), [], 'não voltou: sem aviso'); assert.ok(concernIssues(buildConcerns([{ date: day(1), details: [{ exerciseId: 'x', exerciseName: 'X', note: 'dor', coachReplyAt: new Date() }] }] as any, { now }), new Set(['x']))[0].includes('você já respondeu'));
+    assert.deepEqual(buildConcerns(null as any), []);
+  });
+  await t('observações da aluna (rota): só o coach dele/master, lista com tipo em português e o que continua na rotina atual; sem observação: lista vazia', async () => {
+    seed(); db.workoutHistory.length = 0; db.workout.length = 0;
+    db.workout.push({ id: 'wcur', userId: 's1', name: 'Atual', workoutModel: 'CARGA', createdAt: new Date(), exercises: [{ exerciseId: 'q2' }] });
+    const ago = (n: number) => new Date(Date.now() - n * 86400000);
+    db.workoutHistory.push({ id: 'h1', userId: 's1', date: ago(3), details: [{ exerciseId: 'q2', exerciseName: 'Leg press 45', note: 'dor no joelho' }, { exerciseId: 'b1', exerciseName: 'Rosca', note: 'não senti o bíceps' }] });
+    const g = (as: string | null, uid = 's1') => call(concernsGET, as, { path: '/api/gen-prefs/concerns?userId=' + uid });
+    const r = await g(C1); assert.equal(r.status, 200, JSON.stringify(r.json)); assert.equal(r.json.total, 2); assert.deepEqual(r.json.concerns.map((c: any) => [c.exerciseId, c.kind, c.kindLabel, c.joint, c.inCurrent]), [['q2', 'DOR', 'dor ou desconforto', 'joelho', true], ['b1', 'SEM_ALVO', 'não sentiu o músculo', null, false]]);
+    assert.equal((await g(C2)).status, 403, 'coach de outro aluno'); assert.equal((await g(S1)).status, 403, 'o próprio aluno não vê'); assert.equal((await g(null)).status, 401); assert.equal((await call(concernsGET, C1, { path: '/api/gen-prefs/concerns' })).status, 400); assert.equal((await g(C1, 'nao-existe')).status, 404);
+    db.workoutHistory.length = 0; const vazio = await g(C1); assert.deepEqual(vazio.json, { concerns: [], total: 0 });
+  });
+  await t('observações da aluna na geração: exercício com dor/"não senti" que VOLTOU no treino novo aparece em "Para você conferir" (sem trocar nada e sem mudar a nota); se não voltou, nada aparece', async () => {
+    const ctl = seedGen(); ctl.setHook((b: any) => b); db.workoutHistory.length = 0;
+    const ago = (n: number) => new Date(Date.now() - n * 86400000);
+    db.workoutHistory.push({ id: 'hh', userId: 's1', date: ago(2), details: [{ exerciseId: 'peito-1', exerciseName: 'PEITO 1', note: 'tive dor no ombro nesse', setNumber: 1, weight: 10, reps: '10' }, { exerciseId: 'zzz-fora', exerciseName: 'Outro', note: 'dor no joelho', setNumber: 1, weight: 10, reps: '10' }] });
+    let r = await gen({ genRules: { pinIds: ['peito-1'] } }); assert.equal(r.status, 200, JSON.stringify(r.body)); assert.ok(idsOf(r).includes('peito-1'));
+    const found = r.body.quality.issues.filter((i: string) => i.includes('voltou no treino')); assert.equal(found.length, 1, r.body.quality.issues.join(' | ')); assert.ok(found[0].includes('"PEITO 1"') && found[0].includes('dor ou desconforto, ombro') && found[0].includes('tive dor no ombro nesse'), found[0]);
+    assert.ok(!r.body.quality.issues.some((i: string) => i.includes('Outro')), 'quem não voltou não alerta'); assert.ok(r.body.exercisesByDay.A.some((e: any) => e.exerciseId === 'peito-1'), 'nada foi trocado sozinho');
+    r = await gen({ genRules: { excludeIds: ['peito-1'] } }); assert.ok(!r.body.quality.issues.some((i: string) => i.includes('voltou no treino')), 'bloqueado: não volta, não alerta');
+    db.workoutHistory.length = 0;
   });
   await t('geração: o fixado repete mesmo que a rotação mandasse trocar (e o fixado de outro músculo sem vaga no plano vira aviso)', async () => {
     const ctl = seedGen(); ctl.setHook((b: any) => b);
