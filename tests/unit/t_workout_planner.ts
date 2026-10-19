@@ -179,7 +179,9 @@ const hist = (rows: Array<{ id: string; sets: number[]; effort?: string; perSide
   });
   await t('refineWorkout: séries pelo grupo (menos e mais), GVT/drop/21 mantêm a contagem própria, repetições dentro da faixa da fase', () => {
     const r = refineWorkout({ A: [gx(PEITO[0], 5, '', '', '5'), gx(PEITO[1], 1, '', '', '20'), gx(BICEPS[0], 3, 'DROPSET', '', '10'), gx(BICEPS[1], 3, '', '', '10-12')] }, mk()); const A = r.byDay.A;
-    assert.equal(A[0].blocks.length, 3); assert.equal(A[0].blocks[0].reps, '8', '5 sobe para o piso 8'); assert.equal(A[1].blocks.length, 3, '1 bloco vira 3 (repete o último)'); assert.equal(A[1].blocks[2].reps, '15', '20 desce para o teto 15');
+    // (19 out 2026) séries que chegam todas com a mesma repetição viram pirâmide da fase (lib/ai/repSchemes.ts); a faixa continua mandando (nenhuma série fora de 8–15)
+    const rp = (ex: GenEx) => ex.blocks.map((b) => Number(b.reps));
+    assert.equal(A[0].blocks.length, 3); assert.ok(rp(A[0]).every((n) => n >= 8 && n <= 15) && new Set(rp(A[0])).size > 1 && rp(A[0])[0] >= rp(A[0])[2], '5 repetições nas 3 séries: sobe para a faixa e vira pirâmide ' + rp(A[0])); assert.equal(A[1].blocks.length, 3, '1 bloco vira 3 (repete o último)'); assert.ok(rp(A[1]).every((n) => n >= 8 && n <= 15) && new Set(rp(A[1])).size > 1, '20 desce para a faixa e vira pirâmide ' + rp(A[1]));
     assert.equal(A[2].blocks[0].technique, 'DROPSET'); assert.equal(A[3].blocks[0].reps, '10-12', 'faixa já dentro: intacta');
     assert.ok(r.quality.fixes.some((f) => f.includes('"Peito 1" tinha 5 séries, ajustado para 3')), r.quality.fixes.join());
     const g = refineWorkout({ A: [gx(PEITO[0], 10, 'GVT', '', '10'), gx(PEITO[1], 3, '21', '', '21'), gx(BICEPS[0]), gx(BICEPS[1])] }, mk({ phase: 'FORCA', level: 'AVANCADO' })); assert.equal(g.byDay.A[0].blocks.length, 10, 'GVT segue com 10 (nível avançado pode)'); assert.equal(g.byDay.A[1].blocks[0].reps, '21', '21 segue 21');

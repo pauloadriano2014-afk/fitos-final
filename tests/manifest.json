@@ -202,6 +202,9 @@
  "t_register_plan": [
   "build30.mjs"
  ],
+ "t_rep_schemes": [
+  "build70.mjs"
+ ],
  "t_replies": [
   "build23.mjs"
  ],

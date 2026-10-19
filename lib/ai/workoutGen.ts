@@ -15,7 +15,8 @@ import { jointFilterIssues } from '@/lib/autoPlanQuality';
 import { unavailableExerciseIds, filterUnavailable } from '@/lib/equipment';
 import { callClaudeWorkout, isClaudeEngine, WORKOUT_TIMEOUT_MS } from '@/lib/ai/claudeWorkout';
 import { callArgon } from '@/lib/ai/argon';
-import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
+import { shapeReps, cleanRepChoice, describeRepChoice } from '@/lib/ai/repSchemes';
+import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, repRange, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
 import { pickSwap, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
 import { loadAdminLibrary } from '@/lib/genLibrary';
@@ -30,7 +31,7 @@ const TECH_RULE = `TÉCNICAS (1 por dia mínimo, diferentes). ATENÇÃO — CARG
    TRISET: EXATAMENTE 3 exercícios consecutivos, um logo após o outro, todos marcados TRISET. NUNCA 2 ou 4+ exercícios seguidos com TRISET — sempre trincas fechadas
    21: reps="21" SEMPRE | CLUSTERSET: reps="3" blocos 15s | 1_5_REPS: reps 8-12
    TUT: cadência 3s descida (também depende de carga externa, mesma regra acima) | GVT: SEMPRE gere EXATAMENTE 10 blocos separados, cada um com sets="1", reps="10", restTime="60". NUNCA 1 bloco só`;
-const BLOCKS_RULE = (n: number) => `Nº DE BLOCOS = Nº DE SÉRIES (ERRO MAIS COMUM — LEIA COM ATENÇÃO): cada bloco do array "blocks" representa UMA série. A CONFIGURAÇÃO DO CICLO abaixo informa quantas séries cada grupo muscular deve ter (ex: "4 séries"). Você DEVE gerar exatamente essa quantidade de blocos pra CADA exercício daquele grupo — nunca apenas 1 bloco, a menos que a configuração peça 1 série. Todo bloco tem sets="1" (é sempre 1 série por bloco); é a QUANTIDADE de blocos no array que soma as séries totais. Pirâmide = mesma quantidade de blocos, mas com reps/load DIFERENTES entre eles (ex: 12/10/8/6 reps com carga crescente). Exceções com contagem própria: GVT sempre 10 blocos (regra ${n}), 21 e CLUSTERSET seguem a regra ${n}.`;
+const BLOCKS_RULE = (n: number) => `Nº DE BLOCOS = Nº DE SÉRIES (ERRO MAIS COMUM — LEIA COM ATENÇÃO): cada bloco do array "blocks" representa UMA série. A CONFIGURAÇÃO DO CICLO abaixo informa quantas séries cada grupo muscular deve ter (ex: "4 séries"). Você DEVE gerar exatamente essa quantidade de blocos pra CADA exercício daquele grupo — nunca apenas 1 bloco, a menos que a configuração peça 1 série. Todo bloco tem sets="1" (é sempre 1 série por bloco); é a QUANTIDADE de blocos no array que soma as séries totais. Pirâmide = mesma quantidade de blocos, mas com reps/load DIFERENTES entre eles (ex: 12/10/8/6 reps com carga crescente). REPETIÇÕES (como o treino real do Paulo e da Adri): NÃO repita o mesmo número em todas as séries do exercício; use pirâmide decrescente dentro da faixa da fase — 3 séries = 15/12/10 (12/10/8 nos compostos pesados ou 15/12/12), 4 séries = 15/12/10/8 (ou 12/10/8/8), 5 séries = 15/12/12/10/10. Só mantenha a mesma repetição em todas as séries na fase DELOAD ou nas técnicas que têm repetição própria. Exceções com contagem própria: GVT sempre 10 blocos (regra ${n}), 21 e CLUSTERSET seguem a regra ${n}.`;
 
 export interface GenerateWorkoutInput {
   userId: string;
@@ -240,7 +241,7 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
 CONFIGURAÇÃO DO CICLO
 ══════════════════════════════════════════
 FASE: ${phaseLabels[cycleConfig.phase] || cycleConfig.phase}
-TÉCNICAS: ${techList}
+${describeRepChoice(cleanRepChoice(cycleConfig.repScheme)) ? `REPETIÇÕES (escolha do coach — OBRIGATÓRIO, vale mais que a regra geral de repetições): ${describeRepChoice(cleanRepChoice(cycleConfig.repScheme))}\n` : ''}TÉCNICAS: ${techList}
 ESCOPO: ${cycleConfig.techniqueScope === 'DAY' ? 'Técnicas DIFERENTES por dia' : 'Distribua ao longo do ciclo'}
 AMBIENTE: ${envLabel}
 ${genderRules}
@@ -318,16 +319,16 @@ FORMATO JSON — sem markdown, sem texto extra:
         "observation": "",
         "substitute": { "exerciseId": "id-exato-do-substituto", "title": "nome-exato-do-substituto" },
         "blocks": [
-          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
-          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
-          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
-          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" }
+          { "sets": "1", "reps": "15", "load": "20kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "12", "load": "22.5kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "10", "load": "25kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "8", "load": "27.5kg", "restTime": "60", "technique": "" }
         ]
       }
     ]
   }
 }
-// ☝️ Exemplo com 4 blocos = 4 séries (porque a ESTRUTURA pediu 4 séries pra esse grupo). Se a ESTRUTURA pedir outra quantidade, gere essa quantidade de blocos — não sempre 4.
+// ☝️ Exemplo com 4 blocos = 4 séries em pirâmide 15/12/10/8 (porque a ESTRUTURA pediu 4 séries pra esse grupo). Se a ESTRUTURA pedir outra quantidade, gere essa quantidade de blocos e uma pirâmide do mesmo jeito — não sempre 4.
 
 IMPORTANTE: "observation" deve ser SEMPRE string vazia "". Não escreva observações — o personal trainer fará isso manualmente.`;
 
@@ -360,16 +361,16 @@ FORMATO JSON — sem markdown, sem texto extra:
         "subCategory": "SubCategoria",
         "observation": "",
         "blocks": [
-          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
-          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
-          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" },
-          { "sets": "1", "reps": "12", "load": "20kg", "restTime": "60", "technique": "" }
+          { "sets": "1", "reps": "15", "load": "20kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "12", "load": "22.5kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "10", "load": "25kg", "restTime": "60", "technique": "" },
+          { "sets": "1", "reps": "8", "load": "27.5kg", "restTime": "60", "technique": "" }
         ]
       }
     ]
   }
 }
-// ☝️ Exemplo com 4 blocos = 4 séries (porque a ESTRUTURA pediu 4 séries pra esse grupo). Se a ESTRUTURA pedir outra quantidade, gere essa quantidade de blocos — não sempre 4.
+// ☝️ Exemplo com 4 blocos = 4 séries em pirâmide 15/12/10/8 (porque a ESTRUTURA pediu 4 séries pra esse grupo). Se a ESTRUTURA pedir outra quantidade, gere essa quantidade de blocos e uma pirâmide do mesmo jeito — não sempre 4.
 
 IMPORTANTE: "observation" deve ser SEMPRE string vazia "". Não escreva observações — o personal trainer fará isso manualmente.`;
     const systemPromptStatic = smart ? smartPrompt : legacyPrompt();
@@ -576,7 +577,7 @@ Responda APENAS com JSON válido.`.trim();
         .filter(Boolean)
         .map((ex) => ({ ...ex, exerciseId: book.resolve(ex.exerciseId), substitute: ex.substitute ? { ...ex.substitute, exerciseId: book.resolve(ex.substitute.exerciseId) } : ex.substitute }))
         .filter((ex) => { const ok = exerciseMap.has(ex.exerciseId); if (!ok) { ghostCount++; console.warn(`fantasma: ${ex.exerciseId}`); } return ok; })
-        .map((ex) => {
+        .map((ex, exIdx) => {
           const dbEx = exerciseMap.get(ex.exerciseId)!;
           const substitute = subFor(ex.exerciseId, ex.substitute?.exerciseId);
 
@@ -587,6 +588,8 @@ Responda APENAS com JSON válido.`.trim();
 
           // 🔥 Corrige GVT: garante exatamente 10 blocos de 1x10 com 60s, mesmo se a IA mandou só 1 bloco
           rawBlocks = expandBlocksForTechnique(rawBlocks);
+          // 🔺 séries todas com a mesma repetição viram pirâmide da fase (modo inteligente faz o mesmo na revisão; aqui cobre o modo antigo)
+          rawBlocks = shapeReps(rawBlocks, { phase: cycleConfig?.phase, range: repRange(cycleConfig?.phase, null), compound: String((dbEx as any).tags?.mechanic || '').toUpperCase() === 'COMPOSTO', idx: exIdx, choice: cleanRepChoice(cycleConfig?.repScheme) });
 
           return {
             exerciseId: ex.exerciseId, title: dbEx.name, videoUrl: dbEx.videoUrl || '',
@@ -606,7 +609,7 @@ Responda APENAS com JSON válido.`.trim();
       const r = refineWorkout(rawDays as Record<string, GenEx[]>, {
         days: cycleConfig.days, phase: String(cycleConfig.phase || ''), level: levelInfo.level, levelRules,
         lib: exerciseMap as unknown as Map<string, LibEx>, pool: adminExercises as unknown as LibEx[], cands, facts, hasPrev: prevRoutines.length > 0,
-        env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded, pins: pinSet,
+        env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded, pins: pinSet, repChoice: cleanRepChoice(cycleConfig?.repScheme),
         makeEx: (e, blocks) => ({ exerciseId: e.id, title: e.name, videoUrl: e.videoUrl || '', category: e.category, subCategory: e.subCategory, observation: '', substitute: subFor(e.id), blocks }),
       });
       reviewedDays = r.byDay; quality = r.quality;
