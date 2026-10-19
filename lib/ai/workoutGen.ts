@@ -13,6 +13,7 @@ import { geminiClient, getOrCreateGeminiCache, hashForCache } from '@/lib/gemini
 import { MASTER_IDS } from '@/lib/masterIds';
 import { jointFilterIssues } from '@/lib/autoPlanQuality';
 import { unavailableExerciseIds, filterUnavailable } from '@/lib/equipment';
+import { callClaudeWorkout, isClaudeEngine, WORKOUT_TIMEOUT_MS } from '@/lib/ai/claudeWorkout';
 
 export interface GenerateWorkoutInput {
   userId: string;
@@ -307,7 +308,9 @@ Responda APENAS com JSON válido.`.trim();
 
     // ─── ROTEAMENTO ───
     let selectedAI = cycleConfig?.selectedAI || 'GEMINI_FLASH';
-    if (!isMasterCoach && ['GEMINI', 'GEMINI_PRO', 'GPT', 'CLAUDE'].includes(selectedAI)) selectedAI = 'GEMINI_FLASH';
+    if (!isMasterCoach && ['GEMINI', 'GEMINI_PRO', 'GPT', 'CLAUDE', 'HAIKU'].includes(selectedAI)) selectedAI = 'GEMINI_FLASH';
+    // 📊 (19 out 2026) o que cada geração gastou (tokens) fica no AiLog — é o que mostra, com número real, quanto custa cada motor
+    let genUsage: any = null; const genT0 = Date.now();
 
     let rawText = '';
     console.log(`[gerar-treino] Modelo: ${selectedAI} | Ambiente: ${trainingEnv || 'UNIVERSAL'}`);
@@ -362,21 +365,20 @@ Responda APENAS com JSON válido.`.trim();
             contents: `${systemPromptStatic}\n\n${userMessage}`,
           });
       rawText = result.text || '';
+      const gu: any = (result as any).usageMetadata || {};
+      genUsage = { model: geminiModel, inputTokens: Number(gu.promptTokenCount) || 0, outputTokens: Number(gu.candidatesTokenCount) || 0, cacheReadTokens: Number(gu.cachedContentTokenCount) || 0, cached: !!cacheName };
 
     } else if (selectedAI === 'GPT') {
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
       const r = await openai.chat.completions.create({ model: 'gpt-4o', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }], temperature: 0.7, max_tokens: 16000, response_format: { type: 'json_object' } });
       rawText = r.choices[0].message.content || '';
+      genUsage = { model: 'gpt-4o', inputTokens: Number(r.usage?.prompt_tokens) || 0, outputTokens: Number(r.usage?.completion_tokens) || 0 };
 
-    } else if (selectedAI === 'CLAUDE') {
-      // 🔥 CORRIGIDO: removido prefill que causava erro 400
-      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-      const r = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6', max_tokens: 8000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
-      });
-      rawText = r.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('');
+    } else if (isClaudeEngine(selectedAI)) {
+      // 🧠 (19 out 2026) HAIKU (Claude Haiku 5.5) e CLAUDE (Claude Sonnet 5.5): ver lib/ai/claudeWorkout.ts (cache do prompt fixo, limite de 90 s, tokens para o registro de custo)
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: WORKOUT_TIMEOUT_MS, maxRetries: 0 });
+      const out = await callClaudeWorkout(anthropic, { engine: selectedAI, system: systemPromptStatic, user: userMessage });
+      rawText = out.text; genUsage = out.usage;
     }
 
     // 🔥 EXTRAI JSON: tenta regex primeiro (mais robusto que replace)
@@ -514,6 +516,11 @@ Responda APENAS com JSON válido.`.trim();
     const workoutTabs = Object.keys(validatedDays);
     const totalExercises = workoutTabs.reduce((acc, d) => acc + validatedDays[d].length, 0);
     if (totalExercises === 0) return { status: 500, body: { error: 'A IA não gerou exercícios válidos. Tente novamente.' } };
+
+    // 📊 registro de custo (não pode derrubar a geração)
+    if (genUsage) {
+      try { await (prisma as any).aiLog.create({ data: { userId: adminId, question: `gerar-treino:${selectedAI}`, answer: JSON.stringify({ ...genUsage, ms: genUsage.ms ?? Date.now() - genT0, studentId: userId, bankExercises: adminExercises.length, days: workoutTabs.length, exercises: totalExercises, ghosts: ghostCount }).slice(0, 2000) } }); } catch (e) { /* sem registro */ }
+    }
 
     return {
       status: 200,

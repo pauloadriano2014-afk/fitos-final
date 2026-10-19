@@ -307,6 +307,21 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
     cc.excludeJointRisk = []; const res2: any = await generateWorkoutPlan({ userId: 'q1', adminId: PAULO_ID, cycleConfig: cc }); assert.equal(res2.status, 200); assert.equal(res2.body.jointFilter, undefined, 'sem filtro: corpo igual ao de sempre'); assert.ok(bankIds(String(G.__AI_CALLS.at(-1).contents)).includes(exId('QUADRICEPS', 1))); }
   console.log('OK  modo seguro: só BISET e cardio leve, exercícios de risco articular fora da biblioteca da IA, aviso ao coach; biblioteca esvaziada manda para o coach');
 
+  // 🧠 motores da Anthropic (HAIKU / CLAUDE): mesmo prompt, mesma validação, cache do prompt fixo, registro de custo; parceiro não escolhe
+  { seed({}, { objetivo: 'Hipertrofia', frequencia: 4 });
+    const spec = AP.planSpec('FICHA_8S', { objetivo: 'Hipertrofia', nivel: 'Intermediário', frequencia: 4 }); const mk = (ai: string) => { const cc: any = AP.buildCycleConfig(spec, spec.phases[0], base, 'Feminino'); cc.selectedAI = ai; return cc; };
+    const seen: any[] = [];
+    G.__LLM = async ({ model, args }: any) => { seen.push({ model, args }); const text = String(args.system[0].text) + '\n\n' + String(args.messages[0].content); const r = await G.__GEMINI({ contents: text }); return { content: [{ type: 'text', text: r.text }] }; };
+    const res: any = await generateWorkoutPlan({ userId: 'q1', adminId: PAULO_ID, cycleConfig: mk('HAIKU') }); assert.equal(res.status, 200); assert.ok(Object.keys(res.body.exercisesByDay).length >= 2 && res.body.workoutTabs.length >= 2, 'treino montado e validado');
+    assert.equal(seen.length, 1); assert.equal(seen[0].model, 'claude-haiku-5-5'); const a = seen[0].args; assert.deepEqual(a.system[0].cache_control, { type: 'ephemeral' }, 'prompt fixo em cache'); assert.ok(String(a.system[0].text).includes('BANCO (ambiente') && !String(a.messages[0].content).includes('BANCO ('), 'biblioteca no prompt fixo, aluno na mensagem'); assert.deepEqual(a.output_config, { effort: 'low' }); assert.equal(a.max_tokens, 16000); assert.ok(!('tool_choice' in a) && !('temperature' in a), 'nada forçado');
+    const log = db.aiLog.filter((l: any) => l.question === 'gerar-treino:HAIKU'); assert.equal(log.length, 1, 'custo registrado'); assert.equal(log[0].userId, PAULO_ID); const lj = JSON.parse(log[0].answer); assert.equal(lj.model, 'claude-haiku-5-5'); assert.equal(lj.inputTokens, 1500); assert.equal(lj.outputTokens, 700); assert.equal(lj.studentId, 'q1'); assert.ok(lj.bankExercises > 10 && lj.exercises > 0 && lj.days >= 2 && lj.usd > 0);
+    seen.length = 0; const res2: any = await generateWorkoutPlan({ userId: 'q1', adminId: PAULO_ID, cycleConfig: mk('CLAUDE') }); assert.equal(res2.status, 200); assert.equal(seen[0].model, 'claude-sonnet-5-5'); assert.deepEqual(seen[0].args.output_config, { effort: 'medium' }); assert.equal(db.aiLog.filter((l: any) => l.question === 'gerar-treino:CLAUDE').length, 1);
+    // parceiro (não é do time master) não escolhe HAIKU: cai no Gemini Flash
+    db.user.push({ id: 'coach-x', role: 'ADMIN', email: 'x@x.com', name: 'Parceiro', accountStatus: 'ACTIVE', active: true }); db.user.find((u: any) => u.id === 'q1').coachId = 'coach-x'; for (const e of db.exercise) e.coachId = 'coach-x';
+    seen.length = 0; G.__AI_CALLS.length = 0; const res3: any = await generateWorkoutPlan({ userId: 'q1', adminId: 'coach-x', cycleConfig: mk('HAIKU') }); assert.equal(res3.status, 200); assert.equal(seen.length, 0, 'parceiro: a Anthropic nem foi chamada'); assert.ok(G.__AI_CALLS.length >= 1, 'foi para o Gemini');
+    G.__LLM = null; }
+  console.log('OK  motores Anthropic: Haiku e Sonnet montam treino pelo mesmo prompt e validação, prompt fixo em cache, custo registrado, parceiro não escolhe');
+
   // IA ruim: treino
   seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); cfg.workout = (byDay: any, n: number) => (n === 1 ? { ...byDay, A: byDay.A.slice(0, 1) } : byDay);
   rs = await quiet(() => start()); assert.equal(rs.status, 'DONE', 'a segunda tentativa saiu certa'); assert.equal(cfg.wCalls, 3, '1 ruim + 1 refeita + fase 2'); assert.ok(savedRows().length >= 20);

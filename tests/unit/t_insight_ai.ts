@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { POST as analyzePOST } from '/home/user/fitos-final/app/api/insights/analyze/route';
 import { POST as groupPOST } from '/home/user/fitos-final/app/api/insights/group/route';
 import { callTool, RETRY_ONLY_IF_UNDER_MS } from '@/lib/aiTool';
+import { callClaudeWorkout, estimateUsd, WORKOUT_CLAUDE_MODELS, WORKOUT_TIMEOUT_MS } from '@/lib/ai/claudeWorkout';
 import { aggregatePanorama, buildLoadsContext, buildPanorama, loadLoadsContext, isAdvancedTech, MAX_PANORAMA_CHARS, PANORAMA_MAX_ROUTINES } from '/home/user/fitos-final/lib/similarPanorama';
 import { levelIssues, compareWorkouts } from '/home/user/fitos-final/lib/similarStudents';
 import { analyzeStudent, SYSTEM_PROMPT, ANALYSIS_MODEL, MAX_SOURCES } from '/home/user/fitos-final/lib/insightAnalysis';
@@ -257,6 +258,22 @@ const withModel = async (model: string, over: Record<string, any>, fn: () => Pro
     S.workoutHistory.push({ id: 'ht2', userId: 't', name: 'A', date: ago(1), workoutId: null, loadPhase: 'NORMAL', details: [{ exerciseId: 'e1', exerciseName: 'Supino reto', setNumber: 1, weight: 35, perSide: false }] }); const after = await analyzeStudent(P, CA, 't', { client: c, now: NOW }); assert.strictEqual(after.cached, true, 'carga nova no mesmo exercício: segue em dia (REFAZER DO ZERO atualiza)');
     seed(); const c2 = mk(ANSWER()); await analyzeStudent(P, CA, 't', { client: c2, now: NOW }); assert.ok(!user(c2).includes('\nCARGAS'), 'sem cargas registradas: sem o bloco'); assert.deepStrictEqual((await analyzeStudent(P, CA, 't', { client: c2, now: NOW })).analysis!.cargas, [], 'resposta sem "cargas" vira lista vazia');
     assert.deepStrictEqual(sanitizeAnalysis({ resumo: 'x' }).cargas, [], 'análise antiga da memória não quebra'); assert.strictEqual(sanitizeAnalysis({ cargas: ['a', 'b', 'c', 'd', 'e', 'f'] }).cargas.length, 4, 'no máximo 4 itens');
+  });
+
+  await t('motor Anthropic do treino: pede JSON no texto com o prompt fixo em cache, devolve texto e custo; recusa, corte, tempo esgotado e erro viram aviso claro', async () => {
+    const calls: any[] = []; const mkc = (resp: any) => ({ messages: { create: async (a: any) => { calls.push(a); if (resp instanceof Error) throw resp; return resp; } } });
+    const ok = { content: [{ type: 'text', text: '{"a":' }, { type: 'text', text: '1}' }], usage: { input_tokens: 50000, output_tokens: 9000, cache_read_input_tokens: 40000, cache_creation_input_tokens: 0 } };
+    const r = await callClaudeWorkout(mkc(ok), { engine: 'HAIKU', system: 'REGRAS+BANCO', user: 'ALUNO', now: (() => { let n = 1000; return () => (n += 250); })() });
+    assert.equal(r.text, '{"a":1}'); assert.deepEqual(calls[0].system, [{ type: 'text', text: 'REGRAS+BANCO', cache_control: { type: 'ephemeral' } }]); assert.deepEqual(calls[0].messages, [{ role: 'user', content: 'ALUNO' }]); assert.equal(calls[0].model, 'claude-haiku-5-5'); assert.deepEqual(calls[0].output_config, { effort: 'low' }); assert.ok(!('tool_choice' in calls[0]));
+    assert.deepEqual([r.usage.inputTokens, r.usage.outputTokens, r.usage.cacheReadTokens, r.usage.cacheWriteTokens, r.usage.ms], [50000, 9000, 40000, 0, 250]); assert.equal(r.usage.usd, estimateUsd('HAIKU', r.usage));
+    assert.equal(WORKOUT_CLAUDE_MODELS.HAIKU, 'claude-haiku-5-5'); assert.equal(WORKOUT_CLAUDE_MODELS.CLAUDE, 'claude-sonnet-5-5'); assert.equal(WORKOUT_TIMEOUT_MS, 90000);
+    assert.equal(estimateUsd('HAIKU', { inputTokens: 50000, outputTokens: 9000, cacheReadTokens: 0, cacheWriteTokens: 0 }), 0.0095, 'Haiku: ~1 centavo de dólar'); assert.equal(estimateUsd('CLAUDE', { inputTokens: 50000, outputTokens: 9000, cacheReadTokens: 0, cacheWriteTokens: 0 }), 0.19, 'Sonnet: ~19 centavos'); assert.ok(estimateUsd('CLAUDE', { inputTokens: 10000, outputTokens: 9000, cacheReadTokens: 40000, cacheWriteTokens: 0 }) < 0.19, 'cache barateia'); assert.ok(estimateUsd('CLAUDE', { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 40000 }) > estimateUsd('CLAUDE', { inputTokens: 40000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }), 'escrever o cache custa 25% mais');
+    await callClaudeWorkout(mkc(ok), { engine: 'CLAUDE', system: 's', user: 'u' }); assert.equal(calls[1].model, 'claude-sonnet-5-5'); assert.deepEqual(calls[1].output_config, { effort: 'medium' });
+    await assert.rejects(() => callClaudeWorkout(mkc({ ...ok, stop_reason: 'refusal' }), { engine: 'HAIKU', system: 's', user: 'u' }), /O Claude Haiku recusou montar este treino/);
+    await assert.rejects(() => callClaudeWorkout(mkc({ ...ok, stop_reason: 'max_tokens' }), { engine: 'CLAUDE', system: 's', user: 'u' }), /O Claude Sonnet não terminou de escrever/);
+    const to: any = new Error('Request timed out.'); to.name = 'APIConnectionTimeoutError'; await assert.rejects(() => callClaudeWorkout(mkc(to), { engine: 'HAIKU', system: 's', user: 'u' }), /demorou demais para montar o treino/); await assert.rejects(() => callClaudeWorkout(mkc(new Error('request timeout')), { engine: 'HAIKU', system: 's', user: 'u' }), /demorou demais/);
+    await assert.rejects(() => callClaudeWorkout(mkc(new Error('401 chave inválida')), { engine: 'HAIKU', system: 's', user: 'u' }), /401 chave inválida/, 'outro erro passa como veio');
+    const empty = await callClaudeWorkout(mkc({ content: [], usage: {} }), { engine: 'HAIKU', system: 's', user: 'u' }); assert.equal(empty.text, ''); assert.equal(empty.usage.inputTokens, 0);
   });
   console.log(ok + ' blocos ok');
 })();
