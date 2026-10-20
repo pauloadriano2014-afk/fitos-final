@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -92,6 +94,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     try {
         const auth = requireAuth(req);
         if ('response' in auth) return auth.response;
+        // 🔒 (20 out 2026) o laudo por IA é do coach (antes o próprio aluno também podia disparar e gastar IA) e tem limite por hora
+        if (!(await isActiveCoach(prisma, auth.user))) return coachOnly();
+        const rl = checkRateLimit(`assessment-ai:${auth.user.id}`, { max: 30, windowMs: 60 * 60 * 1000 });
+        if (!rl.allowed) return NextResponse.json({ error: 'Muitos pedidos em pouco tempo. Tente de novo em alguns minutos.', code: 'RATE_LIMIT' }, { status: 429 });
 
         const assessmentId = params.id;
 

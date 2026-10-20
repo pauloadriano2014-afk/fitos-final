@@ -2,6 +2,9 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { requireAuth } from '@/lib/auth';
+import prisma from '@/lib/prisma';
+import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +16,10 @@ export async function POST(req: Request) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
+    // 🔒 (20 out 2026) rota que gasta IA: só coach ativo (antes qualquer pessoa logada, até aluno) e com limite por hora
+    if (!(await isActiveCoach(prisma, auth.user))) return coachOnly();
+    const rl = checkRateLimit(`import-pdf:${auth.user.id}`, { max: 20, windowMs: 60 * 60 * 1000 });
+    if (!rl.allowed) return NextResponse.json({ error: 'Muitos pedidos em pouco tempo. Tente de novo em alguns minutos.', code: 'RATE_LIMIT' }, { status: 429 });
 
     const formData = await req.formData();
     const file = formData.get('file') as File;

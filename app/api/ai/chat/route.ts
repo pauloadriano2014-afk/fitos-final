@@ -1,8 +1,9 @@
 // fitos-api-nova/app/api/ai/chat/route.ts
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import prisma from '../../../../lib/prisma';
+import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '../../../../lib/auth';
+import { checkRateLimit } from '../../../../lib/rateLimit';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -17,6 +18,10 @@ export async function POST(req: Request) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
+    // 🔒 (20 out 2026) cada pergunta ao assistente é IA paga pelo servidor: limite por hora e por dia para quem pergunta (aluno ou coach)
+    const rlH = checkRateLimit(`ai-chat-h:${auth.user.id}`, { max: 40, windowMs: 60 * 60 * 1000 });
+    const rlD = checkRateLimit(`ai-chat-d:${auth.user.id}`, { max: 150, windowMs: 24 * 60 * 60 * 1000 });
+    if (!rlH.allowed || !rlD.allowed) return NextResponse.json({ reply: 'Você fez muitas perguntas em pouco tempo. Tente de novo mais tarde ou fale com o seu coach.', code: 'RATE_LIMIT' }, { status: 429 });
 
     const body = await req.json();
     const {
@@ -32,6 +37,9 @@ export async function POST(req: Request) {
 
     if (!message?.trim()) {
       return NextResponse.json({ reply: "Mensagem vazia." }, { status: 400 });
+    }
+    if (String(message).length > 1000) {
+      return NextResponse.json({ reply: "Pergunta muito longa (máx. 1000 letras)." }, { status: 400 });
     }
 
     if (userId) {

@@ -10,7 +10,8 @@ import { GoogleGenAI } from '@google/genai';
 import { callArgon, ARGON_LABEL } from '@/lib/ai/argon';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
+import { requireAuth, canAccessStudent, canActAsCoach, isMasterId } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -153,6 +154,11 @@ export async function POST(req: Request) {
     try {
         const auth = requireAuth(req);
         if ('response' in auth) return auth.response;
+        // 🔒 (20 out 2026) cada avaliação por IA lê fotos e gasta IA: limite por hora para quem não é do time master
+        if (!isMasterId(auth.user.id)) {
+            const rl = checkRateLimit(`eval-checkin:${auth.user.id}`, { max: 40, windowMs: 60 * 60 * 1000 });
+            if (!rl.allowed) return NextResponse.json({ error: 'Muitas avaliações em pouco tempo. Tente de novo em alguns minutos.', code: 'RATE_LIMIT' }, { status: 429 });
+        }
 
         const {
             checkInId,

@@ -5,7 +5,8 @@ import prisma from '@/lib/prisma';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, isMasterId } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rateLimit';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 
 // Configurações
@@ -58,6 +59,19 @@ export async function POST(req: Request) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
+
+    // 🔒 (20 out 2026) A análise de vídeo por IA é do time PA Elite (o app só mostra o botão para aluno de coach master). Antes qualquer pessoa logada podia mandar vídeo para a IA (custo alto).
+    // Aluno: vale o coach que está NO BANCO (não o do token); coach: só o time master. Mais limite por hora.
+    {
+      let allowed = isMasterId(auth.user.id);
+      if (!allowed && String(auth.user.role || '').toUpperCase() === 'USER') {
+        const row: any = await prisma.user.findUnique({ where: { id: auth.user.id }, select: { coachId: true } });
+        allowed = !!row && (!row.coachId || isMasterId(row.coachId));
+      }
+      if (!allowed) return NextResponse.json({ error: 'A análise de vídeo por IA é exclusiva dos alunos do time PA Elite.', code: 'VIDEO_AI_LOCKED' }, { status: 403 });
+      const rl = checkRateLimit(`video-ai:${auth.user.id}`, { max: 20, windowMs: 60 * 60 * 1000 });
+      if (!rl.allowed) return NextResponse.json({ error: 'Muitos vídeos em pouco tempo. Tente de novo em alguns minutos.', code: 'RATE_LIMIT' }, { status: 429 });
+    }
 
     const formData = await req.formData();
     const file = formData.get('video') as File;
