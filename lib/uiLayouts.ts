@@ -16,6 +16,18 @@ export const UI_SCREENS = [
   'ferramentas',     // Sistema > Treino e dieta (ferramentas)
   'feedbackSemana',  // Feedback da semana
   'biblioteca',      // Biblioteca de exercícios
+  'prontuario',      // Prontuário / evolução do aluno
+  'gestao',          // aba Gestão
+  'ia',              // aba IA
+  'config',          // aba Configurações
+  'templates',       // Modelos de treino
+  'treinoAvulso',    // Treino avulso
+  'relatorioMes',    // Relatório do mês
+  'tecnicas',        // Técnicas avançadas
+  'alimentos',       // Alimentos e substituições
+  'cofreDietas',     // Cofre de dietas
+  'parecidos',       // Alunos parecidos
+  'videosExecucao',  // Vídeos de execução
 ] as const;
 export type UiScreen = (typeof UI_SCREENS)[number];
 export const UI_VARIANTS = ['A', 'B', 'C'] as const;
