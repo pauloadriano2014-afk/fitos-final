@@ -63,8 +63,11 @@ const prisma = {
       return p;
     },
   },
+  // (20 out 2026) chaves por coach (treino avulso liberado pelo master): só leitura, o teste coloca as linhas em state.features
+  coachFeature: { async findMany({ where }) { return (state.features || []).filter((f) => (!where || !where.coachId || f.coachId === where.coachId) && (!where || where.revokedAt !== null || true) && !f.revokedAt).map(clone); } },
+  featureGlobal: { async findMany() { return []; } },
   __state: state,
-  __reset() { state.users.clear(); state.workouts.clear(); state.rows = []; state.exercises.clear(); state.techniques.clear(); state.sysVideos = []; state.shares = []; state.dones = []; state.quicks = []; state.updates = 0; state.nextId = 1; },
+  __reset() { state.features = []; state.users.clear(); state.workouts.clear(); state.rows = []; state.exercises.clear(); state.techniques.clear(); state.sysVideos = []; state.shares = []; state.dones = []; state.quicks = []; state.updates = 0; state.nextId = 1; },
 };
 // produtos digitais que usam um Treino Avulso (a rota de apagar recusa treino em uso)
 state.produtos = state.produtos || [];

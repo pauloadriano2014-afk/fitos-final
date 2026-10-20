@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { lockedByFeature } from '@/lib/coachAi';
 import { PLAN_META, PLAN_TYPES, clampWeek, eligibleTypes, firstWeekOfBlock, normalizeTrainingDays, sanitizeSpeeds } from '@/lib/runningPlans';
 import { initialPersisted } from '@/lib/runningProgress';
 import { persistData } from '@/lib/runningStore';
@@ -26,7 +27,8 @@ async function guard(req: NextRequest, userId: any): Promise<NextResponse | null
   const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
   if (!targetUser) return NextResponse.json({ error: 'Aluno não encontrado.' }, { status: 404 });
   if (!canActAsCoach(auth.user, targetUser.coachId)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
-  return null;
+  // 🔑 (20 out 2026) coach parceiro só mexe no protocolo de corrida com a chave `protocoloCorrida` (o master liga coach a coach). O ALUNO continua vendo/correndo o que já tem.
+  return await lockedByFeature(prisma, auth.user, 'protocoloCorrida', 'O protocolo de corrida');
 }
 
 // POST — o coach confirma e ativa um protocolo NOVO (o anterior é desativado e o andamento recomeça na semana de entrada).

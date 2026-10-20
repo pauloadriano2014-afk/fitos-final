@@ -54,6 +54,9 @@
  "t_checkout": [
   "build48.mjs"
  ],
+ "t_coach_ai": [
+  "build74.mjs"
+ ],
  "t_coach_assistant": [
   "build70.mjs"
  ],

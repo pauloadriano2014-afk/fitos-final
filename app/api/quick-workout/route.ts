@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { coachHasFeature } from '@/lib/coachFeatures';
 import { parseQuickData, quickAvailableDays, shareStatus, MAX_QUICK_NAME } from '@/lib/workoutShare';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,8 @@ export const dynamic = 'force-dynamic';
 const MAX_QUICK_PER_COACH = 200;
 const iso = (d: any) => (d ? new Date(d).toISOString() : null);
 
-const isCoachUser = (u: { id: string; role: string }) => u.role === 'ADMIN' || isMasterId(u.id);
+// 🔑 (20 out 2026) coach parceiro (role COACH) usa o treino avulso quando o master ligou a chave `treinoAvulso` para ele (ou a chave geral). Teste grátis continua só do master (rota workout-share).
+const isCoachUser = async (u: { id: string; role: string }) => u.role === 'ADMIN' || isMasterId(u.id) || (u.role === 'COACH' && (await coachHasFeature(prisma, u.id, 'treinoAvulso')));
 
 const linkSummary = (s: any) => ({
   code: s.code,
@@ -56,7 +58,7 @@ export async function GET(req: Request) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    if (!isCoachUser(auth.user)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    if (!(await isCoachUser(auth.user))) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
 
     const id = new URL(req.url).searchParams.get('id') || '';
     if (id) {
@@ -83,7 +85,7 @@ export async function POST(req: Request) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    if (!isCoachUser(auth.user)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    if (!(await isCoachUser(auth.user))) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     if (!checkRateLimit(`quick-save:${auth.user.id}`, { max: 120, windowMs: 60 * 60 * 1000 }).allowed) return NextResponse.json({ error: 'Muitos salvamentos em pouco tempo. Tente de novo em alguns minutos.' }, { status: 429 });
 
     const body = await req.json().catch(() => ({}));
@@ -115,7 +117,7 @@ export async function DELETE(req: Request) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    if (!isCoachUser(auth.user)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    if (!(await isCoachUser(auth.user))) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     const sp = new URL(req.url).searchParams;
 
     if (sp.get('expired') === '1') {

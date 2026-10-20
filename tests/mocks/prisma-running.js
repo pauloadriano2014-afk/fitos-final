@@ -1,7 +1,7 @@
 // Banco em memória da AGENDA: um mini motor de consulta (igual, in, not, gt/gte/lt/lte, OR/AND/NOT, null) + únicos (P2002) + createMany/updateMany/upsert.
 // Semântica SQL onde importa: `not: valor` NÃO devolve linhas com NULL.
 const clone = (o) => (o == null ? o : JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(v) ? new Date(v) : v)));
-const MODELS = ['user', 'runningAnamnese', 'runningProtocol', 'runningLog'];
+const MODELS = ['user', 'runningAnamnese', 'runningProtocol', 'runningLog', 'coachFeature', 'featureGlobal'];   // (20 out 2026) coachFeature/featureGlobal: as rotas do coach agora olham a chave protocoloCorrida
 const state = { nextId: 1, failOn: {}, calls: {} };
 MODELS.forEach((m) => { state[m] = []; });
 const DEFAULTS = {

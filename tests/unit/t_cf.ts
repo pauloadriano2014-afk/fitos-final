@@ -125,10 +125,10 @@ const on = async (id: string, f: any = 'execVideo') => (await CF.resolveCoachFea
   await t('GET /api/coach-features: coach vê os dele; aluno vê o do coach; sem login 401', async () => {
     coach('c1'); seedStudent(); feat('c1', 'notasVoz');
     assert.strictEqual((await call(GET_ME, '/api/coach-features', null)).status, 401);
-    let r = await call(GET_ME, '/api/coach-features', coachTok); assert.deepStrictEqual(r.json.features, { execVideo: false, notasVoz: true, perguntasVoz: false }); assert.strictEqual(r.json.isMaster, false);
-    r = await call(GET_ME, '/api/coach-features', alunoTok); assert.deepStrictEqual(r.json.features, { execVideo: false, notasVoz: false, perguntasVoz: false });
-    feat('c1', 'execVideo'); r = await call(GET_ME, '/api/coach-features', alunoTok); assert.deepStrictEqual(r.json.features, { execVideo: true, notasVoz: false, perguntasVoz: false });
-    r = await call(GET_ME, '/api/coach-features', master); assert.deepStrictEqual(r.json.features, { execVideo: true, notasVoz: true, perguntasVoz: true }); assert.strictEqual(r.json.isMaster, true);
+    let r = await call(GET_ME, '/api/coach-features', coachTok); assert.deepStrictEqual(r.json.features, { execVideo: false, notasVoz: true, perguntasVoz: false, treinoAvulso: false, iaTreino: false, iaDieta: false, protocoloCorrida: false }); assert.strictEqual(r.json.isMaster, false);
+    r = await call(GET_ME, '/api/coach-features', alunoTok); assert.deepStrictEqual(r.json.features, { execVideo: false, notasVoz: false, perguntasVoz: false, treinoAvulso: false, iaTreino: false, iaDieta: false, protocoloCorrida: false });
+    feat('c1', 'execVideo'); r = await call(GET_ME, '/api/coach-features', alunoTok); assert.deepStrictEqual(r.json.features, { execVideo: true, notasVoz: false, perguntasVoz: false, treinoAvulso: false, iaTreino: false, iaDieta: false, protocoloCorrida: false });
+    r = await call(GET_ME, '/api/coach-features', master); assert.deepStrictEqual(r.json.features, { execVideo: true, notasVoz: true, perguntasVoz: true, treinoAvulso: true, iaTreino: true, iaDieta: true, protocoloCorrida: true }); assert.strictEqual(r.json.isMaster, true);
   });
   await t('admin: só o master; lista coaches com estado; liga/desliga por coach e geral; valida entrada', async () => {
     coach('c1', { isLaunchPromo: true }); coach('c2', { coachBillingStatus: 'OVERDUE' });
@@ -137,7 +137,7 @@ const on = async (id: string, f: any = 'execVideo') => (await CF.resolveCoachFea
     r = await call(PUT_ADM, '/api/admin/coach-features', master, put({ coachId: 'c2', feature: 'execVideo', enabled: true })); assert.strictEqual(r.status, 200);
     r = await call(GET_ADM, '/api/admin/coach-features', master); const byId: any = Object.fromEntries(r.json.coaches.map((c: any) => [c.id, c]));
     assert.strictEqual(byId.c1.features.execVideo.on, true); assert.strictEqual(byId.c1.isLaunchPromo, true); assert.strictEqual(byId.c2.features.execVideo.grant, true); assert.strictEqual(byId.c2.features.execVideo.on, false, 'concedido, mas sem acesso em dia'); assert.strictEqual(byId.c2.standing, false);
-    r = await call(PUT_ADM, '/api/admin/coach-features', master, put({ global: true, feature: 'notasVoz', enabled: true })); assert.deepStrictEqual(r.json.global, { execVideo: false, notasVoz: true, perguntasVoz: false });
+    r = await call(PUT_ADM, '/api/admin/coach-features', master, put({ global: true, feature: 'notasVoz', enabled: true })); assert.deepStrictEqual(r.json.global, { execVideo: false, notasVoz: true, perguntasVoz: false, treinoAvulso: false, iaTreino: false, iaDieta: false, protocoloCorrida: false });
     assert.strictEqual(await on('c2', 'notasVoz'), true);
     r = await call(PUT_ADM, '/api/admin/coach-features', master, put({ coachId: 'c1', feature: 'execVideo', enabled: false })); assert.strictEqual(S.coachFeature.find((x: any) => x.coachId === 'c1').revokedReason, 'MASTER');
     assert.strictEqual((await call(PUT_ADM, '/api/admin/coach-features', master, put({ coachId: 'c1', feature: 'lixo', enabled: true }))).status, 400);

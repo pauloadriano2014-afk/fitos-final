@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth, isMasterId } from '@/lib/auth';
+import { lockedByFeature } from '@/lib/coachAi';
 
 // POST /api/running/anamnese/generate-token
 // Body: { userId: string }
@@ -27,6 +28,8 @@ export async function POST(req: NextRequest) {
     if (!isOwnerCoach && !isMasterId(auth.user.id)) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
+    const locked = await lockedByFeature(prisma, auth.user, 'protocoloCorrida', 'O protocolo de corrida');
+    if (locked) return locked;
 
     // Upsert — se já existe uma anamnese de corrida, retorna o token existente
     // Se não existe, cria com token novo (uuid gerado pelo default do Prisma)
