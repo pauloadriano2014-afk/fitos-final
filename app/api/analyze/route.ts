@@ -7,6 +7,7 @@ import path from 'path';
 import os from 'os';
 import { requireAuth, isMasterId } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 
 // Configurações
@@ -196,12 +197,14 @@ export async function POST(req: Request) {
     const model25Pro = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
     let result;
+    let usedModel = 'gemini-2.5-flash';
     try {
       console.log("🔥 Rodando Análise Comparativa (2.5-flash)...");
       result = await model25Flash.generateContent(contentParts);
     } catch (err: any) {
       console.log("⚠️ Falhou no Flash. Acionando o tanque reserva (2.5-PRO)...");
       try {
+        usedModel = 'gemini-2.5-pro';
         result = await model25Pro.generateContent(contentParts);
       } catch (errPro: any) {
         return NextResponse.json({
@@ -213,6 +216,9 @@ export async function POST(req: Request) {
     }
 
     const rawText = result.response.text();
+    // 📊 (20 out 2026) registro de custo por coach (painel de custo de IA)
+    const um: any = (result.response as any).usageMetadata || {};
+    await logAiUse(prisma, auth.user.id, USE_KINDS.video, usedModel, um.promptTokenCount || 0, um.candidatesTokenCount || 0);
     
     // 🔥 CORREÇÃO DO ERRO DO VS CODE (Sem Regex) 🔥
     const firstBrace = rawText.indexOf('{');

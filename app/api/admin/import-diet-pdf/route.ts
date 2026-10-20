@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +81,9 @@ export async function POST(req: Request) {
     let cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
 
     const parsedData = JSON.parse(cleanJson);
+    // 📊 (20 out 2026) registro de custo por coach (painel de custo de IA); não derruba a importação
+    const um: any = (result.response as any).usageMetadata || {};
+    await logAiUse(prisma, auth.user.id, USE_KINDS.pdfDieta, 'gemini-2.0-flash', um.promptTokenCount || 0, um.candidatesTokenCount || 0);
 
     const mealsReadyForApp = (parsedData.meals || []).map((meal: any) => ({
         id: Date.now().toString() + Math.random().toString(36).substring(7),

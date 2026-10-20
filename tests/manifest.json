@@ -8,6 +8,9 @@
  "t_agenda": [
   "build51.mjs"
  ],
+ "t_ai_cost": [
+  "build74.mjs"
+ ],
  "t_ai_extract": [
   "build44.mjs"
  ],
