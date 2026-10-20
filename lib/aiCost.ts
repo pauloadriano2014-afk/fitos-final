@@ -87,7 +87,8 @@ export function costOfRow(question: string, answer: string): { category: CostCat
     const direct = n(a.usd) || n(a.usage?.usd) || n(a.usageAndCost?.costUsd) || n(a.costUsd);
     if (direct > 0) return { category, usd: direct, estimated: false };
     const u = a.usage && typeof a.usage === 'object' ? a.usage : a.usageAndCost && typeof a.usageAndCost === 'object' ? a.usageAndCost : a;
-    const tin = n(u.inputTokens) || n(u.inTokens), tout = n(u.outputTokens) || n(u.outTokens);
+    // cada lugar grava os tokens com um nome (inputTokens, input_tokens da Anthropic, prompt_tokens da OpenAI…): aceita todos
+    const tin = n(u.inputTokens) || n(u.inTokens) || n(u.input_tokens) || n(u.prompt_tokens), tout = n(u.outputTokens) || n(u.outTokens) || n(u.output_tokens) || n(u.completion_tokens);
     if (tin + tout > 0) return { category, usd: usdFromTokens(a.model || u.model || a.modelUsed, tin, tout), estimated: false };
   }
   return { category, usd: FLAT_USD[category] ?? 0.01, estimated: true };
@@ -126,3 +127,29 @@ export async function logAiUse(db: any, userId: string, kind: string, model: str
     await db.aiLog.create({ data: { userId, question: kind, answer: JSON.stringify({ model, inputTokens: n(inputTokens), outputTokens: n(outputTokens), usd: round(usdFromTokens(model, n(inputTokens), n(outputTokens)), 6), ...extra }).slice(0, 2000) } });
   } catch (e: any) { console.error('[aiCost] não registrou o uso:', e?.message || e); }
 }
+
+const clip = (t: any, max: number) => { const x = String(t ?? '').replace(/\s+/g, ' ').trim(); return x.length > max ? x.slice(0, max - 1) + '…' : x; };
+
+/** Resumo de uma linha do que aconteceu naquele uso (motor, tokens, tempo, fotos…). Nunca devolve o texto da resposta. */
+export function describeRow(question: string, answer: string): string {
+  const q = String(question || ''); const a = parse(answer) || {};
+  const u = a.usage && typeof a.usage === 'object' ? a.usage : a.usageAndCost && typeof a.usageAndCost === 'object' ? a.usageAndCost : a;
+  const parts: string[] = [];
+  const motor = q.includes(':') ? q.split(':')[1] : '';
+  const model = a.model || u.model || a.modelUsed;
+  if (q.startsWith('gerar-treino:') || q.startsWith('gerar-dieta:') || q.startsWith('avaliar-checkin:')) parts.push(`motor ${motor}`);
+  else if (model) parts.push(String(model));
+  if (a.dayType) parts.push(`dia ${a.dayType}`);
+  if (a.days) parts.push(`${a.days} dia(s)`); if (a.exercises) parts.push(`${a.exercises} exercício(s)`);
+  if (a.photos) parts.push(`${a.photos} foto(s)`);
+  if (a.bytes) parts.push(`áudio ${Math.round(n(a.bytes) / 1024)} KB`);
+  if (q.startsWith('[TTS]')) parts.push(`${n(parseInt(String(answer), 10))} letras, voz ${q.replace('[TTS] ', '')}`);
+  const tin = n(u.inputTokens) || n(u.input_tokens) || n(u.inTokens) || n(u.prompt_tokens), tout = n(u.outputTokens) || n(u.output_tokens) || n(u.outTokens) || n(u.completion_tokens);
+  if (tin + tout > 0) parts.push(`${tin} entrada + ${tout} saída (tokens)`);
+  if (n(u.ms) > 0) parts.push(`${(n(u.ms) / 1000).toFixed(1)} s`);
+  if (q.startsWith('weekly-feedback:') || q.startsWith('weekly-whatsapp-parse:')) parts.push(`semana ${q.split(':').slice(1).join(':')}`);
+  if (q.startsWith('insight-analysis:')) parts.push(q.endsWith(':inc') ? 'análise incremental' : 'análise completa');
+  return parts.join(' · ');
+}
+/** Só o chat do aluno guarda a pergunta como texto: mostra um pedaço dela (o painel só mostra isso para o time master). */
+export const chatQuestion = (q: string, max = 160) => clip(q, max);
