@@ -6,6 +6,7 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import prisma from '@/lib/prisma';
 import { geminiClient } from '@/lib/geminiCache';
+import { callArgon, ARGON_MODEL } from '@/lib/ai/argon';
 
 // Clientes criados só quando usados: importar este arquivo (ex.: a rota da anamnese, que dispara o plano automático) não pode derrubar o build
 // nem a rota quando a chave de algum provedor não está configurada.
@@ -18,7 +19,8 @@ const getAnthropic = () => (_anthropic ??= new Anthropic({ apiKey: process.env.A
 // -- travado tanto na UI (ModelSelectorModal só mostra a aba de modelo pra
 // master) quanto aqui no servidor, pra um coach parceiro não conseguir usar
 // batendo direto na API.
-export type Provider = 'openai' | 'openai-mini' | 'anthropic' | 'anthropic-haiku' | 'google';
+// 'gemini-argon' (20 out 2026): motor de TESTE só para os masters (lib/ai/argon.ts), para comparar nota e custo da dieta com os outros motores
+export type Provider = 'openai' | 'openai-mini' | 'anthropic' | 'anthropic-haiku' | 'google' | 'gemini-argon';
 
 export interface MacrosOverride { kcal: number; prot: number; carb: number; fat: number; }
 
@@ -753,6 +755,11 @@ function calculateCost(provider: string, modelUsed: string, usage: any) {
     } else if (provider === 'google') {
         inTokens = usage?.promptTokenCount || 0;
         outTokens = usage?.candidatesTokenCount || 0;
+    } else if (provider === 'gemini-argon') {
+        // o Argon já devolve o custo estimado pronto (entrada + saída + pensamento, com o desconto do cache)
+        const costUsd = Number(usage?.usd) || 0;
+        const inT = Number(usage?.inputTokens) || 0, outT = (Number(usage?.outputTokens) || 0) + (Number(usage?.thinkingTokens) || 0);
+        return { inTokens: inT, outTokens: outT, totalTokens: inT + outT, costUsd, costBrl: costUsd * 5.50 };
     }
 
     let inPrice = 0; let outPrice = 0;
@@ -869,6 +876,7 @@ export async function generateDietDay(input: GenerateDietDayInput) {
     switch (provider as Provider) {
         case 'anthropic':        { const r = await callAnthropic(prompt); raw = r.content; usage = r.usage; modelUsed = 'claude-3-5-sonnet-20240620'; break; }
         case 'anthropic-haiku':  { const r = await callAnthropic(prompt, 'claude-haiku-4-5'); raw = r.content; usage = r.usage; modelUsed = 'claude-haiku-4-5'; break; }
+        case 'gemini-argon': { const out = await callArgon(geminiClient, { user: prompt, timeoutMs: 100_000 }); raw = out.text; usage = out.usage; modelUsed = ARGON_MODEL; break; }
         case 'google':      { const r = await callGoogle(prompt); raw = r.content; usage = r.usage; modelUsed = 'gemini-3.8-flash'; break; }
         case 'openai-mini': { const r = await callOpenAI(prompt,'gpt-4o-mini'); raw = r.content; usage = r.usage; modelUsed = 'gpt-4o-mini'; break; }
         default:            { const r = await callOpenAI(prompt,'gpt-4o'); raw = r.content; usage = r.usage; modelUsed = 'gpt-4o'; break; }

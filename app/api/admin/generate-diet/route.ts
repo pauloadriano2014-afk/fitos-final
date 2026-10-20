@@ -41,6 +41,11 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Este modelo de IA está disponível apenas para os administradores master.' }, { status: 403 });
         }
 
+        // 🧪 Gemini Argon (teste) é só do time master: o coach parceiro já foi trocado por 'google' acima, esta é a trava explícita
+        if (providerAsked === 'gemini-argon' && !isMasterId(auth.user.id)) {
+            return NextResponse.json({ error: 'Este modelo de IA está disponível apenas para os administradores master.' }, { status: 403 });
+        }
+
         const result = await generateDietDay({ anamnese, dayType, provider, birthDate, gender, macrosOverride, customInstruction });
         // 📊 Cada aba de dieta gerada fica no registro de IA: é o que conta o limite do mês do coach e mostra o custo real (antes a dieta não deixava rastro).
         try { await (prisma as any).aiLog.create({ data: { userId: auth.user.id, question: `gerar-dieta:${provider}`, answer: JSON.stringify({ dayType, provider, modelUsed: (result as any)?.meta?.modelUsed, usageAndCost: (result as any)?.usageAndCost || null }).slice(0, 4000) } }); } catch (e: any) { console.error('[generate-diet] log:', e?.message || e); }
