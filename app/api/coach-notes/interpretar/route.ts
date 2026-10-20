@@ -5,6 +5,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { capResponse } from '@/lib/coachMonthlyCaps';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 import { draftFromExtraction, ruleDraft, MAX_SPOKEN_TEXT, todayKeyBrt } from '@/lib/coachNotes';
 import { extractNote } from '@/lib/coachNotesAI';
 import { loadCoachStudents, missing, requireNotesCoach } from '@/lib/coachNotesStore';
@@ -23,12 +25,14 @@ export async function POST(req: Request) {
     const rl = checkRateLimit(`nota-interpretar:${auth.user.id}`, { max: 80, windowMs: 60 * 60 * 1000 });
     if (!rl.allowed) return NextResponse.json({ error: 'Muitas anotações seguidas. Aguarde um pouco.' }, { status: 429 });
 
+    { const cap = await capResponse(prisma, auth.user, 'voz'); if (cap) return cap; }   // 🧮 (20 out 2026) limite mensal de ditado por voz do coach parceiro
     const todayKey = todayKeyBrt();
     const students = await loadCoachStudents(prisma, auth.user.id);
     let draft;
     try {
       const { input, usage } = await extractNote(text, todayKey);
       draft = draftFromExtraction(input, text, students, todayKey);
+      await logAiUse(prisma, auth.user.id, USE_KINDS.notaVoz, usage.model, usage.inputTokens, usage.outputTokens);
       console.info(`[nota-voz] interpretou model=${usage.model} in=${usage.inputTokens} out=${usage.outputTokens} ms=${usage.ms}`);
     } catch (e: any) {
       console.error('[nota-voz] IA indisponível, usando regras:', e?.message || e);

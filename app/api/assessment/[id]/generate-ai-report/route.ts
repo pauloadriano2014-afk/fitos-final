@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
+import { checkRateLimit } from '@/lib/rateLimit';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -92,6 +95,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     try {
         const auth = requireAuth(req);
         if ('response' in auth) return auth.response;
+        // 🔒 (20 out 2026) o laudo por IA é do coach (antes o próprio aluno também podia disparar e gastar IA) e tem limite por hora
+        if (!(await isActiveCoach(prisma, auth.user))) return coachOnly();
+        const rl = checkRateLimit(`assessment-ai:${auth.user.id}`, { max: 30, windowMs: 60 * 60 * 1000 });
+        if (!rl.allowed) return NextResponse.json({ error: 'Muitos pedidos em pouco tempo. Tente de novo em alguns minutos.', code: 'RATE_LIMIT' }, { status: 429 });
 
         const assessmentId = params.id;
 
@@ -168,6 +175,8 @@ Lembre-se: ${nomeAluno} vai ler este laudo diretamente. Escreva para ela(e), nã
             return NextResponse.json({ error: 'Resposta da IA vazia' }, { status: 500 });
         }
 
+        // 📊 (20 out 2026) registro de custo por coach (painel de custo de IA)
+        await logAiUse(prisma, auth.user.id, USE_KINDS.laudo, 'claude-haiku-4-5', (response as any).usage?.input_tokens || 0, (response as any).usage?.output_tokens || 0);
         const cleanText = textBlock.text.replace(/```json|```/g, '').trim();
         let parsed: any;
         try {

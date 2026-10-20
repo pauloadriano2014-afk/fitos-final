@@ -8,11 +8,20 @@
  "t_agenda": [
   "build51.mjs"
  ],
+ "t_ai_caps": [
+  "build74.mjs"
+ ],
+ "t_ai_cost": [
+  "build74.mjs"
+ ],
  "t_ai_extract": [
   "build44.mjs"
  ],
  "t_ai_gate": [
   "build28.mjs"
+ ],
+ "t_ai_locks": [
+  "build74.mjs"
  ],
  "t_ai_parity": [
   "build45.mjs"

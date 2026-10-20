@@ -7,6 +7,8 @@ import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { capResponse } from '@/lib/coachMonthlyCaps';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 import { isMasterCoachId } from '@/lib/coachAssistant';
 import { supportSystemPrompt } from '@/lib/assistantGuides';
 
@@ -35,6 +37,7 @@ export async function POST(req: Request) {
         if (!message) return NextResponse.json({ error: 'Mensagem vazia.' }, { status: 400 });
         if (message.length > MAX_MESSAGE) return NextResponse.json({ error: `Pergunta muito longa (máx. ${MAX_MESSAGE} letras).` }, { status: 400 });
 
+        { const cap = await capResponse(prisma, auth.user, 'perguntas'); if (cap) return cap; }   // 🧮 (20 out 2026) limite mensal de perguntas com IA do coach parceiro
         // o plano vem do BANCO (antes vinha do app e qualquer um podia dizer que era ELITE)
         const master = isMasterCoachId(auth.user.id);
         let plan: string | null = null;
@@ -53,6 +56,7 @@ export async function POST(req: Request) {
 
         const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
         const response: any = await client.messages.create({ model: 'claude-haiku-5-5', max_tokens: 700, system, messages });
+        await logAiUse(prisma, auth.user.id, USE_KINDS.eliteAssistente, 'claude-haiku-5-5', response?.usage?.input_tokens || 0, response?.usage?.output_tokens || 0);
         const reply = (response.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
         return NextResponse.json({ reply });
 

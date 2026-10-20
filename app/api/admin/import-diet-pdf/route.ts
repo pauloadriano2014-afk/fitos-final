@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { requireAuth } from '@/lib/auth';
+import prisma from '@/lib/prisma';
+import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
+import { checkRateLimit } from '@/lib/rateLimit';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +15,10 @@ export async function POST(req: Request) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
+    // 🔒 (20 out 2026) rota que gasta IA: só coach ativo (antes qualquer pessoa logada, até aluno) e com limite por hora
+    if (!(await isActiveCoach(prisma, auth.user))) return coachOnly();
+    const rl = checkRateLimit(`import-diet-pdf:${auth.user.id}`, { max: 20, windowMs: 60 * 60 * 1000 });
+    if (!rl.allowed) return NextResponse.json({ error: 'Muitos pedidos em pouco tempo. Tente de novo em alguns minutos.', code: 'RATE_LIMIT' }, { status: 429 });
 
     const formData = await req.formData();
     const file = formData.get('file') as File;
@@ -73,6 +81,9 @@ export async function POST(req: Request) {
     let cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
 
     const parsedData = JSON.parse(cleanJson);
+    // 📊 (20 out 2026) registro de custo por coach (painel de custo de IA); não derruba a importação
+    const um: any = (result.response as any).usageMetadata || {};
+    await logAiUse(prisma, auth.user.id, USE_KINDS.pdfDieta, 'gemini-2.0-flash', um.promptTokenCount || 0, um.candidatesTokenCount || 0);
 
     const mealsReadyForApp = (parsedData.meals || []).map((meal: any) => ({
         id: Date.now().toString() + Math.random().toString(36).substring(7),

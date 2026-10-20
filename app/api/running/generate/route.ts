@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
 import { lockedByFeature } from '@/lib/coachAi';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 import { canUseAiBuilder } from '@/lib/aiAccess';
 import { GOAL_LABELS, PLAN_META, PLAN_TYPES, eligibleTypes, extractJson, sanitizeAiSuggestion, suggestByRules } from '@/lib/runningPlans';
 
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
           max_tokens: 2000,
           messages: [{ role: 'user', content: prompt }],
         });
+        await logAiUse(prisma, auth.user.id, USE_KINDS.corrida, 'claude-opus-4-6', (response as any).usage?.input_tokens || 0, (response as any).usage?.output_tokens || 0);   // 📊 (20 out 2026) custo por coach
         const raw = response.content[0] && response.content[0].type === 'text' ? response.content[0].text : '';
         const parsed = extractJson(raw);
         if (!parsed) throw new Error('resposta fora do formato');

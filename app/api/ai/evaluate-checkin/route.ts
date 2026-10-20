@@ -10,7 +10,10 @@ import { GoogleGenAI } from '@google/genai';
 import { callArgon, ARGON_LABEL } from '@/lib/ai/argon';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
+import { requireAuth, canAccessStudent, canActAsCoach, isMasterId } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rateLimit';
+import { capResponse } from '@/lib/coachMonthlyCaps';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -153,6 +156,13 @@ export async function POST(req: Request) {
     try {
         const auth = requireAuth(req);
         if ('response' in auth) return auth.response;
+        // 🔒 (20 out 2026) cada avaliação por IA lê fotos e gasta IA: limite por hora para quem não é do time master
+        if (!isMasterId(auth.user.id)) {
+            const rl = checkRateLimit(`eval-checkin:${auth.user.id}`, { max: 40, windowMs: 60 * 60 * 1000 });
+            if (!rl.allowed) return NextResponse.json({ error: 'Muitas avaliações em pouco tempo. Tente de novo em alguns minutos.', message: 'Muitas avaliações em pouco tempo. Tente de novo em alguns minutos.', code: 'RATE_LIMIT' }, { status: 429 });
+        }
+        // 🧮 (20 out 2026) limite mensal de avaliações por IA do coach parceiro (master não tem)
+        { const cap = await capResponse(prisma, auth.user, 'checkin'); if (cap) return cap; }
 
         const {
             checkInId,
@@ -454,6 +464,9 @@ ${signatureBlock}`;
         }
 
         // 📊 (19 out 2026) o que o Argon gastou em cada avaliação fica no AiLog — é o que mostra, com número real, quanto custa em relação ao Flash (não pode derrubar a avaliação)
+        if (!argonUsage) {
+            await logAiUse(prisma, auth.user.id, `avaliar-checkin:${selectedModel}`, selectedModel === 'gemini-pro' ? 'gemini-2.5-pro' : selectedModel === 'gemini-flash' ? 'gemini-2.5-flash' : selectedModel === 'claude-haiku' ? 'claude-haiku-4-5' : 'gpt-4o-mini', 0, 0, { photos: validUrls.length, studentId: checkIn?.userId ?? null });
+        }
         if (argonUsage) {
             try { await (prisma as any).aiLog.create({ data: { userId: auth.user.id, question: 'avaliar-checkin:gemini-argon', answer: JSON.stringify({ ...argonUsage, photos: validUrls.length, studentId: checkIn?.userId ?? null, chars: analysisText.length }).slice(0, 2000) } }); } catch (e) { /* sem registro */ }
         }
