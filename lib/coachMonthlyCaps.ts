@@ -56,5 +56,7 @@ export async function capState(db: any, user: { id: string; role?: string } | nu
 export async function capResponse(db: any, user: { id: string; role?: string } | null | undefined, kind: CapKind, now: Date = new Date()): Promise<NextResponse | null> {
   const s = await capState(db, user, kind, now);
   if (!s.reached) return null;
-  return NextResponse.json({ error: `Você usou todos os ${s.limit} ${CAP_LABEL[kind]} deste mês. Volta a liberar no dia ${s.resetsOn}. Precisa de mais? Fale com a equipe do ELITE FIT.`, code: 'LIMITE_MENSAL', kind, used: s.used, limit: s.limit, resetsOn: s.resetsOn }, { status: 429 });
+  // o mesmo texto em 3 campos: cada tela do app lê um (check-in lê `message`, o assistente lê `reply`, as demais `error`)
+  const text = `Você usou todos os ${s.limit} ${CAP_LABEL[kind]} deste mês. Volta a liberar no dia ${s.resetsOn}. Precisa de mais? Fale com a equipe do ELITE FIT.`;
+  return NextResponse.json({ error: text, message: text, reply: text, code: 'LIMITE_MENSAL', kind, used: s.used, limit: s.limit, resetsOn: s.resetsOn }, { status: 429 });
 }

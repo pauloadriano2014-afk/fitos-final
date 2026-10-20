@@ -159,7 +159,7 @@ export async function POST(req: Request) {
         // 🔒 (20 out 2026) cada avaliação por IA lê fotos e gasta IA: limite por hora para quem não é do time master
         if (!isMasterId(auth.user.id)) {
             const rl = checkRateLimit(`eval-checkin:${auth.user.id}`, { max: 40, windowMs: 60 * 60 * 1000 });
-            if (!rl.allowed) return NextResponse.json({ error: 'Muitas avaliações em pouco tempo. Tente de novo em alguns minutos.', code: 'RATE_LIMIT' }, { status: 429 });
+            if (!rl.allowed) return NextResponse.json({ error: 'Muitas avaliações em pouco tempo. Tente de novo em alguns minutos.', message: 'Muitas avaliações em pouco tempo. Tente de novo em alguns minutos.', code: 'RATE_LIMIT' }, { status: 429 });
         }
         // 🧮 (20 out 2026) limite mensal de avaliações por IA do coach parceiro (master não tem)
         { const cap = await capResponse(prisma, auth.user, 'checkin'); if (cap) return cap; }

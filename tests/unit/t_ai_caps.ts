@@ -61,7 +61,7 @@ process.env.ANTHROPIC_API_KEY = 'x';
     const st = uid('al'); fill(st, USE_KINDS.perguntaCoach, 400); assert.strictEqual((await capState(P, { id: st, role: 'USER' }, 'perguntas')).reached, false, 'aluno não é coach');
     assert.strictEqual((await capState({ aiLog: { count: async () => { throw new Error('x'); } } }, { id: co, role: 'COACH' }, 'perguntas')).reached, false, 'erro nosso nunca trava o coach');
     const r = await capResponse(P, { id: co, role: 'COACH' }, 'perguntas'); assert.strictEqual(r!.status, 429);
-    const j: any = await r!.json(); assert.strictEqual(j.code, 'LIMITE_MENSAL'); assert.strictEqual(j.kind, 'perguntas'); assert.strictEqual(j.limit, 300); assert.match(j.error, /300 perguntas ao assistente/);
+    const j: any = await r!.json(); assert.strictEqual(j.message, j.error); assert.strictEqual(j.reply, j.error); assert.strictEqual(j.code, 'LIMITE_MENSAL'); assert.strictEqual(j.kind, 'perguntas'); assert.strictEqual(j.limit, 300); assert.match(j.error, /300 perguntas ao assistente/);
   });
 
   await t('ditado por voz: com o limite do mês acabado, nota (interpretar e transcrever), treino e dieta por voz respondem 429; coach com saldo e master passam da trava', async () => {
@@ -80,7 +80,7 @@ process.env.ANTHROPIC_API_KEY = 'x';
   await t('perguntas ao assistente: elite-assistant barra com 429; a pergunta ao coach-assistant NÃO dá erro, só deixa de usar IA (segue pelas palavras-chave)', async () => {
     const full = uid('co'), fine = uid('co'); u(full, 'COACH'); u(fine, 'COACH'); grant(full, 'perguntasVoz'); grant(fine, 'perguntasVoz');
     fill(full, USE_KINDS.eliteAssistente, 150); fill(full, USE_KINDS.perguntaCoach, 150);
-    let r = await call(ELITE, tok(full), { message: 'Como cadastro um aluno?' }); assert.strictEqual(r.status, 429); assert.strictEqual(r.json.code, 'LIMITE_MENSAL');
+    let r = await call(ELITE, tok(full), { message: 'Como cadastro um aluno?' }); assert.strictEqual(r.status, 429); assert.strictEqual(r.json.code, 'LIMITE_MENSAL'); assert.match(r.json.reply, /300 perguntas ao assistente/, 'o chat do assistente lê o campo reply');
     llm.calls = 0; r = await call(ELITE, tok(fine), { message: 'Como cadastro um aluno?' }); assert.strictEqual(r.status, 200); assert.strictEqual(llm.calls, 1);
     assert.strictEqual(S.aiLog.filter((x: any) => x.userId === fine && x.question === USE_KINDS.eliteAssistente).length, 1, 'registrou o custo');
     llm.calls = 0; r = await call(ASK, tok(full), { text: 'quais alunos estão sem treino' }); assert.notStrictEqual(r.status, 429); assert.strictEqual(llm.calls, 0, 'sem saldo: não chamou a IA'); assert.ok(r.json?.ok, JSON.stringify(r.json)); assert.strictEqual(r.json.ai, false);
@@ -89,7 +89,7 @@ process.env.ANTHROPIC_API_KEY = 'x';
 
   await t('check-in: com 100 avaliações no mês o coach parceiro recebe 429; master não tem limite', async () => {
     const full = uid('co'), fine = uid('co'); u(full, 'COACH'); u(fine, 'COACH'); fill(full, 'avaliar-checkin:gemini-flash', 100); fill(fine, 'avaliar-checkin:gemini-flash', 99); fill(PAULO_ID, 'avaliar-checkin:gemini-argon', 300);
-    let r = await call(EVAL, tok(full), {}); assert.strictEqual(r.status, 429); assert.strictEqual(r.json.code, 'LIMITE_MENSAL'); assert.strictEqual(r.json.kind, 'checkin');
+    let r = await call(EVAL, tok(full), {}); assert.strictEqual(r.status, 429); assert.strictEqual(r.json.code, 'LIMITE_MENSAL'); assert.strictEqual(r.json.kind, 'checkin'); assert.match(r.json.message, /100 avaliações de check-in/, 'a tela do check-in lê o campo message');
     r = await call(EVAL, tok(fine), {}); assert.notStrictEqual(r.json?.code, 'LIMITE_MENSAL', 'o 100º ainda passa da trava');
     r = await call(EVAL, tok(PAULO_ID, 'ADMIN'), {}); assert.notStrictEqual(r.json?.code, 'LIMITE_MENSAL');
   });
