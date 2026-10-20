@@ -16,3 +16,13 @@ model PlatformConfig {
   launchPromoMax  Int      @default(10)
   updatedAt       DateTime @updatedAt
 }
+
+// 🎨 (20 out 2026) "Personalizar o app": qual dos 3 desenhos (A, B ou C) cada coach escolheu para cada tela do painel dele.
+// Tabela própria e isolada (nada de coluna nova em User): se ela ainda não existir no banco, só a tela "Personalizar o app" fica sem salvar no servidor
+// (o app guarda no aparelho) e login e cadastro não são afetados. `layouts` = { "alunos": "B", "ficha": "C", ... } (só telas e letras válidas, ver lib/uiLayouts.ts).
+model CoachUiLayout {
+  coachId   String   @id
+  layouts   Json
+  updatedAt DateTime @updatedAt
+}
+

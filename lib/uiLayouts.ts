@@ -1,0 +1,34 @@
+// lib/uiLayouts.ts
+// 🎨 (20 out 2026) "Personalizar o app": cada coach escolhe, tela por tela, entre 3 desenhos (A, B ou C). A é o desenho de sempre (é o que vale enquanto o coach não escolher).
+// As telas do ALUNO, "Montar treino" e "Montar dieta" ficam de fora de propósito (não têm escolha). Guardado em CoachUiLayout (prisma/schema/config.prisma).
+export const UI_SCREENS = [
+  'alunos',          // aba Alunos
+  'ficha',           // ficha do aluno (admin-aluno)
+  'agenda',          // aba Agenda
+  'financas',        // aba Finanças
+  'avaliacoes',      // aba Avaliações (check-ins)
+  'feed',            // aba Feed
+  'formularios',     // Formulários e anamnese
+  'vendas',          // Sistema > Vendas
+  'produtos',        // Sistema > Produtos digitais
+  'desafios',        // Sistema > Desafios
+  'marca',           // Sistema > Minha marca
+  'ferramentas',     // Sistema > Treino e dieta (ferramentas)
+  'feedbackSemana',  // Feedback da semana
+  'biblioteca',      // Biblioteca de exercícios
+] as const;
+export type UiScreen = (typeof UI_SCREENS)[number];
+export const UI_VARIANTS = ['A', 'B', 'C'] as const;
+export type UiVariant = (typeof UI_VARIANTS)[number];
+export type UiLayouts = Partial<Record<UiScreen, UiVariant>>;
+
+export const isUiScreen = (v: any): v is UiScreen => (UI_SCREENS as readonly string[]).includes(String(v));
+export const isUiVariant = (v: any): v is UiVariant => (UI_VARIANTS as readonly string[]).includes(String(v));
+
+/** Fica só com tela e letra válidas (o que vier de fora ou de uma versão antiga nunca quebra o app). */
+export function sanitizeLayouts(raw: any): UiLayouts {
+  const out: UiLayouts = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const k of UI_SCREENS) { if (!Object.prototype.hasOwnProperty.call(raw, k)) continue; const v = (raw as any)[k]; if (isUiVariant(v)) out[k] = v; }   // só o que é do próprio objeto (nada herdado)
+  return out;
+}
