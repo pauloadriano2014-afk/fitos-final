@@ -185,6 +185,10 @@ const dietBody = (anamnese: any = GOOD) => post({ anamnese, dayType: 'TREINO', p
     assert.strictEqual(await CA.countUsage(P, 'c1', 'dieta'), 1, 'a aba gerada entra na conta do mês');
     r = await call(POST_DIETA, '/api/admin/generate-diet', c1, post({ anamnese: GOOD, provider: 'anthropic-haiku' })); assert.strictEqual(r.status, 403, 'Haiku continua do master');
     r = await call(POST_DIETA, '/api/admin/generate-diet', master, dietBody()); assert.strictEqual(r.status, 200); assert.strictEqual((DG as any).__calls[1].provider, 'anthropic');
+    const nCalls = (DG as any).__calls.length;
+    r = await call(POST_DIETA, '/api/admin/generate-diet', c1, post({ anamnese: GOOD, provider: 'gemini-argon' })); assert.strictEqual(r.status, 403, 'Gemini Argon (teste) é só do master'); assert.strictEqual((DG as any).__calls.length, nCalls, 'e a IA nem foi chamada');
+    r = await call(POST_DIETA, '/api/admin/generate-diet', master, post({ anamnese: GOOD, provider: 'gemini-argon' })); assert.strictEqual(r.status, 200); assert.strictEqual((DG as any).__calls[nCalls].provider, 'gemini-argon', 'o master escolhe e o Argon vai até a geração');
+    assert.strictEqual(S.aiLog.filter((l: any) => l.userId === PAULO_ID && l.question === 'gerar-dieta:gemini-argon').length, 1, 'o custo do Argon fica no registro');
   });
 
   // ── treino avulso ──
