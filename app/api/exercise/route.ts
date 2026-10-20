@@ -323,7 +323,9 @@ export async function DELETE(req: Request) {
 
     await prisma.exercise.delete({ where: { id: id } });
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
+    // 🔁 (20 out 2026) P2003 = o exercício está na ficha de algum aluno. Antes saía só "Erro ao excluir"; agora o app sabe que dá para TROCAR por outro e apagar (GET/POST /api/exercise/replace).
+    if (error?.code === 'P2003') return NextResponse.json({ error: 'Este exercício está em treinos de alunos. Escolha outro exercício para substituir e depois apague.', inUse: true }, { status: 409 });
     return NextResponse.json({ error: "Erro ao excluir" }, { status: 500 });
   }
 }
