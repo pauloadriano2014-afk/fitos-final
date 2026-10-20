@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, isMasterId, type AuthUser } from '@/lib/auth';
+import { lockedByFeature } from '@/lib/coachAi';
 import { cleanStep } from '@/lib/loadSuggest';
 import { findOwnedActiveCoachPlan, studentFieldsFromCoachPlan, coachPlanInfoFor } from '@/lib/coachPlanLink';
 
@@ -232,6 +233,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         const isOwner = await checkOwnership(userId, auth.user);
         if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
 
+        // 🔑 (20 out 2026) ligar/desligar o módulo de corrida de um aluno é do protocolo de corrida: coach parceiro só com a chave `protocoloCorrida` (master sempre)
+        if (auth.user.id !== userId && Object.prototype.hasOwnProperty.call(body, 'runningModule')) {
+            const locked = await lockedByFeature(prisma, auth.user, 'protocoloCorrida', 'O protocolo de corrida');
+            if (locked) return corsResponse(await locked.json(), 403);
+        }
         const planErr = await applyCoachPlanToBody(userId, body, auth.user);
         if (planErr.error) return corsResponse({ error: planErr.error }, planErr.status || 400);
         const dataToUpdate = sanitizeUpdateData(body, { isSelfEdit: auth.user.id === userId });
@@ -254,6 +260,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         const isOwner = await checkOwnership(userId, auth.user);
         if (!isOwner) return corsResponse({ error: 'Acesso não autorizado.' }, 403);
 
+        // 🔑 (20 out 2026) ligar/desligar o módulo de corrida de um aluno é do protocolo de corrida: coach parceiro só com a chave `protocoloCorrida` (master sempre)
+        if (auth.user.id !== userId && Object.prototype.hasOwnProperty.call(body, 'runningModule')) {
+            const locked = await lockedByFeature(prisma, auth.user, 'protocoloCorrida', 'O protocolo de corrida');
+            if (locked) return corsResponse(await locked.json(), 403);
+        }
         const planErr = await applyCoachPlanToBody(userId, body, auth.user);
         if (planErr.error) return corsResponse({ error: planErr.error }, planErr.status || 400);
         const dataToUpdate = sanitizeUpdateData(body, { isSelfEdit: auth.user.id === userId });

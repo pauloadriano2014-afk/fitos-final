@@ -16,14 +16,15 @@ import { GET as GET_QUICK } from '/home/user/fitos-final/app/api/quick-workout/r
 import { POST as POST_RUN } from '/home/user/fitos-final/app/api/running/protocol/route';
 import { GET as GET_DT, POST as POST_DT, DELETE as DEL_DT } from '/home/user/fitos-final/app/api/admin/diet-templates/route';
 import { GET as GET_MT, POST as POST_MT, DELETE as DEL_MT } from '/home/user/fitos-final/app/api/admin/meal-templates/route';
+import { PATCH as PATCH_USER } from '/home/user/fitos-final/app/api/admin/user/[id]/route';
 import { PAULO_ID, ADRI_ID } from '/home/user/fitos-final/lib/masterIds';
 
 const P = prisma as any; const S = P.__state;
 const SECRET = 'dev-only-troque-isso-configurando-JWT_SECRET-no-env';
 const tok = (id: string, role = 'COACH') => jwt.sign({ id, role, coachId: null }, SECRET);
-const call = async (fn: any, url: string, as: string | null, init: any = {}) => {
+const call = async (fn: any, url: string, as: string | null, init: any = {}, ctx?: any) => {
   const headers: any = { 'content-type': 'application/json' }; if (as) headers.authorization = 'Bearer ' + as;
-  const r = await fn(new Request('http://x' + url, { ...init, headers }));
+  const r = await fn(new Request('http://x' + url, { ...init, headers }), ctx);
   return { status: r.status, json: await r.json().catch(() => null) };
 };
 const post = (o: any) => ({ method: 'POST', body: JSON.stringify(o) }); const put = (o: any) => ({ method: 'PUT', body: JSON.stringify(o) }); const del = () => ({ method: 'DELETE' });
@@ -202,6 +203,17 @@ const dietBody = (anamnese: any = GOOD) => post({ anamnese, dayType: 'TREINO', p
     let r = await call(POST_RUN, '/api/running/protocol', c1, post({ userId: 's1' })); assert.strictEqual(r.status, 403); assert.strictEqual(r.json.code, 'FEATURE_LOCKED');
     feat('c1', 'protocoloCorrida'); r = await call(POST_RUN, '/api/running/protocol', c1, post({ userId: 's1' })); assert.notStrictEqual(r.json?.code, 'FEATURE_LOCKED');
     r = await call(POST_RUN, '/api/running/protocol', master, post({ userId: 's1' })); assert.notStrictEqual(r.json?.code, 'FEATURE_LOCKED');
+  });
+
+  await t('ligar o módulo de corrida do aluno também depende da chave (e só quando o corpo mexe em runningModule)', async () => {
+    coach('c1'); student('s1', 'c1');
+    const CTX = { params: { id: 's1' } };
+    const patch = (o: any) => ({ method: 'PATCH', body: JSON.stringify(o) });
+    let r = await call(PATCH_USER, '/api/admin/user/s1', c1, patch({ runningModule: true }), CTX);
+    assert.strictEqual(r.status, 403); assert.strictEqual(r.json.code, 'FEATURE_LOCKED'); assert.notStrictEqual(S.user.find((u: any) => u.id === 's1').runningModule, true);
+    r = await call(PATCH_USER, '/api/admin/user/s1', c1, patch({ name: 'Novo nome' }), CTX); assert.strictEqual(r.status, 200, 'outros campos seguem livres');
+    feat('c1', 'protocoloCorrida');
+    r = await call(PATCH_USER, '/api/admin/user/s1', c1, patch({ runningModule: true }), CTX); assert.strictEqual(r.status, 200); assert.strictEqual(S.user.find((u: any) => u.id === 's1').runningModule, true);
   });
 
   // ── cofre de dietas e modelos de refeição ──
