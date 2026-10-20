@@ -36,6 +36,8 @@ const seed = () => {
   const u = (o: any) => S.user.push({ role: 'USER', active: true, name: o.id, coachId: null, gender: 'F', ...o });
   u({ id: PAULO_ID, role: 'ADMIN', name: 'Paulo Master' });
   u({ id: 'cA', role: 'COACH' }); u({ id: 'cB', role: 'COACH' });
+  // (20 out 2026) o master liga o protocolo de corrida coach a coach (chave `protocoloCorrida`): aqui os dois coaches parceiros já têm
+  for (const c of ['cA', 'cB']) S.coachFeature.push({ id: 'cf-' + c, coachId: c, feature: 'protocoloCorrida', revokedAt: null, revokedReason: null, grantedAt: new Date(), reason: 'MANUAL' });
   u({ id: 's1', coachId: 'cA' }); u({ id: 's2', coachId: 'cB' }); u({ id: 'sm', coachId: PAULO_ID }); u({ id: 'so' });
 };
 const asS1 = () => tok('s1', 'USER', 'cA');

@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { lockedByFeature } from '@/lib/coachAi';
 import { applyCoachAction } from '@/lib/runningProgress';
 import { loadUserLogs, persistData, syncProgress } from '@/lib/runningStore';
 
@@ -15,6 +16,8 @@ export async function POST(req: NextRequest, { params }: { params: { userId: str
     const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
     if (!targetUser) return NextResponse.json({ error: 'Aluno não encontrado.' }, { status: 404 });
     if (!canActAsCoach(auth.user, targetUser.coachId)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+    const locked = await lockedByFeature(prisma, auth.user, 'protocoloCorrida', 'O protocolo de corrida');
+    if (locked) return locked;
 
     const body = await req.json().catch(() => null);
     const action = body && body.action;

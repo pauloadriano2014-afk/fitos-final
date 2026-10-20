@@ -3,15 +3,17 @@
 // automático do aluno. Esta rota ficou só com a autenticação e as travas de acesso.
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, canAccessStudent, canActAsCoach } from '@/lib/auth';
-import { canUseAiBuilder, aiBuilderLocked } from '@/lib/aiAccess';
+import prisma from '@/lib/prisma';
+import { checkCoachAi, gateResponse, workoutReadiness } from '@/lib/coachAi';
 import { generateWorkoutPlan } from '@/lib/ai/workoutGen';
 
 export async function POST(req: NextRequest) {
   try {
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    // 🔒 Montagem por IA só pro time master (a criação por voz continua liberada pros parceiros).
-    if (!canUseAiBuilder(auth.user)) return aiBuilderLocked();
+    // 🔒 Montagem por IA: time master sempre; coach parceiro só com a chave `iaTreino` ligada pelo master, dentro do limite do mês (lib/coachAi.ts).
+    const gate = await checkCoachAi(prisma, auth.user, 'treino');
+    if (!gate.ok) return gateResponse(gate);
 
     const body = await req.json();
     const { userId, adminId, cycleConfig } = body;
@@ -22,6 +24,15 @@ export async function POST(req: NextRequest) {
 
     if (!canActAsCoach(auth.user, adminId)) {
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    }
+
+    // 🧭 Coach parceiro: só gera se a anamnese e a biblioteca derem base para um treino bom (o app mostra o mesmo checklist antes, em /api/coach-ai/status).
+    if (!gate.master) {
+      const stu: any = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true, anamneses: { orderBy: { createdAt: 'desc' }, take: 1 } } as any });
+      if (!stu || !canAccessStudent(auth.user, userId, stu.coachId)) return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+      const libraryCount = await prisma.exercise.count({ where: { coachId: adminId } });
+      const ready = workoutReadiness({ anamnese: stu.anamneses?.[0] || null, libraryCount });
+      if (!ready.ok) return NextResponse.json({ error: ready.blockers[0], code: 'NAO_PRONTO', blockers: ready.blockers, warnings: ready.warnings }, { status: 422 });
     }
 
     const result = await generateWorkoutPlan({

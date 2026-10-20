@@ -202,6 +202,12 @@ model DietTemplate {
   totalKcal Float?
   meals     Json
   createdAt DateTime @default(now())
+
+  // 🔒 (20 out 2026) Dono do modelo (o coach que salvou). Antes não havia dono: o COFRE DE DIETAS era uma lista só, e qualquer pessoa logada via e apagava tudo.
+  // Os modelos que já existiam ficam com coachId nulo = acervo do time master (Paulo e Adri continuam vendo). Coluna opcional: nada é apagado nem alterado.
+  coachId   String?
+
+  @@index([coachId])
 }
 
 model MealTemplate {
@@ -210,6 +216,11 @@ model MealTemplate {
   category  String?
   items     Json
   createdAt DateTime @default(now())
+
+  // 🔒 (20 out 2026) Dono do modelo, igual ao DietTemplate: nulo = acervo antigo do time master.
+  coachId   String?
+
+  @@index([coachId])
 }
 
 // 🔥 NOVO: atalhos de observação de refeição salvos pelo coach, pra reusar

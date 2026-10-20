@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
+import { lockedByFeature } from '@/lib/coachAi';
 import { canUseAiBuilder } from '@/lib/aiAccess';
 import { GOAL_LABELS, PLAN_META, PLAN_TYPES, eligibleTypes, extractJson, sanitizeAiSuggestion, suggestByRules } from '@/lib/runningPlans';
 
@@ -29,6 +30,8 @@ export async function POST(req: NextRequest) {
     if (!canActAsCoach(auth.user, targetUser.coachId)) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
+    const locked = await lockedByFeature(prisma, auth.user, 'protocoloCorrida', 'O protocolo de corrida');
+    if (locked) return locked;
 
     const anamnese = await prisma.runningAnamnese.findUnique({ where: { userId } });
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, gender: true } });

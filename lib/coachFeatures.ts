@@ -9,9 +9,14 @@
 // Sem carência. Os ganchos de revogação também ficam no webhook do Asaas e no bloqueio do master; a checagem aqui é a rede de segurança.
 //
 // Recebe o `db` (Prisma) por parâmetro para testar sem banco. Se as tabelas ainda não existem (antes do `npx prisma db push`), tudo responde "sem recurso" em vez de quebrar.
-export const FEATURE_KEYS = ['execVideo', 'notasVoz', 'perguntasVoz'] as const;
+export const FEATURE_KEYS = ['execVideo', 'notasVoz', 'perguntasVoz', 'treinoAvulso', 'iaTreino', 'iaDieta', 'protocoloCorrida'] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
-export const FEATURE_LABELS: Record<FeatureKey, string> = { execVideo: 'Vídeo de execução', notasVoz: 'Notas por voz', perguntasVoz: 'Perguntas livres por voz (IA)' };
+export const FEATURE_LABELS: Record<FeatureKey, string> = {
+  execVideo: 'Vídeo de execução', notasVoz: 'Notas por voz', perguntasVoz: 'Perguntas livres por voz (IA)',
+  treinoAvulso: 'Treino avulso (link)', iaTreino: 'Montar treino por IA (com limite)', iaDieta: 'Montar dieta por IA (com limite)', protocoloCorrida: 'Protocolo de corrida',
+};
+// (20 out 2026) Os 4 últimos nasceram do pedido do Paulo ("adicione os recursos que eles não têm acesso, que eu decido"). Nenhum deles é de Fundador: só o master liga, coach a coach (ou a chave geral).
+// `iaTreino` e `iaDieta` gastam IA: mesmo ligados, valem o limite mensal e as regras de qualidade de lib/coachAi.ts.
 /** Recursos que o Fundador recebe sozinho ao pagar. `perguntasVoz` (gasta IA a cada pergunta) fica de fora: só o master libera, coach a coach. */
 export const FOUNDER_KEYS: readonly FeatureKey[] = ['execVideo', 'notasVoz'];
 
