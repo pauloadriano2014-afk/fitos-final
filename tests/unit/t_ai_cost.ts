@@ -81,8 +81,8 @@ const near = (a: number, b: number, d = 1e-6) => assert.ok(Math.abs(a - b) <= d,
     assert.deepStrictEqual(r.json.coaches.map((c: any) => c.coachId), [PAULO_ID, 'coB', 'coA', null], 'do mais caro para o mais barato');
     near(r.json.totals.usd, A.usd + B.usd + M.usd + F.usd, 1e-3);
     near(r.json.totals.partnersBrl, (A.usd + B.usd + F.usd) * 5.5, 0.02); assert.ok(r.json.totals.partnersBrl < r.json.totals.brl);
-    assert.deepStrictEqual(A.limits, { treino: { used: 2, limit: 30 }, dieta: { used: 1, limit: 60 } });
-    assert.deepStrictEqual(B.limits, { treino: { used: 0, limit: 30 }, dieta: { used: 0, limit: 0 } });
+    assert.deepStrictEqual(A.limits, { treino: { used: 2, limit: 30 }, dieta: { used: 1, limit: 60 }, voz: { used: 0, limit: 600 }, perguntas: { used: 0, limit: 300 }, checkin: { used: 0, limit: 100 } });
+    assert.deepStrictEqual(B.limits, { treino: { used: 0, limit: 30 }, dieta: { used: 0, limit: 0 }, voz: { used: 0, limit: 600 }, perguntas: { used: 0, limit: 300 }, checkin: { used: 0, limit: 100 } });
     assert.ok(Array.isArray(r.json.notMeasured) && r.json.notMeasured.length > 0);
   });
 

@@ -14,6 +14,8 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
 import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { capResponse } from '@/lib/coachMonthlyCaps';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 import { buildFoodIndex } from '@/lib/voiceDiet/match';
 import { buildDietReview, attachPortions } from '@/lib/voiceDiet/pipeline';
 import { extractDiet } from '@/lib/voiceDiet/extract';
@@ -59,6 +61,7 @@ export async function POST(req: Request) {
     if (!rl.allowed) {
       return NextResponse.json({ error: 'Muitas interpretações seguidas. Aguarde um pouco.' }, { status: 429 });
     }
+    { const cap = await capResponse(prisma, auth.user, 'voz'); if (cap) return cap; }   // 🧮 (20 out 2026) limite mensal de ditado por voz do coach parceiro
 
     // Mesmo escopo do GET /api/food/search: TACO (global) + os alimentos do time do coach.
     const teamId = isMasterId(adminId) ? MASTER_TEAM : adminId;
@@ -87,6 +90,7 @@ export async function POST(req: Request) {
     }
 
     const { usage } = extracted;
+    await logAiUse(prisma, auth.user.id, USE_KINDS.dietaVoz, usage.model, usage.inputTokens, usage.outputTokens);
     const foodsCount = extracted.parsed.meals.reduce((n, m) => n + m.foods.length, 0);
     console.info(`[dieta-por-voz] model=${usage.model} fallback=${usage.usedFallback} in=${usage.inputTokens} out=${usage.outputTokens} ms=${usage.ms} refeicoes=${extracted.parsed.meals.length} alimentos=${foodsCount}`);
 

@@ -14,6 +14,8 @@ import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { isActiveCoach, coachOnly } from '@/lib/aiAccess';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { capResponse } from '@/lib/coachMonthlyCaps';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -60,6 +62,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Muitas gravações seguidas. Aguarde um pouco.' }, { status: 429 });
     }
 
+    // 🧮 (20 out 2026) limite mensal de ditado por voz do coach parceiro (master não tem); a hora a hora continua valendo
+    { const cap = await capResponse(prisma, auth.user, 'voz'); if (cap) return cap; }
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: 'Transcrição indisponível (chave não configurada no servidor).' }, { status: 503 });
@@ -97,6 +101,7 @@ export async function POST(req: Request) {
       prompt: isDiet ? WHISPER_HINT_DIETA : WHISPER_HINT,
       temperature: 0,
     });
+    await logAiUse(prisma, auth.user.id, USE_KINDS.transcricao, 'whisper-1', 0, 0, { usd: 0.003, bytes: file.size });
     console.info(`[${isDiet ? 'dieta' : 'treino'}-por-voz] transcricao bytes=${file.size} ms=${Date.now() - t0}`);
 
     const text = String(r.text || '').replace(/\s+/g, ' ').trim();

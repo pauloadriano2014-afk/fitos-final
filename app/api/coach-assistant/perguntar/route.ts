@@ -8,6 +8,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { capResponse } from '@/lib/coachMonthlyCaps';
+import { logAiUse, USE_KINDS } from '@/lib/aiCost';
 import { requireAskCoach, missing } from '@/lib/coachNotesStore';
 import { todayKeyBrt } from '@/lib/coachNotes';
 import { MAX_QUESTION, NOT_UNDERSTOOD, aiRoute, isIntent, isMasterCoachId, ruleRoute, runIntent, type Route } from '@/lib/coachAssistant';
@@ -37,9 +39,13 @@ export async function POST(req: Request) {
 
     let route: Route = { intent: 'NENHUMA', params: {} };
     let ai = false;
+    // 🧮 (20 out 2026) acabou o limite mensal de perguntas com IA? Segue só pelas palavras-chave (grátis), sem erro para o coach
+    const capped = !!(await capResponse(prisma, auth.user, 'perguntas'));
     try {
+      if (capped) throw new Error('limite mensal de IA');
       const r = await aiRoute(text, todayKeyBrt(), { master });
       route = r.route; ai = true;
+      await logAiUse(prisma, auth.user.id, USE_KINDS.perguntaCoach, r.usage.model, r.usage.inputTokens, r.usage.outputTokens);
       console.info(`[pergunta-voz] roteou model=${r.usage.model} in=${r.usage.inputTokens} out=${r.usage.outputTokens} ms=${r.usage.ms} consulta=${route.intent}`);
     } catch (e: any) {
       console.error('[pergunta-voz] IA indisponível, usando palavras-chave:', e?.message || e);

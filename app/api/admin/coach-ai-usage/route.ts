@@ -1,11 +1,12 @@
 // app/api/admin/coach-ai-usage/route.ts
 // 💰 Painel do time master: quanto a IA do servidor custou por coach no mês (estimativa, a partir do AiLog).
 //   GET ?month=AAAA-MM   (padrão: mês atual em Brasília)
-//   -> { month, brlPerUsd, totals: { count, usd, brl }, coaches: [ { coachId, name, plan, master, count, usd, brl, categories: [...], limits, used } ], notMeasured: [...] }
+//   -> { month, brlPerUsd, totals: { count, usd, brl, partnersBrl }, coaches: [ { coachId, name, plan, master, count, usd, brl, categories: [...], limits: { treino, dieta, voz, perguntas, checkin } (cada um { used, limit }; null no time master) } ], notMeasured: [...] }
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireMaster, isMasterId } from '@/lib/auth';
 import { aggregate, toCategories, BRL_PER_USD, NOT_MEASURED, type CoachCost } from '@/lib/aiCost';
+import { capLimit } from '@/lib/coachMonthlyCaps';
 import { monthStartBR, nextMonthStartBR, limitsFor } from '@/lib/coachAi';
 
 export const dynamic = 'force-dynamic';
@@ -48,7 +49,7 @@ export async function GET(req: Request) {
     const withLimits = list.map((c) => {
       const lim = limitsFor(c.plan);
       const used = (k: string) => c.categories.find((x) => x.category === k)?.count || 0;
-      return { ...c, limits: c.master ? null : { treino: { used: used('treino'), limit: lim.treino }, dieta: { used: used('dieta'), limit: lim.dieta } } };
+      return { ...c, limits: c.master ? null : { treino: { used: used('treino'), limit: lim.treino }, dieta: { used: used('dieta'), limit: lim.dieta }, voz: { used: used('ditado'), limit: capLimit('voz') }, perguntas: { used: used('pergunta'), limit: capLimit('perguntas') }, checkin: { used: used('checkin'), limit: capLimit('checkin') } } };
     });
     const usd = list.reduce((s, c) => s + c.usd, 0);
     return NextResponse.json({ month, brlPerUsd: BRL_PER_USD, totals: { count: list.reduce((s, c) => s + c.count, 0), usd: round(usd, 4), brl: round(usd * BRL_PER_USD, 2), partnersBrl: round(list.filter((c) => !c.master).reduce((s, c) => s + c.usd, 0) * BRL_PER_USD, 2) }, coaches: withLimits, notMeasured: NOT_MEASURED });

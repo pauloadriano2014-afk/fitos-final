@@ -16,6 +16,8 @@ export const PRICES: Record<string, [number, number]> = {
   'gemini-2.5-flash': [0.3, 2.5],
   'gemini-2.5-pro': [1.25, 10],
   'claude-haiku-4-5': [1, 5],
+  'claude-haiku-5-5': [1, 5],
+  'claude-opus-4-6': [15, 75],
 };
 const DEFAULT_PRICE: [number, number] = [1, 5];
 const TTS_USD_PER_CHAR = 18 / BRL_PER_USD / 200_000;   // ~R$ 18 a cada 200 mil letras (mesma conta do limite mensal da voz)
@@ -34,20 +36,24 @@ export const usdFromTokens = (model: string | null | undefined, inputTokens: num
   return (Math.max(0, inputTokens) / 1e6) * pi + (Math.max(0, outputTokens) / 1e6) * po;
 };
 
-export type CostCategory = 'treino' | 'dieta' | 'checkin' | 'analise' | 'feedback' | 'voz' | 'pdf' | 'laudo' | 'video' | 'chat';
+export type CostCategory = 'treino' | 'dieta' | 'checkin' | 'analise' | 'feedback' | 'voz' | 'ditado' | 'pergunta' | 'corrida' | 'pdf' | 'laudo' | 'video' | 'chat';
 export const CATEGORY_LABEL: Record<CostCategory, string> = {
   treino: 'Treino por IA', dieta: 'Dieta por IA', checkin: 'Avaliação de check-in', analise: 'Análise com memória',
-  feedback: 'Feedback da semana', voz: 'Voz (OUVIR)', pdf: 'Importar PDF', laudo: 'Laudo da avaliação', video: 'Análise de vídeo', chat: 'Chat do aluno',
+  feedback: 'Feedback da semana', voz: 'Voz (OUVIR)', ditado: 'Ditado por voz (notas, treino, dieta)', pergunta: 'Perguntas ao assistente', corrida: 'Protocolo de corrida por IA', pdf: 'Importar PDF', laudo: 'Laudo da avaliação', video: 'Análise de vídeo', chat: 'Chat do aluno',
 };
-export const CATEGORY_ORDER: CostCategory[] = ['treino', 'dieta', 'checkin', 'analise', 'feedback', 'pdf', 'laudo', 'video', 'voz', 'chat'];
+export const CATEGORY_ORDER: CostCategory[] = ['treino', 'dieta', 'checkin', 'analise', 'feedback', 'ditado', 'pergunta', 'corrida', 'pdf', 'laudo', 'video', 'voz', 'chat'];
 /** Valor médio (USD) usado quando a linha não traz custo nem tokens. */
-const FLAT_USD: Partial<Record<CostCategory, number>> = { chat: 0.004, checkin: 0.01, treino: 0.05, dieta: 0.01, analise: 0.03, feedback: 0.005, pdf: 0.08, laudo: 0.01, video: 0.1 };
+const FLAT_USD: Partial<Record<CostCategory, number>> = { chat: 0.004, ditado: 0.003, pergunta: 0.003, corrida: 0.05, checkin: 0.01, treino: 0.05, dieta: 0.01, analise: 0.03, feedback: 0.005, pdf: 0.08, laudo: 0.01, video: 0.1 };
 /** O que a IA do servidor faz mas AINDA não deixa registro (portanto não entra nesta conta). */
-export const NOT_MEASURED = ['Notas por voz e treino/dieta por voz do coach', 'Perguntas ao assistente do coach', 'Troca de exercício por IA', 'Avaliação de check-in com o motor Flash (só o Argon deixa custo)'];
+export const NOT_MEASURED = ['Uso com a chave de IA do próprio coach (o custo é dele)', 'Qualquer uso feito antes de 20/10/2026 em importar PDF, laudo, vídeo, ditado por voz, perguntas ao assistente e check-in (não havia registro)'];
 
 /** Tag das rotas que passaram a deixar registro agora (uso:<tipo>). */
 export const USE_PREFIX = 'uso:';
-export const USE_KINDS = { pdfTreino: 'uso:importar-pdf-treino', pdfDieta: 'uso:importar-pdf-dieta', laudo: 'uso:laudo-avaliacao', video: 'uso:analise-video' } as const;
+export const USE_KINDS = {
+  pdfTreino: 'uso:importar-pdf-treino', pdfDieta: 'uso:importar-pdf-dieta', laudo: 'uso:laudo-avaliacao', video: 'uso:analise-video',
+  transcricao: 'uso:transcricao', notaVoz: 'uso:nota-voz', treinoVoz: 'uso:treino-voz', dietaVoz: 'uso:dieta-voz',
+  perguntaCoach: 'uso:pergunta-coach', eliteAssistente: 'uso:elite-assistente', corrida: 'uso:corrida-ia',
+} as const;
 
 /** Qual categoria é esta linha do AiLog? Null = linha que não conta (falhou, chave própria do coach). */
 export function categorize(question: string): CostCategory | null {
@@ -60,6 +66,9 @@ export function categorize(question: string): CostCategory | null {
   if (q.startsWith('weekly-feedback:') || q.startsWith('weekly-whatsapp-parse:')) return 'feedback';
   if (q.startsWith(TTS_LOG_PREFIX)) return 'voz';
   if (q === USE_KINDS.pdfTreino || q === USE_KINDS.pdfDieta) return 'pdf';
+  if (q === USE_KINDS.transcricao || q === USE_KINDS.notaVoz || q === USE_KINDS.treinoVoz || q === USE_KINDS.dietaVoz) return 'ditado';
+  if (q === USE_KINDS.perguntaCoach || q === USE_KINDS.eliteAssistente) return 'pergunta';
+  if (q === USE_KINDS.corrida) return 'corrida';
   if (q === USE_KINDS.laudo) return 'laudo';
   if (q === USE_KINDS.video) return 'video';
   return 'chat';   // o que sobra no AiLog é pergunta do aluno ao assistente (a pergunta é o próprio texto)
