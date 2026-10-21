@@ -28,6 +28,7 @@ export const UI_SCREENS = [
   'cofreDietas',     // Cofre de dietas
   'parecidos',       // Alunos parecidos
   'videosExecucao',  // Vídeos de execução
+  'modo',            // 🎨 Modo Bento (21 out 2026): chave GERAL do app do coach. 'D' = Modo Bento ligado em todas as telas; 'A' (ou ausente) = o padrão de sempre
 ] as const;
 export type UiScreen = (typeof UI_SCREENS)[number];
 export const UI_VARIANTS = ['A', 'B', 'C', 'D'] as const;
