@@ -22,8 +22,10 @@ const u = (id: string, role: string, extra: any = {}) => S.user.push({ id, role,
   await t('lista de telas: sem as telas do aluno nem montar treino/dieta; validadores e limpeza de dados vindos de fora', () => {
     assert.ok(UI_SCREENS.includes('alunos' as any) && UI_SCREENS.includes('ficha' as any) && UI_SCREENS.includes('formularios' as any));
     for (const banned of ['montarTreino', 'montarDieta', 'home', 'treino', 'dieta', 'perfil', 'aluno']) assert.ok(!(UI_SCREENS as readonly string[]).includes(banned), banned + ' não é personalizável');
-    assert.ok(isUiScreen('alunos') && !isUiScreen('xx') && !isUiScreen(undefined)); assert.ok(isUiVariant('A') && isUiVariant('C') && !isUiVariant('D') && !isUiVariant('a') && !isUiVariant(1));
+    assert.ok(isUiScreen('alunos') && !isUiScreen('xx') && !isUiScreen(undefined)); assert.ok(isUiVariant('A') && isUiVariant('C') && isUiVariant('D') && !isUiVariant('E') && !isUiVariant('a') && !isUiVariant(1));
     assert.deepStrictEqual(sanitizeLayouts({ alunos: 'B', ficha: 'Z', inventada: 'A', feed: 'C' }), { alunos: 'B', feed: 'C' });
+    assert.deepStrictEqual(sanitizeLayouts({ alunos: 'D', ficha: 'E' }), { alunos: 'D' }, 'o quarto desenho (D) vale; a letra seguinte não');
+    assert.ok(UI_SCREENS.includes('modo' as any) && isUiScreen('modo'), 'chave geral do Modo Bento'); assert.deepStrictEqual(sanitizeLayouts({ modo: 'D', alunos: 'A' }), { modo: 'D', alunos: 'A' }); assert.deepStrictEqual(sanitizeLayouts({ modo: 'Z' }), {});
     assert.deepStrictEqual(sanitizeLayouts(null), {}); assert.deepStrictEqual(sanitizeLayouts('x'), {}); assert.deepStrictEqual(sanitizeLayouts(['A']), {}); assert.deepStrictEqual(sanitizeLayouts({ __proto__: { alunos: 'B' } }), {});
   });
 
@@ -60,7 +62,7 @@ const u = (id: string, role: string, extra: any = {}) => S.user.push({ id, role,
 
   await t('entradas inválidas: tela ou letra que não existe, corpo vazio ou torto dão 400 e não gravam nada', async () => {
     u('co', 'COACH');
-    for (const body of [{ screen: 'montarDieta', variant: 'B' }, { screen: 'alunos', variant: 'D' }, { screen: 'alunos' }, { variant: 'B' }, {}, { layouts: { inventada: 'B' } }, 'não é json']) {
+    for (const body of [{ screen: 'montarDieta', variant: 'B' }, { screen: 'alunos', variant: 'E' }, { screen: 'alunos' }, { variant: 'B' }, {}, { layouts: { inventada: 'B' } }, 'não é json']) {
       const r = await call(PUT, tok('co'), body as any); assert.strictEqual(r.status, 400, JSON.stringify(body));
     }
     assert.strictEqual(S.coachUiLayout.length, 0);

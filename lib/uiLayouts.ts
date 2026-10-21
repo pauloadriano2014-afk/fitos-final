@@ -1,5 +1,5 @@
 // lib/uiLayouts.ts
-// 🎨 (20 out 2026) "Personalizar o app": cada coach escolhe, tela por tela, entre 3 desenhos (A, B ou C). A é o desenho de sempre (é o que vale enquanto o coach não escolher).
+// 🎨 (20 out 2026) "Personalizar o app": cada coach escolhe, tela por tela, entre os desenhos A, B ou C (e D nas telas que têm um quarto desenho). A é o desenho de sempre (é o que vale enquanto o coach não escolher).
 // As telas do ALUNO, "Montar treino" e "Montar dieta" ficam de fora de propósito (não têm escolha). Guardado em CoachUiLayout (prisma/schema/config.prisma).
 export const UI_SCREENS = [
   'alunos',          // aba Alunos
@@ -28,9 +28,10 @@ export const UI_SCREENS = [
   'cofreDietas',     // Cofre de dietas
   'parecidos',       // Alunos parecidos
   'videosExecucao',  // Vídeos de execução
+  'modo',            // 🎨 Modo Bento (21 out 2026): chave GERAL do app do coach. 'D' = Modo Bento ligado em todas as telas; 'A' (ou ausente) = o padrão de sempre
 ] as const;
 export type UiScreen = (typeof UI_SCREENS)[number];
-export const UI_VARIANTS = ['A', 'B', 'C'] as const;
+export const UI_VARIANTS = ['A', 'B', 'C', 'D'] as const;
 export type UiVariant = (typeof UI_VARIANTS)[number];
 export type UiLayouts = Partial<Record<UiScreen, UiVariant>>;
 
