@@ -25,6 +25,7 @@ const u = (id: string, role: string, extra: any = {}) => S.user.push({ id, role,
     assert.ok(isUiScreen('alunos') && !isUiScreen('xx') && !isUiScreen(undefined)); assert.ok(isUiVariant('A') && isUiVariant('C') && isUiVariant('D') && !isUiVariant('E') && !isUiVariant('a') && !isUiVariant(1));
     assert.deepStrictEqual(sanitizeLayouts({ alunos: 'B', ficha: 'Z', inventada: 'A', feed: 'C' }), { alunos: 'B', feed: 'C' });
     assert.deepStrictEqual(sanitizeLayouts({ alunos: 'D', ficha: 'E' }), { alunos: 'D' }, 'o quarto desenho (D) vale; a letra seguinte não');
+    assert.ok(UI_SCREENS.includes('painel' as any) && isUiScreen('painel') && !isUiScreen('home'), 'tela inicial do painel (A = abas em cima, D = painel)'); assert.deepStrictEqual(sanitizeLayouts({ painel: 'D', home: 'D' }), { painel: 'D' });
     assert.ok(UI_SCREENS.includes('modo' as any) && isUiScreen('modo'), 'chave geral do Modo Bento'); assert.deepStrictEqual(sanitizeLayouts({ modo: 'D', alunos: 'A' }), { modo: 'D', alunos: 'A' }); assert.deepStrictEqual(sanitizeLayouts({ modo: 'Z' }), {});
     assert.deepStrictEqual(sanitizeLayouts(null), {}); assert.deepStrictEqual(sanitizeLayouts('x'), {}); assert.deepStrictEqual(sanitizeLayouts(['A']), {}); assert.deepStrictEqual(sanitizeLayouts({ __proto__: { alunos: 'B' } }), {});
   });
