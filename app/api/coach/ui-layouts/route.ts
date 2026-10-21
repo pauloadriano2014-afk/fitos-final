@@ -46,7 +46,7 @@ export async function PUT(req: Request) {
       if (!Object.keys(patch).length && b.layouts && Object.keys(b.layouts).length) return NextResponse.json({ error: 'Nenhuma tela ou desenho válido.' }, { status: 400 });
     } else {
       if (!isUiScreen(b.screen)) return NextResponse.json({ error: 'Tela inválida.' }, { status: 400 });
-      if (!isUiVariant(b.variant)) return NextResponse.json({ error: 'Desenho inválido (use A, B ou C).' }, { status: 400 });
+      if (!isUiVariant(b.variant)) return NextResponse.json({ error: 'Desenho inválido (use A, B, C ou D).' }, { status: 400 });
       patch = { [b.screen]: b.variant };
     }
 
