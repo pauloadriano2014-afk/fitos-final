@@ -28,6 +28,7 @@ export const UI_SCREENS = [
   'cofreDietas',     // Cofre de dietas
   'parecidos',       // Alunos parecidos
   'videosExecucao',  // Vídeos de execução
+  'painel',          // 🏠 Tela inicial do painel (21 out 2026): 'A' = abas em cima (a de sempre); 'D' = painel com barra lateral / de baixo, faixa Hoje e quadro por situação (só vale com o Modo Bento ligado)
   'modo',            // 🎨 Modo Bento (21 out 2026): chave GERAL do app do coach. 'D' = Modo Bento ligado em todas as telas; 'A' (ou ausente) = o padrão de sempre
 ] as const;
 export type UiScreen = (typeof UI_SCREENS)[number];
