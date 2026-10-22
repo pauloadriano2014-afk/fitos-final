@@ -563,8 +563,8 @@ Responda APENAS com JSON válido.`.trim();
       if (tagged) substitute = asSub(tagged);
       // 2) o que a IA escolheu só vale se for do mesmo músculo e do mesmo tipo (nunca alongamento/mobilidade/cardio no lugar de musculação)
       else if (iaSubId && exerciseMap.has(iaSubId) && isCompatibleSub(orig, exerciseMap.get(iaSubId) as unknown as LibEx) && !bannedIds.has(iaSubId)) substitute = asSub(exerciseMap.get(iaSubId)!);
-      // 3) sem marcação e sem escolha boa da IA: o servidor escolhe um do mesmo músculo na biblioteca
-      if (!substitute && orig && String(orig.category || '').toUpperCase() !== 'CARDIO') {
+      // 3) sem marcação e sem escolha boa da IA (modo inteligente): o servidor escolhe um do mesmo músculo na biblioteca
+      if (!substitute && smart && orig && String(orig.category || '').toUpperCase() !== 'CARDIO') {
         const p = pickSwap(orig, adminExercises as unknown as LibEx[], { unavailable: bannedIds, jointRisks: excludeRisks, env: trainingEnv || 'UNIVERSAL', level: levelRules && levelInfo ? levelInfo.level : null, usedNames: new Set<string>(), envOk: () => true, levelIssues });
         if (p) substitute = { id: p.id, name: p.name, videoUrl: p.videoUrl || '' };
       }
