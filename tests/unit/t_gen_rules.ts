@@ -298,5 +298,18 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     seedGen(); r = await gen({ genRules: { excludeJointRisk: [], noHighImpact: true, avoidProfiles: ['GESTANTE'] } }); assert.equal(r.status, 200); assert.ok(r.body.filters.summary.includes('sem alto impacto'));
   });
 
+  await t('substitutos: o que o coach marcou manda; a IA nunca coloca alongamento/mobilidade no lugar de musculação (cai num exercício do mesmo músculo)', async () => {
+    const ctl = seedGen();
+    db.exercise.push({ id: 'mob-1', coachId: PAULO_ID, name: 'Alongamento de bíceps', category: 'Mobilidade', subCategory: 'Geral', videoUrl: 'v', tags: { target: 'MOBILIDADE', equipment: 'LIVRE', mechanic: 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'] });
+    db.exercise.find((e: any) => e.id === 'biceps-1').defaultSubstitutes = ['biceps-5'];
+    ctl.setHook((byDay: any) => { for (const d of Object.keys(byDay)) for (const ex of byDay[d]) ex.substitute = { exerciseId: 'mob-1', title: 'Alongamento de bíceps' }; return byDay; });
+    const r = await gen({}); assert.equal(r.status, 200);
+    const all = Object.values<any[]>(r.body.exercisesByDay).flat();
+    assert.ok(all.length > 0 && all.every((e: any) => !e.substitute || e.substitute.id !== 'mob-1'), 'nenhum substituto de mobilidade');
+    const withSub = all.filter((e: any) => e.substitute);
+    assert.ok(withSub.length > 0 && withSub.every((e: any) => String(e.substitute.id).split('-')[0] === String(e.exerciseId).split('-')[0]), 'substituto do mesmo músculo: ' + withSub.map((e: any) => e.exerciseId + '>' + e.substitute.id).join());
+    const b1 = all.find((e: any) => e.exerciseId === 'biceps-1'); if (b1) assert.equal(b1.substitute.id, 'biceps-5', 'o marcado pelo coach vence');
+  });
+
   console.log(`\n${ok} verificações dos filtros de exercícios`);
 })();
