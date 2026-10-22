@@ -27,6 +27,7 @@ const u = (id: string, role: string, extra: any = {}) => S.user.push({ id, role,
     assert.deepStrictEqual(sanitizeLayouts({ alunos: 'D', ficha: 'E' }), { alunos: 'D' }, 'o quarto desenho (D) vale; a letra seguinte não');
     assert.ok(UI_SCREENS.includes('painel' as any) && isUiScreen('painel') && !isUiScreen('home'), 'tela inicial do painel (A = abas em cima, D = painel)'); assert.deepStrictEqual(sanitizeLayouts({ painel: 'D', home: 'D' }), { painel: 'D' });
     assert.ok(UI_SCREENS.includes('modo' as any) && isUiScreen('modo'), 'chave geral do Modo Bento'); assert.deepStrictEqual(sanitizeLayouts({ modo: 'D', alunos: 'A' }), { modo: 'D', alunos: 'A' }); assert.deepStrictEqual(sanitizeLayouts({ modo: 'Z' }), {});
+    assert.ok(isUiScreen('modoAluno'), 'chave do Modo Bento do aluno'); assert.deepStrictEqual(sanitizeLayouts({ modoAluno: 'D', modo: 'A' }), { modoAluno: 'D', modo: 'A' }); assert.deepStrictEqual(sanitizeLayouts({ modoAluno: 'Z' }), {});
     assert.deepStrictEqual(sanitizeLayouts(null), {}); assert.deepStrictEqual(sanitizeLayouts('x'), {}); assert.deepStrictEqual(sanitizeLayouts(['A']), {}); assert.deepStrictEqual(sanitizeLayouts({ __proto__: { alunos: 'B' } }), {});
   });
 
