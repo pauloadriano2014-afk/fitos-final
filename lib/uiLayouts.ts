@@ -29,6 +29,7 @@ export const UI_SCREENS = [
   'parecidos',       // Alunos parecidos
   'videosExecucao',  // Vídeos de execução
   'painel',          // 🏠 Tela inicial do painel (21 out 2026): 'A' = abas em cima (a de sempre); 'D' = painel com barra lateral / de baixo, faixa Hoje e quadro por situação (só vale com o Modo Bento ligado)
+  'modoAluno',       // 🎨 Modo Bento DO ALUNO (22 out 2026): 'D' = o coach vê o app do aluno ("Ver app do aluno") no visual Bento; 'A' (ou ausente) = o app do aluno de sempre. Por enquanto só vale para o coach.
   'modo',            // 🎨 Modo Bento (21 out 2026): chave GERAL do app do coach. 'D' = Modo Bento ligado em todas as telas; 'A' (ou ausente) = o padrão de sempre
 ] as const;
 export type UiScreen = (typeof UI_SCREENS)[number];
