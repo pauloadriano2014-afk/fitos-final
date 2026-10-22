@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { PAULO_ID } from '/home/user/fitos-final/lib/masterIds';
 import { generateWorkoutPlan } from '/home/user/fitos-final/lib/ai/workoutGen';
 import { suggestImpact, suggestAvoid, pickExtra, cleanExtraPatch, mergeTags, effectiveExtra, EXTRA_KEYS } from '/home/user/fitos-final/lib/exerciseTags';
+import { orderDayExercises, orderedGroupIds } from '/home/user/fitos-final/lib/ai/exerciseOrder';
 import { effectiveEnvironments, cleanRules, emptyRules, isEmptyRules, mergeRules, describeRules, removalReason, applyRules, removedSummary, loadStudentRules, MAX_IDS } from '/home/user/fitos-final/lib/genRules';
 import { GET as prefsGET, PUT as prefsPUT, DELETE as prefsDEL } from '/home/user/fitos-final/app/api/gen-prefs/route';
 import { POST as previewPOST } from '/home/user/fitos-final/app/api/gen-prefs/preview/route';
@@ -309,6 +310,35 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     const withSub = all.filter((e: any) => e.substitute);
     assert.ok(withSub.length > 0 && withSub.every((e: any) => String(e.substitute.id).split('-')[0] === String(e.exerciseId).split('-')[0]), 'substituto do mesmo músculo: ' + withSub.map((e: any) => e.exerciseId + '>' + e.substitute.id).join());
     const b1 = all.find((e: any) => e.exerciseId === 'biceps-1'); if (b1) assert.equal(b1.substitute.id, 'biceps-5', 'o marcado pelo coach vence');
+  });
+
+  await t('ordem: músculo grande antes de pequeno, cada músculo junto, composto antes do isolado, bi/tri-set inteiros, mobilidade no começo e cardio no fim', () => {
+    assert.deepEqual(orderedGroupIds(['BICEPS', 'TRICEPS', 'COSTAS_PUXADA', 'COSTAS_REMADA']), ['COSTAS_PUXADA', 'COSTAS_REMADA', 'BICEPS', 'TRICEPS'], 'costas antes de braços');
+    assert.deepEqual(orderedGroupIds(['GLUTEOS', 'QUADRICEPS', 'PANTURRILHA']), ['GLUTEOS', 'QUADRICEPS', 'PANTURRILHA'], 'mesmo nível: ordem do coach (glúteos foco)');
+    assert.deepEqual(orderedGroupIds(['BICEPS', 'PEITO'], true), ['BICEPS', 'PEITO'], 'keepGroupOrder segue a estrutura');
+    const ex = (id: string, g: string | null, comp = false, tech = '', kind: any = 'FORCA') => ({ id, g, comp, tech, kind });
+    const run = (list: any[], groups: string[], keep = false) => orderDayExercises(list, { groups, keepGroupOrder: keep, groupOf: (e: any) => e.g, isCompound: (e: any) => e.comp, kind: (e: any) => e.kind, technique: (e: any) => e.tech });
+    const ids = (r: any) => r.list.map((e: any) => e.id).join();
+    // o exemplo do Paulo: bíceps, costas, tríceps, bíceps, costas
+    let r = run([ex('b1', 'BICEPS'), ex('c1', 'COSTAS_PUXADA'), ex('t1', 'TRICEPS'), ex('b2', 'BICEPS'), ex('c2', 'COSTAS_REMADA', true)], ['COSTAS_PUXADA', 'COSTAS_REMADA', 'BICEPS', 'TRICEPS']);
+    assert.equal(ids(r), 'c1,c2,b1,b2,t1'); assert.ok(r.changed);
+    r = run([ex('i1', 'PEITO'), ex('m1', 'PEITO', true), ex('i2', 'PEITO')], ['PEITO']); assert.equal(ids(r), 'm1,i1,i2', 'composto primeiro, resto na ordem');
+    r = run([ex('cardio', 'CARDIO', false, '', 'CARDIO'), ex('p1', 'PEITO'), ex('mob', null, false, '', 'MOB')], ['PEITO']); assert.equal(ids(r), 'mob,p1,cardio');
+    r = run([ex('b1', 'BICEPS', false, 'BISET'), ex('b2', 'BICEPS', false, 'BISET'), ex('p1', 'PEITO', true)], ['PEITO', 'BICEPS']); assert.equal(ids(r), 'p1,b1,b2', 'o bi-set anda inteiro');
+    r = run([ex('p1', 'PEITO', true), ex('b1', 'BICEPS')], ['PEITO', 'BICEPS']); assert.ok(!r.changed, 'já certo: nada muda');
+    r = run([ex('p1', 'PEITO', true), ex('x', null), ex('b1', 'BICEPS')], ['PEITO', 'BICEPS']); assert.equal(ids(r), 'p1,x,b1', 'sem grupo conhecido fica colado ao de cima');
+  });
+  await t('ordem na geração: a IA embaralha (bíceps → peito → bíceps → peito) e o treino sai com peito primeiro, cada músculo junto, composto antes do isolado', async () => {
+    const ctl = seedGen();
+    ctl.setHook((byDay: any) => ({ ...byDay, A: [...(byDay.A || [])].reverse() }));   // a IA devolve o dia de trás para frente
+    const r = await gen({ days: [{ name: 'A', groups: [{ id: 'BICEPS', qty: 2, sets: 3, rest: 30 }, { id: 'PEITO', qty: 2, sets: 3, rest: 60 }] }, { name: 'B', groups: [{ id: 'COSTAS_REMADA', qty: 2, sets: 3, rest: 60 }] }] }); assert.equal(r.status, 200);
+    const a = r.body.exercisesByDay.A.map((e: any) => e.exerciseId.split('-')[0]);
+    const firstBiceps = a.indexOf('biceps'); const lastPeito = a.lastIndexOf('peito');
+    assert.ok(lastPeito >= 0 && firstBiceps > lastPeito, 'peito (grande) antes de bíceps: ' + a.join());
+    const k = await gen({ keepGroupOrder: true, days: [{ name: 'A', groups: [{ id: 'BICEPS', qty: 2, sets: 3, rest: 30 }, { id: 'PEITO', qty: 2, sets: 3, rest: 60 }] }, { name: 'B', groups: [{ id: 'COSTAS_REMADA', qty: 2, sets: 3, rest: 60 }] }] }); assert.equal(k.status, 200);
+    const ka = k.body.exercisesByDay.A.map((e: any) => e.exerciseId.split('-')[0]); assert.ok(ka.lastIndexOf('biceps') < ka.indexOf('peito'), 'keepGroupOrder: segue a estrutura, cada músculo junto: ' + ka.join());
+    const first = r.body.exercisesByDay.A.find((e: any) => e.exerciseId.startsWith('peito'));
+    assert.equal(first.exerciseId, 'peito-1', 'o composto (peito-1) abre o grupo: ' + r.body.exercisesByDay.A.map((e: any) => e.exerciseId).join());
   });
 
   console.log(`\n${ok} verificações dos filtros de exercícios`);

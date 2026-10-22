@@ -82,6 +82,14 @@ export const buildPresets = (gender) => {
     { category: 'Superiores', label: 'Costas Completa', seen: 6, groups: [{ id: 'COSTAS_PUXADA', qty: 3 }, { id: 'COSTAS_REMADA', qty: 3 }, { id: 'OMBRO_POST', qty: 1 }] },
     { category: 'Combinados', label: 'Superior Geral', groups: [{ id: 'PEITO', qty: 2 }, { id: 'COSTAS_PUXADA', qty: 1 }, { id: 'COSTAS_REMADA', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 1 }, { id: 'BICEPS', qty: 1 }, { id: 'TRICEPS', qty: 1 }] },
     { category: 'Combinados', label: 'Full Body', groups: [{ id: 'QUADRICEPS', qty: 2 }, { id: 'GLUTEOS', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'PEITO', qty: 2 }, { id: 'ABDOMEN', qty: 1 }] },
+    // 🧩 (23 out 2026) combos prontos, com os músculos já na ordem de prioridade (grande/multiarticular primeiro, braços e pequenos depois)
+    { category: 'Superiores', label: 'Costas + Bíceps', groups: [{ id: 'COSTAS_PUXADA', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'OMBRO_POST', qty: 1 }, { id: 'BICEPS', qty: 2 }] },
+    { category: 'Superiores', label: 'Peito + Tríceps', groups: [{ id: 'PEITO', qty: 3 }, { id: 'TRICEPS', qty: 3 }, { id: 'ABDOMEN', qty: 1 }] },
+    { category: 'Superiores', label: 'Peito + Costas', groups: [{ id: 'PEITO', qty: 2 }, { id: 'COSTAS_PUXADA', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }] },
+    { category: 'Pernas', label: 'Glúteos + Posteriores', groups: [{ id: 'GLUTEOS', qty: 3 }, { id: 'POSTERIORES', qty: 3 }, { id: 'ABDUTOR', qty: 1 }, { id: 'PANTURRILHA', qty: 1 }] },
+    { category: 'Pernas', label: 'Pernas + Abdômen', groups: [{ id: 'QUADRICEPS', qty: 2 }, { id: 'POSTERIORES', qty: 2 }, { id: 'GLUTEOS', qty: 1 }, { id: 'PANTURRILHA', qty: 1 }, { id: 'ABDOMEN', qty: 2 }] },
+    { category: 'Combinados', label: 'Empurrar (Peito + Ombros + Tríceps)', groups: [{ id: 'PEITO', qty: 2 }, { id: 'OMBRO_MULTI', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 2 }, { id: 'TRICEPS', qty: 2 }] },
+    { category: 'Combinados', label: 'Puxar (Costas + Bíceps + Ombro post.)', groups: [{ id: 'COSTAS_PUXADA', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'OMBRO_POST', qty: 1 }, { id: 'BICEPS', qty: 2 }] },
     { category: 'Isolados', label: 'Abdômen', seen: 24, groups: [{ id: 'ABDOMEN', qty: 4 }] },
     { category: 'Isolados', label: 'Cardio', groups: [{ id: 'CARDIO', qty: 1 }] },
   ];
@@ -99,6 +107,14 @@ export const buildPresets = (gender) => {
     { category: 'Superiores', label: 'Costas Completa', seen: 5, groups: [{ id: 'COSTAS_PUXADA', qty: 3 }, { id: 'COSTAS_REMADA', qty: 3 }, { id: 'TRAPEZIO', qty: 1 }] },
     { category: 'Combinados', label: 'Superior Geral', groups: [{ id: 'PEITO', qty: 2 }, { id: 'COSTAS_PUXADA', qty: 2 }, { id: 'OMBRO_LATERAL', qty: 2 }, { id: 'BICEPS', qty: 2 }, { id: 'TRICEPS', qty: 2 }] },
     { category: 'Combinados', label: 'Full Body', groups: [{ id: 'QUADRICEPS', qty: 2 }, { id: 'POSTERIORES', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'PEITO', qty: 2 }, { id: 'ABDOMEN', qty: 1 }] },
+    // 🧩 (23 out 2026) combos prontos, com os músculos já na ordem de prioridade (grande/multiarticular primeiro, braços e pequenos depois)
+    { category: 'Superiores', label: 'Costas + Bíceps + Tríceps', groups: [{ id: 'COSTAS_PUXADA', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'BICEPS', qty: 2 }, { id: 'TRICEPS', qty: 2 }] },
+    { category: 'Superiores', label: 'Peito + Tríceps', groups: [{ id: 'PEITO', qty: 4 }, { id: 'TRICEPS', qty: 3 }] },
+    { category: 'Superiores', label: 'Peito + Costas', groups: [{ id: 'PEITO', qty: 3 }, { id: 'COSTAS_PUXADA', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }] },
+    { category: 'Superiores', label: 'Ombros + Braços', groups: [{ id: 'OMBRO_MULTI', qty: 1 }, { id: 'OMBRO_FRONTAL', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 2 }, { id: 'BICEPS', qty: 2 }, { id: 'TRICEPS', qty: 2 }] },
+    { category: 'Pernas', label: 'Pernas + Abdômen', groups: [{ id: 'QUADRICEPS', qty: 3 }, { id: 'POSTERIORES', qty: 2 }, { id: 'PANTURRILHA', qty: 1 }, { id: 'ABDOMEN', qty: 2 }] },
+    { category: 'Combinados', label: 'Empurrar (Peito + Ombros + Tríceps)', groups: [{ id: 'PEITO', qty: 3 }, { id: 'OMBRO_MULTI', qty: 1 }, { id: 'OMBRO_LATERAL', qty: 2 }, { id: 'TRICEPS', qty: 2 }] },
+    { category: 'Combinados', label: 'Puxar (Costas + Bíceps + Ombro post.)', groups: [{ id: 'COSTAS_PUXADA', qty: 2 }, { id: 'COSTAS_REMADA', qty: 2 }, { id: 'OMBRO_POST', qty: 1 }, { id: 'TRAPEZIO', qty: 1 }, { id: 'BICEPS', qty: 2 }] },
     { category: 'Isolados', label: 'Abdômen', groups: [{ id: 'ABDOMEN', qty: 4 }] },
     { category: 'Isolados', label: 'Cardio', groups: [{ id: 'CARDIO', qty: 1 }] },
   ];

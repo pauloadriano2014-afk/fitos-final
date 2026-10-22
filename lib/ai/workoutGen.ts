@@ -19,6 +19,7 @@ import { shapeReps, cleanRepChoice, describeRepChoice } from '@/lib/ai/repScheme
 import { compactToFull } from '@/lib/ai/compactOutput';
 import { MUSCLE_GROUPS } from '@/lib/ai/splitPresets';
 import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, repRange, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
+import { orderDayExercises } from '@/lib/ai/exerciseOrder';
 import { pickSwap, isCompatibleSub, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
 import { loadAdminLibrary } from '@/lib/genLibrary';
@@ -629,6 +630,7 @@ Responda APENAS com JSON válido.`.trim();
       if (techRemoved.length) quality.fixes.unshift(`Técnicas tiradas do ciclo pelo nível ${levelInfo.label}: ${techRemoved.join(', ')}`);
     }
 
+    const orderFixedDays: string[] = [];
     for (const [day, list] of Object.entries(reviewedDays)) {
       let dayExercises = list as any[];
       // 🔥 Corrige cadeias de técnicas que agrupam exercícios (BI-SET=2,
@@ -640,8 +642,23 @@ Responda APENAS com JSON válido.`.trim();
       dayExercises = repairChainedTechnique(dayExercises, 'BISET', 2);
       dayExercises = repairChainedTechnique(dayExercises, 'TRISET', 3);
 
+      // 📐 ORDEM (padrão do coach, garantida pelo servidor): grupos juntos, músculo grande antes de pequeno, composto antes de isolado, bi/tri-set inteiros, mobilidade no começo e cardio no fim
+      if (smart && cands) {
+        const dayCfg = (cycleConfig?.days || []).find((d: any) => d.name === day);
+        const groupIds: string[] = (dayCfg?.groups || []).map((g: any) => String(g.id));
+        const groupOf = (ex: any): string | null => { for (const gid of groupIds) if ((cands!.byGroup.get(gid) || []).some((e: any) => e.id === ex.exerciseId)) return gid; return null; };
+        const ord = orderDayExercises(dayExercises, {
+          groups: groupIds, keepGroupOrder: cycleConfig?.keepGroupOrder === true, groupOf,
+          isCompound: (ex: any) => String((exerciseMap.get(ex.exerciseId) as any)?.tags?.mechanic || '').toUpperCase() === 'COMPOSTO',
+          kind: (ex: any) => { const c = String((exerciseMap.get(ex.exerciseId) as any)?.category || '').toLowerCase(); return c === 'mobilidade' ? 'MOB' : c === 'cardio' ? 'CARDIO' : 'FORCA'; },
+          technique: (ex: any) => String(ex.blocks?.[0]?.technique || ''),
+        });
+        if (ord.changed) { dayExercises = ord.list; orderFixedDays.push(day); }
+      }
+
       validatedDays[day] = dayExercises;
     }
+    if (quality && orderFixedDays.length) quality.fixes.push(`Ordem ajustada no(s) dia(s) ${orderFixedDays.join(', ')}: músculo grande primeiro, multiarticular antes do isolado, cada músculo junto`);
 
     // 🔥 INJETA EXERCÍCIOS MANUAIS DE MOBILIDADE — escolhidos pelo coach, bypassam a IA
     Object.entries(manualExercisesByDay).forEach(([day, items]) => {
