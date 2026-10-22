@@ -19,7 +19,7 @@ import { shapeReps, cleanRepChoice, describeRepChoice } from '@/lib/ai/repScheme
 import { compactToFull } from '@/lib/ai/compactOutput';
 import { MUSCLE_GROUPS } from '@/lib/ai/splitPresets';
 import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, repRange, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
-import { pickSwap, nameKey, type LibEx } from '@/lib/exerciseSwap';
+import { pickSwap, isCompatibleSub, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
 import { loadAdminLibrary } from '@/lib/genLibrary';
 import { buildConcerns, concernIssues } from '@/lib/exerciseConcerns';
@@ -555,15 +555,18 @@ Responda APENAS com JSON válido.`.trim();
     // 🧠 substituto de um exercício: o da biblioteca (defaultSubstitutes) primeiro, depois o que a IA escolheu; no modo inteligente, sem nenhum dos dois, o servidor escolhe um do mesmo músculo
     const subFor = (exId: string, iaSubId?: string) => {
       let substitute: any = null;
-      const preCalc = substitutesByExercise[exId];
-      if (preCalc?.length > 0) { const dbSub = exerciseMap.get(preCalc[0].id); if (dbSub) substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' }; }
-      else if (iaSubId && exerciseMap.has(iaSubId)) { const dbSub = exerciseMap.get(iaSubId)!; substitute = { id: dbSub.id, name: dbSub.name, videoUrl: dbSub.videoUrl || '' }; }
-      if (!substitute && smart) {
-        const orig = exerciseMap.get(exId) as unknown as LibEx | undefined;
-        if (orig && String(orig.category || '').toUpperCase() !== 'CARDIO') {
-          const p = pickSwap(orig, adminExercises as unknown as LibEx[], { unavailable: bannedIds, jointRisks: excludeRisks, env: trainingEnv || 'UNIVERSAL', level: levelRules && levelInfo ? levelInfo.level : null, usedNames: new Set<string>(), envOk: () => true, levelIssues });
-          if (p) substitute = { id: p.id, name: p.name, videoUrl: p.videoUrl || '' };
-        }
+      const orig = exerciseMap.get(exId) as unknown as LibEx | undefined;
+      const asSub = (e: any) => ({ id: e.id, name: e.name, videoUrl: e.videoUrl || '' });
+      // 1) o que o coach marcou na biblioteca manda (o primeiro marcado que o aluno pode fazer; se nenhum pode, o primeiro marcado)
+      const preCalc = (substitutesByExercise[exId] || []).map((s) => exerciseMap.get(s.id)).filter(Boolean) as any[];
+      const tagged = preCalc.find((e) => !bannedIds.has(e.id)) || preCalc[0];
+      if (tagged) substitute = asSub(tagged);
+      // 2) o que a IA escolheu só vale se for do mesmo músculo e do mesmo tipo (nunca alongamento/mobilidade/cardio no lugar de musculação)
+      else if (iaSubId && exerciseMap.has(iaSubId) && isCompatibleSub(orig, exerciseMap.get(iaSubId) as unknown as LibEx) && !bannedIds.has(iaSubId)) substitute = asSub(exerciseMap.get(iaSubId)!);
+      // 3) sem marcação e sem escolha boa da IA (modo inteligente): o servidor escolhe um do mesmo músculo na biblioteca
+      if (!substitute && smart && orig && String(orig.category || '').toUpperCase() !== 'CARDIO') {
+        const p = pickSwap(orig, adminExercises as unknown as LibEx[], { unavailable: bannedIds, jointRisks: excludeRisks, env: trainingEnv || 'UNIVERSAL', level: levelRules && levelInfo ? levelInfo.level : null, usedNames: new Set<string>(), envOk: () => true, levelIssues });
+        if (p) substitute = { id: p.id, name: p.name, videoUrl: p.videoUrl || '' };
       }
       return substitute;
     };

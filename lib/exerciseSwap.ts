@@ -21,6 +21,15 @@ const LIGHT = ['HALTER', 'LIVRE', 'PESO_CORPORAL', 'CANELEIRA', 'BARRA'];
 export const looksLikeMachine = (name: string) => /\b(cadeira|maquina|mesa flexora|leg ?press|hack|smith|pec ?deck|articulad[ao]|projetad[ao]|reclinad[ao]|newtech|extensora|flexora|panturrilha em pe)\b/.test(norm(name));
 const tg = (e: LibEx) => String(e.tags?.target || '').toUpperCase();
 
+/** (23 out 2026) Um exercício pode ser substituto de outro? Mesmo músculo (tags.target; sem tag, mesma categoria) e nunca alongamento/mobilidade/cardio no lugar de musculação (nem o contrário). */
+export function isCompatibleSub(orig: LibEx | null | undefined, cand: LibEx | null | undefined): boolean {
+  if (!orig || !cand || !orig.id || !cand.id || orig.id === cand.id) return false;
+  const kind = (e: LibEx) => { const c = norm(e.category); const t = tg(e); return c === 'mobilidade' || t === 'MOBILIDADE' ? 'MOB' : c === 'cardio' || t === 'CARDIO' ? 'CARDIO' : 'FORCA'; };
+  if (kind(orig) !== kind(cand)) return false;
+  const ot = tg(orig); const ct = tg(cand);
+  return ot && ct ? ot === ct : norm(orig.category) === norm(cand.category);
+}
+
 /** O melhor substituto da biblioteca para `orig` (ou null se nada serve). */
 export function pickSwap(orig: LibEx, pool: LibEx[], ctx: SwapCtx): SwapTarget | null {
   const origTarget = tg(orig); const origEq = String(orig.tags?.equipment || '').toUpperCase(); const origMech = String(orig.tags?.mechanic || '').toUpperCase();

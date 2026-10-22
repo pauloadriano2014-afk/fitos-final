@@ -15,7 +15,8 @@ const post = async (fn: any, as: string | null, body: any) => {
   const r = await fn(new Request('http://x/api', { method: 'POST', headers, body: JSON.stringify(body) })); let j: any = null; try { j = await r.json(); } catch {} return { status: r.status, json: j };
 };
 // uuids aleatórios (id da refeição e uniqueId do item) não entram na comparação. `reps` também não: desde 19 out 2026 o treino novo transforma séries de repetição igual em pirâmide (lib/ai/repSchemes.ts, testada em t_rep_schemes), o que a rota antiga não fazia
-const strip = (o: any): any => Array.isArray(o) ? o.map(strip) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).filter(([k]) => !['uniqueId', 'reps'].includes(k) && !(k === 'id' && typeof o[k] === 'string' && /^[0-9a-f-]{36}$/.test(o[k]))).map(([k, v]) => [k, strip(v)])) : o;
+// (23 out 2026) 'substitute' fora da comparação com a rota antiga: agora o substituto da IA só vale se for do mesmo músculo (testado em t_gen_rules)
+const strip = (o: any): any => Array.isArray(o) ? o.map(strip) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).filter(([k]) => !['uniqueId', 'reps', 'substitute'].includes(k) && !(k === 'id' && typeof o[k] === 'string' && /^[0-9a-f-]{36}$/.test(o[k]))).map(([k, v]) => [k, strip(v)])) : o;
 
 function seed() {
   for (const k of Object.keys(db)) db[k].length = 0;
