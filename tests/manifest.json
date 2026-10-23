@@ -283,6 +283,9 @@
  "t_units": [
   "build2.mjs"
  ],
+ "t_user_photo": [
+  "build75.mjs"
+ ],
  "t_web_print": [
   "build43.mjs"
  ],
