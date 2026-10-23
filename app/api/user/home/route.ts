@@ -24,6 +24,7 @@ export async function GET(req: Request) {
       select: { 
         id: true, 
         name: true, 
+        photoUrl: true,   // 📷 foto de perfil (link do R2): o app do aluno mostra a mesma foto em qualquer aparelho
         currentXP: true, 
         plan: true,
         nextCheckInDate: true, 

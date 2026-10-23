@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { getAuthUser } from '@/lib/auth';
+import { validPhotoUrl } from '@/lib/photoUrl';
 
 
 // 🔥 FUNÇÃO DE MURALHA: Verifica se o Coach é dono deste Aluno
@@ -22,7 +23,7 @@ async function checkUserOwnership(userId: string, adminId: string | null) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { userId, name, phone, password, adminId } = body; // 🔥 adminId adicionado
+    const { userId, name, phone, password, adminId, photoUrl } = body; // 🔥 adminId adicionado
 
     if (!userId) {
       return NextResponse.json({ error: "ID do usuário obrigatório" }, { status: 400 });
@@ -43,12 +44,23 @@ export async function PUT(req: Request) {
         if (!isOwner) return NextResponse.json({ error: "Acesso Negado: Você não pode alterar os dados deste aluno." }, { status: 403 });
     }
 
+    // 📷 (23 out 2026) Foto de perfil: o app sobe a imagem para o R2 (/api/upload-image) e manda só o LINK. Só com login (token) e só link do nosso R2;
+    // null ou vazio apaga a foto. Antes a foto ficava só no aparelho (base64) e nem o coach nem outro aparelho do aluno via.
+    let photoChange: { set: boolean; value: string | null } = { set: false, value: null };
+    if (photoUrl !== undefined) {
+        if (!authUser) return NextResponse.json({ error: "Faça login de novo para trocar a foto." }, { status: 401 });
+        const checked = validPhotoUrl(photoUrl);
+        if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+        photoChange = { set: true, value: checked.value };
+    }
+
     // Prepara o objeto de atualização
     const updateData: any = {};
     if (name) updateData.name = name;
     if (phone) updateData.phone = phone;
     // 🔒 Senha SEMPRE em hash — antes ia em texto puro pro banco.
     if (password) updateData.password = await bcrypt.hash(password, 10);
+    if (photoChange.set) updateData.photoUrl = photoChange.value;
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
