@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 import { describeSave, describeSubstitutes, autoResolveEquipment } from '@/lib/workoutAdjust';
+import { recordCoachSave } from '@/lib/ai/genSnapshots';
 
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
@@ -118,6 +119,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         sendPushToUser(student, '🏋️ Treino atualizado!', `Seu coach atualizou "${workout.name}". Confira as mudanças.`, { type: 'workout_updated', workoutId: id }).catch(() => {});
       }
     }
+
+    // 🧠 (23 out 2026) se este treino veio da IA (gerado nos últimos 3 dias), registra o que o coach corrigiu (nunca atrapalha o salvar)
+    await recordCoachSave({ studentId: existingWorkout.userId, workoutId: id, rows: savedRows });
 
     // 🛠️ (9 out 2026) o que mudou na ficha (para o coach avisar o aluno) e os avisos de aparelho que a troca resolveu. Campos EXTRAS na resposta: o app antigo ignora.
     const adjustment = await describeSave(beforeRows, savedRows);
