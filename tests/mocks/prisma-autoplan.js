@@ -1,7 +1,7 @@
 // Banco em memória para o teste do plano automático (lib/autoPlan.ts). Implementa só o que o pipeline usa.
 const { randomUUID } = require('crypto');
 const T = (globalThis.__DB = {
-  user: [], anamnese: [], workout: [], workoutExercise: [], diet: [], meal: [], foodItem: [], foodItemMeta: [], exercise: [], autoPlanRun: [], food: [], dietDayScheme: [], workoutHistory: [], aiLog: [], dailyCheckin: [], challengeCheckin: [], templateCollection: [], workoutTemplate: [], genPrefs: [], genPreset: [], equipmentReport: [],
+  user: [], anamnese: [], workout: [], workoutExercise: [], diet: [], meal: [], foodItem: [], foodItemMeta: [], exercise: [], autoPlanRun: [], food: [], dietDayScheme: [], workoutHistory: [], aiLog: [], dailyCheckin: [], challengeCheckin: [], templateCollection: [], workoutTemplate: [], genPrefs: [], genPreset: [], workoutGenSnapshot: [], equipmentReport: [],
 });
 const get = (o, k) => o?.[k];
 function match(row, where) {
@@ -91,6 +91,7 @@ const prisma = {
   foodItem: table('foodItem'),
   foodItemMeta: table('foodItemMeta'),
   exercise: table('exercise'),
+  workoutGenSnapshot: table('workoutGenSnapshot', () => ({ workoutId: null, saved: null, edits: null, savedAt: null, editCount: 0, engine: null })),
   food: table('food'),
   dietDayScheme: table('dietDayScheme'),
   workoutHistory: table('workoutHistory'),

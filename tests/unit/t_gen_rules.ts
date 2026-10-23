@@ -14,6 +14,9 @@ import { GET as presetsGET, POST as presetsPOST, DELETE as presetsDEL } from '/h
 import { GET as tagsGET, POST as tagsPOST } from '/home/user/fitos-final/app/api/exercise/tags-review/route';
 import { PUT as exercisePUT } from '/home/user/fitos-final/app/api/exercise/route';
 import { GET as syncTags } from '/home/user/fitos-final/app/api/exercise/sync-tags/route';
+import { POST as workoutPOST } from '/home/user/fitos-final/app/api/workout/route';
+import { PUT as workoutPUT } from '/home/user/fitos-final/app/api/workout/[id]/route';
+import { GET as learnGET } from '/home/user/fitos-final/app/api/gen-learning/route';
 
 const db: any = (prisma as any).__db; const G: any = globalThis;
 const quiet = async <T,>(fn: () => Promise<T>) => { const w = console.warn, e = console.error, l = console.log; console.warn = console.error = console.log = () => {}; try { return await fn(); } finally { console.warn = w; console.error = e; console.log = l; } };
@@ -339,6 +342,59 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     const ka = k.body.exercisesByDay.A.map((e: any) => e.exerciseId.split('-')[0]); assert.ok(ka.lastIndexOf('biceps') < ka.indexOf('peito'), 'keepGroupOrder: segue a estrutura, cada músculo junto: ' + ka.join());
     const first = r.body.exercisesByDay.A.find((e: any) => e.exerciseId.startsWith('peito'));
     assert.equal(first.exerciseId, 'peito-1', 'o composto (peito-1) abre o grupo: ' + r.body.exercisesByDay.A.map((e: any) => e.exerciseId).join());
+  });
+
+  // ═════ 5) aprender com as edições do coach (etapa 2): a geração guarda uma cópia; ao salvar, registra o que o coach mudou ═════
+  const rowsOf = (byDay: any, edit?: (day: string, list: any[]) => any[]) => {
+    const out: any[] = [];
+    for (const [day, list0] of Object.entries<any[]>(byDay)) for (const e of (edit ? edit(day, list0) : list0)) out.push({ exerciseId: e.exerciseId, day, sets: e.blocks[0].sets, reps: e.blocks[0].reps, restTime: 60, technique: JSON.stringify({ t: e.blocks[0].technique || '', b: e.blocks, o: '' }), observation: '', substitutes: [] });
+    return out;
+  };
+  const savePost = (rows: any[]) => call(workoutPOST, P, { method: 'POST', body: { userId: 's1', name: 'R', exercises: rows, startDate: new Date().toISOString() } });
+  const savePut = async (id: string, rows: any[]) => { const r = await quiet(() => workoutPUT(new Request('http://x/api/workout/' + id, { method: 'PUT', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + P }, body: JSON.stringify({ name: 'R', exercises: rows, startDate: new Date().toISOString(), endDate: new Date(Date.now() + 86400000 * 30).toISOString() }) }), { params: { id } })) as Response; return { status: r.status }; };
+
+  await t('aprender: a geração devolve o id da cópia guardada (ordem já corrigida pelo servidor); sem a tabela a geração segue normal e sem id', async () => {
+    seedGen(); db.workoutGenSnapshot.length = 0;
+    const r = await gen({}); assert.equal(r.status, 200); assert.ok(r.body.genSnapshotId, 'id da cópia no corpo'); assert.equal(db.workoutGenSnapshot.length, 1);
+    const snap = db.workoutGenSnapshot[0]; assert.equal(snap.coachId, PAULO_ID); assert.equal(snap.studentId, 's1'); assert.equal(snap.engine, 'GEMINI'); assert.equal(snap.workoutId, null);
+    assert.deepEqual(Object.keys(snap.generated), ['A', 'B']); assert.equal(snap.generated.A.length, 4); assert.deepEqual(snap.generated.A.map((x: any) => x.id), r.body.exercisesByDay.A.map((e: any) => e.exerciseId)); assert.ok(snap.generated.A[0].n && snap.generated.A[0].g && snap.generated.A[0].s === 3 && snap.generated.A[0].r, 'nome, grupo, séries e repetições');
+    const keep = (prisma as any).workoutGenSnapshot; (prisma as any).workoutGenSnapshot = undefined;
+    try { const r2 = await gen({}); assert.equal(r2.status, 200); assert.ok(!('genSnapshotId' in r2.body), 'sem tabela: sem id e sem erro'); } finally { (prisma as any).workoutGenSnapshot = keep; }
+    const old = db.workoutGenSnapshot[0]; old.createdAt = new Date(Date.now() - 130 * 86400000); await gen({}); assert.ok(!db.workoutGenSnapshot.includes(old), 'cópias com mais de 120 dias são apagadas');
+  });
+  await t('aprender: ao salvar o treino da IA, o servidor registra a troca, a ordem e as séries que o coach mudou; salvar de novo atualiza; fora dos 3 dias não registra', async () => {
+    seedGen(); db.workoutGenSnapshot.length = 0; const r = await gen({}); const sid = r.body.genSnapshotId;
+    const A = r.body.exercisesByDay.A.map((e: any) => e.exerciseId); const pe = A.filter((id: string) => id.startsWith('peito')); const bi = A.filter((id: string) => id.startsWith('biceps'));
+    // coach: troca um peito por outro peito, inverte os bíceps e põe 5 séries no 1º exercício
+    const spare = ['peito-1', 'peito-2', 'peito-3', 'peito-4', 'peito-5', 'peito-6'].find((id) => !pe.includes(id)) as string;
+    const rows = rowsOf(r.body.exercisesByDay, (day, list) => day !== 'A' ? list : [...list.filter((e) => e.exerciseId === pe[0]), { ...list.find((e) => e.exerciseId === pe[1]), exerciseId: spare, title: 'x' }, ...list.filter((e) => e.exerciseId === bi[1]), ...list.filter((e) => e.exerciseId === bi[0])]);
+    rows[0].sets = 5; rows[0].technique = JSON.stringify({ t: '', b: [{ sets: '5', reps: r.body.exercisesByDay.A[0].blocks[0].reps, technique: '' }], o: '' });
+    const post = await savePost(rows); assert.equal(post.status, 200, JSON.stringify(post.json));
+    let snap = db.workoutGenSnapshot.find((x: any) => x.id === sid); assert.ok(snap.workoutId, 'ligou ao treino criado'); assert.ok(snap.savedAt && snap.saved && snap.edits);
+    const types = snap.edits.map((e: any) => e.type).sort(); assert.ok(types.includes('swapped') && types.includes('moved') && types.includes('sets'), types.join());
+    const sw = snap.edits.find((e: any) => e.type === 'swapped'); assert.equal(sw.fromId, pe[1]); assert.equal(sw.toId, spare); assert.equal(sw.day, 'A'); assert.equal(snap.editCount, snap.edits.length); assert.equal(snap.edits.find((e: any) => e.type === 'sets').to, 5);
+    // salvar de novo (PUT no mesmo treino) sem mudar mais nada: continua com as mesmas correções; tirar um exercício acrescenta
+    const wid = snap.workoutId; db.workout.push(db.workout.find((w: any) => w.id === wid) || { id: wid, userId: 's1' });
+    const before = snap.editCount; assert.equal((await savePut(wid, rows)).status, 200); snap = db.workoutGenSnapshot.find((x: any) => x.id === sid); assert.equal(snap.editCount, before);
+    assert.equal((await savePut(wid, rows.filter((x) => x.exerciseId !== bi[0]))).status, 200); snap = db.workoutGenSnapshot.find((x: any) => x.id === sid); assert.ok(snap.edits.some((e: any) => e.type === 'removed' && e.id === bi[0]), JSON.stringify(snap.edits.map((e: any) => e.type)));
+    // depois de 3 dias não é mais "correção da IA": nada muda
+    snap.createdAt = new Date(Date.now() - 4 * 86400000); const frozen = JSON.stringify(snap.edits); await savePut(wid, rows.slice(0, 2)); assert.equal(JSON.stringify(db.workoutGenSnapshot.find((x: any) => x.id === sid).edits), frozen);
+  });
+  await t('aprender: salvar treino que não veio da IA (outro aluno ou sem cópia) não registra nada nem atrapalha; tabela ausente não derruba o salvar', async () => {
+    seedGen(); db.workoutGenSnapshot.length = 0; const r = await gen({}); const rows = rowsOf(r.body.exercisesByDay);
+    db.user.push({ id: 's9', role: 'USER', name: 'Outro', coachId: PAULO_ID }); const other = await call(workoutPOST, P, { method: 'POST', body: { userId: 's9', name: 'R', exercises: rows } }); assert.equal(other.status, 200);
+    assert.equal(db.workoutGenSnapshot[0].workoutId, null, 'a cópia do s1 não foi ligada ao treino do s9'); assert.equal(db.workoutGenSnapshot[0].savedAt, null);
+    // um 2º treino do MESMO aluno salvo depois que a cópia já foi ligada ao 1º não mexe nessa cópia
+    assert.equal((await savePost(rows)).status, 200); const linked = db.workoutGenSnapshot[0]; const wid1 = linked.workoutId; assert.ok(wid1); const edits1 = JSON.stringify(linked.edits);
+    assert.equal((await savePost(rows.slice(0, 2))).status, 200); assert.equal(db.workoutGenSnapshot[0].workoutId, wid1); assert.equal(JSON.stringify(db.workoutGenSnapshot[0].edits), edits1, 'outro treino do aluno não vira "correção" da mesma cópia');
+    const keep = (prisma as any).workoutGenSnapshot; (prisma as any).workoutGenSnapshot = undefined; try { assert.equal((await savePost(rows)).status, 200, 'sem tabela o salvar funciona'); } finally { (prisma as any).workoutGenSnapshot = keep; }
+  });
+  await t('aprender: /api/gen-learning lista só as do próprio coach com o resumo; master vê as de outro; coach não vê as de outro', async () => {
+    seedGen(); db.workoutGenSnapshot.length = 0; const r = await gen({}); const rows = rowsOf(r.body.exercisesByDay, (d, l) => (d === 'A' ? l.slice().reverse() : l)); await savePost(rows);
+    const mine = await call(learnGET, P, { path: '/api/gen-learning' }); assert.equal(mine.status, 200); assert.equal(mine.json.items.length, 1); const it = mine.json.items[0]; assert.equal(it.saved, true); assert.ok(it.summary.moved > 0 && it.summary.total === it.summary.moved + it.summary.removed + it.summary.added + it.summary.swapped + it.summary.changed); assert.ok(!('generated' in it) && !('edits' in it), 'a lista é só o resumo');
+    assert.equal((await call(learnGET, C1, { path: '/api/gen-learning' })).json.items.length, 0, 'coach 1 não tem as do Paulo'); assert.equal((await call(learnGET, C1, { path: '/api/gen-learning?coachId=' + PAULO_ID })).status, 403);
+    assert.equal((await call(learnGET, P, { path: '/api/gen-learning?coachId=c1' })).json.items.length, 0); assert.equal((await call(learnGET, null, { path: '/api/gen-learning' })).status, 401);
+    const keep = (prisma as any).workoutGenSnapshot; (prisma as any).workoutGenSnapshot = undefined; try { assert.deepEqual((await call(learnGET, P, { path: '/api/gen-learning' })).json, { items: [], missingTable: true }); } finally { (prisma as any).workoutGenSnapshot = keep; }
   });
 
   console.log(`\n${ok} verificações dos filtros de exercícios`);

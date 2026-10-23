@@ -20,6 +20,7 @@ import { compactToFull } from '@/lib/ai/compactOutput';
 import { MUSCLE_GROUPS } from '@/lib/ai/splitPresets';
 import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, repRange, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
 import { orderDayExercises } from '@/lib/ai/exerciseOrder';
+import { recordGenerated } from '@/lib/ai/genSnapshots';
 import { pickSwap, isCompatibleSub, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
 import { loadAdminLibrary } from '@/lib/genLibrary';
@@ -699,10 +700,14 @@ Responda APENAS com JSON válido.`.trim();
       try { await (prisma as any).aiLog.create({ data: { userId: adminId, question: `gerar-treino:${selectedAI}`, answer: JSON.stringify({ ...genUsage, ms: genUsage.ms ?? Date.now() - genT0, studentId: userId, bankExercises: adminExercises.length, days: workoutTabs.length, exercises: totalExercises, ghosts: ghostCount, ...(quality ? { smart: true, score: quality.score, newPct: quality.stats.newPct, swapped: quality.stats.swapped, filled: quality.stats.filled, candidates: book.size } : {}), ...(applied.active ? { rulesRemoved: applied.removedTotal, pinned: applied.pinned.length } : {}) }).slice(0, 2000) } }); } catch (e) { /* sem registro */ }
     }
 
+    // 🧠 (23 out 2026) guarda uma cópia do treino gerado para comparar com o que o coach corrigir ao salvar (etapa 2; nunca derruba a geração)
+    const genSnapshotId = await recordGenerated({ coachId: adminId, studentId: userId, engine: selectedAI, exercisesByDay: validatedDays, workoutTabs });
+
     return {
       status: 200,
       body: {
         success: true,
+        ...(genSnapshotId ? { genSnapshotId } : {}),
         workoutName: parsed.workoutName || `Rotina — ${user.name}`,
         workoutModel: parsed.workoutModel || 'CARGA',
         reasoning: parsed.reasoning || '',

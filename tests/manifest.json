@@ -137,6 +137,9 @@
   "build.mjs",
   "build6.mjs"
  ],
+ "t_gen_learning": [
+  "build75.mjs"
+ ],
  "t_gen_rules": [
   "build44.mjs"
  ],

@@ -1,0 +1,23 @@
+// prisma/schema/gen-learning.prisma
+// 🧠 (23 out 2026) APRENDER COM AS EDIÇÕES DO COACH (etapa 2). Quando a IA gera um treino, o servidor guarda uma cópia enxuta ("generated"). Quando o coach salva esse treino nos 3 dias
+// seguintes, o servidor compara com o que ele deixou ("saved") e anota o que mudou ("edits": exercício trocado/tirado/acrescentado, ordem, séries, repetições, técnica).
+// Nada aparece nem muda para o coach: é só registro, usado depois para dar exemplos reais à IA (etapa 3).
+// Tabela nova, SEM relação com User/Workout de propósito (como GenPrefs e InsightMemory): só adiciona (`npx prisma db push`), nada é apagado nem alterado.
+// Antes do push tudo continua funcionando normalmente, só sem registrar (o código ignora a falta da tabela). Registros com mais de 120 dias são apagados sozinhos.
+model WorkoutGenSnapshot {
+  id         String    @id @default(uuid())
+  coachId    String                       // quem pediu a geração
+  studentId  String
+  engine     String?                      // motor da IA (haiku, gemini, argon...)
+  generated  Json                         // o treino como a IA entregou (já com a ordem do servidor)
+  saved      Json?                        // o treino como o coach deixou na última vez que salvou (dentro dos 3 dias)
+  edits      Json?                        // lista do que mudou
+  editCount  Int       @default(0)
+  workoutId  String?                      // a rotina criada a partir dele
+  createdAt  DateTime  @default(now())
+  savedAt    DateTime?
+
+  @@index([coachId, createdAt])
+  @@index([studentId, createdAt])
+  @@index([workoutId])
+}

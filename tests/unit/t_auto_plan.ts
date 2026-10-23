@@ -166,6 +166,7 @@ function installAI(opts: { failDiet?: () => boolean; failWorkout?: () => boolean
   const run8: any = await AP.runStore.get(st.runId!);
   assert.equal(run8.attempts, 1); assert.equal(run8.step, 'DONE'); assert.equal(run8.error, null); assert.equal(run8.workoutIds.length, 2); assert.ok(run8.dietId); assert.equal(run8.summary.workoutDone, true); assert.equal(run8.summary.dietDone, true);
   assert.deepEqual(run8.summary.flags.some((f: string) => f.includes('Hipertensão')), true, 'pontos de atenção gravados'); assert.equal(run8.summary.focus, 'Glúteos');
+  assert.ok(db.workoutGenSnapshot.length >= 2 && db.workoutGenSnapshot.every((x: any) => run8.workoutIds.includes(x.workoutId)), 'cada treino automático liga a cópia da IA ao treino criado (para comparar se o coach editar)');
   const ws = db.workout.filter((w: any) => run8.workoutIds.includes(w.id)).sort((a: any, b: any) => a.startDate - b.startDate);
   assert.equal(ws.length, 2); assert.ok(ws[0].name.includes('FICHA 8 SEMANAS') && ws[0].name.includes('Fase 1') && ws[1].name.includes('Fase 2'));
   const base = new Date(run8.summary.baseDate).getTime();

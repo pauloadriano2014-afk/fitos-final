@@ -17,6 +17,7 @@ import prisma from '@/lib/prisma';
 import { PAULO_ID } from '@/lib/masterIds';
 import { isMasterId } from '@/lib/auth';
 import { generateWorkoutPlan } from '@/lib/ai/workoutGen';
+import { linkSnapshotToWorkout } from '@/lib/ai/genSnapshots';
 import { generateDietDay, allowedFoodIds, type MacrosOverride } from '@/lib/ai/dietGen';
 import { calcAge } from '@/lib/macroPlanner';
 import {
@@ -556,6 +557,7 @@ async function doWorkouts(ctx: Ctx): Promise<string[]> {
       return w.id;
     });
     ids.push(workoutId);
+    await linkSnapshotToWorkout(r.genSnapshotId, workoutId);   // 🧠 liga a cópia da IA ao treino criado (para comparar se o coach editar nos 3 dias seguintes)
     await runStore.update(run.id, { workoutIds: [...ids], summary: { ...(run.summary || {}), baseDate: baseDate.toISOString(), workoutDone: ids.length === spec.phases.length } });
     run.workoutIds = [...ids];
   }

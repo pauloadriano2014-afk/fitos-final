@@ -6,6 +6,7 @@ import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { buildLastLoads } from '@/lib/exerciseLoad';
 import { buildLoadSuggestions } from '@/lib/loadSuggest';
 import { sendPushToUser } from '@/app/utils/sendNotification';
+import { recordCoachSave } from '@/lib/ai/genSnapshots';
 
 const expo = new Expo();
 export const dynamic = 'force-dynamic';
@@ -210,6 +211,7 @@ export async function POST(req: Request) {
       }
     });
 
+    let savedRows: any[] = [];
     if (exercises && exercises.length > 0) {
       const allIds: string[] = [];
       exercises.forEach((ex: any) => {
@@ -253,7 +255,11 @@ export async function POST(req: Request) {
               data: exercisesToCreate
           });
       }
+      savedRows = exercisesToCreate;
     }
+
+    // 🧠 (23 out 2026) se este treino veio da IA (gerado nos últimos 3 dias), registra o que o coach corrigiu (nunca atrapalha o salvar)
+    await recordCoachSave({ studentId: userId, workoutId: workout.id, rows: savedRows });
 
     if (notifyStudent) {
       const student = await prisma.user.findUnique({
