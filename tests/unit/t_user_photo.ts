@@ -39,5 +39,10 @@ const t = async (name: string, fn: () => any) => { try { seed(); await fn(); ok+
     U.find((u: any) => u.id === 'aluno').photoUrl = OK; const r = await put({ userId: 'aluno', name: 'Novo Nome' }, tok('aluno')); assert.equal(r.status, 200); const u = U.find((u: any) => u.id === 'aluno'); assert.equal(u.name, 'Novo Nome'); assert.equal(u.photoUrl, OK);
     assert.ok(/photoUrl: true/.test(fs.readFileSync('/home/user/fitos-final/app/api/user/home/route.ts', 'utf8')), '/api/user/home devolve photoUrl');
   });
+  await t('a resposta nunca devolve a senha (nem o hash), com troca de senha, nome ou foto', async () => {
+    U.find((u: any) => u.id === 'aluno').password = 'HASH-ANTIGO';
+    for (const body of [{ userId: 'aluno', name: 'Novo' }, { userId: 'aluno', password: 'nova-senha-123' }, { userId: 'aluno', photoUrl: OK }]) { const r = await put(body, tok('aluno')); assert.equal(r.status, 200); assert.ok(r.json.user && r.json.user.id === 'aluno', 'devolve o usuário'); assert.ok(!('password' in r.json.user), 'sem o campo password'); assert.ok(!JSON.stringify(r.json).includes('HASH-ANTIGO') && !JSON.stringify(r.json).includes('$2'), 'nem o hash'); }
+    assert.ok(U.find((u: any) => u.id === 'aluno').password.startsWith('$2'), 'a senha nova foi guardada em hash no banco');
+  });
   console.log(`\n${bad ? 'FALHOU' : 'OK'}: ${ok} ok, ${bad} falharam`); process.exit(bad ? 1 : 0);
 })();

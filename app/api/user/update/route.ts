@@ -67,7 +67,9 @@ export async function PUT(req: Request) {
       data: updateData,
     });
 
-    return NextResponse.json({ success: true, user: updatedUser });
+    // 🔒 (23 out 2026) A resposta nunca leva a senha (nem o hash): antes devolvia o usuário inteiro, com o campo `password`.
+    const { password: _hash, ...safeUser } = updatedUser as any;
+    return NextResponse.json({ success: true, user: safeUser });
 
   } catch (error) {
     console.error("Erro ao atualizar perfil:", error);
