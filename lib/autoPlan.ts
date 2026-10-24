@@ -510,7 +510,7 @@ async function doWorkouts(ctx: Ctx): Promise<string[]> {
     const picked = await fromTemplate(ctx, phase, i + 1);
     if (picked) ctx.quality.templates.push({ phase: phase.key, id: picked.id, name: picked.name });
     const r = picked ? picked.body : await withRetry(`treino ${phase.key}`, async () => {
-      const res = await generateWorkoutPlan({ userId: user.id, adminId, cycleConfig });
+      const res = await generateWorkoutPlan({ userId: user.id, adminId, cycleConfig: { ...cycleConfig, subsOnlyTagged: false } })   // plano automático (aluno sem coach revisando): o servidor continua escolhendo o substituto;
       if (res.status === 422 && res.body?.code === 'BANCO_INSUFICIENTE') throw new ManualRequired('BANCO_INSUFICIENTE', res.body.error);
       if (res.status !== 200) throw new Error(res.body?.error || `Falha ao gerar o treino (${res.status}).`);
       // 🛡️ confere o que a IA devolveu (dia vazio, sem cardio, séries erradas...): conserta o que dá, manda refazer o que não dá

@@ -2,6 +2,7 @@
 // 🛠️ (9 out 2026) "Não tem esse aparelho na academia": avisos do aluno (EquipmentReport). Nada aqui apaga exercício da biblioteca nem do treino:
 // o aviso só (1) chega ao coach, (2) mantém a IA longe do exercício para ESTE aluno e (3) vira alerta quando o coach monta ou importa treino para ele.
 import prisma from '@/lib/prisma';
+import { muscleTarget } from '@/lib/ai/muscleTarget';
 
 /** Avisos que valem como "este aluno não tem": em aberto ou já tratados. VOLTOU A TER / OUTRA ACADEMIA saem dos alertas (ficam só no histórico). */
 export const ACTIVE_STATUS = ['OPEN', 'RESOLVED'];
@@ -22,7 +23,7 @@ export async function unavailableExerciseIds(userId: string, db: any = prisma): 
  */
 export function filterUnavailable<T extends { id: string; name: string; category?: string | null; tags?: any }>(list: T[], banned: Set<string>): { list: T[]; avoided: string[] } {
   if (!banned.size) return { list, avoided: [] };
-  const tgt = (ex: T) => String((ex.tags as any)?.target || ex.category || '').toUpperCase();
+  const tgt = (ex: T) => muscleTarget(ex as any);
   const kept = list.filter((ex) => !banned.has(ex.id));
   const left = new Map<string, number>();
   kept.forEach((ex) => left.set(tgt(ex), (left.get(tgt(ex)) || 0) + 1));

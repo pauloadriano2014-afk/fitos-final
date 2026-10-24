@@ -5,6 +5,7 @@
 // dele, sem risco para a limitação e sem pedir mais nível do que ele tem. Entre os que servem, prefere o mesmo tipo de movimento (composto/isolado), e — em condomínio ou em casa —
 // os que usam menos aparelho (halter, peso do corpo, livre, barra) antes de polia e máquina.
 import type { LevelKey } from '@/lib/studentLevel';
+import { muscleTarget } from '@/lib/ai/muscleTarget';
 
 export interface LibEx { id: string; name: string; category: string; subCategory?: string | null; videoUrl?: string | null; tags?: any; environments?: string[] | null }
 export interface SwapTarget { id: string; name: string; videoUrl: string | null; category: string; subCategory: string | null }
@@ -19,7 +20,7 @@ const arr = (v: any): string[] => (Array.isArray(v) ? v.map((x) => String(x)) : 
 const LIGHT = ['HALTER', 'LIVRE', 'PESO_CORPORAL', 'CANELEIRA', 'BARRA'];
 // A tag `equipment` da biblioteca nem sempre diz a verdade ("Cadeira abdutora" está como LIVRE). Pelo nome dá para desconfiar de máquina: em condomínio/casa é o último recurso.
 export const looksLikeMachine = (name: string) => /\b(cadeira|maquina|mesa flexora|leg ?press|hack|smith|pec ?deck|articulad[ao]|projetad[ao]|reclinad[ao]|newtech|extensora|flexora|panturrilha em pe)\b/.test(norm(name));
-const tg = (e: LibEx) => String(e.tags?.target || '').toUpperCase();
+const tg = (e: LibEx) => (e.tags?.target ? muscleTarget(e as any) : '');   // sem etiqueta continua vazio (aí vale a categoria)
 
 /** (23 out 2026) Um exercício pode ser substituto de outro? Mesmo músculo (tags.target; sem tag, mesma categoria) e nunca alongamento/mobilidade/cardio no lugar de musculação (nem o contrário). */
 export function isCompatibleSub(orig: LibEx | null | undefined, cand: LibEx | null | undefined): boolean {

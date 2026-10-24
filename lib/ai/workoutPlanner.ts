@@ -17,6 +17,7 @@ import { LEVEL_LABEL, type LevelKey } from '@/lib/studentLevel';
 import { sessionsOf, suggestLoad } from '@/lib/loadSuggest';
 import { sideValue } from '@/lib/exerciseLoad';
 import { shapeReps, type RepChoice } from '@/lib/ai/repSchemes';
+import { muscleTarget } from '@/lib/ai/muscleTarget';
 
 export interface PlanGroup { id: string; qty: number; sets?: number; rest?: number }
 export interface PlanDay { name: string; groups: PlanGroup[] }
@@ -29,7 +30,7 @@ export interface GenEx { exerciseId: string; title: string; videoUrl: string; ca
 export const ANCHOR_MAX_CYCLES = 3;    // uma âncora (composto) fica no máximo 3 rotinas seguidas; depois vira uma variação
 export const MAX_ANCHORS_PER_DAY = 2;  // e só as 2 primeiras de cada dia seguram (o resto gira), senão biblioteca cheia de compostos nunca varia
 
-const targetOf = (e: { tags?: any; category?: any }) => String(e.tags?.target || e.category || '').toUpperCase();
+const targetOf = (e: { tags?: any; category?: any; subCategory?: any }) => muscleTarget(e);   // o músculo já corrigido pela categoria (ver muscleTarget.ts)
 const mechOf = (e: { tags?: any }) => String(e.tags?.mechanic || '').toUpperCase();
 const equipOf = (e: { tags?: any }) => String(e.tags?.equipment || '').toUpperCase();
 const isCardioLib = (e: { tags?: any; category?: any }) => String(e.category || '').toUpperCase() === 'CARDIO' || String(e.tags?.target || '').toUpperCase() === 'CARDIO';
@@ -51,15 +52,19 @@ const LEVEL_TEXT: Record<LevelKey, string> = {
 const PHASE_REPS: Record<string, [number, number]> = { HIPERTROFIA: [8, 15], FORCA: [3, 6], CHOQUE: [6, 12], DELOAD: [15, 20], EMAGRECIMENTO: [12, 20], DEFINICAO: [12, 15] };
 
 /** Faixa de repetições da fase, ajustada ao nível (iniciante não faz série de 3 a 5 repetições no primeiro mês). */
-export function repRange(phase: string | null | undefined, level: LevelKey | null | undefined): [number, number] {
+export const REP_CAP = 15;         // 🔒 (24 out 2026) teto de repetições por série: os alunos do Paulo fazem 15/12/10/8, nunca 18 ou 20 (a faixa da fase chegava a 20 e a IA usava)
+export const CALF_REP_CAP = 20;    // panturrilha é a exceção (20/18/15/15 é normal nela) quando o coach não escolheu um teto próprio
+const capOf = (v: any): number => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 6 && n <= 40 ? n : REP_CAP; };
+export function repRange(phase: string | null | undefined, level: LevelKey | null | undefined, cap?: number | null): [number, number] {
   const base = PHASE_REPS[String(phase || '').toUpperCase()] || [8, 15];
-  if (level === 'INICIANTE') return [Math.max(base[0], base[1] <= 6 ? 6 : 8), Math.max(base[1], 10)];
-  return base;
+  const r: [number, number] = level === 'INICIANTE' ? [Math.max(base[0], base[1] <= 6 ? 6 : 8), Math.max(base[1], 10)] : [base[0], base[1]];
+  const hi = Math.min(r[1], capOf(cap));
+  return [Math.min(r[0], hi), hi];
 }
 
 export interface LevelPolicy { level: LevelKey; label: string; banned: string[]; reps: [number, number]; text: string }
-export function levelPolicy(level: LevelKey, phase: string | null | undefined): LevelPolicy {
-  const reps = repRange(phase, level);
+export function levelPolicy(level: LevelKey, phase: string | null | undefined, cap?: number | null): LevelPolicy {
+  const reps = repRange(phase, level, cap);
   const banned = advancedTechsFor(level);
   const text = `NÍVEL DO ALUNO: ${LEVEL_LABEL[level]} — ${LEVEL_TEXT[level]}\nFaixa de repetições desta fase para este nível: ${reps[0]} a ${reps[1]} (cardio e técnicas com repetição própria ficam de fora).${banned.length ? `\nTécnicas PROIBIDAS para este nível: ${banned.join(', ')}.` : ''}`;
   return { level, label: LEVEL_LABEL[level], banned, reps, text };
@@ -255,6 +260,8 @@ export interface RefineCtx {
   pins?: Set<string>;
   /** escolha de repetições do coach (quadradinho "Repetições" da tela); sem escolha = pirâmide automática pela fase */
   repChoice?: RepChoice;
+  /** teto de repetições por série escolhido pelo coach (sem escolha = REP_CAP; panturrilha fica com CALF_REP_CAP) */
+  repCap?: number | null;
   makeEx: (e: LibEx, blocks: GenBlock[]) => GenEx;
 }
 export interface Quality {
@@ -286,7 +293,8 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
   let pinnedIn = 0;
   const out: Record<string, GenEx[]> = { ...byDay };
   const lvl = ctx.levelRules ? ctx.level : null;
-  const reps = repRange(ctx.phase, lvl);
+  const reps = repRange(ctx.phase, lvl, ctx.repCap);
+  const calfReps = ctx.repCap == null ? repRange(ctx.phase, lvl, CALF_REP_CAP) : reps;   // panturrilha pode passar do teto geral, a menos que o coach tenha escolhido um teto
   const { latestNames, olderNames } = ctx.cands;
   const libOf = (ex: GenEx) => ctx.lib.get(ex.exerciseId);
   const exTarget = (ex: GenEx) => { const l = libOf(ex); return l ? targetOf(l) : String(ex.category || '').toUpperCase(); };
@@ -358,9 +366,10 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
         const want = Number(g.sets); fix(`Dia ${d.name}: "${ex.title}" tinha ${blocks.length} séries, ajustado para ${want}`);
         blocks = blocks.length > want ? blocks.slice(0, want) : [...blocks, ...Array.from({ length: want - blocks.length }, () => ({ ...blocks[blocks.length - 1] }))];
       }
-      blocks = blocks.map((b) => (SPECIAL_REPS.has(techOfBlock(b)) ? b : { ...b, reps: clampReps(b.reps, reps) }));
+      const rr = g?.id === 'PANTURRILHA' ? calfReps : reps;
+      blocks = blocks.map((b) => (SPECIAL_REPS.has(techOfBlock(b)) ? b : { ...b, reps: clampReps(b.reps, rr) }));
       // 🔺 séries todas com a mesma repetição viram pirâmide da fase (15-12-10, 12-10-8...), como o Paulo e a Adri montam; quem já veio variando fica
-      { const sh = shapeReps(blocks, { phase: ctx.phase, range: reps, compound: !!lib && mechOf(lib) === 'COMPOSTO', idx: exIdx, choice: ctx.repChoice }); if (sh !== blocks) { st.repsShaped++; blocks = sh; } }
+      { const sh = shapeReps(blocks, { phase: ctx.phase, range: rr, compound: !!lib && mechOf(lib) === 'COMPOSTO', idx: exIdx, choice: ctx.repChoice }); if (sh !== blocks) { st.repsShaped++; blocks = sh; } }
       const nx = { ...ex, blocks }; if (g) groupOf.set(nx, g);   // objeto novo: o grupo vai junto
       return nx;
     });

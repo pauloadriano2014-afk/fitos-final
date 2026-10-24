@@ -4,7 +4,8 @@ import prisma from '@/lib/prisma';
 import { PAULO_ID } from '/home/user/fitos-final/lib/masterIds';
 import { generateWorkoutPlan } from '/home/user/fitos-final/lib/ai/workoutGen';
 import { suggestImpact, suggestAvoid, pickExtra, cleanExtraPatch, mergeTags, effectiveExtra, EXTRA_KEYS } from '/home/user/fitos-final/lib/exerciseTags';
-import { orderDayExercises, orderedGroupIds } from '/home/user/fitos-final/lib/ai/exerciseOrder';
+import { orderDayExercises, orderedGroupIds, kindOfDay, cleanOrderStyle } from '/home/user/fitos-final/lib/ai/exerciseOrder';
+import { muscleTarget, targetMismatch } from '/home/user/fitos-final/lib/ai/muscleTarget';
 import { effectiveEnvironments, cleanRules, emptyRules, isEmptyRules, mergeRules, describeRules, removalReason, applyRules, removedSummary, loadStudentRules, MAX_IDS } from '/home/user/fitos-final/lib/genRules';
 import { GET as prefsGET, PUT as prefsPUT, DELETE as prefsDEL } from '/home/user/fitos-final/app/api/gen-prefs/route';
 import { POST as previewPOST } from '/home/user/fitos-final/app/api/gen-prefs/preview/route';
@@ -302,17 +303,105 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     seedGen(); r = await gen({ genRules: { excludeJointRisk: [], noHighImpact: true, avoidProfiles: ['GESTANTE'] } }); assert.equal(r.status, 200); assert.ok(r.body.filters.summary.includes('sem alto impacto'));
   });
 
-  await t('substitutos: o que o coach marcou manda; a IA nunca coloca alongamento/mobilidade no lugar de musculação (cai num exercício do mesmo músculo)', async () => {
+  await t('substitutos: por padrão SÓ vale o que o coach marcou na biblioteca (a IA e o servidor não escolhem outro)', async () => {
     const ctl = seedGen();
-    db.exercise.push({ id: 'mob-1', coachId: PAULO_ID, name: 'Alongamento de bíceps', category: 'Mobilidade', subCategory: 'Geral', videoUrl: 'v', tags: { target: 'MOBILIDADE', equipment: 'LIVRE', mechanic: 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'] });
+    db.exercise.find((e: any) => e.id === 'biceps-1').defaultSubstitutes = ['biceps-5'];
+    ctl.setHook((byDay: any) => { for (const d of Object.keys(byDay)) for (const ex of byDay[d]) ex.substitute = { exerciseId: 'biceps-4', title: 'qualquer' }; return byDay; });
+    const r = await gen({}); assert.equal(r.status, 200);
+    const all = Object.values<any[]>(r.body.exercisesByDay).flat();
+    assert.ok(all.length > 0);
+    const tagged = new Map<string, string[]>(db.exercise.filter((e: any) => (e.defaultSubstitutes || []).length).map((e: any) => [e.id, e.defaultSubstitutes]));
+    for (const e of all) { if (e.substitute) assert.ok((tagged.get(e.exerciseId) || []).includes(e.substitute.id), 'substituto não marcado: ' + e.exerciseId + '>' + e.substitute.id); }
+    const b1 = all.find((e: any) => e.exerciseId === 'biceps-1'); if (b1) assert.equal(b1.substitute.id, 'biceps-5', 'o marcado pelo coach vence');
+    const other = all.find((e: any) => !tagged.has(e.exerciseId)); assert.ok(other && !other.substitute, 'sem marcação = sem substituto');
+  });
+
+  await t('substitutos (subsOnlyTagged:false): o que o coach marcou manda; a IA nunca coloca alongamento/mobilidade no lugar de musculação (cai num exercício do mesmo músculo)', async () => {
+    const ctl = seedGen();
+    db.exercise.push({ id: 'mob-1', coachId: PAULO_ID, name: 'Alongamento de bíceps', category: 'Mobilidade', subCategory: 'Geral', videoUrl: 'v', tags: { target: 'MOBILIDADE', equipment: 'LIVRE', mechanic: 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'] } as any);
     db.exercise.find((e: any) => e.id === 'biceps-1').defaultSubstitutes = ['biceps-5'];
     ctl.setHook((byDay: any) => { for (const d of Object.keys(byDay)) for (const ex of byDay[d]) ex.substitute = { exerciseId: 'mob-1', title: 'Alongamento de bíceps' }; return byDay; });
-    const r = await gen({}); assert.equal(r.status, 200);
+    const r = await gen({ subsOnlyTagged: false }); assert.equal(r.status, 200);
     const all = Object.values<any[]>(r.body.exercisesByDay).flat();
     assert.ok(all.length > 0 && all.every((e: any) => !e.substitute || e.substitute.id !== 'mob-1'), 'nenhum substituto de mobilidade');
     const withSub = all.filter((e: any) => e.substitute);
     assert.ok(withSub.length > 0 && withSub.every((e: any) => String(e.substitute.id).split('-')[0] === String(e.exerciseId).split('-')[0]), 'substituto do mesmo músculo: ' + withSub.map((e: any) => e.exerciseId + '>' + e.substitute.id).join());
     const b1 = all.find((e: any) => e.exerciseId === 'biceps-1'); if (b1) assert.equal(b1.substitute.id, 'biceps-5', 'o marcado pelo coach vence');
+  });
+
+  await t('muscleTarget: a categoria corrige a etiqueta errada (abdominal "PEITO" vira ABDOMEN); o resto fica como o coach etiquetou', () => {
+    const e = (category: string, target: string | undefined, subCategory = 'Geral') => ({ category, subCategory, tags: target ? { target } : {} });
+    assert.equal(muscleTarget(e('Abdômen', 'PEITO', 'Supra')), 'ABDOMEN'); assert.equal(muscleTarget(e('Abdômen', 'ABDÔMEN')), 'ABDOMEN'); assert.equal(muscleTarget(e('Abdômen', undefined)), 'ABDOMEN');
+    assert.equal(muscleTarget(e('Bíceps', 'PEITO')), 'BICEPS'); assert.equal(muscleTarget(e('Tríceps', 'PEITO')), 'TRICEPS'); assert.equal(muscleTarget(e('Bíceps', 'TRICEPS')), 'BICEPS');
+    assert.equal(muscleTarget(e('Costas', 'PEITO', 'Puxadas')), 'COSTAS_PUXADA'); assert.equal(muscleTarget(e('Costas', 'PEITO', 'Remadas')), 'COSTAS_REMADA'); assert.equal(muscleTarget(e('Costas', 'PEITO', 'Geral')), 'COSTAS');
+    assert.equal(muscleTarget(e('Ombros', 'PEITO', 'Lateral')), 'OMBRO_LATERAL'); assert.equal(muscleTarget(e('Ombros', 'PEITO', 'Geral')), 'OMBROS'); assert.equal(muscleTarget(e('Ombros', 'POSTERIOR')), 'OMBRO_POST', 'posterior de ombros não é coxa');
+    assert.equal(muscleTarget(e('Pernas', 'PEITO', 'Glúteos')), 'GLUTEOS'); assert.equal(muscleTarget(e('Pernas', 'PEITO', 'Posteriores')), 'POSTERIOR'); assert.equal(muscleTarget(e('Pernas', 'PEITO', 'Geral')), 'PERNAS');
+    assert.equal(muscleTarget(e('Peito', 'PEITO')), 'PEITO', 'peito de verdade continua peito'); assert.equal(muscleTarget(e('Costas', 'COSTAS_REMADA')), 'COSTAS_REMADA'); assert.equal(muscleTarget(e('Pernas', 'GLUTEOS')), 'GLUTEOS'); assert.equal(muscleTarget(e('Pernas', 'PERNAS')), 'PERNAS');
+    assert.equal(muscleTarget(e('Musculação', undefined)), 'MUSCULACAO', 'sem etiqueta: a categoria'); assert.equal(muscleTarget(null), '');
+    assert.deepEqual(targetMismatch(e('Abdômen', 'PEITO', 'Supra')), { from: 'PEITO', to: 'ABDOMEN' }); assert.equal(targetMismatch(e('Peito', 'PEITO')), null); assert.equal(targetMismatch(e('Abdômen', 'ABDÔMEN')), null);
+  });
+
+  await t('geração: abdômen mal etiquetado como PEITO entra no grupo de abdômen e fica DEPOIS de peito e braços (o erro do treino do Paulo)', async () => {
+    const ctl = seedGen();
+    for (let n = 1; n <= 6; n++) db.exercise.push({ id: `abdomen-${n}`, coachId: PAULO_ID, name: `Abdominal ${n}`, category: 'Abdômen', subCategory: 'Supra', videoUrl: 'v', tags: { target: 'PEITO', equipment: 'LIVRE', mechanic: 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    // a IA põe o abdômen no meio do treino (como saiu no dia E)
+    ctl.setHook((byDay: any) => { for (const d of Object.keys(byDay)) { const ab = byDay[d].filter((e: any) => String(e.exerciseId).length && /Abdominal/.test(e.title)); const rest = byDay[d].filter((e: any) => !ab.includes(e)); byDay[d] = [rest[0], ...ab, ...rest.slice(1)]; } return byDay; });
+    const r = await gen({ days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 3, rest: 60 }, { id: 'BICEPS', qty: 2, sets: 3, rest: 30 }, { id: 'ABDOMEN', qty: 1, sets: 3, rest: 30 }] }] });
+    assert.equal(r.status, 200); const ids = idsOf(r).map((x: string) => x.split('-')[0]);
+    assert.equal(ids.filter((x: string) => x === 'abdomen').length, 1, 'o abdômen entrou como abdômen: ' + ids.join());
+    assert.ok(ids.indexOf('abdomen') > ids.lastIndexOf('biceps') && ids.indexOf('abdomen') > ids.lastIndexOf('peito'), 'abdômen por último: ' + ids.join());
+    // um dia só de peito nunca recebe o abdominal como "peito"
+    const p = await gen({ days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 6, sets: 3, rest: 60 }] }] }); assert.ok(idsOf(p).every((x: string) => !x.startsWith('abdomen')), 'abdominal fora do peito: ' + idsOf(p).join());
+  });
+
+  await t('repetições: teto de 15 por padrão (nunca 18/20), panturrilha até 20, e o coach pode escolher outro teto', async () => {
+    const ctl = seedGen();
+    for (let n = 1; n <= 4; n++) db.exercise.push({ id: `panturrilha-${n}`, coachId: PAULO_ID, name: `Panturrilha ${n}`, category: 'Pernas', subCategory: 'Panturrilha', videoUrl: 'v', tags: { target: 'PANTURRILHA', equipment: 'MAQUINA', mechanic: 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    ctl.setHook((byDay: any) => { for (const d of Object.keys(byDay)) for (const ex of byDay[d]) ex.blocks = ex.blocks.map((b: any, i: number) => ({ ...b, reps: String([20, 18, 15, 15][i % 4]) })); return byDay; });
+    const days = [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 4, rest: 60 }, { id: 'PANTURRILHA', qty: 1, sets: 4, rest: 30 }] }];
+    const reps = (r: any, pre: string) => Object.values<any[]>(r.body.exercisesByDay).flat().filter((e: any) => e.exerciseId.startsWith(pre)).flatMap((e: any) => e.blocks.map((b: any) => Number(b.reps)));
+    const r = await gen({ phase: 'EMAGRECIMENTO', days }); assert.equal(r.status, 200);
+    assert.ok(reps(r, 'peito').length > 0 && reps(r, 'peito').every((n: number) => n <= 15), 'peito até 15: ' + reps(r, 'peito').join());
+    assert.ok(Math.max(...reps(r, 'panturrilha')) > 15 && reps(r, 'panturrilha').every((n: number) => n <= 20), 'panturrilha pode passar de 15: ' + reps(r, 'panturrilha').join());
+    assert.ok(lastPrompt().includes('NENHUMA série passa de 15'), 'a IA recebe o teto');
+    const hi = await gen({ phase: 'EMAGRECIMENTO', days, maxReps: 20 }); assert.ok(Math.max(...reps(hi, 'peito')) >= 18, 'teto 20 do coach: ' + reps(hi, 'peito').join()); assert.ok(lastPrompt().includes('TETO DE REPETIÇÕES DESTE COACH: nenhuma série passa de 20'));
+    const lo = await gen({ phase: 'HIPERTROFIA', days, maxReps: 12 }); assert.ok(Math.max(...reps(lo, 'peito')) <= 12 && Math.max(...reps(lo, 'panturrilha')) <= 12, 'teto 12 vale até na panturrilha: ' + reps(lo, 'peito').join() + ' / ' + reps(lo, 'panturrilha').join());
+  });
+
+  await t('estilo do coach: ordem por tipo de dia, regras entre músculos e entre exercícios, cardio no começo; estilo quebrado não atrapalha', () => {
+    assert.equal(kindOfDay(['PEITO', 'ABDOMEN']), 'UPPER'); assert.equal(kindOfDay(['GLUTEOS', 'PANTURRILHA', 'ABDOMEN']), 'LOWER'); assert.equal(kindOfDay(['QUADRICEPS', 'BICEPS']), 'FULL'); assert.equal(kindOfDay(['ABDOMEN']), 'UPPER');
+    const ex = (id: string, g: string | null, comp = false, tech = '', kind: any = 'FORCA') => ({ id, g, comp, tech, kind });
+    const run = (list: any[], groups: string[], style: any, cardioAt?: string) => orderDayExercises(list, { groups, groupOf: (e: any) => e.g, isCompound: (e: any) => e.comp, kind: (e: any) => e.kind, technique: (e: any) => e.tech, style, exId: (e: any) => e.id, cardioAt });
+    const ids = (r: any) => r.list.map((e: any) => e.id).join();
+    const day = () => [ex('ab1', 'ABDOMEN'), ex('bi1', 'BICEPS'), ex('pe1', 'PEITO', true), ex('tri1', 'TRICEPS')];
+    // ordem por tipo de dia: a lista do coach manda (aqui o coach quer abdômen no meio, antes dos braços)
+    let r = run(day(), ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'], { orders: { UPPER: ['PEITO', 'ABDOMEN', 'TRICEPS', 'BICEPS'] }, rules: [] }); assert.equal(ids(r), 'pe1,ab1,tri1,bi1', 'a lista do coach manda');
+    r = run(day(), ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'], { orders: { UPPER: ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'] }, rules: [{ a: { k: 'G', id: 'ABDOMEN' }, rel: 'DEPOIS', b: { k: 'G', id: 'TRICEPS' }, when: 'SEMPRE' }] }); assert.equal(ids(r), 'pe1,bi1,tri1,ab1', 'regra "abdômen depois de tríceps" vence a lista');
+    r = run(day(), ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'], { orders: {}, rules: [{ a: { k: 'G', id: 'ABDOMEN' }, rel: 'DEPOIS', b: { k: 'G', id: 'TRICEPS' }, when: 'LOWER' }] }); assert.equal(ids(r), 'pe1,ab1,bi1,tri1', 'regra só para pernas não vale num dia de cima (sem lista: ordem da estrutura)');
+    // full body: regra entre exercício específico e músculo / exercício
+    const fb = () => [ex('bi1', 'BICEPS'), ex('hack', 'QUADRICEPS', true), ex('ab1', 'ABDOMEN'), ex('stiff', 'POSTERIORES', true)];
+    const groups = ['BICEPS', 'QUADRICEPS', 'ABDOMEN', 'POSTERIORES'];
+    r = run(fb(), groups, { orders: { FULL: ['BICEPS', 'ABDOMEN', 'QUADRICEPS', 'POSTERIORES'] }, rules: [{ a: { k: 'E', id: 'hack' }, rel: 'ANTES', b: { k: 'G', id: 'BICEPS' }, when: 'FULL' }] }); assert.equal(ids(r), 'hack,bi1,ab1,stiff', 'Hack antes de bíceps (o resto segue a lista)');
+    r = run(fb(), groups, { orders: { FULL: ['QUADRICEPS', 'POSTERIORES', 'BICEPS', 'ABDOMEN'] }, rules: [{ a: { k: 'E', id: 'stiff' }, rel: 'DEPOIS', b: { k: 'E', id: 'ab1' }, when: 'SEMPRE' }] }); assert.equal(ids(r), 'hack,bi1,ab1,stiff', 'Stiff depois do abdominal');
+    r = run(fb(), groups, { orders: { FULL: ['BICEPS', 'ABDOMEN', 'QUADRICEPS', 'POSTERIORES'] }, rules: [{ a: { k: 'E', id: 'hack' }, rel: 'ANTES', b: { k: 'G', id: 'BICEPS' }, when: 'UPPER' }] }); assert.equal(ids(r), 'bi1,ab1,hack,stiff', 'regra de "só parte de cima" não vale no full body');
+    r = run(fb(), groups, { orders: { FULL: ['BICEPS', 'ABDOMEN', 'QUADRICEPS', 'POSTERIORES'] }, rules: [{ a: { k: 'E', id: 'naoexiste' }, rel: 'ANTES', b: { k: 'G', id: 'BICEPS' }, when: 'SEMPRE' }] }); assert.equal(ids(r), 'bi1,ab1,hack,stiff', 'exercício que não está no dia: regra ignorada');
+    // bi-set continua inteiro e cardio no começo vai depois da mobilidade
+    r = run([ex('c1', null, false, '', 'CARDIO'), ex('m1', null, false, '', 'MOB'), ex('pe1', 'PEITO', true), ex('bi1', 'BICEPS', false, 'BISET'), ex('bi2', 'BICEPS', false, 'BISET')], ['PEITO', 'BICEPS'], { orders: { UPPER: ['BICEPS', 'PEITO'] }, rules: [] }, 'COMECO'); assert.equal(ids(r), 'm1,c1,bi1,bi2,pe1', 'mobilidade, cardio, depois o bi-set inteiro');
+    r = run([ex('c1', null, false, '', 'CARDIO'), ex('pe1', 'PEITO', true), ex('bi1', 'BICEPS')], ['PEITO', 'BICEPS'], { orders: { UPPER: ['PEITO', 'BICEPS'] }, rules: [] }); assert.equal(ids(r), 'pe1,bi1,c1', 'cardio no fim por padrão');
+    // estilo quebrado: volta para a ordem padrão
+    assert.equal(cleanOrderStyle(null), null); assert.equal(cleanOrderStyle('x'), null); assert.equal(cleanOrderStyle({ orders: { UPPER: 'x' }, rules: [{ a: { k: 'X', id: 'a' }, rel: 'ANTES', b: { k: 'G', id: 'PEITO' } }] }), null);
+    assert.deepEqual(cleanOrderStyle({ orders: { UPPER: ['PEITO', 'PEITO', 'XYZ', 'BICEPS'] }, rules: [{ a: { k: 'G', id: 'PEITO' }, rel: 'ANTES', b: { k: 'G', id: 'PEITO' } }] })!.orders.UPPER, ['PEITO', 'BICEPS'], 'repetido e desconhecido saem');
+    assert.equal(ids(run(day(), ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'], 'lixo')), 'pe1,bi1,tri1,ab1', 'sem estilo válido: padrão por nível (abdômen por último)');
+  });
+
+  await t('geração: o estilo do coach (orderStyle) muda a ordem do treino gerado; sem ele vale a ordem padrão', async () => {
+    seedGen();
+    const days = [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 3, rest: 60 }, { id: 'BICEPS', qty: 2, sets: 3, rest: 30 }] }];
+    const base = await gen({ days }); const g = (r: any) => idsOf(r).map((x: string) => x.split('-')[0]);
+    assert.ok(g(base).lastIndexOf('peito') < g(base).indexOf('biceps'), 'padrão: peito antes de bíceps: ' + g(base).join());
+    const own = await gen({ days, orderStyle: { orders: { UPPER: ['BICEPS', 'PEITO'] }, rules: [] } });
+    assert.ok(g(own).lastIndexOf('biceps') < g(own).indexOf('peito'), 'o coach mandou bíceps primeiro: ' + g(own).join());
+    const fixes = (own.body.quality?.fixes || []).join(' '); assert.ok(/que você escolheu/.test(fixes), 'o resumo diz que seguiu a ordem do coach: ' + fixes);
   });
 
   await t('ordem: músculo grande antes de pequeno, cada músculo junto, composto antes do isolado, bi/tri-set inteiros, mobilidade no começo e cardio no fim', () => {
