@@ -26,6 +26,14 @@ const get = async (as: string, qs: string) => { const r = await loadsGET(new Req
     assert.strictEqual(buildStudentLoads([row(-3, 'NORMAL', { e1: [40] }, { mult: 0.8 })] as any, { now: NOW }).e1.refs.NORMAL!.top, 40, 'multiplicador em treino normal é ignorado');
     assert.ok(!l.refs.NORMAL!.perSide); const ps = buildStudentLoads([row(-2, 'CHOQUE', { e1: [40, 40] }, { perSide: true, mult: 1.1 })] as any, { now: NOW }).e1.refs.CHOQUE!; assert.ok(ps.perSide && ps.top === 44, 'cada lado preservado e multiplicado');
   });
+  await block('gaveta Histórico do Montar treino: as repetições que o aluno anotou chegam junto das cargas (e a falta de reps não quebra nada)', () => {
+    const withReps = { date: day(-1), loadPhase: null, details: [10, 10, 8, 8].map((r, i) => ({ exerciseId: 'e1', exerciseName: 'Ex', setNumber: i + 1, weight: 40 + i * 10, perSide: false, reps: String(r) })) };
+    const l = buildStudentLoads([withReps] as any, { now: NOW }).e1;
+    assert.deepStrictEqual(l.refs.NORMAL!.sets.map((s) => s.reps), ['10', '10', '8', '8']); assert.deepStrictEqual(l.refs.NORMAL!.sets.map((s) => s.weight), [40, 50, 60, 70]);
+    const old = buildStudentLoads([row(-1, null, { e1: [40, 50] })] as any, { now: NOW }).e1; assert.ok(old.refs.NORMAL!.sets.every((s) => !('reps' in s)), 'dado antigo sem reps: o campo some, o resto fica igual');
+    const blank = buildStudentLoads([{ ...withReps, details: withReps.details.map((d) => ({ ...d, reps: '  ' })) }] as any, { now: NOW }).e1; assert.ok(blank.refs.NORMAL!.sets.every((s) => !('reps' in s)));
+    const long = buildStudentLoads([{ ...withReps, details: [{ ...withReps.details[0], reps: '1234567890123456789' }] }] as any, { now: NOW }).e1; assert.strictEqual(long.refs.NORMAL!.sets[0].reps!.length, 12, 'texto gigante é cortado');
+  });
   await block('série do gráfico: até 8 treinos, do mais velho para o mais novo, cada ponto com a fase', () => {
     const h = Array.from({ length: 12 }, (_, i) => row(-(i + 1), i === 2 ? 'CHOQUE' : i === 0 ? 'DELOAD' : 'NORMAL', { e1: [40 + i] }, i === 2 ? { mult: 1.5 } : i === 0 ? { mult: 0.5 } : {}));
     const l = buildStudentLoads(h as any, { now: NOW }).e1;
