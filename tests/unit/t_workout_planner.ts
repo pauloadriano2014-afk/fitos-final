@@ -29,8 +29,8 @@ const hist = (rows: Array<{ id: string; sets: number[]; effort?: string; perSide
   // ═════ 1) nível ═════
   await t('repRange: faixa da fase, e o iniciante não faz série de 3 a 5 repetições', () => {
     assert.deepEqual(repRange('HIPERTROFIA', 'INTERMEDIARIO'), [8, 15]); assert.deepEqual(repRange('FORCA', 'AVANCADO'), [3, 6]); assert.deepEqual(repRange('FORCA', 'INICIANTE'), [6, 10]);
-    assert.deepEqual(repRange('DELOAD', 'INICIANTE'), [15, 20]); assert.deepEqual(repRange('CHOQUE', 'INICIANTE'), [8, 12]); assert.deepEqual(repRange('HIPERTROFIA', 'INICIANTE'), [8, 15]);
-    assert.deepEqual(repRange('NADA', null), [8, 15], 'fase desconhecida: hipertrofia'); assert.deepEqual(repRange(undefined, undefined), [8, 15]); assert.deepEqual(repRange('emagrecimento', 'INTERMEDIARIO'), [12, 20], 'não liga para maiúscula');
+    assert.deepEqual(repRange('DELOAD', 'INICIANTE'), [15, 15], 'teto de 15: nunca 18 nem 20'); assert.deepEqual(repRange('DELOAD', 'INICIANTE', 20), [15, 20], 'o coach pode subir o teto'); assert.deepEqual(repRange('CHOQUE', 'INICIANTE'), [8, 12]); assert.deepEqual(repRange('HIPERTROFIA', 'INICIANTE'), [8, 15]);
+    assert.deepEqual(repRange('NADA', null), [8, 15], 'fase desconhecida: hipertrofia'); assert.deepEqual(repRange(undefined, undefined), [8, 15]); assert.deepEqual(repRange('emagrecimento', 'INTERMEDIARIO'), [12, 15], 'não liga para maiúscula; teto 15'); assert.deepEqual(repRange('EMAGRECIMENTO', null, 12), [12, 12], 'teto menor que a faixa'); assert.deepEqual(repRange('EMAGRECIMENTO', null, 99), [12, 15], 'teto absurdo volta ao padrão'); assert.deepEqual(repRange('HIPERTROFIA', null, 10), [8, 10]);
   });
   await t('levelPolicy + techniquesForLevel: o que o nível aguenta', () => {
     const p = levelPolicy('INICIANTE', 'HIPERTROFIA'); assert.equal(p.label, 'Iniciante'); assert.ok(p.banned.includes('DROPSET') && p.banned.includes('TRISET') && !p.banned.includes('BISET')); assert.ok(p.text.includes('PROIBIDAS') && p.text.includes('DROPSET') && p.text.includes('8 a 15') && /NADA de exercício técnico/.test(p.text));

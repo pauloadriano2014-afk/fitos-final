@@ -8,9 +8,10 @@ import { loadAdminLibrary } from '@/lib/genLibrary';
 import { applyRules, cleanRules, describeRules, removedSummary } from '@/lib/genRules';
 import { unavailableExerciseIds, filterUnavailable } from '@/lib/equipment';
 import { aliasesOf, jointFilterIssues } from '@/lib/autoPlanQuality';
+import { muscleTarget } from '@/lib/ai/muscleTarget';
 
 export const dynamic = 'force-dynamic';
-const tgt = (ex: any) => String(ex.tags?.target || ex.category || '').toUpperCase();
+const tgt = (ex: any) => muscleTarget(ex);
 
 export async function POST(req: Request) {
   try {

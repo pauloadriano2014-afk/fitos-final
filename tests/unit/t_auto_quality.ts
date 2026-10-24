@@ -382,7 +382,7 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
     { const fullAI = G.__GEMINI;
       const toCompact = (txt: string) => { const j = JSON.parse(txt); for (const d of Object.keys(j.exercisesByDay)) j.exercisesByDay[d] = j.exercisesByDay[d].map((e: any) => (e.category === 'Cardio' ? { id: e.exerciseId, blocks: e.blocks } : { id: e.exerciseId, reps: e.blocks.map((b: any) => b.reps) })); return JSON.stringify(j); };
       seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); prevRoutine(); const fullAI2 = G.__GEMINI; G.__GEMINI = async (a: any) => { const r = await fullAI2(a); return { ...r, text: toCompact(r.text) }; };   // (seed reinstala a IA simulada: o embrulho vem depois)
-      const rc: any = await gen(mkCfg()); const pc = lastPrompt();
+      const rc: any = await gen(mkCfg({ subsOnlyTagged: false })); const pc = lastPrompt();
       assert.ok(pc.includes('FORMATO JSON COMPACTO') && pc.includes('{ "id": "E001", "reps": [15, 12, 10, 8] }') && !pc.includes('"title": "nome-exato"'), 'o texto pede o formato compacto'); assert.ok(pc.includes('TAMANHO DA LISTA "reps"'), 'regra de séries = tamanho da lista');
       const dayA = rc.body.exercisesByDay.A; assert.equal(dayA.length, 5); for (const e of dayA) { assert.ok(e.title && e.category && e.videoUrl !== undefined, 'nome e categoria vêm do servidor: ' + JSON.stringify(e).slice(0, 120)); assert.equal(e.blocks.length, 3, 'séries do grupo (3)'); assert.ok(new Set(e.blocks.map((b: any) => b.reps)).size > 1, 'pirâmide: ' + e.blocks.map((b: any) => b.reps)); assert.ok(e.substitute, 'substituto escolhido pelo servidor'); }
       assert.ok(dayA.slice(0, 3).every((e: any) => e.blocks.every((b: any) => b.restTime === '60')) && dayA.slice(3).every((e: any) => e.blocks.every((b: any) => b.restTime === '30')), 'descanso vem do GRUPO (PEITO 60s, BÍCEPS 30s): ' + dayA.map((e: any) => e.title + ':' + e.blocks[0].restTime + ':' + e.subCategory));
@@ -424,8 +424,9 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
     const peito1 = r.body.exercisesByDay.A.find((e: any) => e.exerciseId === exId('PEITO', 1)); assert.ok(peito1.blocks.every((b: any) => /^4\d(\.5)?kg$/.test(b.load)), 'IA pôs 5kg, o alvo manda: ' + JSON.stringify(peito1.blocks.map((b: any) => b.load)));
     assert.ok(r.body.exercisesByDay.A.filter((e: any) => e.exerciseId !== exId('PEITO', 1)).every((e: any) => e.blocks.every((b: any) => b.load === '')), 'o resto nunca foi treinado');
     // 5) substituto: o servidor escolhe um do mesmo músculo quando a biblioteca não tem
-    seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); db.exercise.forEach((e: any) => { e.defaultSubstitutes = []; }); r = await gen(mkCfg());
+    seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); db.exercise.forEach((e: any) => { e.defaultSubstitutes = []; }); r = await gen(mkCfg({ subsOnlyTagged: false }));
     assert.ok(r.body.exercisesByDay.A.filter((e: any) => e.category !== 'Cardio').every((e: any) => e.substitute && e.substitute.id !== e.exerciseId && String(e.substitute.id).startsWith('ex-' + String(e.subCategory).toLowerCase())), 'substituto do mesmo músculo, escolhido pelo servidor: ' + JSON.stringify(r.body.exercisesByDay.A.map((e: any) => e.substitute?.id)));
+    { const solo: any = await gen(mkCfg()); assert.ok(solo.body.exercisesByDay.A.every((e: any) => !e.substitute), 'padrão: sem marcação na biblioteca = sem substituto (a IA e o servidor não escolhem)'); }
     cfg.workout = null;
   }
   console.log('OK  montagem inteligente: prompt com códigos curtos e rotina anterior (MANTER/TROCAR), nível tira técnica, revisão troca repetido e completa, carga-alvo, modo antigo preservado');
