@@ -211,6 +211,9 @@
  "t_partner_rules": [
   "profile:partner-lib"
  ],
+ "t_photo_thumb": [
+  "build.mjs"
+ ],
  "t_plan_clock": [
   "build45.mjs"
  ],

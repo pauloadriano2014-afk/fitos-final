@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import sharp from 'sharp';
+import { makeThumbnail } from '@/lib/photoThumb';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -46,10 +46,7 @@ async function uploadToR2(base64String: string | null, userId: string, prefix: s
         await s3.send(command);
 
         try {
-            const thumbBuffer = await sharp(buffer)
-                .resize({ width: 300, withoutEnlargement: true }) 
-                .jpeg({ quality: 60 }) 
-                .toBuffer();
+            const thumbBuffer = await makeThumbnail(buffer);
 
             const thumbCommand = new PutObjectCommand({
                 Bucket: 'fitos-fotos',
