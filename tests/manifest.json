@@ -143,6 +143,9 @@
  "t_gen_rules": [
   "build44.mjs"
  ],
+ "t_history_order": [
+  "build57.mjs"
+ ],
  "t_ibge_comp": [
   "build22.mjs"
  ],

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
+import { planPositions, orderHistoryDetails } from '@/lib/historyOrder';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +29,14 @@ export async function GET(req: Request) {
       }
     });
 
-    return NextResponse.json(history);
+    // 🧭 (25 out 2026) Sem ordem garantida no banco, as séries podiam chegar embaralhadas (3ª antes da 2ª). Devolve na ordem que o coach montou: exercícios como na ficha
+    // (do dia daquele treino) e séries por número. Se a ficha foi apagada ou a consulta falhar, ainda ordena as séries por número.
+    const ids = Array.from(new Set(history.map((h: any) => h.workoutId).filter(Boolean))) as string[];
+    let plan: any[] = [];
+    if (ids.length) { try { plan = await prisma.workoutExercise.findMany({ where: { workoutId: { in: ids } }, select: { workoutId: true, exerciseId: true, day: true, order: true } }); } catch { plan = []; } }
+    const ordered = history.map((h: any) => ({ ...h, details: orderHistoryDetails(h.details, h.workoutId ? planPositions(plan.filter((p: any) => p.workoutId === h.workoutId), h.day) : null) }));
+
+    return NextResponse.json(ordered);
 
   } catch (error) {
     return NextResponse.json({ error: "Erro ao buscar histórico" }, { status: 500 });
