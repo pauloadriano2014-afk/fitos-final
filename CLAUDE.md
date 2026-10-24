@@ -3,7 +3,7 @@
 Quem trabalha aqui: Paulo (dono do ELITE FIT). Responder sempre em português simples, sem jargão. Comandos sempre para **PowerShell**.
 
 ## 1) Banco de dados: sempre entregar os comandos do Prisma (regra do Paulo)
-O Render **não** roda `prisma db push` (o build dele é só `prisma generate` + `next build`). Por isso, **toda vez que uma tarefa mexer no banco** (qualquer alteração em `prisma/schema/*.prisma`: coluna, tabela, índice, enum), a resposta final **tem que trazer o bloco de comandos**, nesta ordem, antes de qualquer merge/deploy:
+O build do Render **roda `prisma db push` sozinho** a cada deploy (confirmado em 24 out 2026: o deploy travou porque o push quis apagar uma tabela de backup e recusou perder dados; a tabela foi movida para o schema `backup`). Mudança destrutiva derruba o build. Mesmo assim, o Paulo roda os comandos abaixo no PC antes do merge. Por isso, **toda vez que uma tarefa mexer no banco** (qualquer alteração em `prisma/schema/*.prisma`: coluna, tabela, índice, enum), a resposta final **tem que trazer o bloco de comandos**, nesta ordem, antes de qualquer merge/deploy:
 
 ```powershell
 npx prisma generate

@@ -388,6 +388,13 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     // bi-set continua inteiro e cardio no começo vai depois da mobilidade
     r = run([ex('c1', null, false, '', 'CARDIO'), ex('m1', null, false, '', 'MOB'), ex('pe1', 'PEITO', true), ex('bi1', 'BICEPS', false, 'BISET'), ex('bi2', 'BICEPS', false, 'BISET')], ['PEITO', 'BICEPS'], { orders: { UPPER: ['BICEPS', 'PEITO'] }, rules: [] }, 'COMECO'); assert.equal(ids(r), 'm1,c1,bi1,bi2,pe1', 'mobilidade, cardio, depois o bi-set inteiro');
     r = run([ex('c1', null, false, '', 'CARDIO'), ex('pe1', 'PEITO', true), ex('bi1', 'BICEPS')], ['PEITO', 'BICEPS'], { orders: { UPPER: ['PEITO', 'BICEPS'] }, rules: [] }); assert.equal(ids(r), 'pe1,bi1,c1', 'cardio no fim por padrão');
+    // seguir a ordem que o coach deixou no dia (keepGroupOrder): vale no lugar da lista por tipo de dia, e as regras entre músculos ainda mandam por cima
+    const runKeep = (list: any[], groups: string[], style: any) => orderDayExercises(list, { groups, keepGroupOrder: true, groupOf: (e: any) => e.g, isCompound: (e: any) => e.comp, kind: (e: any) => e.kind, technique: (e: any) => e.tech, style, exId: (e: any) => e.id });
+    const lista = { orders: { UPPER: ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'] }, rules: [] as any[] };
+    assert.equal(ids(runKeep(day(), ['BICEPS', 'TRICEPS', 'PEITO', 'ABDOMEN'], lista)), 'bi1,tri1,pe1,ab1', 'o dia está bíceps, tríceps, peito, abdômen: a lista do coach por tipo de dia é ignorada');
+    assert.equal(ids(run(day(), ['BICEPS', 'TRICEPS', 'PEITO', 'ABDOMEN'], lista)), 'pe1,ab1,bi1,tri1', 'sem seguir o dia, a lista por tipo de dia manda (como antes)');
+    assert.equal(ids(runKeep(day(), ['BICEPS', 'TRICEPS', 'PEITO', 'ABDOMEN'], { ...lista, rules: [{ a: { k: 'G', id: 'ABDOMEN' }, rel: 'ANTES', b: { k: 'G', id: 'BICEPS' }, when: 'SEMPRE' }] })), 'ab1,bi1,tri1,pe1', 'seguindo o dia, a regra "abdômen antes de bíceps" ainda vale');
+    assert.equal(ids(runKeep([ex('c1', null, false, '', 'CARDIO'), ex('m1', null, false, '', 'MOB'), ...day()], ['BICEPS', 'PEITO', 'TRICEPS', 'ABDOMEN'], lista)), 'm1,bi1,pe1,tri1,ab1,c1', 'mobilidade no começo e cardio no fim continuam');
     // estilo quebrado: volta para a ordem padrão
     assert.equal(cleanOrderStyle(null), null); assert.equal(cleanOrderStyle('x'), null); assert.equal(cleanOrderStyle({ orders: { UPPER: 'x' }, rules: [{ a: { k: 'X', id: 'a' }, rel: 'ANTES', b: { k: 'G', id: 'PEITO' } }] }), null);
     assert.deepEqual(cleanOrderStyle({ orders: { UPPER: ['PEITO', 'PEITO', 'XYZ', 'BICEPS'] }, rules: [{ a: { k: 'G', id: 'PEITO' }, rel: 'ANTES', b: { k: 'G', id: 'PEITO' } }] })!.orders.UPPER, ['PEITO', 'BICEPS'], 'repetido e desconhecido saem');
@@ -401,6 +408,11 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     assert.ok(g(base).lastIndexOf('peito') < g(base).indexOf('biceps'), 'padrão: peito antes de bíceps: ' + g(base).join());
     const own = await gen({ days, orderStyle: { orders: { UPPER: ['BICEPS', 'PEITO'] }, rules: [] } });
     assert.ok(g(own).lastIndexOf('biceps') < g(own).indexOf('peito'), 'o coach mandou bíceps primeiro: ' + g(own).join());
+    const ds = [{ name: 'A', groups: [{ id: 'BICEPS', qty: 2, sets: 3, rest: 30 }, { id: 'PEITO', qty: 2, sets: 3, rest: 60 }] }];
+    const follow = await gen({ days: ds, keepGroupOrder: true, orderStyle: { orders: { UPPER: ['PEITO', 'BICEPS'] }, rules: [] } });
+    assert.ok(g(follow).lastIndexOf('biceps') < g(follow).indexOf('peito'), 'keepGroupOrder + estilo: segue o dia (bíceps primeiro): ' + g(follow).join());
+    const notFollow = await gen({ days: ds, orderStyle: { orders: { UPPER: ['PEITO', 'BICEPS'] }, rules: [] } });
+    assert.ok(g(notFollow).lastIndexOf('peito') < g(notFollow).indexOf('biceps'), 'sem seguir o dia: vale a lista (peito primeiro): ' + g(notFollow).join());
     const fixes = (own.body.quality?.fixes || []).join(' '); assert.ok(/que você escolheu/.test(fixes), 'o resumo diz que seguiu a ordem do coach: ' + fixes);
   });
 

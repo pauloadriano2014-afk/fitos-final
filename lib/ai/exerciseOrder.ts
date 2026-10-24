@@ -58,10 +58,10 @@ export function cleanOrderStyle(raw: any): OrderStyle | null {
   return Object.keys(orders).length || rules.length ? { orders, rules } : null;
 }
 
-/** A ordem dos grupos do dia pelo estilo do coach: a lista do tipo de dia, depois as regras entre músculos ("A antes de B"). */
-export function styleGroupOrder(groups: string[], style: OrderStyle, kind: OrderKind): string[] {
+/** A ordem dos grupos do dia pelo estilo do coach: a lista do tipo de dia (ou, com `followDay`, a ordem em que o coach deixou os músculos no dia), depois as regras entre músculos ("A antes de B"). */
+export function styleGroupOrder(groups: string[], style: OrderStyle, kind: OrderKind, followDay = false): string[] {
   const present = [...new Set(groups)];
-  const list = style.orders[kind] || [];
+  const list = followDay ? present : (style.orders[kind] || []);
   const order = [...list.filter((g) => present.includes(g)), ...present.filter((g) => !list.includes(g))];
   const rules = style.rules.filter((r) => r.a.k === 'G' && r.b.k === 'G' && (r.when === 'SEMPRE' || r.when === kind));
   for (let pass = 0; pass < 2; pass++) {
@@ -77,6 +77,7 @@ export function styleGroupOrder(groups: string[], style: OrderStyle, kind: Order
 export interface OrderOpts<T> {
   /** ids dos grupos do dia, na ordem da estrutura */
   groups: string[];
+  /** segue a ordem dos músculos que o coach deixou no dia (sem estilo: desliga a correção por nível; com estilo: troca a lista por tipo de dia, e as regras entre músculos continuam valendo) */
   keepGroupOrder?: boolean;
   /** grupo do exercício (null = não pertence a nenhum grupo do dia) */
   groupOf: (ex: T) => string | null;
@@ -98,7 +99,7 @@ export function orderDayExercises<T>(list: T[], o: OrderOpts<T>): { list: T[]; c
   if (!Array.isArray(list) || list.length < 2) return { list: list || [], changed: false };
   const style = cleanOrderStyle(o.style);
   const kind = kindOfDay(o.groups);
-  const order = style ? styleGroupOrder(o.groups, style, kind) : orderedGroupIds(o.groups, o.keepGroupOrder);
+  const order = style ? styleGroupOrder(o.groups, style, kind, o.keepGroupOrder === true) : orderedGroupIds(o.groups, o.keepGroupOrder);
   const rankOfGroup = new Map(order.map((g, i) => [g, i]));
   // 1) peças: cadeias de bi/tri-set consecutivas viram uma peça só
   const pieces: T[][] = [];
