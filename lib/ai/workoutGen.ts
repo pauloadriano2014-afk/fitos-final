@@ -19,7 +19,7 @@ import { shapeReps, cleanRepChoice, describeRepChoice } from '@/lib/ai/repScheme
 import { compactToFull } from '@/lib/ai/compactOutput';
 import { MUSCLE_GROUPS } from '@/lib/ai/splitPresets';
 import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, repRange, REP_CAP, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
-import { orderDayExercises } from '@/lib/ai/exerciseOrder';
+import { cleanOrderStyle, orderDayExercises } from '@/lib/ai/exerciseOrder';
 import { recordGenerated } from '@/lib/ai/genSnapshots';
 import { pickSwap, isCompatibleSub, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
@@ -654,7 +654,7 @@ Responda APENAS com JSON válido.`.trim();
         const groupIds: string[] = (dayCfg?.groups || []).map((g: any) => String(g.id));
         const groupOf = (ex: any): string | null => { for (const gid of groupIds) if ((cands!.byGroup.get(gid) || []).some((e: any) => e.id === ex.exerciseId)) return gid; return null; };
         const ord = orderDayExercises(dayExercises, {
-          groups: groupIds, keepGroupOrder: cycleConfig?.keepGroupOrder === true, groupOf,
+          groups: groupIds, keepGroupOrder: cycleConfig?.keepGroupOrder === true, groupOf, style: cycleConfig?.orderStyle, exId: (ex: any) => String(ex.exerciseId), cardioAt: cycleConfig?.warmup?.cardio,
           isCompound: (ex: any) => String((exerciseMap.get(ex.exerciseId) as any)?.tags?.mechanic || '').toUpperCase() === 'COMPOSTO',
           kind: (ex: any) => { const c = String((exerciseMap.get(ex.exerciseId) as any)?.category || '').toLowerCase(); return c === 'mobilidade' ? 'MOB' : c === 'cardio' ? 'CARDIO' : 'FORCA'; },
           technique: (ex: any) => String(ex.blocks?.[0]?.technique || ''),
@@ -664,7 +664,7 @@ Responda APENAS com JSON válido.`.trim();
 
       validatedDays[day] = dayExercises;
     }
-    if (quality && orderFixedDays.length) quality.fixes.push(`Ordem ajustada no(s) dia(s) ${orderFixedDays.join(', ')}: músculo grande primeiro, multiarticular antes do isolado, cada músculo junto`);
+    if (quality && orderFixedDays.length) quality.fixes.push(`Ordem ajustada no(s) dia(s) ${orderFixedDays.join(', ')}: ${cleanOrderStyle(cycleConfig?.orderStyle) ? 'a ordem e as regras que você escolheu' : 'músculo grande primeiro, multiarticular antes do isolado, cada músculo junto'}`);
 
     // 🔥 INJETA EXERCÍCIOS MANUAIS DE MOBILIDADE — escolhidos pelo coach, bypassam a IA
     Object.entries(manualExercisesByDay).forEach(([day, items]) => {

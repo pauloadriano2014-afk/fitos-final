@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 import { PAULO_ID } from '/home/user/fitos-final/lib/masterIds';
 import { generateWorkoutPlan } from '/home/user/fitos-final/lib/ai/workoutGen';
 import { suggestImpact, suggestAvoid, pickExtra, cleanExtraPatch, mergeTags, effectiveExtra, EXTRA_KEYS } from '/home/user/fitos-final/lib/exerciseTags';
-import { orderDayExercises, orderedGroupIds } from '/home/user/fitos-final/lib/ai/exerciseOrder';
+import { orderDayExercises, orderedGroupIds, kindOfDay, cleanOrderStyle } from '/home/user/fitos-final/lib/ai/exerciseOrder';
 import { muscleTarget, targetMismatch } from '/home/user/fitos-final/lib/ai/muscleTarget';
 import { effectiveEnvironments, cleanRules, emptyRules, isEmptyRules, mergeRules, describeRules, removalReason, applyRules, removedSummary, loadStudentRules, MAX_IDS } from '/home/user/fitos-final/lib/genRules';
 import { GET as prefsGET, PUT as prefsPUT, DELETE as prefsDEL } from '/home/user/fitos-final/app/api/gen-prefs/route';
@@ -366,6 +366,42 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     assert.ok(lastPrompt().includes('NENHUMA série passa de 15'), 'a IA recebe o teto');
     const hi = await gen({ phase: 'EMAGRECIMENTO', days, maxReps: 20 }); assert.ok(Math.max(...reps(hi, 'peito')) >= 18, 'teto 20 do coach: ' + reps(hi, 'peito').join()); assert.ok(lastPrompt().includes('TETO DE REPETIÇÕES DESTE COACH: nenhuma série passa de 20'));
     const lo = await gen({ phase: 'HIPERTROFIA', days, maxReps: 12 }); assert.ok(Math.max(...reps(lo, 'peito')) <= 12 && Math.max(...reps(lo, 'panturrilha')) <= 12, 'teto 12 vale até na panturrilha: ' + reps(lo, 'peito').join() + ' / ' + reps(lo, 'panturrilha').join());
+  });
+
+  await t('estilo do coach: ordem por tipo de dia, regras entre músculos e entre exercícios, cardio no começo; estilo quebrado não atrapalha', () => {
+    assert.equal(kindOfDay(['PEITO', 'ABDOMEN']), 'UPPER'); assert.equal(kindOfDay(['GLUTEOS', 'PANTURRILHA', 'ABDOMEN']), 'LOWER'); assert.equal(kindOfDay(['QUADRICEPS', 'BICEPS']), 'FULL'); assert.equal(kindOfDay(['ABDOMEN']), 'UPPER');
+    const ex = (id: string, g: string | null, comp = false, tech = '', kind: any = 'FORCA') => ({ id, g, comp, tech, kind });
+    const run = (list: any[], groups: string[], style: any, cardioAt?: string) => orderDayExercises(list, { groups, groupOf: (e: any) => e.g, isCompound: (e: any) => e.comp, kind: (e: any) => e.kind, technique: (e: any) => e.tech, style, exId: (e: any) => e.id, cardioAt });
+    const ids = (r: any) => r.list.map((e: any) => e.id).join();
+    const day = () => [ex('ab1', 'ABDOMEN'), ex('bi1', 'BICEPS'), ex('pe1', 'PEITO', true), ex('tri1', 'TRICEPS')];
+    // ordem por tipo de dia: a lista do coach manda (aqui o coach quer abdômen no meio, antes dos braços)
+    let r = run(day(), ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'], { orders: { UPPER: ['PEITO', 'ABDOMEN', 'TRICEPS', 'BICEPS'] }, rules: [] }); assert.equal(ids(r), 'pe1,ab1,tri1,bi1', 'a lista do coach manda');
+    r = run(day(), ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'], { orders: { UPPER: ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'] }, rules: [{ a: { k: 'G', id: 'ABDOMEN' }, rel: 'DEPOIS', b: { k: 'G', id: 'TRICEPS' }, when: 'SEMPRE' }] }); assert.equal(ids(r), 'pe1,bi1,tri1,ab1', 'regra "abdômen depois de tríceps" vence a lista');
+    r = run(day(), ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'], { orders: {}, rules: [{ a: { k: 'G', id: 'ABDOMEN' }, rel: 'DEPOIS', b: { k: 'G', id: 'TRICEPS' }, when: 'LOWER' }] }); assert.equal(ids(r), 'pe1,ab1,bi1,tri1', 'regra só para pernas não vale num dia de cima (sem lista: ordem da estrutura)');
+    // full body: regra entre exercício específico e músculo / exercício
+    const fb = () => [ex('bi1', 'BICEPS'), ex('hack', 'QUADRICEPS', true), ex('ab1', 'ABDOMEN'), ex('stiff', 'POSTERIORES', true)];
+    const groups = ['BICEPS', 'QUADRICEPS', 'ABDOMEN', 'POSTERIORES'];
+    r = run(fb(), groups, { orders: { FULL: ['BICEPS', 'ABDOMEN', 'QUADRICEPS', 'POSTERIORES'] }, rules: [{ a: { k: 'E', id: 'hack' }, rel: 'ANTES', b: { k: 'G', id: 'BICEPS' }, when: 'FULL' }] }); assert.equal(ids(r), 'hack,bi1,ab1,stiff', 'Hack antes de bíceps (o resto segue a lista)');
+    r = run(fb(), groups, { orders: { FULL: ['QUADRICEPS', 'POSTERIORES', 'BICEPS', 'ABDOMEN'] }, rules: [{ a: { k: 'E', id: 'stiff' }, rel: 'DEPOIS', b: { k: 'E', id: 'ab1' }, when: 'SEMPRE' }] }); assert.equal(ids(r), 'hack,bi1,ab1,stiff', 'Stiff depois do abdominal');
+    r = run(fb(), groups, { orders: { FULL: ['BICEPS', 'ABDOMEN', 'QUADRICEPS', 'POSTERIORES'] }, rules: [{ a: { k: 'E', id: 'hack' }, rel: 'ANTES', b: { k: 'G', id: 'BICEPS' }, when: 'UPPER' }] }); assert.equal(ids(r), 'bi1,ab1,hack,stiff', 'regra de "só parte de cima" não vale no full body');
+    r = run(fb(), groups, { orders: { FULL: ['BICEPS', 'ABDOMEN', 'QUADRICEPS', 'POSTERIORES'] }, rules: [{ a: { k: 'E', id: 'naoexiste' }, rel: 'ANTES', b: { k: 'G', id: 'BICEPS' }, when: 'SEMPRE' }] }); assert.equal(ids(r), 'bi1,ab1,hack,stiff', 'exercício que não está no dia: regra ignorada');
+    // bi-set continua inteiro e cardio no começo vai depois da mobilidade
+    r = run([ex('c1', null, false, '', 'CARDIO'), ex('m1', null, false, '', 'MOB'), ex('pe1', 'PEITO', true), ex('bi1', 'BICEPS', false, 'BISET'), ex('bi2', 'BICEPS', false, 'BISET')], ['PEITO', 'BICEPS'], { orders: { UPPER: ['BICEPS', 'PEITO'] }, rules: [] }, 'COMECO'); assert.equal(ids(r), 'm1,c1,bi1,bi2,pe1', 'mobilidade, cardio, depois o bi-set inteiro');
+    r = run([ex('c1', null, false, '', 'CARDIO'), ex('pe1', 'PEITO', true), ex('bi1', 'BICEPS')], ['PEITO', 'BICEPS'], { orders: { UPPER: ['PEITO', 'BICEPS'] }, rules: [] }); assert.equal(ids(r), 'pe1,bi1,c1', 'cardio no fim por padrão');
+    // estilo quebrado: volta para a ordem padrão
+    assert.equal(cleanOrderStyle(null), null); assert.equal(cleanOrderStyle('x'), null); assert.equal(cleanOrderStyle({ orders: { UPPER: 'x' }, rules: [{ a: { k: 'X', id: 'a' }, rel: 'ANTES', b: { k: 'G', id: 'PEITO' } }] }), null);
+    assert.deepEqual(cleanOrderStyle({ orders: { UPPER: ['PEITO', 'PEITO', 'XYZ', 'BICEPS'] }, rules: [{ a: { k: 'G', id: 'PEITO' }, rel: 'ANTES', b: { k: 'G', id: 'PEITO' } }] })!.orders.UPPER, ['PEITO', 'BICEPS'], 'repetido e desconhecido saem');
+    assert.equal(ids(run(day(), ['PEITO', 'ABDOMEN', 'BICEPS', 'TRICEPS'], 'lixo')), 'pe1,bi1,tri1,ab1', 'sem estilo válido: padrão por nível (abdômen por último)');
+  });
+
+  await t('geração: o estilo do coach (orderStyle) muda a ordem do treino gerado; sem ele vale a ordem padrão', async () => {
+    seedGen();
+    const days = [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 3, rest: 60 }, { id: 'BICEPS', qty: 2, sets: 3, rest: 30 }] }];
+    const base = await gen({ days }); const g = (r: any) => idsOf(r).map((x: string) => x.split('-')[0]);
+    assert.ok(g(base).lastIndexOf('peito') < g(base).indexOf('biceps'), 'padrão: peito antes de bíceps: ' + g(base).join());
+    const own = await gen({ days, orderStyle: { orders: { UPPER: ['BICEPS', 'PEITO'] }, rules: [] } });
+    assert.ok(g(own).lastIndexOf('biceps') < g(own).indexOf('peito'), 'o coach mandou bíceps primeiro: ' + g(own).join());
+    const fixes = (own.body.quality?.fixes || []).join(' '); assert.ok(/que você escolheu/.test(fixes), 'o resumo diz que seguiu a ordem do coach: ' + fixes);
   });
 
   await t('ordem: músculo grande antes de pequeno, cada músculo junto, composto antes do isolado, bi/tri-set inteiros, mobilidade no começo e cardio no fim', () => {
