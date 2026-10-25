@@ -52,3 +52,16 @@ export function guessEquipment(name: any, category?: any): EquipmentGuess | null
 /** O coach marcou o equipamento à mão? Então ninguém (nem a edição do exercício) reescreve. */
 export const isEquipmentLocked = (tags: any) => !!tags && typeof tags === 'object' && tags.equipmentManual === true;
 export const isEquipmentId = (v: any): v is EquipmentId => (EQUIPMENT_IDS as readonly string[]).includes(v);
+
+/**
+ * 🏋️ Escolha do coach no formulário do exercício (cadastro e edição):
+ *  - um dos 7 equipamentos  → grava e TRAVA (equipmentManual), a edição por nome não desfaz;
+ *  - 'AUTO'                 → destrava e volta ao palpite pelo nome (`autoEquipment`);
+ *  - ausente / inválido     → não mexe em nada (quem edita sem mandar o campo mantém o que já tem).
+ */
+export function applyEquipmentChoice<T extends Record<string, any>>(tags: T, choice: any, autoEquipment?: string): T {
+  const out: any = { ...tags };
+  if (choice === 'AUTO') { delete out.equipmentManual; if (autoEquipment) out.equipment = autoEquipment; return out; }
+  if (isEquipmentId(choice)) { out.equipment = choice; out.equipmentManual = true; }
+  return out;
+}

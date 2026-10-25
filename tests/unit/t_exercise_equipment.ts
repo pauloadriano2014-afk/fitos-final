@@ -3,7 +3,8 @@ import jwt from 'jsonwebtoken';
 import prisma from '@/lib/prisma';
 import { POST as bulkPOST } from '/home/user/wt-back/app/api/exercise/bulk-update/route';
 import { GET as reviewGET } from '/home/user/wt-back/app/api/exercise/equipment-review/route';
-import { guessEquipment, isEquipmentLocked, EQUIPMENT_IDS, EQUIPMENT_LABEL } from '/home/user/wt-back/lib/exerciseEquipment';
+import { POST as exPOST, PUT as exPUT } from '/home/user/wt-back/app/api/exercise/route';
+import { guessEquipment, applyEquipmentChoice, isEquipmentLocked, EQUIPMENT_IDS, EQUIPMENT_LABEL } from '/home/user/wt-back/lib/exerciseEquipment';
 import { mergeTags } from '/home/user/wt-back/lib/exerciseTags';
 import { cleanRules, EQUIPMENTS } from '/home/user/wt-back/lib/genRules';
 import { PAULO_ID, ADRI_ID } from '/home/user/wt-back/lib/masterIds';
@@ -14,6 +15,7 @@ const tok = (id: string, role = 'COACH') => jwt.sign({ id, role, coachId: null }
 const bulk = async (as: string | null, o: any) => { const h: any = { 'content-type': 'application/json' }; if (as) h.authorization = 'Bearer ' + as; const r = await bulkPOST(new Request('http://x/api/exercise/bulk-update', { method: 'POST', headers: h, body: JSON.stringify(o) })); return { status: r.status, json: await r.json().catch(() => null) }; };
 const review = async (as: string | null) => { const h: any = {}; if (as) h.authorization = 'Bearer ' + as; const r = await reviewGET(new Request('http://x/api/exercise/equipment-review', { headers: h })); return { status: r.status, json: await r.json().catch(() => null) }; };
 const MASTER = tok(PAULO_ID, 'ADMIN');
+const exCall = async (fn: any, method: string, o: any) => { const r = await fn(new Request('http://x/api/exercise', { method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tok('c1') }, body: JSON.stringify(o) })); return { status: r.status, json: await r.json().catch(() => null) }; };
 const ex = (id: string, name: string, equipment: string | null, o: any = {}) => ({ id, name, category: 'Pernas', subCategory: 'Geral', coachId: PAULO_ID, hiddenFromCoaches: false, videoUrl: 'v', defaultSubstitutes: [], environments: ['UNIVERSAL'], tags: equipment ? { target: 'PERNAS', equipment, ...(o.tags || {}) } : {}, ...Object.fromEntries(Object.entries(o).filter(([k]) => k !== 'tags')) });
 const seed = () => {
   P.__reset();
@@ -86,6 +88,26 @@ const g = (n: string, c?: string) => guessEquipment(n, c)?.equipment ?? null;
     assert.deepEqual(r.json.noGuess.map((i: any) => i.id), ['unk']); assert.equal(r.json.locked, 1);
     assert.ok(!r.json.items.some((i: any) => ['lock', 'mob', 'o', 'abd', 'hal'].includes(i.id)), 'travado, mobilidade, outro coach e os já certos ficam fora');
     assert.equal(JSON.stringify(S.exercise), antes, 'só leitura'); assert.equal((await review(tok('c1'))).status === 200, false, 'parceiro não vê');
+  });
+  await t('cadastro: escolher o equipamento no formulário grava e TRAVA; sem escolha ou "AUTO" usa o palpite pelo nome', async () => {
+    let r = await exCall(exPOST, 'POST', { adminId: 'c1', name: 'Rosca no aparelho X', muscleGroup: 'Bíceps', equipment: 'SMITH' }); assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.tags.equipment, 'SMITH'); assert.equal(r.json.tags.equipmentManual, true);
+    r = await exCall(exPOST, 'POST', { adminId: 'c1', name: 'Stiff no Smith novo', muscleGroup: 'Pernas' }); assert.equal(r.json.tags.equipment, 'SMITH', 'sem escolha: palpite pelo nome'); assert.equal(r.json.tags.equipmentManual, undefined);
+    r = await exCall(exPOST, 'POST', { adminId: 'c1', name: 'Pelve MATRIX novo', muscleGroup: 'Glúteos', equipment: 'AUTO' }); assert.equal(r.json.tags.equipment, 'MAQUINA'); assert.equal(r.json.tags.equipmentManual, undefined);
+    r = await exCall(exPOST, 'POST', { adminId: 'c1', name: 'Exercício qualquer', muscleGroup: 'Pernas', equipment: 'PLANETA' }); assert.equal(r.json.tags.equipment, 'LIVRE', 'valor inválido é ignorado (vira "sem classificar")'); assert.equal(r.json.tags.equipmentManual, undefined);
+  });
+  await t('edição: escolher trava; AUTO destrava e refaz pelo nome; sem o campo mantém o que o exercício já tinha', async () => {
+    S.exercise.push(ex('mine', 'Leg press 45º', 'LIVRE', { coachId: 'c1' }));
+    const base = { id: 'mine', adminId: 'c1', name: 'Leg press 45º', muscleGroup: 'Pernas' };
+    let r = await exCall(exPUT, 'PUT', { ...base, equipment: 'OUTROS' }); assert.equal(r.status, 200, JSON.stringify(r.json)); assert.equal(row('mine').tags.equipment, 'OUTROS'); assert.equal(row('mine').tags.equipmentManual, true);
+    r = await exCall(exPUT, 'PUT', { ...base }); assert.equal(row('mine').tags.equipment, 'OUTROS', 'editar o nome/vídeo sem mexer no equipamento não desfaz a escolha'); assert.equal(row('mine').tags.equipmentManual, true);
+    r = await exCall(exPUT, 'PUT', { ...base, equipment: 'AUTO' }); assert.equal(row('mine').tags.equipment, 'MAQUINA', 'AUTO volta ao palpite do nome'); assert.equal(row('mine').tags.equipmentManual, undefined);
+    r = await exCall(exPUT, 'PUT', { ...base, equipment: 'HALTER' }); assert.equal(row('mine').tags.equipment, 'HALTER');
+    r = await exCall(exPUT, 'PUT', { ...base, equipment: 'LIVRE' }); assert.equal(row('mine').tags.equipment, 'HALTER', 'LIVRE é nome antigo: não se escolhe, mantém'); assert.equal(row('mine').tags.equipmentManual, true);
+  });
+  await t('applyEquipmentChoice: função pura (escolha trava, AUTO destrava, inválido não mexe e não altera o original)', () => {
+    const t0 = { equipment: 'MAQUINA', target: 'X' }; const a = applyEquipmentChoice(t0, 'SMITH', 'MAQUINA'); assert.deepEqual(a, { equipment: 'SMITH', equipmentManual: true, target: 'X' }); assert.deepEqual(t0, { equipment: 'MAQUINA', target: 'X' });
+    assert.deepEqual(applyEquipmentChoice(a, 'AUTO', 'POLIA'), { equipment: 'POLIA', target: 'X' }); assert.deepEqual(applyEquipmentChoice(a, undefined, 'POLIA'), a); assert.deepEqual(applyEquipmentChoice(a, 'LIVRE', 'POLIA'), a);
   });
   console.log(`\n${ok} ok, ${bad} falhas`); process.exit(bad ? 1 : 0);
 })();

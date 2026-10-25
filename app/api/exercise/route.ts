@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 import { PAULO_ID, ADRI_ID, MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
 import { visibleLibraryWhere, hiddenFlagFromBody } from '@/lib/exerciseVisibility';
-import { guessEquipment } from '@/lib/exerciseEquipment';
+import { guessEquipment, applyEquipmentChoice } from '@/lib/exerciseEquipment';
 import { mergeTags, cleanExtraPatch } from '@/lib/exerciseTags';
 
 export const dynamic = 'force-dynamic';
@@ -192,7 +192,9 @@ export async function POST(req: Request) {
     const subCat = body.subCategory || guessSubCategory(body.name, cat);
     const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
     // 🏷️ (19 out 2026) tags novas (impacto, evitar para, favorito) vêm de `body.extraTags`; as automáticas (músculo, equipamento...) seguem pelo nome
-    const tags = mergeTags(generateTags(body.name, cat), null, cleanExtraPatch(body.extraTags));
+    const generated = generateTags(body.name, cat);
+    // 🏋️ equipamento escolhido no formulário (7 opções) trava; "AUTO"/ausente = palpite pelo nome
+    const tags = applyEquipmentChoice(mergeTags(generated, null, cleanExtraPatch(body.extraTags)) as any, body.equipment, (generated as any).equipment);
     const adminId = body.adminId;
 
     if (!adminId) return NextResponse.json({ error: "Acesso Negado: Faltando Admin ID" }, { status: 403 });
@@ -268,7 +270,9 @@ export async function PUT(req: Request) {
     const envs = body.environments && body.environments.length > 0 ? body.environments : ["ACADEMIA"];
     // 🏷️ (19 out 2026) editar o exercício REGERA as tags automáticas pelo nome, mas NÃO pode apagar as marcações novas feitas à mão (impacto, evitar para, favorito)
     const current = await prisma.exercise.findUnique({ where: { id }, select: { tags: true } });
-    const tags = mergeTags(generateTags(body.name, cat), current?.tags, cleanExtraPatch(body.extraTags));
+    const generated = generateTags(body.name, cat);
+    // 🏋️ equipamento: sem o campo no corpo mantém o que já tem (travado à mão fica); "AUTO" destrava e volta ao palpite; um dos 7 trava
+    const tags = applyEquipmentChoice(mergeTags(generated, current?.tags, cleanExtraPatch(body.extraTags)) as any, body.equipment, (generated as any).equipment);
     // 🙈 Só o time master muda "só o Paulo vê"; sem o campo no corpo, o valor atual é mantido.
     const hidden = hiddenFlagFromBody(body, adminId);
 

@@ -118,6 +118,9 @@
  "t_exercise_bulk": [
   "build73.mjs"
  ],
+ "t_exercise_content_bulk": [
+  "build73.mjs"
+ ],
  "t_exercise_equipment": [
   "build73.mjs"
  ],
