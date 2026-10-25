@@ -5,6 +5,7 @@
 // no servidor. Se mexer num dos lados, mexa no outro (há um teste de paridade entre os dois).
 
 export const MUSCLE_GROUPS = [
+  { id: 'PERNAS_MULTI', label: 'Pernas — Multi.', color: '#FF5C5C', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },
   { id: 'QUADRICEPS',    label: 'Quadríceps',       color: '#FF6B6B', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },
   { id: 'POSTERIORES',   label: 'Posteriores',      color: '#FF8E53', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },
   { id: 'GLUTEOS',       label: 'Glúteos',          color: '#FF6B9D', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },

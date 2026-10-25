@@ -41,8 +41,16 @@ const groupInfo = (id: string): any => (MUSCLE_GROUPS as any[]).find((g) => g.id
 const LIGHT_EQ = ['HALTER', 'LIVRE', 'PESO_CORPORAL', 'CANELEIRA', 'BARRA'];
 // A biblioteca real marca TODO exercício de glúteo como isolado (hip thrust incluso) e usa rótulos genéricos (PERNAS, COSTAS, OMBROS) ao lado dos específicos.
 // Músculos grandes: o 1º exercício do dia daquele músculo é o "levantamento principal" e vira âncora mesmo sem a etiqueta de composto.
-const BIG_TARGETS = new Set(['PEITO', 'COSTAS', 'COSTAS_PUXADA', 'COSTAS_REMADA', 'QUADRICEPS', 'POSTERIORES', 'POSTERIOR', 'GLUTEOS', 'PERNAS', 'OMBRO_MULTI', 'OMBRO_FRONTAL', 'OMBROS']);
+const BIG_TARGETS = new Set(['PEITO', 'COSTAS', 'COSTAS_PUXADA', 'COSTAS_REMADA', 'PERNAS_MULTI', 'QUADRICEPS', 'POSTERIORES', 'POSTERIOR', 'GLUTEOS', 'PERNAS', 'OMBRO_MULTI', 'OMBRO_FRONTAL', 'OMBROS']);
 const GENERIC_TARGETS = new Set(['PERNAS', 'COSTAS', 'OMBROS']);
+/** rótulo genérico para o grupo pedido: PERNAS/COSTAS/OMBROS soltos, ou multiarticular de perna etiquetado só PERNAS caindo em Quadríceps/Glúteos/... (o etiquetado do próprio músculo vale) */
+const isGenericFor = (e: LibEx, gid: string) => {
+  const t = targetOf(e);
+  if (GENERIC_TARGETS.has(t)) return true;
+  if (t !== 'PERNAS_MULTI' || gid === 'PERNAS_MULTI') return false;
+  const raw = String((e.tags as any)?.target ?? '').trim().toUpperCase();
+  return !(raw === gid || raw === 'QUADRICEPS' && gid === 'QUADRICEPS');
+};
 
 // ───────────────────────────── 1) NÍVEL ─────────────────────────────
 const LEVEL_TEXT: Record<LevelKey, string> = {
@@ -173,10 +181,13 @@ export function buildCandidates(c: CandCtx): Candidates {
     if (g.id === 'MOBILIDADE') continue;
     const cur = groups.get(g.id) || { total: 0, maxDay: 0 }; cur.total += Number(g.qty) || 0; cur.maxDay = Math.max(cur.maxDay, Number(g.qty) || 0); groups.set(g.id, cur);
   }
+  const hasLegMulti = groups.has('PERNAS_MULTI');
   for (const [gid, q] of groups) {
     const aliases = aliasesOf(gid);
     const seen = new Set<string>();
-    let pool = c.library.filter((e) => (aliases.includes(targetOf(e)) || (gid === 'CARDIO' && isCardioLib(e)))).filter((e) => {
+    // 🦵 com Pernas Multi. no plano, os multiarticulares de perna ficam só nesse grupo (não duplicam em Quadríceps/Glúteos...)
+    const legMultiElsewhere = (e: LibEx) => hasLegMulti && gid !== 'PERNAS_MULTI' && targetOf(e) === 'PERNAS_MULTI';
+    let pool = c.library.filter((e) => (aliases.includes(targetOf(e)) || (gid === 'CARDIO' && isCardioLib(e))) && !legMultiElsewhere(e)).filter((e) => {
       const k = nameKey(e.name); if (!k) return false;
       if (seen.has(k)) return false; seen.add(k); return true;
     });
@@ -194,7 +205,7 @@ export function buildCandidates(c: CandCtx): Candidates {
       if (pins.has(e.id)) s += 20; else if (keep.has(e.id)) s += 10; else if (latestNames.has(k)) s -= 6;
       if ((e.tags as any)?.favorite === true) s += 2;   // favorito do coach
       if (olderNames.has(k)) s -= 2;
-      if (!GENERIC_TARGETS.has(targetOf(e))) s += 4;   // exercício do músculo certo antes do rótulo genérico (PERNAS no lugar de glúteo)
+      if (!isGenericFor(e, gid)) s += 4;   // exercício do músculo certo antes do rótulo genérico (PERNAS no lugar de glúteo)
       if (e.videoUrl) s += 1;
       const m = mechOf(e); if (restType === 'MULTI') s += m === 'COMPOSTO' ? 2 : 0; else if (restType === 'ISOLADO') s += m === 'ISOLADO' ? 1 : 0;
       const eq = equipOf(e);
@@ -209,7 +220,7 @@ export function buildCandidates(c: CandCtx): Candidates {
       let bi = 0, bv = -Infinity;
       for (let i = 0; i < ranked.length; i++) { const v = ranked[i].s - 0.5 * (eqCount[equipOf(ranked[i].e)] || 0); if (v > bv) { bv = v; bi = i; } }
       const [it] = ranked.splice(bi, 1); picked.push(it.e); const eq = equipOf(it.e); eqCount[eq] = (eqCount[eq] || 0) + 1;
-      if (c.subLinks && gid !== 'CARDIO') for (let i = ranked.length - 1; i >= 0; i--) if (areLinked(c.subLinks, it.e.id, ranked[i].e.id) && !pins.has(ranked[i].e.id)) sibs.unshift(...ranked.splice(i, 1));   // 🔗 o substituto dele sai do cardápio (continua como opção de troca para o aluno)
+      if (c.subLinks && gid !== 'CARDIO') for (let i = ranked.length - 1; i >= 0; i--) if (areLinked(c.subLinks, it.e.id, ranked[i].e.id) && !pins.has(ranked[i].e.id)) sibs.unshift(...ranked.splice(i, 1).map((x) => x.e));   // 🔗 o substituto dele sai do cardápio (continua como opção de troca para o aluno)
     }
     // 🔗 regra suave: se, sem os substitutos, não sobram exercícios para o maior dia do grupo, eles voltam (melhor um substituto do que dia incompleto)
     if (sibs.length && picked.length < q.maxDay) { while (picked.length < q.maxDay && sibs.length) picked.push(sibs.shift()!); notes.push(`${gid}: a biblioteca tem poucos movimentos diferentes, substitutos voltaram ao cardápio`); }
@@ -328,11 +339,13 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
     }
     const cap = groups.map((g) => Math.max(0, Number(g.qty) || 0));
     const slot: GenEx[][] = groups.map(() => []); let left: GenEx[] = list.slice();
+    const dayLegMulti = groups.some((g) => g.id === 'PERNAS_MULTI');
     const place = (strict: boolean) => {
       left = left.filter((ex) => {
         const t = exTarget(ex);
         for (let i = 0; i < groups.length; i++) {
           if (slot[i].length >= cap[i]) continue;
+          if (!strict && dayLegMulti && t === 'PERNAS_MULTI' && groups[i].id !== 'PERNAS_MULTI') continue;   // 🦵 multiarticular de perna só ocupa vaga do grupo Pernas Multi.
           const hit = strict ? t === groups[i].id : aliasesOf(groups[i].id).includes(t) || (groups[i].id === 'CARDIO' && exCardio(ex));
           if (hit) { slot[i].push(ex); return false; }
         }

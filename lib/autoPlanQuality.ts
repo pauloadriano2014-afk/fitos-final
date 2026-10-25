@@ -38,12 +38,13 @@ const real = (v: any) => arr(v).filter((x) => x && !isNone(x));
 // A biblioteca do coach não usa exatamente os nomes dos grupos do plano (POSTERIOR x POSTERIORES, OMBROS x OMBRO_MULTI, ABDUTOR sem exercício...).
 // Este mapa diz em quais targets cada grupo pode ser atendido; vale para conferir cobertura e para saber de que grupo é um exercício.
 export const TARGET_ALIASES: Record<string, string[]> = {
-  QUADRICEPS: ['QUADRICEPS', 'PERNAS'],
-  POSTERIORES: ['POSTERIORES', 'POSTERIOR', 'PERNAS'],
-  GLUTEOS: ['GLUTEOS', 'PERNAS'],
+  PERNAS_MULTI: ['PERNAS_MULTI'],   // Pernas > Multiarticular (agachamento, leg press, hack, afundo, passada...): grupo próprio
+  QUADRICEPS: ['QUADRICEPS', 'PERNAS', 'PERNAS_MULTI'],   // os multiarticulares continuam podendo servir de quadríceps nos planos antigos
+  POSTERIORES: ['POSTERIORES', 'POSTERIOR', 'PERNAS', 'PERNAS_MULTI'],
+  GLUTEOS: ['GLUTEOS', 'PERNAS', 'PERNAS_MULTI'],
   PANTURRILHA: ['PANTURRILHA'],
-  ADUTOR: ['ADUTOR', 'PERNAS'],
-  ABDUTOR: ['ABDUTOR', 'GLUTEOS', 'PERNAS'],
+  ADUTOR: ['ADUTOR', 'PERNAS', 'PERNAS_MULTI'],
+  ABDUTOR: ['ABDUTOR', 'GLUTEOS', 'PERNAS', 'PERNAS_MULTI'],
   COSTAS_PUXADA: ['COSTAS_PUXADA', 'COSTAS'],
   COSTAS_REMADA: ['COSTAS_REMADA', 'COSTAS'],
   OMBRO_MULTI: ['OMBRO_MULTI', 'OMBROS', 'OMBRO_FRONTAL'],

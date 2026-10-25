@@ -167,6 +167,26 @@ const hist = (rows: Array<{ id: string; sets: number[]; effort?: string; perSide
     assert.deepEqual(A.filter((e) => tg(e) === 'BICEPS').map((e) => e.blocks[0].restTime), ['30', '30'], 'descanso do grupo'); assert.equal(filled[0].blocks[0].reps, '12', 'meio de 8–15');
     assert.equal(r.quality.stats.filled, 3); assert.ok(r.quality.fixes.some((f) => f.startsWith('Dia A: a IA deixou PEITO incompleto')), r.quality.fixes.join()); assert.equal(r.byDay.B, undefined, 'dia que a IA nem mandou não é inventado');
   });
+  await t('Pernas — Multi.: multiarticular de perna (qualquer etiqueta) é do grupo próprio, não duplica em Quadríceps/Glúteos e só ocupa a vaga dele', () => {
+    const leg = (id: string, name: string, target: string, sub: string, mech = 'COMPOSTO'): any => ({ id, name, category: 'Pernas', subCategory: sub, videoUrl: 'v', tags: { target, mechanic: mech, equipment: 'LIVRE', jointRisk: [] }, environments: ['UNIVERSAL'] });
+    const L = [leg('m1', 'Passada sem peso', 'PERNAS', 'Multiarticular'), leg('m2', 'Agachamento livre', 'QUADRICEPS', 'Multiarticular'), leg('m3', 'Leg press 45', 'QUADRICEPS', 'Multiarticular'), leg('i1', 'Cadeira extensora', 'QUADRICEPS', 'Quadríceps', 'ISOLADO'), leg('i2', 'Mesa flexora', 'POSTERIOR', 'Posteriores', 'ISOLADO'), leg('g1', 'Elevação pélvica', 'GLUTEOS', 'Glúteos', 'ISOLADO')];
+    const days: PlanDay[] = [{ name: 'A', groups: [{ id: 'PERNAS_MULTI', qty: 2, sets: 4, rest: 60 }, { id: 'QUADRICEPS', qty: 1, sets: 3, rest: 60 }] }];
+    const c = buildCandidates({ days, library: L, facts: [], prev: [], level: null, env: 'X', levelRules: false });
+    assert.deepEqual((c.byGroup.get('PERNAS_MULTI') || []).map((e) => e.id).sort(), ['m1', 'm2', 'm3'], 'a passada (etiqueta PERNAS) aparece em Pernas — Multi.');
+    assert.deepEqual((c.byGroup.get('QUADRICEPS') || []).map((e) => e.id), ['i1'], 'o multi não duplica em Quadríceps');
+    // sem o grupo no plano, o multi ainda serve de Quadríceps (o etiquetado QUADRICEPS vem antes do genérico PERNAS)
+    const solo = buildCandidates({ days: [{ name: 'A', groups: [{ id: 'QUADRICEPS', qty: 2 }] }], library: L, facts: [], prev: [], level: null, env: 'X', levelRules: false }).byGroup.get('QUADRICEPS')!.map((e) => e.id);
+    assert.ok(solo.includes('m1') && solo.includes('m2') && solo.includes('i1'), solo.join()); assert.ok(solo.indexOf('m1') > solo.indexOf('m2'), 'genérico PERNAS depois do etiquetado: ' + solo.join());
+    // refine: a IA mandou 3 multis e 1 extensora; o dia tem 2 vagas de multi e 1 de quadríceps
+    const libMap2 = new Map(L.map((e: any) => [e.id, e]));
+    const r = refineWorkout({ A: [gx(L[0], 3), gx(L[1], 3), gx(L[2], 3), gx(L[3], 3)] }, { ...mk({}, days, L), lib: libMap2 } as any);
+    const ids = r.byDay.A.map((e) => e.exerciseId);
+    assert.equal(ids.filter((i) => ['m1', 'm2', 'm3'].includes(i)).length, 2, 'só 2 multis: ' + ids.join()); assert.ok(ids.includes('i1'), 'a extensora fica na vaga de Quadríceps: ' + ids.join());
+    assert.ok(r.quality.fixes.some((f) => f.includes('tirou 1 exercício')), r.quality.fixes.join());
+    // a IA mandou 3 multis e nenhum isolado: o 3º multi não pode ocupar a vaga de Quadríceps; ela é completada com a extensora
+    const r2 = refineWorkout({ A: [gx(L[0], 3), gx(L[1], 3), gx(L[2], 3)] }, { ...mk({}, days, L), lib: libMap2 } as any); const ids2 = r2.byDay.A.map((e) => e.exerciseId);
+    assert.equal(ids2.filter((i) => ['m1', 'm2', 'm3'].includes(i)).length, 2, ids2.join()); assert.ok(ids2.includes('i1'), 'vaga de Quadríceps completada com o isolado: ' + ids2.join());
+  });
   await t('refineWorkout: tira o que passou do plano, o repetido no dia e o dia fantasma; ordem dos grupos; composto antes do isolado; entrada intacta', () => {
     const input = { A: [gx(BICEPS[0]), gx(PEITO[5]), gx(PEITO[0]), gx(PEITO[0]), gx(PEITO[1]), gx(PEITO[2]), gx(BICEPS[1]), gx(BICEPS[2])], Z: [gx(PEITO[0])] }; const snap = JSON.stringify(input);
     const r = refineWorkout(input, mk()); const A = r.byDay.A;

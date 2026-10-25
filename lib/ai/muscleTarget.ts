@@ -14,6 +14,8 @@ const BY_SUB: Record<string, Record<string, string>> = {
   OMBROS: { FRONTAL: 'OMBRO_FRONTAL', LATERAL: 'OMBRO_LATERAL', POSTERIOR: 'OMBRO_POST', MULTIARTICULAR: 'OMBRO_MULTI', TRAPEZIO: 'TRAPEZIO' },
   PERNAS: { GLUTEOS: 'GLUTEOS', POSTERIORES: 'POSTERIOR', QUADRICEPS: 'QUADRICEPS', PANTURRILHA: 'PANTURRILHA', ADUTOR: 'ADUTOR', ABDUTOR: 'ABDUTOR' },
 };
+/** alvos que a etiqueta pode ter num exercício de Pernas > Multiarticular (outro alvo = erro de importação, fica como está) */
+const LEG_RAW = new Set(['', 'PERNAS', 'QUADRICEPS', 'GLUTEOS', 'POSTERIOR', 'POSTERIORES', 'PEITO']);
 const GENERIC: Record<string, string> = { COSTAS: 'COSTAS', OMBROS: 'OMBROS', PERNAS: 'PERNAS' };
 
 /** O alvo (grupo muscular) do exercício, já corrigido pela categoria; sem categoria nem alvo devolve ''. */
@@ -22,6 +24,8 @@ export function muscleTarget(e: { tags?: any; category?: any; subCategory?: any 
   const raw = strip(e.tags?.target);
   const cat = strip(e.category);
   if (SINGLE[cat]) return SINGLE[cat];
+  // 🦵 (25 out 2026) PERNAS > MULTIARTICULAR (agachamento, leg press, hack, afundo, passada, búlgaro...) é um grupo próprio, "Pernas — Multi." (PERNAS_MULTI), qualquer que seja a etiqueta de alvo (QUADRICEPS ou o genérico PERNAS).
+  if (cat === 'PERNAS' && strip(e.subCategory) === 'MULTIARTICULAR' && LEG_RAW.has(raw)) return 'PERNAS_MULTI';
   if (raw === 'PEITO' && cat && cat !== 'PEITO') {
     const sub = strip(e.subCategory);
     return BY_SUB[cat]?.[sub] || GENERIC[cat] || raw;
