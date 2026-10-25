@@ -19,6 +19,7 @@ import { shapeReps, cleanRepChoice, describeRepChoice } from '@/lib/ai/repScheme
 import { compactToFull } from '@/lib/ai/compactOutput';
 import { MUSCLE_GROUPS } from '@/lib/ai/splitPresets';
 import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy, techniquesForLevel, refineWorkout, repRange, REP_CAP, CodeBook, type PrevRoutine, type PrevEx, type GenEx, type Quality } from '@/lib/ai/workoutPlanner';
+import { buildSubLinks } from '@/lib/ai/subFamily';
 import { cleanOrderStyle, orderDayExercises } from '@/lib/ai/exerciseOrder';
 import { recordGenerated } from '@/lib/ai/genSnapshots';
 import { pickSwap, isCompatibleSub, nameKey, type LibEx } from '@/lib/exerciseSwap';
@@ -208,7 +209,7 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
       levelInfo = computeLevel({ entry: parseLevel((user as any).level) || parseLevel(anamnese_?.nivel) || 'INICIANTE', startDate: (user as any).startDate || (user as any).createdAt, sessions });
       // fixado pelo coach = âncora: repete mesmo que a rotação mandasse trocar
       facts = buildFacts(prevRoutines, history).map((f) => (pinSet.has(f.exerciseId) ? { ...f, plan: 'MANTER' as const, why: 'fixado pelo coach' } : f));
-      cands = buildCandidates({ days: cycleConfig.days, library: adminExercises as unknown as LibEx[], facts, prev: prevRoutines, level: levelInfo.level, env: trainingEnv || 'UNIVERSAL', levelRules, pins: pinSet });
+      cands = buildCandidates({ days: cycleConfig.days, library: adminExercises as unknown as LibEx[], facts, prev: prevRoutines, level: levelInfo.level, env: trainingEnv || 'UNIVERSAL', levelRules, pins: pinSet, subLinks: buildSubLinks(adminExercises) });
     }
     const techFiltered = smart && levelRules && levelInfo ? techniquesForLevel(cycleConfig.techniques || [], levelInfo.level) : { kept: cycleConfig?.techniques || [], removed: [] as string[] };
     techRemoved = techFiltered.removed;
@@ -625,7 +626,7 @@ Responda APENAS com JSON válido.`.trim();
       const r = refineWorkout(rawDays as Record<string, GenEx[]>, {
         days: cycleConfig.days, phase: String(cycleConfig.phase || ''), level: levelInfo.level, levelRules,
         lib: exerciseMap as unknown as Map<string, LibEx>, pool: adminExercises as unknown as LibEx[], cands, facts, hasPrev: prevRoutines.length > 0,
-        env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded, pins: pinSet, repChoice: cleanRepChoice(cycleConfig?.repScheme), repCap: repCapCfg,
+        env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded, pins: pinSet, repChoice: cleanRepChoice(cycleConfig?.repScheme), repCap: repCapCfg, subLinks: buildSubLinks(adminExercises),
         makeEx: (e, blocks) => ({ exerciseId: e.id, title: e.name, videoUrl: e.videoUrl || '', category: e.category, subCategory: e.subCategory, observation: '', substitute: subFor(e.id), blocks }),
       });
       reviewedDays = r.byDay; quality = r.quality;

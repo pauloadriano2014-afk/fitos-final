@@ -18,6 +18,7 @@ import { sessionsOf, suggestLoad } from '@/lib/loadSuggest';
 import { sideValue } from '@/lib/exerciseLoad';
 import { shapeReps, type RepChoice } from '@/lib/ai/repSchemes';
 import { muscleTarget } from '@/lib/ai/muscleTarget';
+import { areLinked, linkedToAny, linkedIds, type SubLinks } from '@/lib/ai/subFamily';   // 🔗 substituto = opção de troca, nunca 2 exercícios no mesmo dia
 
 export interface PlanGroup { id: string; qty: number; sets?: number; rest?: number }
 export interface PlanDay { name: string; groups: PlanGroup[] }
@@ -151,7 +152,7 @@ export class CodeBook {
 }
 
 // ───────────────────────────── 3) CANDIDATOS ─────────────────────────────
-export interface CandCtx { days: PlanDay[]; library: LibEx[]; facts: ExFact[]; prev: PrevRoutine[]; level: LevelKey | null; env: string; levelRules: boolean; /** exercícios que o coach fixou: sempre no topo da lista do grupo */ pins?: Set<string> }
+export interface CandCtx { days: PlanDay[]; library: LibEx[]; facts: ExFact[]; prev: PrevRoutine[]; level: LevelKey | null; env: string; levelRules: boolean; /** exercícios que o coach fixou: sempre no topo da lista do grupo */ pins?: Set<string>; /** 🔗 quem é substituto de quem (lib/ai/subFamily.ts): só um da dupla aparece no cardápio do grupo */ subLinks?: SubLinks }
 export interface Candidates { byGroup: Map<string, LibEx[]>; notes: string[]; latestNames: Set<string>; olderNames: Set<string> }
 
 export function recentNames(prev: PrevRoutine[]): { latestNames: Set<string>; olderNames: Set<string> } {
@@ -203,12 +204,15 @@ export function buildCandidates(c: CandCtx): Candidates {
     };
     const cap = Math.min(24, Math.max(10, q.total * 5));
     const ranked = pool.map((e) => ({ e, s: score(e) })).sort((a, b) => b.s - a.s || nameKey(a.e.name).localeCompare(nameKey(b.e.name)));
-    const picked: LibEx[] = []; const eqCount: Record<string, number> = {};
+    const picked: LibEx[] = []; const eqCount: Record<string, number> = {}; const sibs: LibEx[] = [];   // sibs = substitutos deixados de fora do cardápio
     while (picked.length < cap && ranked.length) {
       let bi = 0, bv = -Infinity;
       for (let i = 0; i < ranked.length; i++) { const v = ranked[i].s - 0.5 * (eqCount[equipOf(ranked[i].e)] || 0); if (v > bv) { bv = v; bi = i; } }
       const [it] = ranked.splice(bi, 1); picked.push(it.e); const eq = equipOf(it.e); eqCount[eq] = (eqCount[eq] || 0) + 1;
+      if (c.subLinks && gid !== 'CARDIO') for (let i = ranked.length - 1; i >= 0; i--) if (areLinked(c.subLinks, it.e.id, ranked[i].e.id) && !pins.has(ranked[i].e.id)) sibs.unshift(...ranked.splice(i, 1));   // 🔗 o substituto dele sai do cardápio (continua como opção de troca para o aluno)
     }
+    // 🔗 regra suave: se, sem os substitutos, não sobram exercícios para o maior dia do grupo, eles voltam (melhor um substituto do que dia incompleto)
+    if (sibs.length && picked.length < q.maxDay) { while (picked.length < q.maxDay && sibs.length) picked.push(sibs.shift()!); notes.push(`${gid}: a biblioteca tem poucos movimentos diferentes, substitutos voltaram ao cardápio`); }
     byGroup.set(gid, picked);
   }
   return { byGroup, notes, latestNames, olderNames };
@@ -258,6 +262,8 @@ export interface RefineCtx {
   loaded: Set<string>;
   /** exercícios que o coach fixou: entram na rotina (no lugar de um acessório do mesmo músculo) e nunca são trocados pela rotação */
   pins?: Set<string>;
+  /** 🔗 quem é substituto de quem (lib/ai/subFamily.ts): no mesmo dia nunca entram dois da mesma dupla (o fixado pelo coach não é tirado) */
+  subLinks?: SubLinks;
   /** escolha de repetições do coach (quadradinho "Repetições" da tela); sem escolha = pirâmide automática pela fase */
   repChoice?: RepChoice;
   /** teto de repetições por série escolhido pelo coach (sem escolha = REP_CAP; panturrilha fica com CALF_REP_CAP) */
@@ -310,6 +316,16 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
     // mesmo exercício duas vezes no dia (mesmo id ou mesmo nome): fica o primeiro
     { const ids = new Set<string>(), nm = new Set<string>(); const uniq = list.filter((ex) => { const k = nameKey(ex.title); if (ids.has(ex.exerciseId) || nm.has(k)) return false; ids.add(ex.exerciseId); nm.add(k); return true; });
       if (uniq.length !== list.length) { fix(`Dia ${d.name}: ${list.length - uniq.length} exercício(s) repetido(s) no mesmo dia removido(s)`); list.splice(0, list.length, ...uniq); } }
+    // 🔗 substituto não é segundo exercício: se a IA pôs "Panturrilha máquina" e "Panturrilha no Smith" no mesmo dia, fica o primeiro (a vaga é completada abaixo com OUTRO movimento)
+    if (ctx.subLinks) {
+      const kept: GenEx[] = []; const dropped: string[] = [];
+      for (const ex of list) {
+        const twin = exCardio(ex) ? undefined : kept.find((k) => !exCardio(k) && areLinked(ctx.subLinks, k.exerciseId, ex.exerciseId));   // cardio fica de fora: esteira/bicicleta podem se alternar
+        if (twin && !(ctx.pins || new Set<string>()).has(ex.exerciseId)) { dropped.push(`"${ex.title}" (mesmo movimento de "${twin.title}")`); continue; }
+        kept.push(ex);
+      }
+      if (dropped.length) { fix(`Dia ${d.name}: substituto não entra como 2º exercício, tirou ${dropped.join(', ')}`); list.splice(0, list.length, ...kept); }
+    }
     const cap = groups.map((g) => Math.max(0, Number(g.qty) || 0));
     const slot: GenEx[][] = groups.map(() => []); let left: GenEx[] = list.slice();
     const place = (strict: boolean) => {
@@ -331,7 +347,9 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
       if (g.id === 'CARDIO') { if (slot[i].length < cap[i]) issues.push(`Dia ${d.name}: faltou cardio`); return; }
       while (slot[i].length < cap[i]) {
         const cands = ctx.cands.byGroup.get(g.id) || [];
-        const usable = cands.filter((e) => !dayIds.has(e.id) && !dayNames.has(nameKey(e.name)) && !ctx.unavailable.has(e.id));
+        let usable = cands.filter((e) => !dayIds.has(e.id) && !dayNames.has(nameKey(e.name)) && !ctx.unavailable.has(e.id) && !linkedToAny(ctx.subLinks, e.id, dayIds));
+        let relaxed = false;
+        if (!usable.length && ctx.subLinks) { usable = cands.filter((e) => !dayIds.has(e.id) && !dayNames.has(nameKey(e.name)) && !ctx.unavailable.has(e.id)); relaxed = usable.length > 0; }   // 🔗 só sobraram substitutos: melhor um substituto do que o dia incompleto (e o coach é avisado)
         const pick = usable.find((e) => !latestNames.has(nameKey(e.name)) && !routineNames.has(nameKey(e.name))) || usable.find((e) => !latestNames.has(nameKey(e.name))) || usable[0];
         if (!pick) { issues.push(`Dia ${d.name}: faltou 1 exercício de ${g.id} (a biblioteca não tem outro disponível)`); break; }
         const sets = Number(g.sets) > 0 ? Number(g.sets) : Number(groupInfo(g.id)?.defaultSets) || 3;
@@ -340,6 +358,7 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
         const ex = ctx.makeEx(pick, Array.from({ length: sets }, () => ({ sets: '1', reps: r, load: '', restTime: rest, technique: '' })));
         slot[i].push(ex); filled.push(ex); dayIds.add(pick.id); dayNames.add(nameKey(pick.name)); st.filled++;
         fix(`Dia ${d.name}: a IA deixou ${g.id} incompleto — entrou "${pick.name}"`);
+        if (relaxed) issues.push(`Dia ${d.name}: "${pick.name}" é substituto de outro exercício do dia (a biblioteca não tem outro movimento de ${g.id} disponível)`);
       }
     });
     groups.forEach((g, i) => slot[i].forEach((ex) => groupOf.set(ex, g)));
@@ -397,15 +416,18 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
   }
   // ── c) rotação: o que a rotina anterior mandava TROCAR (e repetição entre dias) vira outro exercício do mesmo músculo ──
   const swapCtx = (used: Set<string>) => ({ unavailable: ctx.unavailable, jointRisks: ctx.jointRisks, env: ctx.env, level: lvl, usedNames: used, envOk: () => true, levelIssues });
+  const addedByDay = new Map<string, Set<string>>();   // 🔗 o que a rotação já trouxe para cada dia nesta passada
   const swap = (ex: GenEx, why: string, day: string): GenEx | null => {
     const orig = libOf(ex); if (!orig) return null;
     const used = new Set<string>([...routineNames, ...latestNames]);
+    // 🔗 a troca não pode cair num substituto de outro exercício que já está nesse dia
+    if (ctx.subLinks) { const here = [...(out[day] || []).filter((e) => e !== ex).map((e) => e.exerciseId), ...(addedByDay.get(day) || [])]; for (const id of linkedIds(ctx.subLinks, here)) { const l = ctx.lib.get(id); if (l) used.add(nameKey(l.name)); } }
     const withOlder = new Set<string>([...used, ...olderNames]);
     const pick = pickSwap(orig, ctx.pool, swapCtx(withOlder)) || pickSwap(orig, ctx.pool, swapCtx(used));
     if (!pick) return null;
     const nl = ctx.lib.get(pick.id); if (!nl) return null;
     const novo = ctx.makeEx(nl, ex.blocks.map((b) => ({ ...b, load: '' })));
-    routineNames.add(nameKey(nl.name)); st.swapped++;
+    routineNames.add(nameKey(nl.name)); st.swapped++; (addedByDay.get(day) || addedByDay.set(day, new Set()).get(day)!).add(nl.id);
     fix(`Dia ${day}: "${ex.title}" → "${nl.name}" (${why})`);
     return novo;
   };

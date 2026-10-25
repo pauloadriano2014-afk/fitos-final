@@ -4,6 +4,7 @@ import {
   ANCHOR_MAX_CYCLES, MAX_ANCHORS_PER_DAY, type ExFact, type GenEx, type RefineCtx, type PlanDay, type PrevRoutine,
 } from '/home/user/fitos-final/lib/ai/workoutPlanner';
 import { nameKey } from '/home/user/fitos-final/lib/exerciseSwap';
+import { buildSubLinks, areLinked, linkedToAny, linkedIds } from '/home/user/fitos-final/lib/ai/subFamily';
 
 let ok = 0; const t = async (name: string, fn: () => Promise<void> | void) => { try { await fn(); ok++; console.log('  ok  ' + name); } catch (e: any) { console.log('FALHOU  ' + name + '\n' + String(e?.stack || e).split('\n').slice(0, 6).join('\n')); process.exitCode = 1; } };
 
@@ -280,6 +281,61 @@ const hist = (rows: Array<{ id: string; sets: number[]; effort?: string; perSide
   await t('refineWorkout: dia que a IA nem mandou, ou mandou vazio, fica como está (a conferência do plano decide)', () => {
     const r = refineWorkout({ A: [], B: undefined as any }, mk()); assert.deepEqual(r.byDay.A, []); assert.equal(r.byDay.B, undefined); assert.equal(r.quality.stats.filled, 0);
     assert.equal(r.quality.stats.exercises, 0);
+  });
+
+
+  // ═════ 🔗 substituto = opção de troca, nunca 2 exercícios no mesmo dia (25 out 2026) ═════
+  const calf = (id: string, name: string, subs: string[] = [], eq = 'MAQUINA') => ({ ...lib(id, name, 'PANTURRILHA', 'ISOLADO', eq), defaultSubstitutes: subs });
+  const CALF = [calf('f1', 'Panturrilha máquina', ['f2']), calf('f2', 'Panturrilha no Smith', ['f1'], 'BARRA'), calf('f3', 'Panturrilha no banco', [], 'LIVRE')];
+  const calfDays: PlanDay[] = [{ name: 'A', groups: [{ id: 'PANTURRILHA', qty: 2, sets: 4, rest: 30 }] }];
+  await t('subFamily: ligação direta nos dois sentidos (só um lado listando já vale), sem "amigo do amigo", sem nada quando não há tag', () => {
+    const l = buildSubLinks([{ id: 'a', defaultSubstitutes: ['b'] }, { id: 'b', defaultSubstitutes: ['c'] }, { id: 'c' }, { id: 'd', defaultSubstitutes: null }]);
+    assert.ok(areLinked(l, 'a', 'b') && areLinked(l, 'b', 'a'), 'A lista B: B também enxerga A'); assert.ok(areLinked(l, 'b', 'c') && areLinked(l, 'c', 'b'));
+    assert.ok(!areLinked(l, 'a', 'c'), 'a~b e b~c NÃO fazem a~c (a tag errada de um não junta movimentos diferentes)'); assert.ok(!areLinked(l, 'a', 'd') && !areLinked(l, 'a', 'a'));
+    assert.ok(linkedToAny(l, 'a', ['x', 'b']) && !linkedToAny(l, 'a', ['c', 'd'])); assert.deepEqual([...linkedIds(l, ['a', 'c'])].sort(), ['b']);
+    assert.equal(buildSubLinks(undefined).size, 0); assert.ok(!areLinked(undefined, 'a', 'b') && !linkedToAny(null, 'a', ['b'])); assert.equal(linkedIds(undefined, ['a']).size, 0);
+  });
+  await t('cardápio: de uma dupla de substitutos só um entra (o outro continua como opção de troca); sem ligações, tudo como antes', () => {
+    const links = buildSubLinks(CALF);
+    const ids = (sl?: any) => buildCandidates({ days: calfDays, library: CALF, facts: [], prev: [], level: null, env: 'X', levelRules: false, subLinks: sl }).byGroup.get('PANTURRILHA')!.map((e) => e.id).sort();
+    assert.deepEqual(ids(), ['f1', 'f2', 'f3'], 'sem ligações: os 3'); const w = ids(links);
+    assert.equal(w.length, 2); assert.ok(w.includes('f3'), 'o banco (outro movimento) fica'); assert.equal(w.filter((x) => x === 'f1' || x === 'f2').length, 1, 'um só da dupla máquina/Smith');
+  });
+  await t('refineWorkout: a IA põe máquina E Smith no mesmo dia → fica a máquina, e o 2º de panturrilha vira OUTRO movimento (banco), nunca o Smith', () => {
+    const links = buildSubLinks(CALF);
+    const r = refineWorkout({ A: [gx(CALF[0], 4), gx(CALF[1], 4)] }, mk({ subLinks: links }, calfDays, CALF));
+    assert.deepEqual(r.byDay.A.map((e) => e.exerciseId).sort(), ['f1', 'f3'], r.byDay.A.map((e) => e.title).join());
+    assert.ok(r.quality.fixes.some((f) => f.includes('substituto não entra como 2º exercício') && f.includes('Panturrilha no Smith')), r.quality.fixes.join('|'));
+    const off = refineWorkout({ A: [gx(CALF[0], 4), gx(CALF[1], 4)] }, mk({}, calfDays, CALF)); assert.deepEqual(off.byDay.A.map((e) => e.exerciseId).sort(), ['f1', 'f2'], 'sem as ligações o comportamento antigo segue igual');
+  });
+  await t('refineWorkout: completar vaga nunca escolhe o substituto de quem já está no dia; só 1 de panturrilha pedido não muda nada', () => {
+    const links = buildSubLinks(CALF);
+    const r = refineWorkout({ A: [gx(CALF[0], 4)] }, mk({ subLinks: links }, calfDays, CALF)); assert.deepEqual(r.byDay.A.map((e) => e.exerciseId).sort(), ['f1', 'f3']);
+    const one = refineWorkout({ A: [gx(CALF[1], 4)] }, mk({ subLinks: links }, [{ name: 'A', groups: [{ id: 'PANTURRILHA', qty: 1, sets: 4, rest: 30 }] }], CALF)); assert.deepEqual(one.byDay.A.map((e) => e.exerciseId), ['f2'], '1 vaga: o Smith que a IA escolheu fica');
+    const only = [CALF[0], CALF[1]]; const r2 = refineWorkout({ A: [gx(CALF[0], 4)] }, mk({ subLinks: buildSubLinks(only) }, calfDays, only));
+    assert.deepEqual(r2.byDay.A.map((e) => e.exerciseId).sort(), ['f1', 'f2'], 'sem outro movimento na biblioteca: melhor o substituto do que o dia incompleto'); assert.ok(r2.quality.issues.some((i) => i.includes('é substituto de outro exercício do dia')), r2.quality.issues.join());
+    const ring = [1, 2, 3, 4, 5, 6].map((n) => ({ ...lib(`r${n}`, `Anel ${n}`, 'PANTURRILHA', 'ISOLADO'), defaultSubstitutes: [`r${n === 6 ? 1 : n + 1}`] })); const rr = refineWorkout({ A: [gx(ring[0], 4), gx(ring[1], 4)] }, mk({ subLinks: buildSubLinks(ring) }, calfDays, ring));
+    assert.equal(rr.byDay.A.length, 2, 'biblioteca com tags em anel: o dia continua completo'); assert.ok(!areLinked(buildSubLinks(ring), rr.byDay.A[0].exerciseId, rr.byDay.A[1].exerciseId), 'e os dois não são substitutos um do outro');
+  });
+  await t('refineWorkout: dias diferentes podem usar versões diferentes (máquina no A, Smith no B); fixado pelo coach nunca é tirado', () => {
+    const links = buildSubLinks(CALF);
+    const days: PlanDay[] = [{ name: 'A', groups: [{ id: 'PANTURRILHA', qty: 1, sets: 4, rest: 30 }] }, { name: 'B', groups: [{ id: 'PANTURRILHA', qty: 1, sets: 4, rest: 30 }] }];
+    const r = refineWorkout({ A: [gx(CALF[0], 4)], B: [gx(CALF[1], 4)] }, mk({ subLinks: links }, days, CALF)); assert.deepEqual([r.byDay.A[0].exerciseId, r.byDay.B[0].exerciseId], ['f1', 'f2'], 'a regra é por dia');
+    const both = refineWorkout({ A: [gx(CALF[0], 4), gx(CALF[1], 4)] }, mk({ subLinks: links, pins: new Set(['f2']) }, calfDays, CALF)); assert.deepEqual(both.byDay.A.map((e) => e.exerciseId).sort(), ['f1', 'f2'], 'o Smith está fixado: não é tirado');
+  });
+  await t('cardio fica fora da regra: esteira e bicicleta ligadas como substitutas podem entrar juntas no mesmo dia', () => {
+    const K = [{ ...lib('k1', 'Esteira', 'CARDIO', 'ISOLADO'), defaultSubstitutes: ['k2'] }, { ...lib('k2', 'Bike', 'CARDIO', 'ISOLADO'), defaultSubstitutes: ['k1'] }];
+    const days: PlanDay[] = [{ name: 'A', groups: [{ id: 'CARDIO', qty: 2 }] }];
+    const r = refineWorkout({ A: [gx(K[0], 1), gx(K[1], 1)] }, mk({ subLinks: buildSubLinks(K) }, days, K)); assert.deepEqual(r.byDay.A.map((e) => e.exerciseId).sort(), ['k1', 'k2']);
+    const c = buildCandidates({ days, library: K, facts: [], prev: [], level: null, env: 'X', levelRules: false, subLinks: buildSubLinks(K) }).byGroup.get('CARDIO')!; assert.equal(c.length, 2);
+  });
+  await t('refineWorkout: a rotação (troca por repetir da rotina anterior) não cai no substituto de outro exercício do mesmo dia', () => {
+    // bíceps: b1 repetido da rotina anterior vai ser trocado; b2 é o substituto de b3, que já está no dia → a troca tem que escolher b4 ou b5, nunca b2
+    const B = [1, 2, 3, 4, 5].map((n) => ({ ...lib(`bb${n}`, `Rosca ${n}`, 'BICEPS', 'ISOLADO', 'HALTER'), defaultSubstitutes: n === 2 ? ['bb3'] : [] }));
+    const prev: PrevRoutine = { name: 'Ant', days: { A: [B[0]].map(prevEx) } }; const days: PlanDay[] = [{ name: 'A', groups: [{ id: 'BICEPS', qty: 2, sets: 3, rest: 30 }] }];
+    const facts = buildFacts([prev], [], new Date());
+    const r = refineWorkout({ A: [gx(B[0], 3), gx(B[2], 3)] }, mk({ subLinks: buildSubLinks(B), hasPrev: true }, days, B, [prev], facts));
+    const ids = r.byDay.A.map((e) => e.exerciseId); assert.ok(!ids.includes('bb2'), 'não pode vir o substituto de bb3: ' + ids.join()); assert.ok(ids.includes('bb3'));
   });
 
   console.log(`\n${ok} verificações do planejador de treino`);
