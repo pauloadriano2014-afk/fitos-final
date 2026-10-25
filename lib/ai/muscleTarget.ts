@@ -7,7 +7,7 @@
 const strip = (s: any) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
 
 /** Músculos únicos: a categoria decide e pronto. */
-const SINGLE: Record<string, string> = { ABDOMEN: 'ABDOMEN', BICEPS: 'BICEPS', TRICEPS: 'TRICEPS' };
+const SINGLE: Record<string, string> = { ABDOMEN: 'ABDOMEN', BICEPS: 'BICEPS', TRICEPS: 'TRICEPS', ANTEBRACO: 'ANTEBRACO' };
 
 const BY_SUB: Record<string, Record<string, string>> = {
   COSTAS: { PUXADAS: 'COSTAS_PUXADA', REMADAS: 'COSTAS_REMADA' },
@@ -16,6 +16,8 @@ const BY_SUB: Record<string, Record<string, string>> = {
 };
 /** alvos que a etiqueta pode ter num exercício de Pernas > Multiarticular (outro alvo = erro de importação, fica como está) */
 const LEG_RAW = new Set(['', 'PERNAS', 'QUADRICEPS', 'GLUTEOS', 'POSTERIOR', 'POSTERIORES', 'PEITO']);
+/** Peito > Superior/Medial/Inferior: cada região é um grupo do plano ("Peito — Superior"...). */
+const CHEST_REGION: Record<string, string> = { SUPERIOR: 'PEITO_SUPERIOR', MEDIAL: 'PEITO_MEDIAL', INFERIOR: 'PEITO_INFERIOR' };
 const GENERIC: Record<string, string> = { COSTAS: 'COSTAS', OMBROS: 'OMBROS', PERNAS: 'PERNAS' };
 
 /** O alvo (grupo muscular) do exercício, já corrigido pela categoria; sem categoria nem alvo devolve ''. */
@@ -26,6 +28,10 @@ export function muscleTarget(e: { tags?: any; category?: any; subCategory?: any 
   if (SINGLE[cat]) return SINGLE[cat];
   // 🦵 (25 out 2026) PERNAS > MULTIARTICULAR (agachamento, leg press, hack, afundo, passada, búlgaro...) é um grupo próprio, "Pernas — Multi." (PERNAS_MULTI), qualquer que seja a etiqueta de alvo (QUADRICEPS ou o genérico PERNAS).
   if (cat === 'PERNAS' && strip(e.subCategory) === 'MULTIARTICULAR' && LEG_RAW.has(raw)) return 'PERNAS_MULTI';
+  // 🫁 (25 out 2026) PEITO > SUPERIOR/MEDIAL/INFERIOR viram "Peito — Superior/Medial/Inferior" (a etiqueta de alvo precisa ser PEITO ou estar vazia; etiqueta de outro músculo fica como o coach pôs).
+  if (cat === 'PEITO' && (raw === 'PEITO' || raw === '') && CHEST_REGION[strip(e.subCategory)]) return CHEST_REGION[strip(e.subCategory)];
+  // 🔙 COSTAS > LOMBAR (hiperextensão, bom dia...) não é puxada nem remada: grupo "Costas — Lombar"
+  if (cat === 'COSTAS' && strip(e.subCategory) === 'LOMBAR' && (raw === '' || raw === 'COSTAS' || raw === 'PEITO')) return 'COSTAS_LOMBAR';
   if (raw === 'PEITO' && cat && cat !== 'PEITO') {
     const sub = strip(e.subCategory);
     return BY_SUB[cat]?.[sub] || GENERIC[cat] || raw;

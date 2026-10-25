@@ -41,7 +41,7 @@ const groupInfo = (id: string): any => (MUSCLE_GROUPS as any[]).find((g) => g.id
 const LIGHT_EQ = ['HALTER', 'LIVRE', 'PESO_CORPORAL', 'CANELEIRA', 'BARRA'];
 // A biblioteca real marca TODO exercício de glúteo como isolado (hip thrust incluso) e usa rótulos genéricos (PERNAS, COSTAS, OMBROS) ao lado dos específicos.
 // Músculos grandes: o 1º exercício do dia daquele músculo é o "levantamento principal" e vira âncora mesmo sem a etiqueta de composto.
-const BIG_TARGETS = new Set(['PEITO', 'COSTAS', 'COSTAS_PUXADA', 'COSTAS_REMADA', 'PERNAS_MULTI', 'QUADRICEPS', 'POSTERIORES', 'POSTERIOR', 'GLUTEOS', 'PERNAS', 'OMBRO_MULTI', 'OMBRO_FRONTAL', 'OMBROS']);
+const BIG_TARGETS = new Set(['PEITO', 'PEITO_SUPERIOR', 'PEITO_MEDIAL', 'PEITO_INFERIOR', 'COSTAS', 'COSTAS_PUXADA', 'COSTAS_REMADA', 'PERNAS_MULTI', 'QUADRICEPS', 'POSTERIORES', 'POSTERIOR', 'GLUTEOS', 'PERNAS', 'OMBRO_MULTI', 'OMBRO_FRONTAL', 'OMBROS']);
 const GENERIC_TARGETS = new Set(['PERNAS', 'COSTAS', 'OMBROS']);
 /** rótulo genérico para o grupo pedido: PERNAS/COSTAS/OMBROS soltos, ou multiarticular de perna etiquetado só PERNAS caindo em Quadríceps/Glúteos/... (o etiquetado do próprio músculo vale) */
 const isGenericFor = (e: LibEx, gid: string) => {
@@ -181,13 +181,12 @@ export function buildCandidates(c: CandCtx): Candidates {
     if (g.id === 'MOBILIDADE') continue;
     const cur = groups.get(g.id) || { total: 0, maxDay: 0 }; cur.total += Number(g.qty) || 0; cur.maxDay = Math.max(cur.maxDay, Number(g.qty) || 0); groups.set(g.id, cur);
   }
-  const hasLegMulti = groups.has('PERNAS_MULTI');
   for (const [gid, q] of groups) {
     const aliases = aliasesOf(gid);
     const seen = new Set<string>();
-    // 🦵 com Pernas Multi. no plano, os multiarticulares de perna ficam só nesse grupo (não duplicam em Quadríceps/Glúteos...)
-    const legMultiElsewhere = (e: LibEx) => hasLegMulti && gid !== 'PERNAS_MULTI' && targetOf(e) === 'PERNAS_MULTI';
-    let pool = c.library.filter((e) => (aliases.includes(targetOf(e)) || (gid === 'CARDIO' && isCardioLib(e))) && !legMultiElsewhere(e)).filter((e) => {
+    // 🦵🫁 se o plano tem o grupo ESPECÍFICO (Pernas — Multi., Peito — Superior...), o exercício dele fica só nesse grupo e não duplica no mais geral (Quadríceps, Peito...)
+    const specificElsewhere = (e: LibEx) => { const t = targetOf(e); return t !== gid && groups.has(t) && aliases.includes(t); };
+    let pool = c.library.filter((e) => (aliases.includes(targetOf(e)) || (gid === 'CARDIO' && isCardioLib(e))) && !specificElsewhere(e)).filter((e) => {
       const k = nameKey(e.name); if (!k) return false;
       if (seen.has(k)) return false; seen.add(k); return true;
     });
@@ -291,7 +290,7 @@ const NEEDS_LOAD = new Set(['DROPSET', 'RESTPAUSE', '21', 'CLUSTERSET', 'TUT']);
 const SPECIAL_REPS = new Set(['21', 'CLUSTERSET', 'GVT']);
 const CHAIN = new Set(['BISET', 'TRISET']);
 const techOfBlock = (b: GenBlock) => techNorm(String(b.technique || ''));
-const PUSH = ['PEITO', 'OMBRO_MULTI', 'OMBRO_FRONTAL', 'OMBRO_LATERAL', 'TRICEPS'];
+const PUSH = ['PEITO', 'PEITO_SUPERIOR', 'PEITO_MEDIAL', 'PEITO_INFERIOR', 'OMBRO_MULTI', 'OMBRO_FRONTAL', 'OMBRO_LATERAL', 'TRICEPS'];
 const PULL = ['COSTAS_PUXADA', 'COSTAS_REMADA', 'OMBRO_POST', 'BICEPS', 'TRAPEZIO'];
 
 function clampReps(reps: string, [lo, hi]: [number, number]): string {
@@ -339,13 +338,13 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
     }
     const cap = groups.map((g) => Math.max(0, Number(g.qty) || 0));
     const slot: GenEx[][] = groups.map(() => []); let left: GenEx[] = list.slice();
-    const dayLegMulti = groups.some((g) => g.id === 'PERNAS_MULTI');
+    const dayGroupIds = new Set(groups.map((g) => g.id));
     const place = (strict: boolean) => {
       left = left.filter((ex) => {
         const t = exTarget(ex);
         for (let i = 0; i < groups.length; i++) {
           if (slot[i].length >= cap[i]) continue;
-          if (!strict && dayLegMulti && t === 'PERNAS_MULTI' && groups[i].id !== 'PERNAS_MULTI') continue;   // 🦵 multiarticular de perna só ocupa vaga do grupo Pernas Multi.
+          if (!strict && t !== groups[i].id && dayGroupIds.has(t)) continue;   // 🦵🫁 exercício de um grupo específico do dia (Pernas Multi., Peito Superior...) só ocupa a vaga dele
           const hit = strict ? t === groups[i].id : aliasesOf(groups[i].id).includes(t) || (groups[i].id === 'CARDIO' && exCardio(ex));
           if (hit) { slot[i].push(ex); return false; }
         }

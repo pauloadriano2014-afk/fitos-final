@@ -115,6 +115,9 @@
   "build66.mjs",
   "build69.mjs"
  ],
+ "t_exercise_bulk": [
+  "build73.mjs"
+ ],
  "t_exercise_replace": [
   "build73.mjs"
  ],

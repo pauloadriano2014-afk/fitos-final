@@ -187,6 +187,20 @@ const hist = (rows: Array<{ id: string; sets: number[]; effort?: string; perSide
     const r2 = refineWorkout({ A: [gx(L[0], 3), gx(L[1], 3), gx(L[2], 3)] }, { ...mk({}, days, L), lib: libMap2 } as any); const ids2 = r2.byDay.A.map((e) => e.exerciseId);
     assert.equal(ids2.filter((i) => ['m1', 'm2', 'm3'].includes(i)).length, 2, ids2.join()); assert.ok(ids2.includes('i1'), 'vaga de Quadríceps completada com o isolado: ' + ids2.join());
   });
+  await t('Peito por região + Costas Lombar: grupo próprio pelo subgrupo; "Peito" geral não repete o que é da região; sem região continua aceitando todas', () => {
+    const ch = (id: string, name: string, sub: string, cat = 'Peito', target = 'PEITO'): any => ({ id, name, category: cat, subCategory: sub, videoUrl: 'v', tags: { target, mechanic: 'COMPOSTO', equipment: 'LIVRE', jointRisk: [] }, environments: ['UNIVERSAL'] });
+    const L = [ch('s1', 'Supino inclinado', 'Superior'), ch('s2', 'Crucifixo inclinado', 'Superior'), ch('m1', 'Supino reto', 'Medial'), ch('m2', 'Crossover', 'Medial'), ch('i1', 'Supino declinado', 'Inferior'), ch('l1', 'Hiperextensão lombar', 'Lombar', 'Costas', 'COSTAS'), ch('c1', 'Remada baixa', 'Remadas', 'Costas', 'COSTAS_REMADA')];
+    const days: PlanDay[] = [{ name: 'A', groups: [{ id: 'PEITO_SUPERIOR', qty: 1, sets: 4, rest: 60 }, { id: 'PEITO', qty: 2, sets: 3, rest: 60 }, { id: 'COSTAS_LOMBAR', qty: 1, sets: 3, rest: 30 }] }];
+    const c = buildCandidates({ days, library: L, facts: [], prev: [], level: null, env: 'X', levelRules: false });
+    assert.deepEqual((c.byGroup.get('PEITO_SUPERIOR') || []).map((e) => e.id).sort(), ['s1', 's2']);
+    assert.deepEqual((c.byGroup.get('PEITO') || []).map((e) => e.id).sort(), ['i1', 'm1', 'm2'], 'o geral fica com o que não é da região pedida');
+    assert.deepEqual((c.byGroup.get('COSTAS_LOMBAR') || []).map((e) => e.id), ['l1']);
+    const solo = buildCandidates({ days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 3 }] }], library: L, facts: [], prev: [], level: null, env: 'X', levelRules: false }).byGroup.get('PEITO')!.map((e) => e.id).sort();
+    assert.deepEqual(solo, ['i1', 'm1', 'm2', 's1', 's2'], 'sem grupo de região, Peito aceita todas');
+    const libMap2 = new Map(L.map((e: any) => [e.id, e]));
+    const r = refineWorkout({ A: [gx(L[0], 3), gx(L[1], 3), gx(L[2], 3), gx(L[3], 3)] }, { ...mk({}, days, L), lib: libMap2 } as any); const ids = r.byDay.A.map((e) => e.exerciseId);
+    assert.equal(ids.filter((i) => ['s1', 's2'].includes(i)).length, 1, 'só 1 da região Superior: ' + ids.join()); assert.ok(ids.includes('l1'), 'a vaga de lombar foi completada: ' + ids.join()); assert.equal(ids.filter((i) => ['m1', 'm2', 'i1'].includes(i)).length, 2, ids.join());
+  });
   await t('refineWorkout: tira o que passou do plano, o repetido no dia e o dia fantasma; ordem dos grupos; composto antes do isolado; entrada intacta', () => {
     const input = { A: [gx(BICEPS[0]), gx(PEITO[5]), gx(PEITO[0]), gx(PEITO[0]), gx(PEITO[1]), gx(PEITO[2]), gx(BICEPS[1]), gx(BICEPS[2])], Z: [gx(PEITO[0])] }; const snap = JSON.stringify(input);
     const r = refineWorkout(input, mk()); const A = r.byDay.A;

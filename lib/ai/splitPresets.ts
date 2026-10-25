@@ -14,14 +14,19 @@ export const MUSCLE_GROUPS = [
   { id: 'ABDUTOR',       label: 'Abdutor',          color: '#DDA0DD', defaultRest: 30, defaultSets: 3, restType: 'ISOLADO' },
   { id: 'COSTAS_PUXADA', label: 'Costas — Puxada',  color: '#4ECDC4', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },
   { id: 'COSTAS_REMADA', label: 'Costas — Remada',  color: '#45B7D1', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },
+  { id: 'COSTAS_LOMBAR', label: 'Costas — Lombar',  color: '#2FA8A0', defaultRest: 30, defaultSets: 3, restType: 'ISOLADO' },
   { id: 'OMBRO_MULTI',   label: 'Ombro — Multi.',   color: '#96CEB4', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },
   { id: 'OMBRO_FRONTAL', label: 'Ombro — Frontal',  color: '#88D8B0', defaultRest: 30, defaultSets: 3, restType: 'ISOLADO' },
   { id: 'OMBRO_LATERAL', label: 'Ombro — Lateral',  color: '#F0E68C', defaultRest: 30, defaultSets: 3, restType: 'ISOLADO' },
   { id: 'OMBRO_POST',    label: 'Ombro — Post.',    color: '#DDA0DD', defaultRest: 30, defaultSets: 3, restType: 'ISOLADO' },
   { id: 'TRAPEZIO',      label: 'Trapézio',         color: '#98D8C8', defaultRest: 30, defaultSets: 3, restType: 'ISOLADO' },
   { id: 'PEITO',         label: 'Peito',            color: '#F7DC6F', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },
+  { id: 'PEITO_SUPERIOR', label: 'Peito — Superior', color: '#F9E79F', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },
+  { id: 'PEITO_MEDIAL',  label: 'Peito — Medial',   color: '#F4D03F', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },
+  { id: 'PEITO_INFERIOR', label: 'Peito — Inferior', color: '#E9C46A', defaultRest: 60, defaultSets: 4, restType: 'MULTI'   },
   { id: 'BICEPS',        label: 'Bíceps',           color: '#82E0AA', defaultRest: 30, defaultSets: 3, restType: 'ISOLADO' },
   { id: 'TRICEPS',       label: 'Tríceps',          color: '#85C1E9', defaultRest: 30, defaultSets: 3, restType: 'ISOLADO' },
+  { id: 'ANTEBRACO',     label: 'Antebraço',        color: '#7FB3D5', defaultRest: 30, defaultSets: 3, restType: 'ISOLADO' },
   { id: 'ABDOMEN',       label: 'Abdômen',          color: '#F1948A', defaultRest: 30, defaultSets: 3, restType: 'ISOLADO' },
   { id: 'CARDIO',        label: 'Cardio',           color: '#FF6B6B', defaultRest: 0,  defaultSets: 1, restType: 'CARDIO'  },
   // 🔥 NOVO: Mobilidade — seleção manual, não passa pela IA
@@ -198,8 +203,8 @@ export const dayNeedsCardio = (groups, phase) => {
   if (!['EMAGRECIMENTO', 'DEFINICAO'].includes(phase)) return false;
   if (groups.some(g => g.id === 'CARDIO')) return false;
   return groups.some(g =>
-    ['PEITO','COSTAS_PUXADA','COSTAS_REMADA','OMBRO_MULTI','OMBRO_FRONTAL',
-     'OMBRO_LATERAL','OMBRO_POST','TRAPEZIO','BICEPS','TRICEPS','ABDOMEN'].includes(g.id)
+    ['PEITO','PEITO_SUPERIOR','PEITO_MEDIAL','PEITO_INFERIOR','COSTAS_PUXADA','COSTAS_REMADA','COSTAS_LOMBAR','OMBRO_MULTI','OMBRO_FRONTAL',
+     'OMBRO_LATERAL','OMBRO_POST','TRAPEZIO','BICEPS','TRICEPS','ANTEBRACO','ABDOMEN'].includes(g.id)
   );
 };
 

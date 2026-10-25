@@ -9,10 +9,10 @@
 
 /** Nível do grupo: 1 = grande/multiarticular, 2 = ombros pequenos e trapézio, 3 = braços, 4 = pequenos e abdômen. */
 export const GROUP_TIER: Record<string, number> = {
-  PERNAS_MULTI: 1, QUADRICEPS: 1, POSTERIORES: 1, GLUTEOS: 1, PEITO: 1, COSTAS_PUXADA: 1, COSTAS_REMADA: 1, OMBRO_MULTI: 1,
+  PERNAS_MULTI: 1, QUADRICEPS: 1, POSTERIORES: 1, GLUTEOS: 1, PEITO: 1, PEITO_SUPERIOR: 1, PEITO_MEDIAL: 1, PEITO_INFERIOR: 1, COSTAS_PUXADA: 1, COSTAS_REMADA: 1, OMBRO_MULTI: 1,
   OMBRO_FRONTAL: 2, OMBRO_LATERAL: 2, OMBRO_POST: 2, TRAPEZIO: 2,
-  BICEPS: 3, TRICEPS: 3,
-  ADUTOR: 4, ABDUTOR: 4, PANTURRILHA: 4, ABDOMEN: 4,
+  BICEPS: 3, TRICEPS: 3, ANTEBRACO: 3,
+  COSTAS_LOMBAR: 4, ADUTOR: 4, ABDUTOR: 4, PANTURRILHA: 4, ABDOMEN: 4,
 };
 const tierOf = (id: string) => GROUP_TIER[id] ?? 2;
 
@@ -29,7 +29,7 @@ export type OrderKind = 'UPPER' | 'LOWER' | 'FULL';
 export interface OrderRef { k: 'G' | 'E'; id: string }
 export interface OrderRule { a: OrderRef; rel: 'ANTES' | 'DEPOIS'; b: OrderRef; when: 'SEMPRE' | OrderKind }
 export interface OrderStyle { orders: Partial<Record<OrderKind, string[]>>; rules: OrderRule[] }
-const UPPER = new Set(['PEITO', 'COSTAS_PUXADA', 'COSTAS_REMADA', 'OMBRO_MULTI', 'OMBRO_FRONTAL', 'OMBRO_LATERAL', 'OMBRO_POST', 'TRAPEZIO', 'BICEPS', 'TRICEPS']);
+const UPPER = new Set(['PEITO', 'PEITO_SUPERIOR', 'PEITO_MEDIAL', 'PEITO_INFERIOR', 'COSTAS_PUXADA', 'COSTAS_REMADA', 'COSTAS_LOMBAR', 'OMBRO_MULTI', 'OMBRO_FRONTAL', 'OMBRO_LATERAL', 'OMBRO_POST', 'TRAPEZIO', 'BICEPS', 'TRICEPS', 'ANTEBRACO']);
 const LOWER = new Set(['PERNAS_MULTI', 'QUADRICEPS', 'POSTERIORES', 'GLUTEOS', 'ADUTOR', 'ABDUTOR', 'PANTURRILHA']);
 export const MAX_ORDER_RULES = 24;
 
