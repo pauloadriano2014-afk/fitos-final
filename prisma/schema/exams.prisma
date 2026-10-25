@@ -1,0 +1,47 @@
+// prisma/schema/exams.prisma
+// 🩺 (25 out 2026) EXAMES DO ALUNO: o aluno envia exame/avaliação/laudo (PDF ou fotos das páginas) para o PROFISSIONAL DELE (personal e/ou nutri) e recebe a resposta por escrito.
+// Dado de saúde: os arquivos moram num bucket PRIVADO do R2 (R2_EXAMS_BUCKET, sem endereço público) e só abrem por link assinado de poucos minutos, depois de conferir quem pede.
+// Regra de quem vê (lib/exams.ts → examAccess): o próprio aluno e o(s) profissional(is) que ELE escolheu e que ainda são dele. O time master NÃO tem passe livre: só vê exames dos próprios alunos.
+// Sem relação com User de propósito (não trava a anonimização da conta; a limpeza apaga os exames na exclusão). Tudo aditivo.
+
+model ExamSubmission {
+  id              String    @id @default(uuid())
+  userId          String                      // o aluno
+  coachId         String?                     // o personal escolhido (vazio = não enviou para ele)
+  nutritionistId  String?                     // o nutri escolhido
+  type            String                      // BLOOD | BODY | PHYSICAL | REPORT | OTHER
+  examDate        DateTime?                   // data do exame (dia)
+  note            String?   @db.Text          // "em jejum de 12 h"
+  status          String    @default("NEW")   // NEW | READ | ANSWERED
+  coachViewedAt   DateTime?                   // primeira vez que um profissional abriu
+  createdAt       DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([coachId, status, createdAt])
+  @@index([nutritionistId, status, createdAt])
+}
+
+// Cada arquivo do envio: 1 PDF, ou até 8 fotos (uma por página, na ordem `pageNo`).
+model ExamFile {
+  id            String   @id @default(uuid())
+  submissionId  String
+  key           String   @unique              // caminho no bucket privado
+  mime          String                        // application/pdf | image/jpeg | image/png | image/webp
+  size          Int
+  pageNo        Int      @default(1)
+  createdAt     DateTime @default(now())
+
+  @@index([submissionId, pageNo])
+}
+
+// Resposta escrita do profissional (pode haver mais de uma; a IA, quando entrar, só gera RASCUNHO para o profissional editar).
+model ExamReply {
+  id            String    @id @default(uuid())
+  submissionId  String
+  authorId      String                        // o profissional
+  body          String    @db.Text
+  studentReadAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([submissionId, createdAt])
+}

@@ -108,6 +108,9 @@
   "build6.mjs",
   "build8.mjs"
  ],
+ "t_exames": [
+  "build_exam.mjs"
+ ],
  "t_exec_video": [
   "build66.mjs",
   "build69.mjs"

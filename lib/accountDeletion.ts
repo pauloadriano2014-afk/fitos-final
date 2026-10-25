@@ -20,6 +20,7 @@ import prisma from '@/lib/prisma';
 import { isMasterId } from '@/lib/auth';
 import { dropPersonAgenda, dropCoachAgenda } from '@/lib/agendaStore';
 import { dropMemory } from '@/lib/insightMemory';
+import { purgeExams } from '@/lib/examsStore';
 
 export async function anonymizeUserAccount(userId: string): Promise<{ alreadyDeleted: boolean }> {
   // 🔒 Segunda trava (a primeira é em cada rota que chama isso) — contas
@@ -94,6 +95,8 @@ export async function anonymizeUserAccount(userId: string): Promise<{ alreadyDel
   await dropCoachAgenda(prisma, userId);
   // 🧠 memória das análises do assistente: some a do aluno (como destino) e, se for coach, tudo dele (melhor esforço)
   await dropMemory(prisma, { coachId: userId, studentId: userId });
+  // 🩺 exames enviados (dado de saúde): arquivos do bucket privado + linhas somem junto (melhor esforço: não trava a exclusão)
+  try { await purgeExams(prisma, userId); } catch (e: any) { console.error('[accountDeletion] exames:', e?.message || e); }
 
   return { alreadyDeleted: false };
 }
