@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { PAULO_ID, ADRI_ID, MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
 import { visibleLibraryWhere, hiddenFlagFromBody } from '@/lib/exerciseVisibility';
+import { guessEquipment } from '@/lib/exerciseEquipment';
 import { mergeTags, cleanExtraPatch } from '@/lib/exerciseTags';
 
 export const dynamic = 'force-dynamic';
@@ -139,13 +140,8 @@ function generateTags(name: string, category: string): object {
   let mechanic = 'ISOLADO';
   if (n.includes('agachamento') || n.includes('leg press') || n.includes('supino') || n.includes('remada') || n.includes('puxada') || n.includes('desenvolvimento') || n.includes('stiff') || n.includes('terra') || n.includes('hack') || n.includes('afundo') || n.includes('passada') || n.includes('búlgaro') || n.includes('mergulho') || n.includes('barra fixa')) mechanic = 'COMPOSTO';
 
-  let equipment = 'LIVRE';
-  if (n.includes('máquina') || n.includes('maquina') || n.includes('extensora') || n.includes('flexora') || n.includes('peck deck') || n.includes('hack') || n.includes('articulado') || n.includes('smart')) equipment = 'MAQUINA';
-  else if (n.includes('cross') || n.includes('polia') || n.includes('cabo') || n.includes('corda')) equipment = 'POLIA';
-  else if (n.includes('halter') || n.includes('halteres')) equipment = 'HALTER';
-  else if (n.includes('barra') || n.includes('smith')) equipment = 'BARRA';
-  else if (n.includes('caneleira')) equipment = 'CANELEIRA';
-  else if (n.includes('prancha') || n.includes('corporal') || n.includes('livre')) equipment = 'PESO_CORPORAL';
+  // 🏋️ equipamento: regra única em lib/exerciseEquipment.ts (Smith separado da barra); sem palpite fica LIVRE ("sem classificar")
+  const equipment: string = guessEquipment(name, category)?.equipment || 'LIVRE';
 
   const jointRisk: string[] = [];
   if (n.includes('stiff') || n.includes('terra') || n.includes('remada curvada') || n.includes('agachamento livre') || n.includes('bom dia')) jointRisk.push('LOMBAR');

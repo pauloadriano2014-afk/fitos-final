@@ -3,16 +3,19 @@
 //
 //   POST { ids: string[],
 //          environments?: { mode: 'ADD' | 'REMOVE' | 'SET', values: string[] },
-//          category?: string, subCategory?: string }
+//          category?: string, subCategory?: string,
+//          equipment?: 'MAQUINA' | 'POLIA' | 'BARRA' | 'SMITH' | 'HALTER' | 'PESO_CORPORAL' | 'OUTROS' | 'AUTO' }
 //   -> { success, count, unchanged, skipped: [{ id, name, reason }] }
 //
 // Só Paulo e Adri, e só em exercício que é do próprio coach logado ou global (o mesmo recorte de /api/exercise/visibility).
 // Não apaga nada e não mexe em treino montado. ADD acrescenta o ambiente, REMOVE tira, SET troca tudo; o exercício nunca fica sem ambiente
+// equipment: grava o equipamento e TRAVA (a edição do exercício não refaz pelo nome); 'AUTO' destrava e volta ao palpite pelo nome.
 // (se o REMOVE deixaria vazio, ele é pulado e aparece em `skipped`). Nomes antigos (ACADEMIA, CASA...) são convertidos ao mexer.
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireMaster } from '@/lib/auth';
 import { ENVIRONMENT_IDS } from '@/lib/genRules';
+import { EQUIPMENT_IDS, guessEquipment, isEquipmentId } from '@/lib/exerciseEquipment';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,11 +64,16 @@ export async function POST(req: Request) {
       if (!s || s.length > 40) return NextResponse.json({ error: 'Subgrupo inválido.' }, { status: 400 });
       subCategory = s;
     }
-    if (!envPlan && !category && !subCategory) return NextResponse.json({ error: 'Escolha o que mudar (ambiente ou grupo).' }, { status: 400 });
+    let equipment: string | null = null;
+    if (body?.equipment != null) {
+      if (body.equipment !== 'AUTO' && !isEquipmentId(body.equipment)) return NextResponse.json({ error: `Equipamento inválido. Use um destes: ${EQUIPMENT_IDS.join(', ')} ou AUTO.` }, { status: 400 });
+      equipment = body.equipment;
+    }
+    if (!envPlan && !category && !subCategory && !equipment) return NextResponse.json({ error: 'Escolha o que mudar (ambiente, grupo ou equipamento).' }, { status: 400 });
 
     const rows: any[] = await prisma.exercise.findMany({
       where: { id: { in: ids }, OR: [{ coachId: auth.user.id }, { coachId: null }] },
-      select: { id: true, name: true, category: true, subCategory: true, environments: true },
+      select: { id: true, name: true, category: true, subCategory: true, environments: true, tags: true },
     });
 
     const skipped: Array<{ id: string; name: string; reason: string }> = [];
@@ -87,6 +95,12 @@ export async function POST(req: Request) {
         if (!subCategory) data.subCategory = 'Geral';   // trocou de grupo sem dizer o subgrupo: o antigo não vale mais
       }
       if (subCategory && subCategory !== r.subCategory) data.subCategory = subCategory;
+      if (equipment) {
+        const tags: any = r.tags && typeof r.tags === 'object' ? { ...r.tags } : {};
+        if (equipment === 'AUTO') { delete tags.equipmentManual; tags.equipment = guessEquipment(r.name, data.category || r.category)?.equipment || 'LIVRE'; }
+        else { tags.equipment = equipment; tags.equipmentManual = true; }
+        if (tags.equipment !== (r.tags || {}).equipment || tags.equipmentManual !== (r.tags || {}).equipmentManual) data.tags = tags;
+      }
       if (Object.keys(data).length) updates.push(prisma.exercise.update({ where: { id: r.id }, data }));
     }
     if (updates.length) await prisma.$transaction(updates);

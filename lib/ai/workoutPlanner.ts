@@ -38,7 +38,7 @@ const isCardioLib = (e: { tags?: any; category?: any }) => String(e.category || 
 const num = (v: any): number | null => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
 const fmtKg = (n: number) => String(Math.round(n * 100) / 100).replace(',', '.');
 const groupInfo = (id: string): any => (MUSCLE_GROUPS as any[]).find((g) => g.id === id);
-const LIGHT_EQ = ['HALTER', 'LIVRE', 'PESO_CORPORAL', 'CANELEIRA', 'BARRA'];
+const LIGHT_EQ = ['HALTER', 'LIVRE', 'PESO_CORPORAL', 'CANELEIRA', 'BARRA', 'OUTROS'];   // em casa/condomínio: o que dá para fazer sem aparelho (Smith conta como aparelho, abaixo)
 // A biblioteca real marca TODO exercício de glúteo como isolado (hip thrust incluso) e usa rótulos genéricos (PERNAS, COSTAS, OMBROS) ao lado dos específicos.
 // Músculos grandes: o 1º exercício do dia daquele músculo é o "levantamento principal" e vira âncora mesmo sem a etiqueta de composto.
 const BIG_TARGETS = new Set(['PEITO', 'PEITO_SUPERIOR', 'PEITO_MEDIAL', 'PEITO_INFERIOR', 'COSTAS', 'COSTAS_PUXADA', 'COSTAS_REMADA', 'PERNAS_MULTI', 'QUADRICEPS', 'POSTERIORES', 'POSTERIOR', 'GLUTEOS', 'PERNAS', 'OMBRO_MULTI', 'OMBRO_FRONTAL', 'OMBROS']);
@@ -208,7 +208,7 @@ export function buildCandidates(c: CandCtx): Candidates {
       if (e.videoUrl) s += 1;
       const m = mechOf(e); if (restType === 'MULTI') s += m === 'COMPOSTO' ? 2 : 0; else if (restType === 'ISOLADO') s += m === 'ISOLADO' ? 1 : 0;
       const eq = equipOf(e);
-      if (light) { if (eq === 'MAQUINA' || looksLikeMachine(e.name)) s -= 3; else if (LIGHT_EQ.includes(eq)) s += 2; else if (eq === 'POLIA') s += 1; }
+      if (light) { if (eq === 'MAQUINA' || eq === 'SMITH' || looksLikeMachine(e.name)) s -= 3; else if (LIGHT_EQ.includes(eq)) s += 2; else if (eq === 'POLIA') s += 1; }
       else if (c.level === 'INICIANTE' && restType === 'MULTI' && (eq === 'MAQUINA' || eq === 'POLIA')) s += 1;
       return s;
     };

@@ -57,6 +57,8 @@ export function cleanExtraPatch(raw: any): { impact?: Impact | null; avoid?: Pro
 /** Tags geradas pelo nome (target/mechanic/equipment/jointRisk) + as chaves novas que o exercício já tinha (e o pedido, se vier). Nunca perde uma marcação feita à mão. */
 export function mergeTags(generated: object, existing: any, patch?: ReturnType<typeof cleanExtraPatch>): object {
   const base: any = { ...generated, ...pickExtra(existing) };
+  // 🏋️ equipamento marcado à mão (ou pela correção em lote) fica: a edição do exercício não refaz pelo nome
+  if (existing && typeof existing === 'object' && existing.equipmentManual === true && typeof existing.equipment === 'string' && existing.equipment) { base.equipment = existing.equipment; base.equipmentManual = true; }
   if (patch) {
     if ('impact' in patch) { if (patch.impact) base.impact = patch.impact; else delete base.impact; }
     if ('avoid' in patch) { if (patch.avoid) base.avoid = patch.avoid; else delete base.avoid; }

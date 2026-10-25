@@ -8,7 +8,7 @@
 import { effectiveExtra, PROFILES, type Profile } from '@/lib/exerciseTags';
 import { looksLikeMachine, type LibEx } from '@/lib/exerciseSwap';
 
-export const EQUIPMENTS = ['MAQUINA', 'POLIA', 'BARRA', 'HALTER', 'LIVRE', 'PESO_CORPORAL', 'CANELEIRA'] as const;
+export const EQUIPMENTS = ['MAQUINA', 'POLIA', 'BARRA', 'SMITH', 'HALTER', 'PESO_CORPORAL', 'OUTROS', 'LIVRE', 'CANELEIRA'] as const;   // LIVRE/CANELEIRA = nomes antigos (regras já salvas continuam valendo)
 export const JOINTS = ['JOELHO', 'LOMBAR', 'OMBRO'] as const;
 export const MAX_IDS = 600;
 /** Locais de treino que o coach marca nos exercícios (Exercise.environments). */
