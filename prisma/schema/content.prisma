@@ -52,6 +52,9 @@ model Content {
   // libera manualmente pelo admin, ex: aula VIP de brinde).
   valor       Float?
 
+  // 🎯 (26 out 2026) QUEM VÊ: marcas separadas por vírgula (TREINO, DIETA, PREMIUM, EXAMES); o aluno só vê se tiver TODAS. Vazio/null = todos. Regras em lib/contentAudience.ts.
+  audience    String?
+
   videoUrl    String?
   pdfUrl      String?
   audioUrl    String?

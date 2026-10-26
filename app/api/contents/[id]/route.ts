@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, canActAsCoach, isMasterId } from '@/lib/auth';
+import { parseAudience, audienceToString } from '@/lib/contentAudience';
 
 
 // 🔥 PATCH: Atualiza um conteúdo existente (Editar)
@@ -28,6 +29,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         type: body.type,
         isVIP: body.isVIP,
         valor: (body.isVIP && body.valor) ? parseFloat(body.valor) : null,
+        // sem o campo no pedido (app antigo) mantém o que já está salvo
+        ...(body.audience !== undefined ? { audience: audienceToString(parseAudience(body.audience)) } : {}),
         videoUrl: body.videoUrl,
         pdfUrl: body.pdfUrl,
         audioUrl: body.audioUrl,

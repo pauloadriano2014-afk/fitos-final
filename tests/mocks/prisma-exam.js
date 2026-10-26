@@ -1,7 +1,7 @@
 // Banco em memória da AGENDA: um mini motor de consulta (igual, in, not, gt/gte/lt/lte, OR/AND/NOT, null) + únicos (P2002) + createMany/updateMany/upsert.
 // Semântica SQL onde importa: `not: valor` NÃO devolve linhas com NULL.
 const clone = (o) => (o == null ? o : JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(v) ? new Date(v) : v)));
-const MODELS = ['insightMemory', 'agendaEvent', 'agendaSeries', 'agendaSettings', 'agendaTaskSnooze', 'agendaTaskNote', 'user', 'offlineClient', 'weeklyFeedback', 'studentAlert', 'checkIn', 'workout', 'workoutShare', 'runningAnamnese', 'runningProtocol', 'workoutSession', 'workoutHistory', 'agendaTaskResolved', 'studentCoachMessage', 'equipmentReport', 'workoutExercise', 'exercise', 'anamnese', 'exerciseHistory', 'executionVideo', 'videoFeedback', 'videoRequest', 'videoPolicy', 'videoQuickReply', 'tutorialVideo', 'coachFeature', 'featureGlobal', 'examSubmission', 'examFile', 'examReply', 'diet', 'dietFeedback', 'platformConfig', 'aiLog', 'coachNote', 'coachTask'];
+const MODELS = ['insightMemory', 'agendaEvent', 'agendaSeries', 'agendaSettings', 'agendaTaskSnooze', 'agendaTaskNote', 'user', 'offlineClient', 'weeklyFeedback', 'studentAlert', 'checkIn', 'workout', 'workoutShare', 'runningAnamnese', 'runningProtocol', 'workoutSession', 'workoutHistory', 'agendaTaskResolved', 'studentCoachMessage', 'equipmentReport', 'workoutExercise', 'exercise', 'anamnese', 'exerciseHistory', 'executionVideo', 'videoFeedback', 'videoRequest', 'videoPolicy', 'videoQuickReply', 'tutorialVideo', 'coachFeature', 'featureGlobal', 'examSubmission', 'examFile', 'examReply', 'diet', 'dietFeedback', 'platformConfig', 'aiLog', 'coachNote', 'coachTask', 'content', 'contentAccess', 'contentLike'];
 const state = { nextId: 1, failOn: {}, calls: {}, override: {} };
 MODELS.forEach((m) => { state[m] = []; });
 const DEFAULTS = {
@@ -9,6 +9,7 @@ const DEFAULTS = {
   examSubmission: () => ({ createdAt: new Date(), status: 'NEW', coachViewedAt: null, coachId: null, nutritionistId: null, examDate: null, note: null }),
   examFile: () => ({ createdAt: new Date(), pageNo: 1 }),
   examReply: () => ({ createdAt: new Date(), studentReadAt: null }),
+  content: () => ({ createdAt: new Date(), subtitle: null, description: '', type: 'video', isVIP: false, valor: null, audience: null, videoUrl: null, pdfUrl: null, audioUrl: null, thumbUrl: null, duration: null, coachId: null }),
   coachFeature: () => ({ grantedAt: new Date(), revokedAt: null, revokedReason: null, reason: null, grantedBy: null }),
   featureGlobal: () => ({ enabled: false, updatedBy: null }),
   executionVideo: () => ({ createdAt: new Date(), status: 'UPLOADING', coachViewedAt: null, deletedAt: null, durationSec: null, priority: false, requestId: null, studentNote: null, setNumber: null, day: null, workoutId: null, workoutExerciseId: null, exerciseId: null, coachId: null }),

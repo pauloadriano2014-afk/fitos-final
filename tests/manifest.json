@@ -339,5 +339,8 @@
  ],
  "t_workout_templates": [
   "build44.mjs"
+ ],
+ "t_content_audience": [
+  "build_contentaud.mjs"
  ]
 }

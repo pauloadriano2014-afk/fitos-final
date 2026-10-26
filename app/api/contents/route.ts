@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { sendNotificationToAll } from '../../utils/sendNotification';
 import { requireAuth, canActAsCoach, canViewCoachLibrary } from '@/lib/auth';
+import { parseAudience, audienceToString, studentCanSee } from '@/lib/contentAudience';
+import { availableRecipients } from '@/lib/exams';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,6 +69,19 @@ export async function GET(request: Request) {
       }
     });
 
+    // 🎯 QUEM VÊ (26 out 2026): o ALUNO que está lendo só recebe o que serve para o cadastro dele (tem treino? tem dieta? plano completo? exames ligados?).
+    // Vale para qualquer tela do aluno que leia esta rota (Biblioteca, PA FLIX, Início). Coach/master veem tudo, para poder gerenciar.
+    let visibleContent = allContent;
+    if (auth.user.role === 'USER' && allContent.some((c: any) => c.audience)) {
+        const me: any = await prisma.user.findUnique({ where: { id: auth.user.id }, select: { id: true, coachId: true, nutritionistId: true, plan: true, dietModule: true, studentModules: true } });
+        if (me) {
+            const coach: any = me.coachId ? await prisma.user.findUnique({ where: { id: me.coachId }, select: { coachPlan: true } }) : null;
+            const needsExams = allContent.some((c: any) => parseAudience(c.audience).includes('EXAMES'));
+            const examsOk = needsExams ? (await availableRecipients(prisma, me)).length > 0 : false;
+            visibleContent = allContent.filter((c: any) => studentCanSee(parseAudience(c.audience), me, coach?.coachPlan ?? null, examsOk));
+        }
+    }
+
     // 🔥 BUSCA ACESSOS PARA LIBERAR OS VÍDEOS VIP NO APP DO ALUNO
     let userAccessList: string[] = [];
     if (userId && userId !== 'null' && userId !== 'undefined') {
@@ -78,7 +93,7 @@ export async function GET(request: Request) {
     }
 
     // 🔥 ADICIONA A CHAVE "hasAccess" PARA O FRONT-END NÃO OCULTAR O CONTEÚDO
-    const processedContent = allContent.map(video => ({
+    const processedContent = visibleContent.map(video => ({
         ...video,
         hasAccess: !video.isVIP || userAccessList.includes(video.id)
     }));
@@ -126,7 +141,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const {
       title, subtitle, category, videoUrl, thumbUrl, duration, description,
-      type, isVIP, pdfUrl, audioUrl, adminId, valor
+      type, isVIP, pdfUrl, audioUrl, adminId, valor, audience, notify
     } = body;
 
     if (!title || !category) {
@@ -147,6 +162,7 @@ export async function POST(request: Request) {
         type: type || 'video',
         isVIP: isVIP || false,
         valor: (isVIP && valor) ? parseFloat(valor) : null,
+        audience: audienceToString(parseAudience(audience)),
         videoUrl: videoUrl || null,
         pdfUrl: pdfUrl || null,
         audioUrl: audioUrl || null,
@@ -168,11 +184,14 @@ export async function POST(request: Request) {
         notifMsg = `Dê o play em: "${title}" na sua Biblioteca.`;
     }
 
-    sendNotificationToAll(
-        notifTitle,
-        notifMsg,
-        { screen: 'Biblioteca', contentId: newContent.id }
-    );
+    // 🎯 Sem aviso em massa quando o coach desligou o aviso ou quando o conteúdo é só para um grupo de alunos (o aviso iria também para quem não pode ver).
+    if (notify !== false && !(newContent as any).audience) {
+        sendNotificationToAll(
+            notifTitle,
+            notifMsg,
+            { screen: 'Biblioteca', contentId: newContent.id }
+        );
+    }
 
     return NextResponse.json(newContent);
 
