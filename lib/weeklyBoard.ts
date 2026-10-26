@@ -43,7 +43,7 @@ export async function loadWeeklyBoard(db: any, o: { adminId: string; weekStart: 
 
   const users: any[] = await db.user.findMany({
     where: { role: 'USER', ...studentCoachWhere(o.adminId, o.owner) },
-    select: { id: true, name: true, photoUrl: true, coachId: true, createdAt: true, active: true, accountStatus: true, lastContactDate: true },
+    select: { id: true, name: true, photoUrl: true, coachId: true, createdAt: true, active: true, accountStatus: true, lastContactDate: true, frozenAt: true },
   });
   const students = users.filter((u) => isDueStudentForWeek(u, weekStart));
   const ids = students.map((u) => u.id);

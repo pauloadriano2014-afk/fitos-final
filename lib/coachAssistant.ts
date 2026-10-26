@@ -131,7 +131,7 @@ async function cobranca(db: Db, coachId: string, p: ReturnType<typeof cleanParam
 }
 
 async function semTreinar(db: Db, coachId: string, p: ReturnType<typeof cleanParams>, now: Date): Promise<Answer> {
-  const students = await loadStudents(db, coachId, { id: true, name: true });
+  const students = (await loadStudents(db, coachId, { id: true, name: true, frozenAt: true })).filter((s) => !s.frozenAt);   // ❄️ plano congelado não conta
   const ids = students.map((s) => s.id);
   const title = `Sem treinar há ${daysWord(p.dias)} ou mais`;
   if (!ids.length) return answer('SEM_TREINAR', title, 'Você não tem alunos ativos.', [], 0);
@@ -150,7 +150,7 @@ async function semTreinar(db: Db, coachId: string, p: ReturnType<typeof cleanPar
 }
 
 async function treinoVencendo(db: Db, coachId: string, p: ReturnType<typeof cleanParams>, todayKey: string): Promise<Answer> {
-  const students = await loadStudents(db, coachId, { id: true, name: true });
+  const students = (await loadStudents(db, coachId, { id: true, name: true, frozenAt: true })).filter((s) => !s.frozenAt);   // ❄️ plano congelado não vence
   const byId = new Map(students.map((s) => [s.id, s]));
   const title = `Treinos vencendo em ${daysWord(p.dias)}`;
   if (!students.length) return answer('TREINO_VENCENDO', title, 'Você não tem alunos ativos.', [], 0);

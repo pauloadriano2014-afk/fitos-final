@@ -34,6 +34,7 @@ export async function GET(req: Request) {
         // 🔥 FINANCEIRO
         paymentDueDate: true,
         isFinanceActive: true,
+        frozenAt: true, frozenUntil: true, frozenReason: true,   // ❄️ plano congelado
         paymentClaimedAt: true,
         paymentClaimStatus: true,
         paymentClaimCycleDueDate: true,

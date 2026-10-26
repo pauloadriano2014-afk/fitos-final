@@ -97,6 +97,14 @@ model User {
   financeCategory   String?   @default("Consultoria Online") 
   isFinanceActive   Boolean   @default(true)
 
+  // ❄️ (26 out 2026) PLANO CONGELADO (cirurgia, viagem, lesão...): o coach congela e descongela (lib/freeze.ts, POST /api/admin/freeze). Enquanto `frozenAt` existe o aluno não é cobrado,
+  // não é cobrado de treino/feedback e o app mostra "plano congelado". Ao descongelar, os dias parados empurram o fim do treino, o próximo vencimento e a próxima avaliação.
+  // `frozenFinanceWasActive` guarda se o aluno estava ativo no financeiro antes (para voltar igual). Colunas novas e opcionais: só adicionam (`npx prisma db push`).
+  frozenAt               DateTime?
+  frozenUntil            DateTime?
+  frozenReason           String?
+  frozenFinanceWasActive Boolean?
+
   paymentClaimedAt         DateTime? 
   paymentClaimStatus       String?   
   paymentClaimCycleDueDate DateTime? 

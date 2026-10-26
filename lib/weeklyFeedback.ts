@@ -207,12 +207,13 @@ export function answersView(questions: Question[] | null | undefined, answers: A
   return out;
 }
 
-type DueUser = { createdAt?: Date | string | null; coachId?: string | null; active?: boolean | null; accountStatus?: string | null; role?: string | null };
+type DueUser = { createdAt?: Date | string | null; coachId?: string | null; active?: boolean | null; accountStatus?: string | null; role?: string | null; frozenAt?: Date | string | null };
 
 /** O aluno entra no feedback da semana `weekStart` (a avaliada)? Tem coach, está ativo e já estava na plataforma até o fim dessa semana. */
 export function isDueStudentForWeek(u: DueUser, weekStart: string): boolean {
   if (!u || !u.coachId) return false;
   if (u.active === false || u.accountStatus === 'DELETED') return false;
+  if (u.frozenAt) return false;   // ❄️ plano congelado: não é perguntado nem cobrado
   if (u.role && u.role !== 'USER') return false;
   const created = u.createdAt ? new Date(u.createdAt) : null;
   return !created || created.getTime() < weekRange(weekStart).end.getTime();

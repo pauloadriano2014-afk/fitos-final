@@ -75,6 +75,7 @@ export async function GET(req: Request) {
         nextWorkoutUpdate: true,
         financeCategory: true,
         isFinanceActive: true,
+        frozenAt: true, frozenUntil: true, frozenReason: true,   // ❄️ plano congelado (selo nas listas do coach)
 
         // 🔥 SISTEMA DE "JÁ PAGUEI" (CLAIM DE PAGAMENTO)
         paymentClaimedAt: true,

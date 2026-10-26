@@ -99,9 +99,9 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
   // ── alunos do coach (uma consulta só; o resto filtra por estes ids) ──
   const students: any[] = await safe('alunos', unavailable, () => db.user.findMany({
     where: { role: 'USER', active: { not: false }, AND: [ownStudentScope(coachId)] },
-    select: { id: true, name: true, phone: true, isFinanceActive: true, isTestAccount: true, contractValue: true, paymentDueDate: true, paymentClaimStatus: true, financeCategory: true, nextCheckInDate: true, disableCheckIn: true },
+    select: { id: true, name: true, phone: true, isFinanceActive: true, isTestAccount: true, contractValue: true, paymentDueDate: true, paymentClaimStatus: true, financeCategory: true, nextCheckInDate: true, disableCheckIn: true, frozenAt: true },
   }), [] as any[]);
-  const real = students.filter((s) => !s.isTestAccount);
+  const real = students.filter((s) => !s.isTestAccount && !s.frozenAt);   // ❄️ aluno com plano congelado não gera pendência
   const ids = real.map((s) => s.id);
   const byId = new Map(real.map((s) => [s.id, s]));
 

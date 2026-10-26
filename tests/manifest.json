@@ -342,5 +342,8 @@
  ],
  "t_content_audience": [
   "build_contentaud.mjs"
+ ],
+ "t_freeze": [
+  "build_freeze.mjs"
  ]
 }

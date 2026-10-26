@@ -53,7 +53,7 @@ const TEXT = {
 async function dueStudents(db: any, weekStart: string) {
   const users: any[] = await db.user.findMany({
     where: { role: 'USER', coachId: { not: null } },
-    select: { id: true, name: true, coachId: true, pushToken: true, createdAt: true, active: true, accountStatus: true, role: true, dietModule: true },
+    select: { id: true, name: true, coachId: true, pushToken: true, createdAt: true, active: true, accountStatus: true, role: true, dietModule: true, frozenAt: true },
   });
   return users.filter((u) => isDueStudentForWeek(u, weekStart));
 }

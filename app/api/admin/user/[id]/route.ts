@@ -145,6 +145,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             contractValue: true,
             paymentDueDate: true,
             isFinanceActive: true,
+            frozenAt: true, frozenUntil: true, frozenReason: true,   // ❄️ plano congelado (o app do aluno mostra o aviso)
             nextWorkoutUpdate: true,
             paymentClaimedAt: true,
             paymentClaimStatus: true,
