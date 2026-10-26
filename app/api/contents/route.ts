@@ -2,9 +2,10 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { sendNotificationToAll } from '../../utils/sendNotification';
-import { requireAuth, canActAsCoach, canViewCoachLibrary } from '@/lib/auth';
+import { requireAuth, canActAsCoach, canViewCoachLibrary, isMasterId } from '@/lib/auth';
 import { parseAudience, audienceToString, studentCanSee } from '@/lib/contentAudience';
 import { availableRecipients } from '@/lib/exams';
+import { coachHasFeature } from '@/lib/coachFeatures';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +60,10 @@ export async function GET(request: Request) {
         };
     } else {
         whereClause = { coachId: targetCoachId };
+        // 🌐 O aluno do coach parceiro também recebe o que o master marcou "para todos os coaches" (vídeos de como usar o app); o QUEM VÊ abaixo ainda filtra.
+        if (auth.user.role === 'USER') {
+            whereClause = { OR: [{ coachId: targetCoachId }, { shared: true, OR: [{ coachId: null }, { coachId: '' }, { coachId: { in: MASTER_IDS } }] }] };
+        }
     }
 
     const allContent = await prisma.content.findMany({
@@ -73,12 +78,16 @@ export async function GET(request: Request) {
     // Vale para qualquer tela do aluno que leia esta rota (Biblioteca, PA FLIX, Início). Coach/master veem tudo, para poder gerenciar.
     let visibleContent = allContent;
     if (auth.user.role === 'USER' && allContent.some((c: any) => c.audience)) {
-        const me: any = await prisma.user.findUnique({ where: { id: auth.user.id }, select: { id: true, coachId: true, nutritionistId: true, plan: true, dietModule: true, studentModules: true } });
+        const me: any = await prisma.user.findUnique({ where: { id: auth.user.id }, select: { id: true, coachId: true, nutritionistId: true, plan: true, dietModule: true, studentModules: true, monthlyReportOn: true, loadSuggestOff: true } });
         if (me) {
             const coach: any = me.coachId ? await prisma.user.findUnique({ where: { id: me.coachId }, select: { coachPlan: true } }) : null;
-            const needsExams = allContent.some((c: any) => parseAudience(c.audience).includes('EXAMES'));
-            const examsOk = needsExams ? (await availableRecipients(prisma, me)).length > 0 : false;
-            visibleContent = allContent.filter((c: any) => studentCanSee(parseAudience(c.audience), me, coach?.coachPlan ?? null, examsOk));
+            const used = (tag: string) => allContent.some((c: any) => parseAudience(c.audience).includes(tag as any));
+            const caps = {
+                exames: used('EXAMES') ? (await availableRecipients(prisma, me)).length > 0 : false,
+                // sem coach (ou coach do time master) = o recurso é do master, sempre ligado
+                execVideo: used('EXEC_VIDEO') ? (!me.coachId || await coachHasFeature(prisma, me.coachId, 'execVideo', { isMaster: isMasterId(me.coachId) })) : false,
+            };
+            visibleContent = allContent.filter((c: any) => studentCanSee(parseAudience(c.audience), me, coach?.coachPlan ?? null, caps));
         }
     }
 
@@ -141,7 +150,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const {
       title, subtitle, category, videoUrl, thumbUrl, duration, description,
-      type, isVIP, pdfUrl, audioUrl, adminId, valor, audience, notify
+      type, isVIP, pdfUrl, audioUrl, adminId, valor, audience, notify, shared
     } = body;
 
     if (!title || !category) {
@@ -163,6 +172,7 @@ export async function POST(request: Request) {
         isVIP: isVIP || false,
         valor: (isVIP && valor) ? parseFloat(valor) : null,
         audience: audienceToString(parseAudience(audience)),
+        shared: isMasterId(auth.user.id) && shared === true,   // só o master compartilha com os coaches parceiros
         videoUrl: videoUrl || null,
         pdfUrl: pdfUrl || null,
         audioUrl: audioUrl || null,

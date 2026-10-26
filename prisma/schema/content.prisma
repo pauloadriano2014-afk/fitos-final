@@ -55,6 +55,9 @@ model Content {
   // 🎯 (26 out 2026) QUEM VÊ: marcas separadas por vírgula (TREINO, DIETA, PREMIUM, EXAMES); o aluno só vê se tiver TODAS. Vazio/null = todos. Regras em lib/contentAudience.ts.
   audience    String?
 
+  // 🌐 (26 out 2026) Só o master marca: o conteúdo aparece TAMBÉM na biblioteca dos alunos dos coaches parceiros (ex.: os vídeos de "como usar o app"). O `audience` acima ainda vale por cima.
+  shared      Boolean  @default(false)
+
   videoUrl    String?
   pdfUrl      String?
   audioUrl    String?

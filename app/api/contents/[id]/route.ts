@@ -30,6 +30,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         isVIP: body.isVIP,
         valor: (body.isVIP && body.valor) ? parseFloat(body.valor) : null,
         // sem o campo no pedido (app antigo) mantém o que já está salvo
+        ...(body.shared !== undefined && isMasterId(auth.user.id) ? { shared: body.shared === true } : {}),
         ...(body.audience !== undefined ? { audience: audienceToString(parseAudience(body.audience)) } : {}),
         videoUrl: body.videoUrl,
         pdfUrl: body.pdfUrl,

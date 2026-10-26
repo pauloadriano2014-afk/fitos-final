@@ -94,5 +94,36 @@ const seed = () => { V('Todos', null); V('Treino', 'TREINO'); V('Dieta', 'DIETA'
     C('cc'); V('V1', 'DIETA', 'cc'); const patch = async (b: any) => { const r: any = await PATCH(new Request('http://x/api/contents/c_V1', { method: 'PATCH', headers: { Authorization: 'Bearer ' + tok('cc', 'COACH'), 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'V1', category: 'COMO USAR O APP', type: 'video', ...b }) }), { params: { id: 'c_V1' } } as any); assert.equal(r.status, 200); return S.content.find((c: any) => c.id === 'c_V1').audience; };
     assert.equal(await patch({}), 'DIETA', 'app antigo não apaga'); assert.equal(await patch({ audience: ['TREINO', 'PREMIUM'] }), 'TREINO,PREMIUM'); assert.equal(await patch({ audience: [] }), null);
   });
+  await t('marcas novas: relatório do mês (liberado por aluno), sugestão de carga (ligada por padrão), só alunos do time master', async () => {
+    C('cp', { coachPlan: 'PERSONAL' });
+    V('Rel', 'RELATORIO'); V('Carga', 'CARGA'); V('SoMaster', 'MASTER');
+    U('m1', { coachId: PAULO_ID, monthlyReportOn: true }); U('m2', { coachId: PAULO_ID, loadSuggestOff: true }); U('m3', { coachId: null });
+    assert.deepEqual(await titles('m1'), ['Carga', 'Rel', 'SoMaster']); assert.deepEqual(await titles('m2'), ['SoMaster']); assert.deepEqual(await titles('m3'), ['Carga', 'SoMaster']);
+    assert.equal(studentCanSee(['MASTER'], { coachId: 'cp' }, 'PERSONAL', {}), false, 'aluno de coach parceiro não é do time master'); assert.equal(studentCanSee(['MASTER'], { coachId: 'cp', nutritionistId: PAULO_ID }, 'PERSONAL', {}), true, 'nutri do time master conta');
+  });
+  await t('vídeo de execução: vê quem tem coach com o recurso ligado (concessão, chave geral ou master); sem coach = master', async () => {
+    S.user.push({ id: PAULO_ID, role: 'COACH', name: 'Paulo' }); C('c1'); C('c2');
+    S.coachFeature.push({ id: 'f1', coachId: 'c1', feature: 'execVideo', reason: 'MANUAL', grantedAt: new Date(), revokedAt: null });
+    ['c1', 'c2', PAULO_ID].forEach((pool, i) => S.content.push({ id: 'ex' + i, title: 'Exec', category: 'X', audience: 'EXEC_VIDEO', coachId: pool })); U('s1', { coachId: 'c1' }); U('s2', { coachId: 'c2' }); U('s3', { coachId: PAULO_ID }); U('s4', { coachId: null });
+    assert.deepEqual(await titles('s1'), ['Exec']); assert.deepEqual(await titles('s2'), [], 'coach sem o recurso'); assert.deepEqual(await titles('s3'), ['Exec']); assert.deepEqual(await titles('s4'), ['Exec']);
+  });
+  await t('PARA TODOS OS COACHES: aluno de coach parceiro recebe o que o master marcou "shared", ainda filtrado pelo QUEM VÊ; o que não foi marcado do master não vaza', async () => {
+    S.user.push({ id: PAULO_ID, role: 'COACH', name: 'Paulo' }); C('cp', { coachPlan: 'PERSONAL' }); C('cx', { coachPlan: 'ELITE' });
+    S.content.push({ id: 'g1', title: 'GeralMaster', category: 'COMO USAR O APP', audience: null, coachId: PAULO_ID, shared: true });
+    S.content.push({ id: 'g2', title: 'DietaMaster', category: 'COMO USAR O APP', audience: 'DIETA', coachId: PAULO_ID, shared: true });
+    S.content.push({ id: 'g3', title: 'TreinoMaster', category: 'COMO USAR O APP', audience: 'TREINO', coachId: PAULO_ID, shared: true });
+    S.content.push({ id: 'g4', title: 'SoDoMaster', category: 'X', audience: null, coachId: PAULO_ID, shared: false });
+    S.content.push({ id: 'g5', title: 'DoOutroCoach', category: 'X', audience: null, coachId: 'cx', shared: true });   // coach parceiro não consegue compartilhar (a rota ignora), mas mesmo que viesse marcado, não é do master
+    S.content.push({ id: 'g6', title: 'Meu', category: 'X', audience: null, coachId: 'cp', shared: false });
+    U('p1', { coachId: 'cp' });
+    assert.deepEqual(await titles('p1'), ['GeralMaster', 'Meu', 'TreinoMaster'], 'personal puro: só treino, sem dieta, e sem o que é de outro coach');
+  });
+  await t('só o master compartilha: coach parceiro marcando "shared" na criação ou na edição é ignorado; master consegue', async () => {
+    C('cc'); S.user.push({ id: PAULO_ID, role: 'COACH', name: 'Paulo' });
+    const post = async (as: string, b: any) => { const r: any = await POST(new Request('http://x/api/contents', { method: 'POST', headers: { Authorization: 'Bearer ' + tok(as, 'COACH'), 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'X', category: 'GERAL', adminId: as, shared: true, ...b }) })); return r.json(); };
+    assert.equal((await post('cc', {})).shared, false); assert.equal((await post(PAULO_ID, {})).shared, true); assert.equal((await post(PAULO_ID, { shared: false })).shared, false);
+    V('V2', null, 'cc'); const patch = async (as: string, b: any) => { const r: any = await PATCH(new Request('http://x/api/contents/c_V2', { method: 'PATCH', headers: { Authorization: 'Bearer ' + tok(as, 'COACH'), 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'V2', category: 'G', type: 'video', ...b }) }), { params: { id: 'c_V2' } } as any); assert.equal(r.status, 200); return S.content.find((c: any) => c.id === 'c_V2').shared; };
+    assert.notEqual(await patch('cc', { shared: true }), true, 'coach parceiro não consegue'); assert.equal(await patch(PAULO_ID, { shared: true }), true); assert.equal(await patch(PAULO_ID, {}), true, 'sem o campo mantém');
+  });
   realLog(`\n${n} ok, ${bad} falhas`); process.exit(bad ? 1 : 0);
 })();
