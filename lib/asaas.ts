@@ -199,6 +199,33 @@ export async function createCheckoutSession(
   });
 }
 
+// ============ PARAR DE COBRAR (busca na Asaas, sem depender do que o app guardou) ============
+// Usado por lib/stopBilling.ts: a cobrança pode ter nascido direto no painel da Asaas, então o app não sabe dela.
+export async function findCustomersBy(filter: { cpfCnpj?: string; email?: string }, apiKey?: string): Promise<any[]> {
+  const qs = new URLSearchParams();
+  if (filter.cpfCnpj) qs.set('cpfCnpj', filter.cpfCnpj);
+  if (filter.email) qs.set('email', filter.email);
+  if (![...qs.keys()].length) return [];
+  qs.set('limit', '20');
+  const r = await asaasRequest(`/customers?${qs.toString()}`, { apiKey });
+  return Array.isArray(r?.data) ? r.data : [];
+}
+
+export async function listCustomerSubscriptions(customerId: string, apiKey?: string): Promise<any[]> {
+  const r = await asaasRequest(`/subscriptions?customer=${encodeURIComponent(customerId)}&status=ACTIVE&limit=100`, { apiKey });
+  return Array.isArray(r?.data) ? r.data : [];
+}
+
+export async function listCustomerPayments(customerId: string, status: 'PENDING' | 'OVERDUE', apiKey?: string): Promise<any[]> {
+  const r = await asaasRequest(`/payments?customer=${encodeURIComponent(customerId)}&status=${status}&limit=100`, { apiKey });
+  return Array.isArray(r?.data) ? r.data : [];
+}
+
+// Cancela uma cobrança ainda não paga (a Asaas só deixa apagar PENDING/OVERDUE).
+export async function deletePayment(paymentId: string, apiKey?: string) {
+  return asaasRequest(`/payments/${paymentId}`, { method: 'DELETE', apiKey });
+}
+
 export async function cancelCheckout(checkoutId: string, apiKey?: string) {
   return asaasRequest(`/checkouts/${checkoutId}/cancel`, { method: 'POST', apiKey });
 }

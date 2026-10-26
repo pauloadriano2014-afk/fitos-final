@@ -277,6 +277,9 @@
  "t_similar_students": [
   "build70.mjs"
  ],
+ "t_stop_billing": [
+  "build_stopbilling.mjs"
+ ],
  "t_student_loads": [
   "build32.mjs"
  ],
