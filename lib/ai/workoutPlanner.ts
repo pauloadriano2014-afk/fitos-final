@@ -16,7 +16,7 @@ import { looksLikeMachine, nameKey, pickSwap, type LibEx } from '@/lib/exerciseS
 import { LEVEL_LABEL, type LevelKey } from '@/lib/studentLevel';
 import { sessionsOf, suggestLoad } from '@/lib/loadSuggest';
 import { sideValue } from '@/lib/exerciseLoad';
-import { shapeReps, type RepChoice } from '@/lib/ai/repSchemes';
+import { shapeReps, cleanRepChoice, type RepChoice } from '@/lib/ai/repSchemes';
 import { muscleTarget } from '@/lib/ai/muscleTarget';
 import { areLinked, linkedToAny, linkedIds, type SubLinks } from '@/lib/ai/subFamily';   // 🔗 substituto = opção de troca, nunca 2 exercícios no mesmo dia
 
@@ -51,6 +51,14 @@ const isGenericFor = (e: LibEx, gid: string) => {
   const raw = String((e.tags as any)?.target ?? '').trim().toUpperCase();
   return !(raw === gid || raw === 'QUADRICEPS' && gid === 'QUADRICEPS');
 };
+
+// 🦵 (26 out 2026) DOBRADIÇA DE QUADRIL (stiff, good morning, RDL, terra): no treino da Evelyn a IA pôs 3 no mesmo dia e o Paulo trocou o Stiff por mesa flexora. Passa de 2 por dia, a vaga
+// vai para outro movimento do mesmo músculo (flexora, elevação pélvica...). Fixado pelo coach nunca é trocado; sem outro movimento disponível, fica como está.
+export const MAX_HINGE_PER_DAY = 2;
+const HINGE_RE = /\b(stiff|good ?morning|bom dia|rdl|romeno|levantamento terra|terra)\b/;
+export const isHinge = (name: any): boolean => HINGE_RE.test(String(name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
+// 🔢 músculos pequenos (abdômen, lombar, panturrilha) saem em 15 repetições retas, não em pirâmide (o Paulo corrigiu os quatro para 15); só na fase hipertrofia/definição e sem escolha do coach
+const FLAT15_GROUPS = new Set(['ABDOMEN', 'COSTAS_LOMBAR', 'PANTURRILHA']);
 
 // ───────────────────────────── 1) NÍVEL ─────────────────────────────
 const LEVEL_TEXT: Record<LevelKey, string> = {
@@ -359,7 +367,8 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
       if (g.id === 'CARDIO') { if (slot[i].length < cap[i]) issues.push(`Dia ${d.name}: faltou cardio`); return; }
       while (slot[i].length < cap[i]) {
         const cands = ctx.cands.byGroup.get(g.id) || [];
-        let usable = cands.filter((e) => !dayIds.has(e.id) && !dayNames.has(nameKey(e.name)) && !ctx.unavailable.has(e.id) && !linkedToAny(ctx.subLinks, e.id, dayIds));
+        const hingeNow = slot.flat().filter((x) => isHinge(x.title)).length;
+        let usable = cands.filter((e) => !dayIds.has(e.id) && !dayNames.has(nameKey(e.name)) && !ctx.unavailable.has(e.id) && !linkedToAny(ctx.subLinks, e.id, dayIds) && !(hingeNow >= MAX_HINGE_PER_DAY && isHinge(e.name)));
         let relaxed = false;
         if (!usable.length && ctx.subLinks) { usable = cands.filter((e) => !dayIds.has(e.id) && !dayNames.has(nameKey(e.name)) && !ctx.unavailable.has(e.id)); relaxed = usable.length > 0; }   // 🔗 só sobraram substitutos: melhor um substituto do que o dia incompleto (e o coach é avisado)
         const pick = usable.find((e) => !latestNames.has(nameKey(e.name)) && !routineNames.has(nameKey(e.name))) || usable.find((e) => !latestNames.has(nameKey(e.name))) || usable[0];
@@ -373,6 +382,21 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
         if (relaxed) issues.push(`Dia ${d.name}: "${pick.name}" é substituto de outro exercício do dia (a biblioteca não tem outro movimento de ${g.id} disponível)`);
       }
     });
+    // 🦵 mais de 2 dobradiças de quadril no dia: as últimas (que o coach não fixou) trocam por outro movimento do mesmo músculo
+    for (let over = slot.flat().filter((x) => isHinge(x.title)).length - MAX_HINGE_PER_DAY; over > 0;) {
+      let done = false;
+      for (let i = groups.length - 1; i >= 0 && !done; i--) for (let j = slot[i].length - 1; j >= 0 && !done; j--) {
+        const ex = slot[i][j]; if (!isHinge(ex.title) || (ctx.pins || new Set<string>()).has(ex.exerciseId)) continue;
+        const cands = ctx.cands.byGroup.get(groups[i].id) || [];
+        const usable = cands.filter((e) => !isHinge(e.name) && !dayIds.has(e.id) && !dayNames.has(nameKey(e.name)) && !ctx.unavailable.has(e.id) && !linkedToAny(ctx.subLinks, e.id, dayIds));
+        const pick = usable.find((e) => !latestNames.has(nameKey(e.name)) && !routineNames.has(nameKey(e.name))) || usable.find((e) => !latestNames.has(nameKey(e.name))) || usable[0]; if (!pick) continue;
+        const novo = ctx.makeEx(pick, ex.blocks.map((b) => ({ ...b, load: '' })));
+        slot[i][j] = novo; dayIds.delete(ex.exerciseId); dayNames.delete(nameKey(ex.title)); dayIds.add(pick.id); dayNames.add(nameKey(pick.name));
+        fix(`Dia ${d.name}: "${ex.title}" → "${pick.name}" (no máximo ${MAX_HINGE_PER_DAY} exercícios de dobradiça de quadril por dia)`); done = true;
+      }
+      if (!done) { issues.push(`Dia ${d.name}: ${over + MAX_HINGE_PER_DAY} exercícios de dobradiça de quadril (stiff/good morning/RDL) e a biblioteca não tem outro movimento disponível para trocar`); break; }
+      over--;
+    }
     groups.forEach((g, i) => slot[i].forEach((ex) => groupOf.set(ex, g)));
     const hasChain = slot.flat().some((ex) => ex.blocks.some((b) => CHAIN.has(techOfBlock(b))));
     let ordered: GenEx[];
@@ -400,7 +424,9 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
       const rr = g?.id === 'PANTURRILHA' ? calfReps : reps;
       blocks = blocks.map((b) => (SPECIAL_REPS.has(techOfBlock(b)) ? b : { ...b, reps: clampReps(b.reps, rr) }));
       // 🔺 séries todas com a mesma repetição viram pirâmide da fase (15-12-10, 12-10-8...), como o Paulo e a Adri montam; quem já veio variando fica
-      { const sh = shapeReps(blocks, { phase: ctx.phase, range: rr, compound: !!lib && mechOf(lib) === 'COMPOSTO', idx: exIdx, choice: ctx.repChoice }); if (sh !== blocks) { st.repsShaped++; blocks = sh; } }
+      const flat15 = !!g && FLAT15_GROUPS.has(g.id) && cleanRepChoice(ctx.repChoice).mode === 'AUTO' && ['HIPERTROFIA', 'DEFINICAO'].includes(String(ctx.phase || 'HIPERTROFIA').toUpperCase()) && blocks.every((b) => !OWN_BLOCKS.has(techOfBlock(b)) && /^\d+$/.test(String(b.reps ?? '').trim()));
+      if (flat15) { const want = clampReps('15', rr); if (blocks.some((b) => String(b.reps ?? '').trim() !== want)) { blocks = blocks.map((b) => ({ ...b, reps: want })); st.repsShaped++; } }
+      else { const sh = shapeReps(blocks, { phase: ctx.phase, range: rr, compound: !!lib && mechOf(lib) === 'COMPOSTO', idx: exIdx, choice: ctx.repChoice }); if (sh !== blocks) { st.repsShaped++; blocks = sh; } }
       const nx = { ...ex, blocks }; if (g) groupOf.set(nx, g);   // objeto novo: o grupo vai junto
       return nx;
     });

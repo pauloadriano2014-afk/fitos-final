@@ -4,6 +4,7 @@ import {
   ANCHOR_MAX_CYCLES, MAX_ANCHORS_PER_DAY, type ExFact, type GenEx, type RefineCtx, type PlanDay, type PrevRoutine,
 } from '/home/user/fitos-final/lib/ai/workoutPlanner';
 import { nameKey } from '/home/user/fitos-final/lib/exerciseSwap';
+import { isHinge, MAX_HINGE_PER_DAY } from '/home/user/fitos-final/lib/ai/workoutPlanner';
 import { buildSubLinks, areLinked, linkedToAny, linkedIds, movementKey } from '/home/user/fitos-final/lib/ai/subFamily';
 import { orderDayExercises } from '/home/user/fitos-final/lib/ai/exerciseOrder';
 
@@ -410,6 +411,39 @@ const hist = (rows: Array<{ id: string; sets: number[]; effort?: string; perSide
     const seq = ord.list.map((e: any) => gid[e.exerciseId]); const collapsed = seq.filter((g: string, i: number) => g !== seq[i - 1]);
     assert.equal(new Set(collapsed).size, collapsed.length, 'cada músculo aparece num bloco só (nunca posterior → glúteo → posterior): ' + seq.join(' > '));
     assert.equal(seq[seq.length - 1], 'PANTURRILHA', 'panturrilha (músculo pequeno) por último: ' + seq.join(' > '));
+  });
+  await t('dobradiça de quadril: no máximo 2 por dia (Stiff + Good morning + RDL → o 3º vira outro movimento do músculo); fixado pelo coach fica; sem alternativa avisa e mantém', () => {
+    for (const n of ['Stiff c/barra', 'Good morning com barra', 'RDL com halter', 'Terra sumô', 'Levantamento terra romeno', 'Bom dia com barra']) assert.ok(isHinge(n), n);
+    for (const n of ['Mesa flexora', 'Flexora unilateral', 'Elevação pélvica máquina', 'Agachamento livre c/barra', 'Terraço', 'Stiffness']) assert.ok(!isHinge(n), n); assert.equal(MAX_HINGE_PER_DAY, 2);
+    const pl = (id: string, name: string, mech = 'COMPOSTO'): any => ({ id, name, category: 'Pernas', subCategory: 'Posteriores', videoUrl: 'v', tags: { target: 'POSTERIOR', mechanic: mech, equipment: 'LIVRE', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    const L = [pl('s', 'Stiff c/barra'), pl('gm', 'Good morning com barra'), pl('rdl', 'RDL com halter'), pl('f', 'Mesa flexora', 'ISOLADO'), pl('f2', 'Cadeira flexora', 'ISOLADO')];
+    const days: PlanDay[] = [{ name: 'D', groups: [{ id: 'POSTERIORES', qty: 3, sets: 3, rest: 60 }] }];
+    const libMap2 = new Map(L.map((e: any) => [e.id, e]));
+    const r = refineWorkout({ D: [gx(L[0], 3), gx(L[1], 3), gx(L[2], 3)] }, { ...mk({}, days, L), lib: libMap2 } as any); const ids = r.byDay.D.map((e) => e.exerciseId);
+    assert.equal(ids.filter((i) => ['s', 'gm', 'rdl'].includes(i)).length, 2, ids.join()); assert.ok(ids.includes('f') || ids.includes('f2'), 'entrou uma flexora: ' + ids.join()); assert.ok(ids.includes('s') && ids.includes('gm'), 'ficam os 2 primeiros');
+    assert.ok(r.quality.fixes.some((f) => f.includes('dobradiça de quadril') && f.includes('RDL com halter')), r.quality.fixes.join());
+    const pinned = refineWorkout({ D: [gx(L[0], 3), gx(L[1], 3), gx(L[2], 3)] }, { ...mk({ pins: new Set(['rdl']) }, days, L), lib: libMap2 } as any); const pi = pinned.byDay.D.map((e) => e.exerciseId);
+    assert.ok(pi.includes('rdl'), 'o fixado nunca sai: ' + pi.join()); assert.equal(pi.filter((i) => ['s', 'gm', 'rdl'].includes(i)).length, 2, 'sai outro dobradiça: ' + pi.join());
+    const only = L.slice(0, 3); const onlyMap = new Map(only.map((e: any) => [e.id, e]));
+    const none = refineWorkout({ D: [gx(only[0], 3), gx(only[1], 3), gx(only[2], 3)] }, { ...mk({}, days, only), lib: onlyMap } as any);
+    assert.equal(none.byDay.D.length, 3, 'sem alternativa o dia continua completo'); assert.ok(none.quality.issues.some((i) => i.includes('dobradiça de quadril')), none.quality.issues.join());
+    // completar vaga: a IA mandou 2 dobradiças e deixou a 3ª vaga em branco → entra a flexora, não o RDL
+    const fill = refineWorkout({ D: [gx(L[0], 3), gx(L[1], 3)] }, { ...mk({}, days, L), lib: libMap2 } as any); const fi = fill.byDay.D.map((e) => e.exerciseId);
+    assert.ok(!fi.includes('rdl') && (fi.includes('f') || fi.includes('f2')), 'vaga completada sem 3ª dobradiça: ' + fi.join());
+    const fill2 = refineWorkout({ D: [gx(only[0], 3), gx(only[1], 3)] }, { ...mk({}, days, only), lib: onlyMap } as any); assert.equal(fill2.byDay.D.length, 2, 'só sobra dobradiça: a vaga não é completada com a 3ª'); assert.ok(fill2.quality.issues.some((i) => i.includes('faltou 1 exercício de POSTERIORES')), fill2.quality.issues.join());
+  });
+  await t('músculos pequenos (abdômen, lombar, panturrilha): 15 repetições retas em vez de pirâmide, só hipertrofia/definição e sem escolha do coach; os demais seguem a pirâmide', () => {
+    const sm = (id: string, name: string, target: string, mech = 'ISOLADO'): any => ({ id, name, category: 'Musculação', subCategory: target, videoUrl: 'v', tags: { target, mechanic: mech, equipment: 'MAQUINA', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    const L = [sm('ab', 'Abdominal crunch', 'ABDOMEN'), sm('pa', 'Panturrilha máquina', 'PANTURRILHA'), sm('lo', 'Lombar no banco romano', 'COSTAS_LOMBAR'), sm('bi', 'Rosca direta', 'BICEPS')];
+    const days: PlanDay[] = [{ name: 'A', groups: [{ id: 'BICEPS', qty: 1, sets: 3, rest: 30 }, { id: 'ABDOMEN', qty: 1, sets: 3, rest: 30 }, { id: 'PANTURRILHA', qty: 1, sets: 3, rest: 30 }, { id: 'COSTAS_LOMBAR', qty: 1, sets: 3, rest: 30 }] }];
+    const libMap2 = new Map(L.map((e: any) => [e.id, e])); const input = () => ({ A: L.map((e: any) => ({ ...gx(e, 3), blocks: [{ sets: '1', reps: '15', load: '', restTime: '30', technique: '' }, { sets: '1', reps: '12', load: '', restTime: '30', technique: '' }, { sets: '1', reps: '10', load: '', restTime: '30', technique: '' }] })) });
+    const reps = (r: any, id: string) => r.byDay.A.find((e: any) => e.exerciseId === id).blocks.map((b: any) => b.reps).join('/');
+    const r = refineWorkout(input(), { ...mk({}, days, L), lib: libMap2 } as any);
+    assert.equal(reps(r, 'ab'), '15/15/15'); assert.equal(reps(r, 'pa'), '15/15/15'); assert.equal(reps(r, 'lo'), '15/15/15'); assert.equal(reps(r, 'bi'), '15/12/10', 'bíceps segue a pirâmide');
+    const emag = refineWorkout(input(), { ...mk({ phase: 'EMAGRECIMENTO' }, days, L), lib: libMap2 } as any); assert.notEqual(reps(emag, 'ab'), '15/15/15', 'outra fase: sem a regra');
+    const reta = refineWorkout(input(), { ...mk({ repChoice: { mode: 'RETA', flat: 12 } }, days, L), lib: libMap2 } as any); assert.equal(reps(reta, 'ab'), '12/12/12', 'escolha do coach vale mais');
+    const tech = refineWorkout({ A: L.map((e: any) => ({ ...gx(e, 3, 'DROPSET'), blocks: [{ sets: '1', reps: '15', load: '', restTime: '30', technique: '' }, { sets: '1', reps: '12', load: '', restTime: '30', technique: '' }, { sets: '1', reps: '10', load: '', restTime: '30', technique: 'DROPSET' }] })) }, { ...mk({ level: 'AVANCADO' }, days, L), lib: libMap2 } as any);
+    assert.equal(reps(tech, 'ab'), '15/12/10', 'com técnica de repetição própria (dropset) não mexe');
   });
   console.log(`\n${ok} verificações do planejador de treino`);
 })();
