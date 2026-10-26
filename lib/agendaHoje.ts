@@ -99,7 +99,7 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
   // ── alunos do coach (uma consulta só; o resto filtra por estes ids) ──
   const students: any[] = await safe('alunos', unavailable, () => db.user.findMany({
     where: { role: 'USER', active: { not: false }, AND: [ownStudentScope(coachId)] },
-    select: { id: true, name: true, phone: true, isFinanceActive: true, isTestAccount: true, contractValue: true, paymentDueDate: true, paymentClaimStatus: true, financeCategory: true, nextCheckInDate: true, disableCheckIn: true, frozenAt: true },
+    select: { id: true, name: true, phone: true, isFinanceActive: true, isTestAccount: true, contractValue: true, paymentDueDate: true, paymentClaimStatus: true, financeCategory: true, nextCheckInDate: true, disableCheckIn: true, frozenAt: true, frozenUntil: true },
   }), [] as any[]);
   const real = students.filter((s) => !s.isTestAccount && !s.frozenAt);   // ❄️ aluno com plano congelado não gera pendência
   const ids = real.map((s) => s.id);
@@ -153,6 +153,14 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       push({ key: `treino:${uid}:${k}`, type: 'treino', severity: left < 0 ? 'late' : left === 0 ? 'today' : 'soon', title: left < 0 ? `Treino vencido: ${s.name || 'Aluno'}` : `Treino vence ${left === 0 ? 'hoje' : 'em ' + daysWord(left)}: ${s.name || 'Aluno'}`, subtitle: left < 0 ? `venceu há ${daysWord(-left)}` : null, person: person('student', s), dueAt: new Date(w.endDate).toISOString(), target: { type: 'student', id: s.id } });
     }
   }, undefined);
+
+  // ── ❄️ volta prevista de aluno congelado: chegou o dia (ou passou) e ele ainda está congelado. O aluno NÃO volta sozinho: o coach confirma e descongela ──
+  for (const s of students) {
+    if (s.isTestAccount || !s.frozenAt || !s.frozenUntil) continue;
+    const k = dateKeyBrt(new Date(s.frozenUntil)), late = -diffDaysKeys(todayKey, k);
+    if (late < 0) continue;
+    push({ key: `descongelar:${s.id}:${k}`, type: 'descongelar', severity: late > 3 ? 'late' : 'today', title: `Hora de descongelar: ${s.name || 'Aluno'}`, subtitle: late === 0 ? 'a volta prevista é hoje' : `a volta prevista era há ${daysWord(late)}`, person: person('student', s), dueAt: new Date(s.frozenUntil).toISOString(), target: { type: 'student', id: s.id } });
+  }
 
   // ── corrida: anamnese respondida sem protocolo (montar) e protocolo concluído (escolher o próximo desafio) ──
   // Some sozinha: ativar um protocolo novo desativa o anterior. Só olha o último mês, para uma anamnese esquecida há muito tempo não virar atraso eterno.

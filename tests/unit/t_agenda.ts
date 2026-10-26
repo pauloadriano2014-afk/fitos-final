@@ -498,6 +498,18 @@ const block = async (name: string, fn: () => Promise<void> | void) => {
     assert.ok(!JSON.stringify(h).includes('Teste') && !JSON.stringify(h).includes('Dora'));
     S.user.find((u: any) => u.id === 'sn').disableCheckIn = true; assert.ok(!(await hoje()).tasks.some((t: any) => t.type === 'checkin' && t.person.id === 'sn'));
   });
+  await block('HOJE: aluno congelado não gera pendência (feedback, avaliação, treino, cobrança); no dia da volta prevista (ou depois) aparece "Hora de descongelar"; sem data de volta ou volta no futuro, não', async () => {
+    const now = Date.now(); const U = (id: string) => S.user.find((u: any) => u.id === id);
+    Object.assign(U('s1'), { nextCheckInDate: new Date(now - 10 * DAY), disableCheckIn: false, contractValue: 250, paymentDueDate: new Date(now - 3 * DAY) });
+    let h = await hoje(); assert.ok(h.tasks.some((t: any) => t.person && t.person.id === 's1' && t.type === 'checkin') && h.tasks.some((t: any) => t.person && t.person.id === 's1' && t.type === 'cobranca'), 'antes de congelar ela aparece');
+    Object.assign(U('s1'), { frozenAt: new Date(now - 10 * DAY), frozenUntil: null, isFinanceActive: false });
+    h = await hoje(); assert.ok(!h.tasks.some((t: any) => t.person && t.person.id === 's1' && ['checkin', 'cobranca', 'treino'].includes(t.type)), 'congelada: nada de avaliação, cobrança nem treino vencido: ' + JSON.stringify(h.tasks.filter((t: any) => t.person && t.person.id === 's1').map((t: any) => t.type)));
+    assert.ok(!h.tasks.some((t: any) => t.type === 'descongelar'), 'sem data de volta: nenhum aviso');
+    U('s1').frozenUntil = new Date(now + 3 * DAY); h = await hoje(); assert.ok(!h.tasks.some((t: any) => t.type === 'descongelar'), 'volta no futuro: ainda não');
+    U('s1').frozenUntil = new Date(now); h = await hoje(); let d = h.tasks.filter((t: any) => t.type === 'descongelar'); assert.strictEqual(d.length, 1); assert.strictEqual(d[0].severity, 'today'); assert.match(d[0].title, /Hora de descongelar: Samara/); assert.strictEqual(d[0].subtitle, 'a volta prevista é hoje'); assert.strictEqual(d[0].target.id, 's1');
+    U('s1').frozenUntil = new Date(now - 5 * DAY); h = await hoje(); d = h.tasks.filter((t: any) => t.type === 'descongelar'); assert.strictEqual(d[0].severity, 'late'); assert.match(d[0].subtitle, /5 dias/);
+    U('s1').frozenAt = null; U('s1').frozenUntil = null; h = await hoje(); assert.ok(!h.tasks.some((t: any) => t.type === 'descongelar') && h.tasks.some((t: any) => t.person && t.person.id === 's1' && t.type === 'checkin'), 'descongelou: volta ao normal');
+  });
   await block('HOJE: cobrança (atrasada, hoje, em até 2 dias), "já paguei", sem valor/inativa/longe ficam fora; cadastros do financeiro entram', async () => {
     const now = Date.now(); const U = (id: string) => S.user.find((u: any) => u.id === id);
     Object.assign(U('s1'), { contractValue: 250, paymentDueDate: new Date(now - 3 * DAY) });
