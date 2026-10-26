@@ -619,6 +619,7 @@ Responda APENAS com JSON válido.`.trim();
     // 🧠 REVISÃO depois da IA (lib/ai/workoutPlanner.ts → refineWorkout): completa o que faltou, tira o que passou, ajusta séries/repetições/técnicas pelo nível,
     // troca o que repetiu da rotina anterior (ou de outro dia), e só deixa carga onde o aluno já treinou o exercício.
     let reviewedDays: Record<string, any[]> = rawDays;
+    let assignedGroups: Record<string, Record<string, string>> = {};   // dia → exercício → grupo em que o planejador o encaixou
     let quality: Quality | null = null;
     if (smart && cands && levelInfo) {
       const loaded = new Set<string>();
@@ -629,7 +630,7 @@ Responda APENAS com JSON válido.`.trim();
         env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded, pins: pinSet, repChoice: cleanRepChoice(cycleConfig?.repScheme), repCap: repCapCfg, subLinks: buildSubLinks(adminExercises),
         makeEx: (e, blocks) => ({ exerciseId: e.id, title: e.name, videoUrl: e.videoUrl || '', category: e.category, subCategory: e.subCategory, observation: '', substitute: subFor(e.id), blocks }),
       });
-      reviewedDays = r.byDay; quality = r.quality;
+      reviewedDays = r.byDay; quality = r.quality; assignedGroups = r.groupIds;
       if (applied.droppedPins.length) {
         for (const id of applied.droppedPins) quality.issues.push(`"${pinNames.get(id) || id}" fixado não está disponível para este aluno (local, limitação ou aparelho)`);
         quality.score = Math.max(0, 100 - 10 * quality.issues.length);
@@ -653,7 +654,7 @@ Responda APENAS com JSON válido.`.trim();
       if (smart && cands) {
         const dayCfg = (cycleConfig?.days || []).find((d: any) => d.name === day);
         const groupIds: string[] = (dayCfg?.groups || []).map((g: any) => String(g.id));
-        const groupOf = (ex: any): string | null => { for (const gid of groupIds) if ((cands!.byGroup.get(gid) || []).some((e: any) => e.id === ex.exerciseId)) return gid; return null; };
+        const groupOf = (ex: any): string | null => { const placed = assignedGroups[day]?.[ex.exerciseId]; if (placed && groupIds.includes(placed)) return placed; for (const gid of groupIds) if ((cands!.byGroup.get(gid) || []).some((e: any) => e.id === ex.exerciseId)) return gid; return null; };
         const ord = orderDayExercises(dayExercises, {
           groups: groupIds, keepGroupOrder: cycleConfig?.keepGroupOrder === true, groupOf, style: cycleConfig?.orderStyle, exId: (ex: any) => String(ex.exerciseId), cardioAt: cycleConfig?.warmup?.cardio,
           isCompound: (ex: any) => String((exerciseMap.get(ex.exerciseId) as any)?.tags?.mechanic || '').toUpperCase() === 'COMPOSTO',

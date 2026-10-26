@@ -4,7 +4,8 @@ import {
   ANCHOR_MAX_CYCLES, MAX_ANCHORS_PER_DAY, type ExFact, type GenEx, type RefineCtx, type PlanDay, type PrevRoutine,
 } from '/home/user/fitos-final/lib/ai/workoutPlanner';
 import { nameKey } from '/home/user/fitos-final/lib/exerciseSwap';
-import { buildSubLinks, areLinked, linkedToAny, linkedIds } from '/home/user/fitos-final/lib/ai/subFamily';
+import { buildSubLinks, areLinked, linkedToAny, linkedIds, movementKey } from '/home/user/fitos-final/lib/ai/subFamily';
+import { orderDayExercises } from '/home/user/fitos-final/lib/ai/exerciseOrder';
 
 let ok = 0; const t = async (name: string, fn: () => Promise<void> | void) => { try { await fn(); ok++; console.log('  ok  ' + name); } catch (e: any) { console.log('FALHOU  ' + name + '\n' + String(e?.stack || e).split('\n').slice(0, 6).join('\n')); process.exitCode = 1; } };
 
@@ -348,7 +349,7 @@ const hist = (rows: Array<{ id: string; sets: number[]; effort?: string; perSide
     const one = refineWorkout({ A: [gx(CALF[1], 4)] }, mk({ subLinks: links }, [{ name: 'A', groups: [{ id: 'PANTURRILHA', qty: 1, sets: 4, rest: 30 }] }], CALF)); assert.deepEqual(one.byDay.A.map((e) => e.exerciseId), ['f2'], '1 vaga: o Smith que a IA escolheu fica');
     const only = [CALF[0], CALF[1]]; const r2 = refineWorkout({ A: [gx(CALF[0], 4)] }, mk({ subLinks: buildSubLinks(only) }, calfDays, only));
     assert.deepEqual(r2.byDay.A.map((e) => e.exerciseId).sort(), ['f1', 'f2'], 'sem outro movimento na biblioteca: melhor o substituto do que o dia incompleto'); assert.ok(r2.quality.issues.some((i) => i.includes('é substituto de outro exercício do dia')), r2.quality.issues.join());
-    const ring = [1, 2, 3, 4, 5, 6].map((n) => ({ ...lib(`r${n}`, `Anel ${n}`, 'PANTURRILHA', 'ISOLADO'), defaultSubstitutes: [`r${n === 6 ? 1 : n + 1}`] })); const rr = refineWorkout({ A: [gx(ring[0], 4), gx(ring[1], 4)] }, mk({ subLinks: buildSubLinks(ring) }, calfDays, ring));
+    const ring = [1, 2, 3, 4, 5, 6].map((n) => ({ ...lib(`r${n}`, `Anel ${'abcdef'[n - 1]}x${'zyxwvu'[n - 1]}`, 'PANTURRILHA', 'ISOLADO'), defaultSubstitutes: [`r${n === 6 ? 1 : n + 1}`] })); const rr = refineWorkout({ A: [gx(ring[0], 4), gx(ring[1], 4)] }, mk({ subLinks: buildSubLinks(ring) }, calfDays, ring));
     assert.equal(rr.byDay.A.length, 2, 'biblioteca com tags em anel: o dia continua completo'); assert.ok(!areLinked(buildSubLinks(ring), rr.byDay.A[0].exerciseId, rr.byDay.A[1].exerciseId), 'e os dois não são substitutos um do outro');
   });
   await t('refineWorkout: dias diferentes podem usar versões diferentes (máquina no A, Smith no B); fixado pelo coach nunca é tirado', () => {
@@ -365,12 +366,50 @@ const hist = (rows: Array<{ id: string; sets: number[]; effort?: string; perSide
   });
   await t('refineWorkout: a rotação (troca por repetir da rotina anterior) não cai no substituto de outro exercício do mesmo dia', () => {
     // bíceps: b1 repetido da rotina anterior vai ser trocado; b2 é o substituto de b3, que já está no dia → a troca tem que escolher b4 ou b5, nunca b2
-    const B = [1, 2, 3, 4, 5].map((n) => ({ ...lib(`bb${n}`, `Rosca ${n}`, 'BICEPS', 'ISOLADO', 'HALTER'), defaultSubstitutes: n === 2 ? ['bb3'] : [] }));
+    const B = [1, 2, 3, 4, 5].map((n) => ({ ...lib(`bb${n}`, ['Rosca direta', 'Rosca martelo', 'Rosca scott', 'Rosca concentrada', 'Rosca inversa'][n - 1], 'BICEPS', 'ISOLADO', 'HALTER'), defaultSubstitutes: n === 2 ? ['bb3'] : [] }));
     const prev: PrevRoutine = { name: 'Ant', days: { A: [B[0]].map(prevEx) } }; const days: PlanDay[] = [{ name: 'A', groups: [{ id: 'BICEPS', qty: 2, sets: 3, rest: 30 }] }];
     const facts = buildFacts([prev], [], new Date());
     const r = refineWorkout({ A: [gx(B[0], 3), gx(B[2], 3)] }, mk({ subLinks: buildSubLinks(B), hasPrev: true }, days, B, [prev], facts));
     const ids = r.byDay.A.map((e) => e.exerciseId); assert.ok(!ids.includes('bb2'), 'não pode vir o substituto de bb3: ' + ids.join()); assert.ok(ids.includes('bb3'));
   });
 
+  await t('mesmo exercício com outra pegada/marca (Graviton neutra × semi-pronada) é substituto automático pelo NOME, sem ninguém marcar; movimentos diferentes continuam livres', () => {
+    for (const [a, b] of [['Graviton pegada neutra fechada', 'Graviton pegada semi-pronada'], ['Mesa flexora', 'Mesa flexora NEWTECH'], ['Remada articulada¹ pronada NEWTECH', 'Remada articulada neutra 1'], ['Pulldown máquina NEWTECH', 'Pulldown máquina neutro NEWTECH']]) assert.equal(movementKey(a), movementKey(b), `${a} = ${b}`);
+    assert.equal(movementKey('Graviton pegada semi-pronada'), 'graviton');
+    for (const [a, b] of [['Puxada frente aberta', 'Puxada com barra neutra'], ['Panturrilha em pé', 'Panturrilha sentada'], ['Stiff com barra', 'Stiff com halter'], ['Supino reto com halteres', 'Supino reto máquina NEWTECH'], ['Remada baixa com triângulo', 'Remada cavalinho pronada']]) assert.notEqual(movementKey(a), movementKey(b), `${a} ≠ ${b}`);
+    assert.equal(movementKey('NEWTECH 1'), '', 'só marca/número: sem chave (nunca liga nada)');
+    const rows = [{ id: 'g1', name: 'Graviton pegada neutra fechada', category: 'Costas' }, { id: 'g2', name: 'Graviton pegada semi-pronada', category: 'Costas' }, { id: 'g3', name: 'Graviton pegada semi-pronada', category: 'Peito' }, { id: 'p1', name: 'Puxada frente aberta', category: 'Costas' }, { id: 'p2', name: 'Puxada com barra neutra', category: 'Costas' }, { id: 'n1', name: 'NEWTECH', category: 'Costas' }, { id: 'n2', name: 'NEWTECH 2', category: 'Costas' }];
+    const links = buildSubLinks(rows);
+    assert.ok(areLinked(links, 'g1', 'g2') && areLinked(links, 'g2', 'g1'), 'dois Graviton do dia: ligados'); assert.ok(!areLinked(links, 'g1', 'g3'), 'outra categoria não liga');
+    assert.ok(!areLinked(links, 'p1', 'p2'), 'puxada frente × puxada com barra são movimentos diferentes'); assert.ok(!areLinked(links, 'n1', 'n2'));
+    const marked = buildSubLinks([{ id: 'a', name: 'Rosca direta', category: 'Bíceps', defaultSubstitutes: ['b'] }, { id: 'b', name: 'Rosca scott', category: 'Bíceps' }]); assert.ok(areLinked(marked, 'a', 'b'), 'a marcação manual continua valendo');
+  });
+  await t('Graviton duas vezes no mesmo dia: a IA manda os dois, fica um e a vaga é completada com OUTRO movimento (sem nenhuma marcação de substituto na biblioteca)', () => {
+    const cs = (id: string, name: string, sub = 'Geral'): any => ({ id, name, category: 'Costas', subCategory: sub, videoUrl: 'v', tags: { target: 'COSTAS', mechanic: 'COMPOSTO', equipment: 'MAQUINA', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    const L = [cs('g1', 'Graviton pegada neutra fechada'), cs('g2', 'Graviton pegada semi-pronada'), cs('r1', 'Remada máquina pegada neutra', 'Remadas'), cs('r2', 'Remada baixa com triângulo', 'Remadas'), cs('r3', 'Serrote com halter', 'Remadas')];
+    const days: PlanDay[] = [{ name: 'E', groups: [{ id: 'COSTAS_PUXADA', qty: 1, sets: 3, rest: 60 }, { id: 'COSTAS_REMADA', qty: 2, sets: 3, rest: 60 }] }];
+    const links = buildSubLinks(L);
+    const libMap2 = new Map(L.map((e: any) => [e.id, e]));
+    const r = refineWorkout({ E: [gx(L[0], 3), gx(L[1], 3), gx(L[2], 3), gx(L[3], 3)] }, { ...mk({}, days, L), lib: libMap2, subLinks: links } as any);
+    const ids = r.byDay.E.map((e) => e.exerciseId);
+    assert.equal(ids.filter((i) => i === 'g1' || i === 'g2').length, 1, 'só um Graviton: ' + ids.join());
+    assert.ok(r.quality.fixes.some((f) => f.includes('substituto não entra como 2º exercício')), r.quality.fixes.join());
+    const sem = refineWorkout({ E: [gx(L[0], 3), gx(L[1], 3), gx(L[2], 3), gx(L[3], 3)] }, { ...mk({}, days, L), lib: libMap2 } as any);
+    assert.equal(sem.byDay.E.filter((e) => e.exerciseId === 'g1' || e.exerciseId === 'g2').length, 2, 'sem os vínculos (comportamento antigo) os dois entravam: o teste enxerga a diferença');
+  });
+  await t('ordem final: cada exercício fica no grupo em que o planejador o encaixou (Good morning/RDL genéricos não vão para o grupo errado e o posterior não volta no meio do treino)', () => {
+    const lg = (id: string, name: string, target: string, sub: string, mech = 'COMPOSTO'): any => ({ id, name, category: 'Pernas', subCategory: sub, videoUrl: 'v', tags: { target, mechanic: mech, equipment: 'LIVRE', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    const L = [lg('s', 'Stiff c/barra', 'POSTERIOR', 'Posteriores'), lg('gm', 'Good morning com barra', 'PERNAS', 'Posteriores'), lg('f', 'Flexora unilateral', 'POSTERIOR', 'Posteriores', 'ISOLADO'), lg('rdl', 'RDL com halter', 'PERNAS', 'Posteriores'), lg('p', 'Panturrilha máquina', 'PANTURRILHA', 'Panturrilha', 'ISOLADO'), lg('e', 'Extensão de quadril no cross', 'GLUTEOS', 'Glúteos', 'ISOLADO'), lg('c', 'Coice no cross', 'GLUTEOS', 'Glúteos', 'ISOLADO')];
+    const days: PlanDay[] = [{ name: 'D', groups: [{ id: 'GLUTEOS', qty: 2, sets: 3, rest: 60 }, { id: 'POSTERIORES', qty: 4, sets: 4, rest: 60 }, { id: 'PANTURRILHA', qty: 1, sets: 4, rest: 60 }] }];
+    const libMap2 = new Map(L.map((e: any) => [e.id, e]));
+    const r = refineWorkout({ D: [gx(L[0], 4), gx(L[1], 4), gx(L[2], 4), gx(L[3], 4), gx(L[4], 4), gx(L[5], 3), gx(L[6], 3)] }, { ...mk({}, days, L), lib: libMap2 } as any);
+    const gid = r.groupIds.D; assert.ok(gid, 'o planejador devolve o grupo de cada exercício');
+    for (const id of ['s', 'f']) assert.equal(gid[id], 'POSTERIORES', id); for (const id of ['e', 'c']) assert.equal(gid[id], 'GLUTEOS', id); assert.equal(gid.p, 'PANTURRILHA');
+    const groupIds = days[0].groups.map((g) => g.id);
+    const ord = orderDayExercises(r.byDay.D, { groups: groupIds, groupOf: (ex: any) => gid[ex.exerciseId] ?? null, isCompound: (ex: any) => (libMap2.get(ex.exerciseId) as any).tags.mechanic === 'COMPOSTO', kind: () => 'FORCA', technique: () => '' });
+    const seq = ord.list.map((e: any) => gid[e.exerciseId]); const collapsed = seq.filter((g: string, i: number) => g !== seq[i - 1]);
+    assert.equal(new Set(collapsed).size, collapsed.length, 'cada músculo aparece num bloco só (nunca posterior → glúteo → posterior): ' + seq.join(' > '));
+    assert.equal(seq[seq.length - 1], 'PANTURRILHA', 'panturrilha (músculo pequeno) por último: ' + seq.join(' > '));
+  });
   console.log(`\n${ok} verificações do planejador de treino`);
 })();

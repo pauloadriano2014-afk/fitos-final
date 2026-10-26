@@ -175,7 +175,7 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
   const groups = (qty = 2) => [{ name: 'A', groups: [{ id: 'PEITO', qty, sets: 3, rest: 60 }, { id: 'BICEPS', qty, sets: 3, rest: 30 }] }, { name: 'B', groups: [{ id: 'COSTAS_REMADA', qty, sets: 3, rest: 60 }] }];
   const seedGen = () => {
     seed(); db.user.find((u: any) => u.id === 's1').coachId = PAULO_ID;
-    for (const tg of TG) for (let n = 1; n <= 6; n++) db.exercise.push({ id: `${tg.toLowerCase()}-${n}`, coachId: PAULO_ID, name: `${tg} ${n}`, category: 'Musculação', subCategory: tg, videoUrl: 'v', tags: { target: tg, equipment: n <= 3 ? 'MAQUINA' : 'HALTER', mechanic: n === 1 ? 'COMPOSTO' : 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    for (const tg of TG) for (let n = 1; n <= 6; n++) db.exercise.push({ id: `${tg.toLowerCase()}-${n}`, coachId: PAULO_ID, name: `${tg} ${'BDFGHJ'[n - 1]}`, category: 'Musculação', subCategory: tg, videoUrl: 'v', tags: { target: tg, equipment: n <= 3 ? 'MAQUINA' : 'HALTER', mechanic: n === 1 ? 'COMPOSTO' : 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
     db.anamnese.push({ id: 'a', userId: 's1', objetivo: 'Hipertrofia', nivel: 'Intermediário', frequencia: 3, limitacoes: [], cirurgias: [], createdAt: new Date() });
     let hook: ((byDay: any) => any) | null = null;
     G.__GEMINI = async ({ contents }: any) => {
@@ -204,22 +204,22 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
   });
   await t('geração: sem `genRules` no pedido vale o que está salvo no aluno; `genRules` (até vazio) vale mais; modo antigo (smart:false) também filtra', async () => {
     seedGen(); db.genPrefs.push({ id: 'g', userId: 's1', coachId: PAULO_ID, rules: { excludeIds: ['biceps-4'], excludeEquipment: [] }, presetId: null });
-    let r = await gen({}); assert.equal(r.status, 200, JSON.stringify(r.body)); assert.ok(!idsOf(r).includes('biceps-4') && !new RegExp('\\| BICEPS 4 \\|').test(lastPrompt()), 'filtro salvo vale (plano automático também)'); assert.deepEqual(r.body.filters.summary, ['1 exercício bloqueado']);
-    r = await gen({ genRules: {} }); assert.ok(!('filters' in r.body), 'a tela mandou "sem filtros": ignora o salvo'); assert.ok(new RegExp('\\| BICEPS 4 \\|').test(lastPrompt()));
+    let r = await gen({}); assert.equal(r.status, 200, JSON.stringify(r.body)); assert.ok(!idsOf(r).includes('biceps-4') && !new RegExp('\\| BICEPS G \\|').test(lastPrompt()), 'filtro salvo vale (plano automático também)'); assert.deepEqual(r.body.filters.summary, ['1 exercício bloqueado']);
+    r = await gen({ genRules: {} }); assert.ok(!('filters' in r.body), 'a tela mandou "sem filtros": ignora o salvo'); assert.ok(new RegExp('\\| BICEPS G \\|').test(lastPrompt()));
     r = await gen({ smart: false, genRules: { excludeIds: ['peito-1'] } }); assert.ok(!idsOf(r).includes('peito-1') && !lastPrompt().includes('"id":"peito-1"'), 'modo antigo: biblioteca já sem o bloqueado'); assert.equal(r.body.filters.removedTotal, 1);
     const saved = (prisma as any).genPrefs; (prisma as any).genPrefs = undefined; try { r = await gen({}); assert.equal(r.status, 200, 'sem a tabela a geração segue normal'); assert.ok(!('filters' in r.body)); } finally { (prisma as any).genPrefs = saved; }
   });
   await t('geração: exercício FIXADO entra mesmo se a IA não escolher (no lugar de um acessório do mesmo músculo), nunca é trocado pela rotação, e aparece como FIXADO para a IA', async () => {
     const ctl = seedGen(); ctl.setHook((byDay: any) => byDay);   // a IA devolve os 2 primeiros de cada grupo
-    let r = await gen({ genRules: { pinIds: ['biceps-6'] } }); assert.equal(r.status, 200, JSON.stringify(r.body)); const p = lastPrompt(); assert.ok(/E\d{3} \| BICEPS 6 \| ISOLADO\/HALTER \| FIXADO pelo coach \(obrigatório\)/.test(p), 'marcado FIXADO para a IA');
-    assert.ok(idsOf(r).includes('biceps-6'), 'a IA recebeu o fixado no topo e usou'); assert.ok(/BICEPS 6/.test(p.slice(p.indexOf('## BICEPS')).split('\n')[1]), 'o fixado é o 1º da lista do músculo (sem o fixar ele seria o último)'); assert.equal(r.body.filters.pinned, 1);
+    let r = await gen({ genRules: { pinIds: ['biceps-6'] } }); assert.equal(r.status, 200, JSON.stringify(r.body)); const p = lastPrompt(); assert.ok(/E\d{3} \| BICEPS J \| ISOLADO\/HALTER \| FIXADO pelo coach \(obrigatório\)/.test(p), 'marcado FIXADO para a IA');
+    assert.ok(idsOf(r).includes('biceps-6'), 'a IA recebeu o fixado no topo e usou'); assert.ok(/BICEPS J/.test(p.slice(p.indexOf('## BICEPS')).split('\n')[1]), 'o fixado é o 1º da lista do músculo (sem o fixar ele seria o último)'); assert.equal(r.body.filters.pinned, 1);
     // a IA ignora o fixado: o servidor põe
-    ctl.setHook((byDay: any) => { byDay.A = byDay.A.filter((e: any) => !/BICEPS 6/.test(e.title)); return byDay; });
+    ctl.setHook((byDay: any) => { byDay.A = byDay.A.filter((e: any) => !/BICEPS J/.test(e.title)); return byDay; });
     db.workoutHistory.length = 0; r = await gen({ genRules: { pinIds: ['biceps-6'] } }); assert.ok(idsOf(r).includes('biceps-6')); assert.equal(r.body.exercisesByDay.A.filter((e: any) => e.subCategory === 'BICEPS').length, 2, 'continua com 2 bíceps: entrou no lugar de um');
     ctl.setHook((byDay: any) => { let k = 0; byDay.A = byDay.A.map((e: any) => (e.subCategory === 'BICEPS' ? { ...e, exerciseId: `biceps-${++k}`, title: `BICEPS ${k}` } : e)); return byDay; });   // IA completa, mas sem o fixado
-    r = await gen({ genRules: { pinIds: ['biceps-6'] } }); assert.ok(idsOf(r).includes('biceps-6'), idsOf(r).join()); assert.ok(r.body.quality.fixes.some((f: string) => f.includes('"BICEPS 6" (fixado por você) entrou no lugar de')), r.body.quality.fixes.join(' | ')); assert.equal(r.body.quality.stats.pinned >= 1, true);
+    r = await gen({ genRules: { pinIds: ['biceps-6'] } }); assert.ok(idsOf(r).includes('biceps-6'), idsOf(r).join()); assert.ok(r.body.quality.fixes.some((f: string) => f.includes('"BICEPS J" (fixado por você) entrou no lugar de')), r.body.quality.fixes.join(' | ')); assert.equal(r.body.quality.stats.pinned >= 1, true);
     // fixado que o aluno não pode usar (fora do ambiente): aviso claro
-    db.exercise.find((e: any) => e.id === 'peito-5').environments = ['EM_CASA']; r = await gen({ genRules: { pinIds: ['peito-5'] } }); assert.deepEqual(r.body.filters.droppedPins, [{ id: 'peito-5', name: 'PEITO 5' }]); assert.ok(r.body.quality.issues.some((i: string) => i.includes('"PEITO 5" fixado não está disponível')), r.body.quality.issues.join()); assert.equal(r.body.quality.score, 100 - 10 * r.body.quality.issues.length);
+    db.exercise.find((e: any) => e.id === 'peito-5').environments = ['EM_CASA']; r = await gen({ genRules: { pinIds: ['peito-5'] } }); assert.deepEqual(r.body.filters.droppedPins, [{ id: 'peito-5', name: 'PEITO H' }]); assert.ok(r.body.quality.issues.some((i: string) => i.includes('"PEITO H" fixado não está disponível')), r.body.quality.issues.join()); assert.equal(r.body.quality.score, 100 - 10 * r.body.quality.issues.length);
   });
   await t('locais (de onde vêm os exercícios): sem escolha vale Universal + o local do aluno (como sempre); com escolha vale a lista do coach; limpeza, resumo e junção de presets', async () => {
     assert.deepEqual(cleanRules({ includeEnvironments: ['condominio', 'ACADEMIA_PADRAO', 'MARTE', 'condominio'] }).includeEnvironments, ['CONDOMINIO', 'ACADEMIA_PADRAO'], 'desconhecido some, sem repetição');
@@ -233,7 +233,7 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     const ctl = seedGen(); ctl.setHook((b: any) => b);
     const env = (id: string, e: string[]) => { db.exercise.find((x: any) => x.id === id).environments = e; };
     env('peito-1', ['OVERALL']); env('peito-2', ['OVERALL']); env('peito-3', ['ACADEMIA_PADRAO', 'OVERALL']); env('peito-4', ['ACADEMIA_PADRAO']); env('peito-5', ['CONDOMINIO']); env('peito-6', ['UNIVERSAL']);
-    const has = (id: string) => new RegExp('\\| ' + id.replace('-', ' ').toUpperCase() + ' \\|').test(lastPrompt());
+    const has = (id: string) => new RegExp('\\| ' + id.replace(/-(\d)/, (_m: string, d: string) => ' ' + 'BDFGHJ'[+d - 1]).toUpperCase() + ' \\|').test(lastPrompt());
     let r = await gen({ trainingEnvironment: 'CONDOMINIO', days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 3, rest: 60 }] }] }); assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.ok(has('peito-5') && has('peito-6'), 'condomínio e universal entram'); assert.ok(!has('peito-1') && !has('peito-2') && !has('peito-3') && !has('peito-4'), 'Overall e Academia padrão ficam de fora (comportamento de sempre)');
     r = await gen({ trainingEnvironment: 'CONDOMINIO', days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 3, rest: 60 }] }], genRules: { includeEnvironments: ['CONDOMINIO', 'ACADEMIA_PADRAO', 'UNIVERSAL'] } }); assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -281,9 +281,9 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
   await t('observações da aluna na geração: exercício com dor/"não senti" que VOLTOU no treino novo aparece em "Para você conferir" (sem trocar nada e sem mudar a nota); se não voltou, nada aparece', async () => {
     const ctl = seedGen(); ctl.setHook((b: any) => b); db.workoutHistory.length = 0;
     const ago = (n: number) => new Date(Date.now() - n * 86400000);
-    db.workoutHistory.push({ id: 'hh', userId: 's1', date: ago(2), details: [{ exerciseId: 'peito-1', exerciseName: 'PEITO 1', note: 'tive dor no ombro nesse', setNumber: 1, weight: 10, reps: '10' }, { exerciseId: 'zzz-fora', exerciseName: 'Outro', note: 'dor no joelho', setNumber: 1, weight: 10, reps: '10' }] });
+    db.workoutHistory.push({ id: 'hh', userId: 's1', date: ago(2), details: [{ exerciseId: 'peito-1', exerciseName: 'PEITO B', note: 'tive dor no ombro nesse', setNumber: 1, weight: 10, reps: '10' }, { exerciseId: 'zzz-fora', exerciseName: 'Outro', note: 'dor no joelho', setNumber: 1, weight: 10, reps: '10' }] });
     let r = await gen({ genRules: { pinIds: ['peito-1'] } }); assert.equal(r.status, 200, JSON.stringify(r.body)); assert.ok(idsOf(r).includes('peito-1'));
-    const found = r.body.quality.issues.filter((i: string) => i.includes('voltou no treino')); assert.equal(found.length, 1, r.body.quality.issues.join(' | ')); assert.ok(found[0].includes('"PEITO 1"') && found[0].includes('dor ou desconforto, ombro') && found[0].includes('tive dor no ombro nesse'), found[0]);
+    const found = r.body.quality.issues.filter((i: string) => i.includes('voltou no treino')); assert.equal(found.length, 1, r.body.quality.issues.join(' | ')); assert.ok(found[0].includes('"PEITO B"') && found[0].includes('dor ou desconforto, ombro') && found[0].includes('tive dor no ombro nesse'), found[0]);
     assert.ok(!r.body.quality.issues.some((i: string) => i.includes('Outro')), 'quem não voltou não alerta'); assert.ok(r.body.exercisesByDay.A.some((e: any) => e.exerciseId === 'peito-1'), 'nada foi trocado sozinho');
     r = await gen({ genRules: { excludeIds: ['peito-1'] } }); assert.ok(!r.body.quality.issues.some((i: string) => i.includes('voltou no treino')), 'bloqueado: não volta, não alerta');
     db.workoutHistory.length = 0;
@@ -292,14 +292,14 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     const ctl = seedGen(); ctl.setHook((b: any) => b);
     db.workout.push({ id: 'wp', userId: 's1', name: 'Anterior', workoutModel: 'CARGA', createdAt: new Date(Date.now() - 5000) }); let o = 0;
     for (const [d, g, n] of [['A', 'peito', 1], ['A', 'peito', 2], ['A', 'biceps', 2], ['B', 'costas_remada', 1]] as const) db.workoutExercise.push({ id: `w-${g}-${n}`, workoutId: 'wp', exerciseId: `${g}-${n}`, day: d, order: o++, sets: 3, reps: '10', restTime: 60, technique: JSON.stringify({ t: '', b: [{ sets: '1', reps: '10', restTime: '60', technique: '' }] }) });
-    let r = await gen({}); assert.ok(!idsOf(r).includes('biceps-2'), 'acessório da rotina anterior gira'); assert.ok(/BICEPS 2 · \[acessório, 1 rotina seguidas\].* → TROCAR/.test(lastPrompt()), lastPrompt().slice(lastPrompt().indexOf('ROTINA ANTERIOR'), lastPrompt().indexOf('ROTINA ANTERIOR') + 500)); r = await gen({ genRules: { pinIds: ['biceps-2'] } }); assert.ok(idsOf(r).includes('biceps-2'), 'fixado repete: ' + idsOf(r).join()); assert.ok(/BICEPS 2 · \[acessório, 1 rotina seguidas\].* → MANTER/.test(lastPrompt()), 'a IA lê o fixado como MANTER, não como TROCAR');
-    ctl.setHook((b: any) => { b.A = [...b.A, { exerciseId: 'biceps-2', title: 'BICEPS 2', blocks: b.A[0].blocks }]; return b; }); r = await gen({ genRules: { pinIds: ['biceps-2'] } }); assert.equal(idsOf(r).filter((id: string) => id === 'biceps-2').length, 1, 'sem duplicar');
-    ctl.setHook((b: any) => b); db.exercise.push({ id: 'perna-1', coachId: PAULO_ID, name: 'PERNA 1', category: 'Musculação', subCategory: 'QUADRICEPS', videoUrl: 'v', tags: { target: 'QUADRICEPS', equipment: 'LIVRE', mechanic: 'COMPOSTO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
-    r = await gen({ genRules: { pinIds: ['perna-1'] } }); assert.ok(!idsOf(r).includes('perna-1')); assert.ok(r.body.quality.issues.some((i: string) => i.includes('"PERNA 1" fixado não coube')), r.body.quality.issues.join());
+    let r = await gen({}); assert.ok(!idsOf(r).includes('biceps-2'), 'acessório da rotina anterior gira'); assert.ok(/BICEPS D · \[acessório, 1 rotina seguidas\].* → TROCAR/.test(lastPrompt()), lastPrompt().slice(lastPrompt().indexOf('ROTINA ANTERIOR'), lastPrompt().indexOf('ROTINA ANTERIOR') + 500)); r = await gen({ genRules: { pinIds: ['biceps-2'] } }); assert.ok(idsOf(r).includes('biceps-2'), 'fixado repete: ' + idsOf(r).join()); assert.ok(/BICEPS D · \[acessório, 1 rotina seguidas\].* → MANTER/.test(lastPrompt()), 'a IA lê o fixado como MANTER, não como TROCAR');
+    ctl.setHook((b: any) => { b.A = [...b.A, { exerciseId: 'biceps-2', title: 'BICEPS D', blocks: b.A[0].blocks }]; return b; }); r = await gen({ genRules: { pinIds: ['biceps-2'] } }); assert.equal(idsOf(r).filter((id: string) => id === 'biceps-2').length, 1, 'sem duplicar');
+    ctl.setHook((b: any) => b); db.exercise.push({ id: 'perna-1', coachId: PAULO_ID, name: 'PERNA B', category: 'Musculação', subCategory: 'QUADRICEPS', videoUrl: 'v', tags: { target: 'QUADRICEPS', equipment: 'LIVRE', mechanic: 'COMPOSTO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    r = await gen({ genRules: { pinIds: ['perna-1'] } }); assert.ok(!idsOf(r).includes('perna-1')); assert.ok(r.body.quality.issues.some((i: string) => i.includes('"PERNA B" fixado não coube')), r.body.quality.issues.join());
   });
   await t('geração: filtros que esvaziam um grupo param antes da IA (BANCO_INSUFICIENTE) e a IA nem é chamada; favorito sobe na lista', async () => {
     seedGen(); let r = await gen({ genRules: { excludeEquipment: ['MAQUINA'], excludeIds: ['peito-4', 'peito-5'] } }); assert.equal(r.status, 422); assert.equal(r.body.code, 'BANCO_INSUFICIENTE'); assert.ok(r.body.error.includes('PEITO: sobraram 1 de 6'), r.body.error); assert.equal(G.__AI_CALLS.length, 0, 'IA não foi chamada');
-    seedGen(); db.exercise.find((e: any) => e.id === 'costas_remada-6').tags.favorite = true; r = await gen({}); assert.equal(r.status, 200); const p = lastPrompt(); const sec = p.slice(p.indexOf('## COSTAS_REMADA')); assert.ok(sec.indexOf('COSTAS_REMADA 6') < sec.indexOf('COSTAS_REMADA 2'), 'favorito do coach sobe na lista (sem a marca, o 2 vem antes do 6 pela ordem do nome): ' + sec.slice(0, 400));
+    seedGen(); db.exercise.find((e: any) => e.id === 'costas_remada-6').tags.favorite = true; r = await gen({}); assert.equal(r.status, 200); const p = lastPrompt(); const sec = p.slice(p.indexOf('## COSTAS_REMADA')); assert.ok(sec.indexOf('COSTAS_REMADA J') < sec.indexOf('COSTAS_REMADA D'), 'favorito do coach sobe na lista (sem a marca, o 2 vem antes do 6 pela ordem do nome): ' + sec.slice(0, 400));
     seedGen(); r = await gen({ genRules: { excludeJointRisk: [], noHighImpact: true, avoidProfiles: ['GESTANTE'] } }); assert.equal(r.status, 200); assert.ok(r.body.filters.summary.includes('sem alto impacto'));
   });
 
@@ -351,7 +351,7 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
 
   await t('geração: abdômen mal etiquetado como PEITO entra no grupo de abdômen e fica DEPOIS de peito e braços (o erro do treino do Paulo)', async () => {
     const ctl = seedGen();
-    for (let n = 1; n <= 6; n++) db.exercise.push({ id: `abdomen-${n}`, coachId: PAULO_ID, name: `Abdominal ${n}`, category: 'Abdômen', subCategory: 'Supra', videoUrl: 'v', tags: { target: 'PEITO', equipment: 'LIVRE', mechanic: 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    for (let n = 1; n <= 6; n++) db.exercise.push({ id: `abdomen-${n}`, coachId: PAULO_ID, name: `Abdominal ${'BDFGHJ'[n - 1]}`, category: 'Abdômen', subCategory: 'Supra', videoUrl: 'v', tags: { target: 'PEITO', equipment: 'LIVRE', mechanic: 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
     // a IA põe o abdômen no meio do treino (como saiu no dia E)
     ctl.setHook((byDay: any) => { for (const d of Object.keys(byDay)) { const ab = byDay[d].filter((e: any) => String(e.exerciseId).length && /Abdominal/.test(e.title)); const rest = byDay[d].filter((e: any) => !ab.includes(e)); byDay[d] = [rest[0], ...ab, ...rest.slice(1)]; } return byDay; });
     const r = await gen({ days: [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 3, rest: 60 }, { id: 'BICEPS', qty: 2, sets: 3, rest: 30 }, { id: 'ABDOMEN', qty: 1, sets: 3, rest: 30 }] }] });
@@ -364,7 +364,7 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
 
   await t('repetições: teto de 15 por padrão (nunca 18/20), panturrilha até 20, e o coach pode escolher outro teto', async () => {
     const ctl = seedGen();
-    for (let n = 1; n <= 4; n++) db.exercise.push({ id: `panturrilha-${n}`, coachId: PAULO_ID, name: `Panturrilha ${n}`, category: 'Pernas', subCategory: 'Panturrilha', videoUrl: 'v', tags: { target: 'PANTURRILHA', equipment: 'MAQUINA', mechanic: 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    for (let n = 1; n <= 4; n++) db.exercise.push({ id: `panturrilha-${n}`, coachId: PAULO_ID, name: `Panturrilha ${'BDFGHJ'[n - 1]}`, category: 'Pernas', subCategory: 'Panturrilha', videoUrl: 'v', tags: { target: 'PANTURRILHA', equipment: 'MAQUINA', mechanic: 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
     ctl.setHook((byDay: any) => { for (const d of Object.keys(byDay)) for (const ex of byDay[d]) ex.blocks = ex.blocks.map((b: any, i: number) => ({ ...b, reps: String([20, 18, 15, 15][i % 4]) })); return byDay; });
     const days = [{ name: 'A', groups: [{ id: 'PEITO', qty: 2, sets: 4, rest: 60 }, { id: 'PANTURRILHA', qty: 1, sets: 4, rest: 30 }] }];
     const reps = (r: any, pre: string) => Object.values<any[]>(r.body.exercisesByDay).flat().filter((e: any) => e.exerciseId.startsWith(pre)).flatMap((e: any) => e.blocks.map((b: any) => Number(b.reps)));

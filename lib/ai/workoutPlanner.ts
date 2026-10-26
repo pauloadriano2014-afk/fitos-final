@@ -301,7 +301,7 @@ function clampReps(reps: string, [lo, hi]: [number, number]): string {
   return s || String(Math.round((lo + hi) / 2));
 }
 
-export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): { byDay: Record<string, GenEx[]>; quality: Quality } {
+export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): { byDay: Record<string, GenEx[]>; groupIds: Record<string, Record<string, string>>; quality: Quality } {
   const fixes: string[] = [], issues: string[] = [];
   let repairs = 0;
   const fix = (msg: string) => { repairs++; fixes.push(msg); };
@@ -494,5 +494,8 @@ export function refineWorkout(byDay: Record<string, GenEx[]>, ctx: RefineCtx): {
   if (push >= 8 && pull < push * 0.7) issues.push(`Mais empurrar (${push} séries) do que puxar (${pull}): atenção aos ombros`);
   if (newPct !== null && newPct < 50) issues.push(`Só ${newPct}% dos exercícios são novos em relação à rotina anterior`);
   const score = Math.max(0, 100 - 10 * issues.length);
-  return { byDay: out, quality: { score, fixes: fixes.slice(0, 30), issues: issues.slice(0, 12), stats: { pinned: pinnedIn, repairs, exercises: total, newPct, kept, ...st, groupSets } } };
+  // 🧩 em que grupo do dia cada exercício ficou (a ordem final usa isto: antes adivinhava pela lista de candidatos, e exercício genérico — Good morning, RDL — caía no grupo errado e o músculo voltava no meio do treino)
+  const groupIds: Record<string, Record<string, string>> = {};
+  for (const [day, list] of Object.entries(out)) { const m: Record<string, string> = {}; for (const ex of list || []) { const g = groupOf.get(ex); if (g) m[ex.exerciseId] = g.id; } groupIds[day] = m; }
+  return { byDay: out, groupIds, quality: { score, fixes: fixes.slice(0, 30), issues: issues.slice(0, 12), stats: { pinned: pinnedIn, repairs, exercises: total, newPct, kept, ...st, groupSets } } };
 }

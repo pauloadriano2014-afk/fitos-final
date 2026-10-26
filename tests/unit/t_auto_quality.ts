@@ -243,7 +243,7 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
       { id: ADRI_ID, role: 'ADMIN', email: 'adri.personal@hotmail.com', name: 'Adri', accountStatus: 'ACTIVE', active: true },
       { id: userId, role: 'USER', email: 'q@x.com', name: 'Aluna Q', plan: 'FICHA_8S', coachId: PAULO_ID, gender: 'Feminino', birthDate: '1995-05-10', dietModule: false, ...user },
     );
-    for (const tg of TARGETS) for (let n = 1; n <= 6; n++) db.exercise.push({ id: exId(tg, n), coachId: PAULO_ID, name: `${tg} ${n}`, category: tg === 'CARDIO' ? 'Cardio' : 'Musculação', subCategory: tg, videoUrl: '', tags: { target: tg, equipment: 'MAQUINA', mechanic: 'COMPOSTO' }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    for (const tg of TARGETS) for (let n = 1; n <= 6; n++) db.exercise.push({ id: exId(tg, n), coachId: PAULO_ID, name: `${tg} ${'BDFGHJ'[n - 1]}`, category: tg === 'CARDIO' ? 'Cardio' : 'Musculação', subCategory: tg, videoUrl: '', tags: { target: tg, equipment: 'MAQUINA', mechanic: 'COMPOSTO' }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
     db.anamnese.push({ id: 'a-' + userId, userId, ...base, ...anam });
     db.workout.push({ id: 'ph', userId, name: 'FICHA EM CONSTRUÇÃO 🚧', archived: false, createdAt: new Date(Date.now() - 1000) });
     AP.__resetAutoPlanMemory(); installAI();
@@ -290,7 +290,7 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
   assert.equal(techOf(wc[0]), 'BISET'); assert.equal(techOf(wc[1]), 'BISET', 'fase de choque no modo seguro: só BISET (sem DROPSET/RESTPAUSE)');
   assert.ok(wc[0].includes('- CARDIO: carga LEVE. Intensidade leve a moderada (Zona 2), sem HIIT nem tiros.') && wc[0].includes('- GERAL: observação: "Cargas moderadas, execução controlada e sem levar nenhuma série à falha."'), 'regra de cardio leve e cargas moderadas chega à IA, nos formatos que a IA já entende: ' + wc[0].slice(wc[0].indexOf('LIMITAÇÕES')));
   // quais exercícios (pelo nome "GRUPO n" da biblioteca de teste) chegaram à IA como candidatos
-  const bankIds = (txt: string) => [...txt.matchAll(/^E\d{3} \| ([A-Z_]+) (\d+) \| /gm)].map((m) => exId(m[1], Number(m[2])));
+  const bankIds = (txt: string) => [...txt.matchAll(/^E\d{3} \| ([A-Z_]+) ([BDFGHJ]) \| /gm)].map((m) => exId(m[1], 'BDFGHJ'.indexOf(m[2]) + 1));
   for (const txt of wc) { const ids = bankIds(txt); for (let n = 1; n <= 3; n++) assert.ok(!ids.includes(exId('QUADRICEPS', n)), 'exercício de risco para joelho não chega à IA'); assert.ok(ids.includes(exId('QUADRICEPS', 4)) && ids.includes(exId('PEITO', 1)), 'os demais ficam (peito marcado só para ombro)'); }
   assert.ok(savedRows().every((e: any) => ![1, 2, 3].some((n) => e.exerciseId === exId('QUADRICEPS', n))), 'e não entram no treino salvo');
   assert.deepEqual(rs.summary.safety, { conservative: ['Hipertensão', 'Limitações/cirurgias: Joelho'], excludeJointRisk: ['JOELHO'] }); assert.ok(G.__pushes.find((p: any) => p.to === PAULO_ID && p.data.type === 'auto_plan_done').body.includes('modo seguro'), 'o coach sabe que foi modo seguro');
@@ -369,7 +369,7 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
     assert.ok(!p.includes('ex-peito-1') && /E001/.test(p) && !p.includes('GUIA DE VARIAÇÕES') && !p.includes('"suggestedSubstitutes"'), 'só códigos curtos, sem a biblioteca inteira em JSON'); assert.ok(p.includes('Nível: Intermediário') && p.includes('NÍVEL DO ALUNO: Intermediário'));
     assert.ok(/Dia A:\n    - PEITO: 3 exercício\(s\), 3 séries \(exceto GVT=10\), descanso 60s/.test(p), 'a estrutura do ciclo segue na mensagem');
     assert.deepEqual(idsOf(r, 'A').slice(0, 2), [exId('PEITO', 1), exId('PEITO', 2)], 'âncoras (MANTER) repetidas'); assert.ok(!idsOf(r, 'A').includes(exId('PEITO', 3)) && !idsOf(r, 'A').includes(exId('BICEPS', 1)) && !idsOf(r, 'A').includes(exId('BICEPS', 2)), 'os TROCAR saíram');
-    assert.equal(r.body.levelInfo.level, 'INTERMEDIARIO'); assert.equal(r.body.quality.stats.kept, 4, 'PEITO 1–2 e COSTAS 1–2'); assert.equal(r.body.quality.stats.newPct, 60); assert.equal(r.body.quality.stats.swapped, 0); assert.equal(r.body.quality.score, 100 - 10 * r.body.quality.issues.length);
+    assert.equal(r.body.levelInfo.level, 'INTERMEDIARIO'); assert.equal(r.body.quality.stats.kept, 4, 'PEITO B–2 e COSTAS B–2'); assert.equal(r.body.quality.stats.newPct, 60); assert.equal(r.body.quality.stats.swapped, 0); assert.equal(r.body.quality.score, 100 - 10 * r.body.quality.issues.length);
     assert.ok(idsOf(r, 'A').every((id: string) => id.startsWith('ex-')), 'ids verdadeiros no resultado'); assert.equal(r.body.exercisesByDay.A.length, 5); assert.equal(r.body.exercisesByDay.B.length, 5);
     const lg = JSON.parse(db.aiLog.filter((l: any) => l.question === 'gerar-treino:GEMINI').at(-1).answer); assert.equal(lg.smart, true); assert.equal(lg.score, r.body.quality.score); assert.equal(lg.newPct, 60); assert.ok(lg.candidates > 10);
 
@@ -404,7 +404,7 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
     // 2) a IA desobedece e repete um TROCAR + inventa um código: a revisão troca e completa
     seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); prevRoutine(); cfg.workout = (byDay: any) => { byDay.A[2].exerciseId = exId('PEITO', 3); byDay.A[0].exerciseId = 'E999'; byDay.B[4].exerciseId = exId('TRICEPS', 1); return byDay; };
     r = await gen(mkCfg()); let q = r.body.quality; assert.ok(!idsOf(r, 'A').includes(exId('PEITO', 3)) && !idsOf(r, 'A').includes('E999'), idsOf(r, 'A').join()); assert.equal(r.body.exercisesByDay.A.filter((e: any) => /PEITO/.test(e.title)).length, 3, 'o código inventado foi tirado e a vaga completada');
-    assert.ok(q.fixes.some((f: string) => f.includes('Dia A: a IA deixou PEITO incompleto')) && q.fixes.some((f: string) => f.includes('"PEITO 3" →') && f.includes('repetido da rotina anterior')) && q.fixes.some((f: string) => f.includes('"TRICEPS 1" →')), q.fixes.join(' | '));
+    assert.ok(q.fixes.some((f: string) => f.includes('Dia A: a IA deixou PEITO incompleto')) && q.fixes.some((f: string) => f.includes('"PEITO F" →') && f.includes('repetido da rotina anterior')) && q.fixes.some((f: string) => f.includes('"TRICEPS B" →')), q.fixes.join(' | '));
     assert.equal(q.stats.filled, 1); assert.equal(q.stats.swapped, 2); assert.ok(r.body.exercisesByDay.A.every((e: any) => e.blocks.length === 3 && e.blocks.every((b: any) => b.load === '')), 'sem histórico de carga: tudo em branco');
 
     // 3) iniciante: técnica avançada sai do ciclo e da resposta; a IA pode teimar, a revisão tira; modo antigo e modo "sem regras de nível" voltam ao de antes
@@ -418,9 +418,9 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
 
     // 4) cargas: exercício que o aluno já treinou mantém a carga-alvo (ficou fácil → sobe); o novo fica em branco
     seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); prevRoutine();
-    db.workoutHistory.push({ id: 'hh1', userId: 'q1', date: new Date(Date.now() - 2 * 86400000), details: [1, 2, 3].map((s) => ({ exerciseId: exId('PEITO', 1), exerciseName: 'PEITO 1', setNumber: s, weight: 40, perSide: false, effort: 'FACIL' })) });
+    db.workoutHistory.push({ id: 'hh1', userId: 'q1', date: new Date(Date.now() - 2 * 86400000), details: [1, 2, 3].map((s) => ({ exerciseId: exId('PEITO', 1), exerciseName: 'PEITO B', setNumber: s, weight: 40, perSide: false, effort: 'FACIL' })) });
     cfg.workout = (byDay: any) => { byDay.A[0].blocks = byDay.A[0].blocks.map((b: any) => ({ ...b, load: '5kg' })); return byDay; };
-    r = await gen(mkCfg()); p = lastPrompt(); assert.ok(/PEITO 1 · \[âncora, 1 rotina seguidas\] · ficou fácil; última carga 40\/40\/40 kg · → MANTER · alvo 42\.5\/42\.5\/42\.5 kg \(subir\)|PEITO 1 .*alvo \d/.test(p), p.slice(p.indexOf('ROTINA ANTERIOR'), p.indexOf('ROTINA ANTERIOR') + 600));
+    r = await gen(mkCfg()); p = lastPrompt(); assert.ok(/PEITO B · \[âncora, 1 rotina seguidas\] · ficou fácil; última carga 40\/40\/40 kg · → MANTER · alvo 42\.5\/42\.5\/42\.5 kg \(subir\)|PEITO B .*alvo \d/.test(p), p.slice(p.indexOf('ROTINA ANTERIOR'), p.indexOf('ROTINA ANTERIOR') + 600));
     const peito1 = r.body.exercisesByDay.A.find((e: any) => e.exerciseId === exId('PEITO', 1)); assert.ok(peito1.blocks.every((b: any) => /^4\d(\.5)?kg$/.test(b.load)), 'IA pôs 5kg, o alvo manda: ' + JSON.stringify(peito1.blocks.map((b: any) => b.load)));
     assert.ok(r.body.exercisesByDay.A.filter((e: any) => e.exerciseId !== exId('PEITO', 1)).every((e: any) => e.blocks.every((b: any) => b.load === '')), 'o resto nunca foi treinado');
     // 5) substituto: o servidor escolhe um do mesmo músculo quando a biblioteca não tem
@@ -449,7 +449,7 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
   // cargas: sem histórico em branco; com histórico mantém
   seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); rs = await start(); const loadsOf = () => savedRows().filter((e: any) => JSON.parse(e.technique).t !== 'Moderada' && e.sets !== 30).flatMap((e: any) => JSON.parse(e.technique).b.map((b: any) => b.load));
   assert.ok(loadsOf().length > 20 && loadsOf().every((l: string) => l === ''), 'aluno sem nenhum treino: cargas em branco');
-  seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); db.workoutHistory.push({ id: 'h1', userId: 'q1', date: new Date(), details: [{ exerciseId: exId('PEITO', 1), exerciseName: 'PEITO 1', setNumber: 1, weight: 20, perSide: false }] }); rs = await start(); assert.ok(loadsOf().some((l: string) => l === '20kg'), 'exercício que o aluno já treinou com carga mantém a sugestão da IA'); assert.ok(loadsOf().some((l: string) => l === ''), 'exercício que ele nunca fez fica com a carga em branco (a IA não chuta carga)');
+  seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); db.workoutHistory.push({ id: 'h1', userId: 'q1', date: new Date(), details: [{ exerciseId: exId('PEITO', 1), exerciseName: 'PEITO B', setNumber: 1, weight: 20, perSide: false }] }); rs = await start(); assert.ok(loadsOf().some((l: string) => l === '20kg'), 'exercício que o aluno já treinou com carga mantém a sugestão da IA'); assert.ok(loadsOf().some((l: string) => l === ''), 'exercício que ele nunca fez fica com a carga em branco (a IA não chuta carga)');
   seed({}, { objetivo: 'Hipertrofia', frequencia: 4 }); db.workoutHistory.push({ id: 'hx', userId: 'outro-aluno', date: new Date(), details: [] }); rs = await start(); assert.ok(loadsOf().length > 20 && loadsOf().every((l: string) => l === ''), 'o histórico de OUTRO aluno não conta');
   console.log('OK  conferência do treino no pipeline: refaz dia incompleto/sem cardio, conserta séries/repetido/dia inventado, cargas em branco sem histórico, aluno nunca recebe plano ruim');
 
@@ -466,7 +466,7 @@ const settle = async (runId: string) => { assert.ok(await waitFor(async () => TE
 
   // ═════ 6) Treinos prontos do coach ═════
   const colOf = (name: string, coachId = PAULO_ID, id = 'col-' + name) => { db.templateCollection.push({ id, coachId, name }); return id; };
-  const mkEd = (tg: string, n: number) => ({ exerciseId: exId(tg, n), title: `${tg} ${n}`, category: tg === 'CARDIO' ? 'Cardio' : 'Musculação', observation: '', substitutes: [{ id: exId(tg, n === 6 ? 1 : n + 1), name: `${tg} sub` }], blocks: Array.from({ length: tg === 'CARDIO' ? 1 : 3 }, () => ({ sets: tg === 'CARDIO' ? '30' : '1', reps: tg === 'CARDIO' ? '300' : '12', load: tg === 'CARDIO' ? '' : '30kg', restTime: '60', technique: '' })) });
+  const mkEd = (tg: string, n: number) => ({ exerciseId: exId(tg, n), title: `${tg} ${'BDFGHJ'[n - 1]}`, category: tg === 'CARDIO' ? 'Cardio' : 'Musculação', observation: '', substitutes: [{ id: exId(tg, n === 6 ? 1 : n + 1), name: `${tg} sub` }], blocks: Array.from({ length: tg === 'CARDIO' ? 1 : 3 }, () => ({ sets: tg === 'CARDIO' ? '30' : '1', reps: tg === 'CARDIO' ? '300' : '12', load: tg === 'CARDIO' ? '' : '30kg', restTime: '60', technique: '' })) });
   const tplData = (tabs: Record<string, Array<[string, number]>>) => JSON.stringify(Object.fromEntries(Object.entries(tabs).map(([tab, list]) => [tab, list.map(([tg, n]) => mkEd(tg, n))])));
   const CH_TABS = { A: [['PEITO', 1], ['TRICEPS', 1], ['CARDIO', 1]], B: [['COSTAS_PUXADA', 1], ['BICEPS', 1], ['CARDIO', 1]], C: [['QUADRICEPS', 1], ['GLUTEOS', 1], ['CARDIO', 1]], D: [['OMBRO_LATERAL', 1], ['ABDOMEN', 1], ['CARDIO', 1]], E: [['CARDIO', 1], ['CARDIO', 2]], F: [['CARDIO', 3], ['CARDIO', 4]] } as Record<string, Array<[string, number]>>;
   const putTpl = (id: string, col: string, name: string, data: string, level: string | null = 'Intermediário') => db.workoutTemplate.push({ id, collectionId: col, name, level, goal: 'Hipertrofia', data });
