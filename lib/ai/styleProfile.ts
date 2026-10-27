@@ -22,7 +22,12 @@ const str = (v: any) => String(v ?? '').trim();
 export const norm = (v: any) => str(v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 const avg = (a: number[]) => (a.length ? Math.round((a.reduce((x, y) => x + y, 0) / a.length) * 10) / 10 : 0);
-const label = (g: string) => g.charAt(0).toUpperCase() + g.slice(1).toLowerCase();
+const label = (g: string) => g.charAt(0).toUpperCase() + g.slice(1);
+const SEP = ' — ';
+/** Treinos do mesmo aluno criados com menos de 7 dias de diferença fazem parte do mesmo ciclo. */
+export const CYCLE_GAP_MS = 7 * 24 * 3600 * 1000;
+/** O grupo "largo" do exercício: Peito, Costas, Pernas... ("Pernas — Posteriores" -> "Pernas"). */
+export const coarse = (g: string) => str(g).split(SEP)[0];
 
 export const isCardio = (it: PlanItem) => /cardio/i.test(it.g);
 export const isMobility = (it: PlanItem) => /mobilidade|along|aquec/i.test(it.g);
@@ -35,7 +40,8 @@ export function toStyleWorkout(w: any): StyleWorkout | null {
   const names: Record<string, { n?: string; g?: string }> = {};
   for (const r of rows) {
     const e = r?.exercise; if (!e || !r.exerciseId) continue;
-    const sub = str(e.subCategory); names[str(r.exerciseId)] = { n: str(e.name), g: sub && norm(sub) !== 'geral' ? sub : str(e.category) };
+    // no sistema do Paulo o músculo está na categoria (Peito, Costas, Pernas...) e a subcategoria é o tipo (Medial, Remadas, Posteriores); "Geral" = sem tipo
+    const cat = str(e.category), sub = str(e.subCategory); names[str(r.exerciseId)] = { n: str(e.name), g: sub && norm(sub) !== 'geral' && norm(sub) !== norm(cat) ? `${cat}${SEP}${sub}` : cat };
   }
   const plan = normalizeSaved(rows, names);
   if (!Object.values(plan).some((l) => l.some(isStrength))) return null;
@@ -43,8 +49,10 @@ export function toStyleWorkout(w: any): StyleWorkout | null {
 }
 
 const strengthDays = (w: StyleWorkout) => Object.values(w.plan).map((l) => l.filter(isStrength)).filter((l) => l.length > 0);
-const groupRuns = (items: PlanItem[]): string[] => { const out: string[] = []; for (const it of items) { const g = norm(it.g); if (g && out[out.length - 1] !== g) out.push(g); } return out; };
+const groupRuns = (items: PlanItem[]): string[] => { const out: string[] = []; for (const it of items) { const g = norm(coarse(it.g)); if (g && out[out.length - 1] !== g) out.push(g); } return out; };
 const dispName = (items: PlanItem[], key: string) => (items.find((i) => norm(i.g) === key)?.g || key);
+const dispCoarse = (items: PlanItem[], key: string) => coarse(items.find((i) => norm(coarse(i.g)) === key)?.g || key);
+const isRealTech = (t: string) => !!t && t.toUpperCase() !== 'NORMAL';
 
 /** O jeito do coach, calculado dos treinos dele (do mais novo para o mais antigo ou em qualquer ordem). */
 export function buildStyleProfile(workoutsIn: StyleWorkout[]): StyleProfile {
@@ -67,14 +75,14 @@ export function buildStyleProfile(workoutsIn: StyleWorkout[]): StyleProfile {
       const st = items.filter(isStrength);
       if (st.length) {
         dayCount++; exPerDay.push(st.length);
-        const runs = groupRuns(st); const pk = runs.join('|'); const cur = patterns.get(pk) || { groups: runs.map((g) => label(dispName(st, g))), count: 0 }; cur.count++; patterns.set(pk, cur);
+        const runs = groupRuns(st); const pk = runs.join('|'); const cur = patterns.get(pk) || { groups: runs.map((g) => label(dispCoarse(st, g))), count: 0 }; cur.count++; patterns.set(pk, cur);
         const perGroup = new Map<string, PlanItem[]>(); for (const it of st) { const k = norm(it.g); (perGroup.get(k) || perGroup.set(k, []).get(k)!).push(it); }
         for (const [k, list] of perGroup) { const e = byGroup.get(k) || { name: dispName(list, k), ex: [], sets: [], days: 0 }; e.ex.push(list.length); list.forEach((x) => e.sets.push(x.s)); e.days++; byGroup.set(k, e); }
         st.forEach((it, i) => {
           totalEx++; setsHist.set(it.s, (setsHist.get(it.s) || 0) + 1);
           if (it.r) { const key = `${it.s}|${it.r}`; const s0 = seqHist.get(key) || { seq: it.r, sets: it.s, count: 0 }; s0.count++; seqHist.set(key, s0); }
-          const lastOfRun = i === st.length - 1 || norm(st[i + 1].g) !== norm(it.g);
-          for (const t of it.t.split('+').map((x) => x.trim()).filter(Boolean)) { const e = tech.get(t) || { exercises: 0, workouts: new Set<string>(), last: 0 }; e.exercises++; e.workouts.add(w.id); if (lastOfRun) e.last++; tech.set(t, e); }
+          const lastOfRun = i === st.length - 1 || norm(coarse(st[i + 1].g)) !== norm(coarse(it.g));
+          for (const t of it.t.split('+').map((x) => x.trim()).filter(isRealTech)) { const e = tech.get(t) || { exercises: 0, workouts: new Set<string>(), last: 0 }; e.exercises++; e.workouts.add(w.id); if (lastOfRun) e.last++; tech.set(t, e); }
           const gk = norm(it.g); const fm = fav.get(gk) || new Map<string, { n: string; students: Set<string> }>(); const f = fm.get(it.id) || { n: it.n, students: new Set<string>() }; f.students.add(w.studentId); fm.set(it.id, f); fav.set(gk, fm);
         });
       }
@@ -87,20 +95,27 @@ export function buildStyleProfile(workoutsIn: StyleWorkout[]): StyleProfile {
   let pairs = 0; let kept = 0; let prevTotal = 0; let common = 0; let setsChanged = 0;
   const grpKeep = new Map<string, { name: string; kept: number; total: number }>(); const swaps = new Map<string, { from: string; to: string; count: number }>();
   for (const list of perStudent.values()) {
-    for (let i = 1; i < list.length; i++) {
-      const prev = list[i - 1], next = list[i];
-      const pItems = Object.values(prev.plan).flat().filter(isStrength); const nItems = Object.values(next.plan).flat().filter(isStrength);
+    // rotinas criadas quase juntas (ex.: "semana 1 e 3" + "semana 2 e 4") são UM ciclo: a variação se mede de um ciclo para o seguinte
+    const cycles: StyleWorkout[][] = [];
+    for (const w of list) { const last = cycles[cycles.length - 1]; const lastW = last && last[last.length - 1]; if (lastW && Date.parse(w.createdAt) - Date.parse(lastW.createdAt) < CYCLE_GAP_MS) last.push(w); else cycles.push([w]); }
+    for (let i = 1; i < cycles.length; i++) {
+      const prev = cycles[i - 1], next = cycles[i];
+      const pItems = prev.flatMap((w) => Object.values(w.plan).flat()).filter(isStrength); const nItems = next.flatMap((w) => Object.values(w.plan).flat()).filter(isStrength);
       if (!pItems.length || !nItems.length) continue;
       pairs++; const nIds = new Map(nItems.map((x) => [x.id, x])); const pIds = new Set(pItems.map((x) => x.id));
       prevTotal += new Set(pItems.map((x) => x.id)).size; const seen = new Set<string>();
       for (const it of pItems) {
         if (seen.has(it.id)) continue; seen.add(it.id);
-        const k = norm(it.g); const gk = grpKeep.get(k) || { name: it.g, kept: 0, total: 0 }; gk.total++;
+        const k = norm(coarse(it.g)); const gk = grpKeep.get(k) || { name: coarse(it.g), kept: 0, total: 0 }; gk.total++;
         const n = nIds.get(it.id); if (n) { kept++; gk.kept++; common++; if (n.s !== it.s) setsChanged++; } grpKeep.set(k, gk);
       }
-      const byG = (items: PlanItem[], not: Set<string>) => { const m = new Map<string, PlanItem[]>(); const s2 = new Set<string>(); for (const x of items) { if (not.has(x.id) || s2.has(x.id)) continue; s2.add(x.id); const k = norm(x.g); (m.get(k) || m.set(k, []).get(k)!).push(x); } return m; };
-      const gone = byG(pItems, new Set(nItems.map((x) => x.id))); const fresh = byG(nItems, pIds);
-      for (const [k, outs] of gone) { const ins = fresh.get(k) || []; outs.slice(0, ins.length).forEach((o, j) => { const key = `${o.id}>${ins[j].id}`; const e = swaps.get(key) || { from: o.n, to: ins[j].n, count: 0 }; e.count++; swaps.set(key, e); }); }
+      // trocas: primeiro dentro do mesmo tipo (Peito — Superior), o que sobrar dentro do mesmo músculo (Peito)
+      const leftover = (items: PlanItem[], not: Set<string>) => { const s2 = new Set<string>(); return items.filter((x) => { if (not.has(x.id) || s2.has(x.id)) return false; s2.add(x.id); return true; }); };
+      const gone = leftover(pItems, new Set(nItems.map((x) => x.id))); const fresh = leftover(nItems, pIds); const taken = new Set<string>();
+      const addSwap = (o: PlanItem, n: PlanItem) => { taken.add(n.id); const key = `${o.id}>${n.id}`; const e = swaps.get(key) || { from: o.n, to: n.n, count: 0 }; e.count++; swaps.set(key, e); };
+      const unpaired: PlanItem[] = [];
+      for (const o of gone) { const n = fresh.find((x) => !taken.has(x.id) && norm(x.g) === norm(o.g)); if (n) addSwap(o, n); else unpaired.push(o); }
+      for (const o of unpaired) { const n = fresh.find((x) => !taken.has(x.id) && norm(coarse(x.g)) === norm(coarse(o.g))); if (n) addSwap(o, n); }
     }
   }
 

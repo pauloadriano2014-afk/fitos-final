@@ -5,15 +5,18 @@ import { toStyleWorkout, buildStyleProfile, styleProfileText, pickSimilarExample
 let ok = 0, bad = 0;
 const t = (name: string, fn: () => any) => { try { fn(); ok++; console.log('  ok  ' + name); } catch (e: any) { bad++; console.log('FALHOU ' + name + '\n   ' + (e.stack || e)); } };
 
+// como está no sistema do Paulo: o músculo na categoria (Peito, Pernas...) e a subcategoria é o tipo (Medial, Superior, Multiarticular); "Geral" = sem tipo
 const EX: Record<string, any> = {
-  sup: { name: 'Supino reto', category: 'Musculação', subCategory: 'Peito' }, inc: { name: 'Supino inclinado', category: 'Musculação', subCategory: 'Peito' }, cru: { name: 'Crucifixo', category: 'Musculação', subCategory: 'Peito' },
-  tri: { name: 'Tríceps corda', category: 'Musculação', subCategory: 'Tríceps' }, fra: { name: 'Tríceps francês', category: 'Musculação', subCategory: 'Tríceps' },
-  agach: { name: 'Agachamento', category: 'Musculação', subCategory: 'Geral' }, leg: { name: 'Leg press', category: 'Musculação', subCategory: 'Quadríceps' }, ext: { name: 'Cadeira extensora', category: 'Musculação', subCategory: 'Quadríceps' },
-  esteira: { name: 'Esteira', category: 'CARDIO', subCategory: 'Geral' }, pec: { name: 'Pec deck', category: 'Musculação', subCategory: 'Peito' },
+  sup: { name: 'Supino reto', category: 'Peito', subCategory: 'Medial' }, inc: { name: 'Supino inclinado', category: 'Peito', subCategory: 'Superior' }, cru: { name: 'Crucifixo', category: 'Peito', subCategory: 'Medial' }, pec: { name: 'Pec deck', category: 'Peito', subCategory: 'Medial' },
+  tri: { name: 'Tríceps corda', category: 'Tríceps', subCategory: 'Geral' }, fra: { name: 'Tríceps francês', category: 'Tríceps', subCategory: 'Geral' },
+  agach: { name: 'Agachamento', category: 'Pernas', subCategory: 'Multiarticular' }, leg: { name: 'Leg press', category: 'Pernas', subCategory: 'Quadríceps e Adutores' }, ext: { name: 'Cadeira extensora', category: 'Pernas', subCategory: 'Quadríceps e Adutores' },
+  esteira: { name: 'Esteira', category: 'Cardio', subCategory: 'Geral' },
 };
 // pirâmide: um bloco por série (como o app salva), a técnica (se houver) na última série
 const pyr = (reps: number[], tech = '') => ({ sets: reps.length, reps: reps.join('/'), technique: JSON.stringify({ t: '', b: reps.map((r, i) => ({ sets: '1', reps: String(r), technique: i === reps.length - 1 ? tech : '' })) }) });
 const plain = (sets: number, reps: string) => ({ sets, reps, technique: '' });
+// o sistema grava "NORMAL" em muitos exercícios comuns: isso NÃO é técnica
+const normalT = () => ({ sets: 3, reps: '12', technique: JSON.stringify({ t: 'NORMAL', b: [{ sets: '3', reps: '12', technique: 'NORMAL' }] }) });
 const r = (id: string, day: string, order: number, o: any) => ({ exerciseId: id, day, order, exercise: EX[id], ...o });
 const W = (id: string, student: string, date: string, gender: string, level: string, goal: string, rows: any[]) => toStyleWorkout({ id, userId: student, createdAt: date, level, goal, user: { gender }, exercises: rows })!;
 
@@ -26,11 +29,13 @@ const w5 = W('W5', 'S3', '2026-06-01', 'Masculino', 'Avançado', 'Hipertrofia', 
 const w6 = W('W6', 'S3', '2026-07-01', 'Masculino', 'Avançado', 'Hipertrofia', abc('cru', 'fra', ''));
 // S4: uma técnica que NÃO está no último exercício do grupo (supino com drop-set) e uma troca que só acontece uma vez (inclinado -> pec deck)
 const w7 = W('W7', 'S4', '2026-01-15', 'Feminino', 'Intermediário', 'Hipertrofia', [r('sup', 'A', 0, pyr([12, 10, 8], 'DROPSET')), r('inc', 'A', 1, plain(3, '12')), r('tri', 'A', 2, plain(3, '12'))]);
-const w8 = W('W8', 'S4', '2026-02-20', 'Feminino', 'Intermediário', 'Hipertrofia', [r('sup', 'A', 0, plain(3, '12')), r('pec', 'A', 1, plain(3, '12')), r('tri', 'A', 2, plain(3, '12'))]);
-const ALL = [w6, w3, w1, w5, w2, w4, w8, w7];   // fora de ordem de propósito
+const w8 = W('W8', 'S4', '2026-02-20', 'Feminino', 'Intermediário', 'Hipertrofia', [r('sup', 'A', 0, plain(3, '12')), r('pec', 'A', 1, plain(3, '12')), r('tri', 'A', 2, normalT())]);
+// rotina "alternada": criada 2 dias depois da w7, do MESMO aluno = mesmo ciclo (não é uma troca de ciclo)
+const w9 = W('W9', 'S4', '2026-01-17', 'Feminino', 'Intermediário', 'Hipertrofia', [r('sup', 'A', 0, plain(3, '12')), r('cru', 'A', 1, plain(3, '12')), r('fra', 'A', 2, plain(3, '12'))]);
+const ALL = [w6, w3, w1, w5, w2, w4, w8, w7, w9];   // fora de ordem de propósito
 
 t('toStyleWorkout: nome e grupo vêm do exercício ("Geral" cai para a categoria), pequeno demais ou só cardio = ignorado', () => {
-  assert.equal(w1.plan.A[0].g, 'Peito'); assert.equal(w1.plan.B[0].n, 'Agachamento'); assert.equal(w1.plan.B[0].g, 'Musculação', 'subCategoria "Geral" usa a categoria');
+  assert.equal(w1.plan.A[0].g, 'Peito — Medial'); assert.equal(w1.plan.B[0].n, 'Agachamento'); assert.equal(w1.plan.B[0].g, 'Pernas — Multiarticular'); assert.equal(w1.plan.A[2].g, 'Tríceps', 'subcategoria "Geral" = só o músculo');
   assert.equal(w1.plan.A[0].s, 4); assert.equal(w1.plan.A[0].r, '15/12/10/8'); assert.equal(w1.plan.A[2].t, 'DROPSET');
   assert.equal(toStyleWorkout({ id: 'x', userId: 'u', createdAt: '2026-01-01', exercises: [r('sup', 'A', 0, plain(3, '10'))] }), null, 'menos de 3 linhas');
   assert.equal(toStyleWorkout({ id: 'x', userId: 'u', createdAt: '2026-01-01', exercises: [r('esteira', 'A', 0, plain(20, '200')), r('esteira', 'A', 1, plain(20, '200')), r('esteira', 'A', 2, plain(20, '200'))] }), null, 'só cardio não ensina musculação');
@@ -39,27 +44,27 @@ t('toStyleWorkout: nome e grupo vêm do exercício ("Geral" cai para a categoria
 
 t('perfil: amostra, dias por rotina, dia mais comum, séries e repetições', () => {
   const p = buildStyleProfile(ALL);
-  assert.deepEqual(p.sample, { workouts: 8, students: 4, from: '2026-01-15', to: '2026-07-01', days: 10 });
-  assert.deepEqual(p.split.daysPerWorkout, [{ n: 1, pct: 75 }, { n: 2, pct: 25 }]);
-  assert.deepEqual(p.split.dayPatterns[0], { groups: ['Peito', 'Tríceps'], count: 8 }); assert.equal(p.volume.exercisesPerDay, 3);
+  assert.deepEqual(p.sample, { workouts: 9, students: 4, from: '2026-01-15', to: '2026-07-01', days: 11 });
+  assert.deepEqual(p.split.daysPerWorkout, [{ n: 1, pct: 78 }, { n: 2, pct: 22 }]);
+  assert.deepEqual(p.split.dayPatterns[0], { groups: ['Peito', 'Tríceps'], count: 9 }); assert.equal(p.volume.exercisesPerDay, 3);
   assert.ok(p.reps.sequences.some((s) => s.seq === '15/12/10/8' && s.sets === 4), 'a pirâmide 15/12/10/8 aparece'); assert.ok(p.volume.setsPerExercise.some((s) => s.n === 4));
-  assert.equal(p.cardio.typical, '20 min'); assert.equal(p.cardio.dayPct, 9, '1 dia com cardio em 11');
+  assert.equal(p.cardio.typical, '20 min'); assert.equal(p.cardio.dayPct, 8, '1 dia com cardio em 12');
 });
 
 t('técnicas: quantos treinos usam e se ficam no último exercício do grupo', () => {
   const p = buildStyleProfile(ALL); const d = p.techniques.find((x) => x.t === 'DROPSET')!;
-  assert.equal(d.exercises, 3); assert.equal(d.workoutsPct, 38); assert.equal(d.lastOfGroupPct, 67, 'em 2 dos 3 era o último do grupo (o supino do S4 abre o grupo)');
+  assert.ok(!p.techniques.some((x) => x.t === 'NORMAL'), 'NORMAL não é técnica'); assert.equal(d.exercises, 3); assert.equal(d.workoutsPct, 33); assert.equal(d.lastOfGroupPct, 67, 'em 2 dos 3 era o último do grupo (o supino do S4 abre o grupo)');
 });
 
 t('exercícios de sempre: por grupo, contando alunos diferentes; grupo com poucos dias fica de fora', () => {
-  const p = buildStyleProfile(ALL); const peito = p.favorites.find((f) => f.g === 'Peito')!;
+  const p = buildStyleProfile(ALL); const peito = p.favorites.find((f) => f.g === 'Peito — Medial')!;
   assert.equal(peito.items[0].n, 'Supino reto'); assert.equal(peito.items[0].students, 4);
-  assert.ok(!p.favorites.some((f) => f.g === 'Quadríceps'), 'só 2 dias: pouco para afirmar');
+  assert.ok(!p.favorites.some((f) => f.g.startsWith('Pernas')), 'só 2 dias: pouco para afirmar');
 });
 
 t('variação entre ciclos: o mesmo aluno, treino a treino — o que mantém e as trocas que repete', () => {
   const p = buildStyleProfile(ALL);
-  assert.equal(p.rotation.pairs, 4); assert.equal(p.rotation.keepRate, 53, '8 de 15 exercícios mantidos'); assert.equal(p.rotation.setsChangedPct, 0);
+  assert.equal(p.rotation.pairs, 4, 'a rotina alternada do S4 não conta como ciclo novo'); assert.equal(p.rotation.keepRate, 47, '8 de 17 exercícios mantidos (o ciclo do S4 tem as duas rotinas)'); assert.equal(p.rotation.setsChangedPct, 0);
   assert.ok(!p.rotation.topSwaps.some((x) => x.to === 'Pec deck'), 'troca que só aconteceu uma vez não vira regra');
   assert.deepEqual(p.rotation.topSwaps.map((s) => [s.from, s.to, s.count]).sort(), [['Supino inclinado', 'Crucifixo', 3], ['Tríceps corda', 'Tríceps francês', 3]]);
   assert.equal(buildStyleProfile([w1]).rotation.pairs, 0, 'um treino só = nada a comparar');
@@ -67,7 +72,7 @@ t('variação entre ciclos: o mesmo aluno, treino a treino — o que mantém e a
 
 t('texto para a IA: cita a amostra, os dias, as repetições, a técnica, as âncoras e as trocas; respeita o limite; sem treino = vazio', () => {
   const tx = styleProfileText(buildStyleProfile(ALL), 'Paulo');
-  for (const s of ['ESTILO DE PAULO', '8 treinos reais de 4 alunos', '1 dias (75%)', 'Peito + Tríceps', '4x 15/12/10/8', 'DROPSET em 38% dos treinos', 'último exercício do grupo', 'Peito: Supino reto', 'Supino inclinado → Crucifixo', 'Cardio']) assert.ok(tx.includes(s), 'faltou: ' + s + '\n' + tx);
+  for (const s of ['ESTILO DE PAULO', '9 treinos reais de 4 alunos', '1 dias (78%)', 'Peito + Tríceps', '4x 15/12/10/8', 'DROPSET em 33% dos treinos', 'último exercício do grupo', 'Peito — Medial: Supino reto', 'Supino inclinado → Crucifixo', 'Cardio']) assert.ok(tx.includes(s), 'faltou: ' + s + '\n' + tx);
   assert.ok(styleProfileText(buildStyleProfile(ALL), 'Paulo', 300).length <= 300); assert.equal(styleProfileText(buildStyleProfile([])), '');
 });
 
