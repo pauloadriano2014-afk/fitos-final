@@ -90,6 +90,9 @@
  "t_contact_numbers": [
   "none"
  ],
+ "t_content_audience": [
+  "build_contentaud.mjs"
+ ],
  "t_cp": [
   "profile:cp-subs",
   "profile:cp-alt",
@@ -148,6 +151,9 @@
  "t_food_match": [
   "build.mjs",
   "build6.mjs"
+ ],
+ "t_freeze": [
+  "build_freeze.mjs"
  ],
  "t_gen_learning": [
   "build75.mjs"
@@ -216,6 +222,9 @@
  ],
  "t_notices_route": [
   "build5.mjs"
+ ],
+ "t_obs_presets": [
+  "build_obspreset.mjs"
  ],
  "t_partner_routes": [
   "profile:partner-routes"
@@ -339,11 +348,5 @@
  ],
  "t_workout_templates": [
   "build44.mjs"
- ],
- "t_content_audience": [
-  "build_contentaud.mjs"
- ],
- "t_freeze": [
-  "build_freeze.mjs"
  ]
 }

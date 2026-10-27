@@ -206,6 +206,8 @@ model PyramidPreset {
 model ObservationPreset {
   id        String   @id @default(uuid())
   text      String   @db.Text
+  // 🗂️ (27 out 2026) Categoria da frase pronta (TECNICA, CUIDADOS, CONTAGEM, COMO_FAZER, CARGA, OUTRAS). Opcional: frase antiga sem categoria o app classifica sozinho.
+  category  String?
   createdAt DateTime @default(now())
 }
 
