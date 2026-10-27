@@ -52,6 +52,7 @@ const block = async (name: string, fn: () => Promise<void> | void) => {
   await block('as consultas saem juntas: muitas em andamento ao mesmo tempo e o total é bem menor que a soma', async () => {
     const MS = 20; const { db, m } = slow(MS);
     const t0 = Date.now(); await buildHoje(db, 'cA', NOW); const took = Date.now() - t0;
+    if (process.env.SHOW_TIMES) console.log('MEDIDA hoje: ' + m.calls + ' consultas de ' + MS + 'ms, demorou ' + took + 'ms (em fila: ' + m.calls * MS + 'ms), máx. simultâneas ' + m.max);
     assert.ok(m.calls >= 15, 'consultas feitas: ' + m.calls);
     assert.ok(m.max >= 6, 'no máximo ' + m.max + ' ao mesmo tempo (esperado 6 ou mais)');
     assert.ok(took < (m.calls * MS) / 2.5, `demorou ${took}ms para ${m.calls} consultas de ${MS}ms (em fila seriam ~${m.calls * MS}ms)`);
