@@ -223,6 +223,9 @@
  "t_notices_route": [
   "build5.mjs"
  ],
+ "t_obs_categories": [
+  "build_obspreset.mjs"
+ ],
  "t_obs_presets": [
   "build_obspreset.mjs"
  ],

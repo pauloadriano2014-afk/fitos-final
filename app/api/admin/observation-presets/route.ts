@@ -2,13 +2,17 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 
-// 🗂️ (27 out 2026) Categorias das frases prontas (as mesmas chaves do app: src/utils/obsPhrases.js). Vazio = sem categoria (o app classifica sozinho).
+// 🗂️ (27 out 2026) Categorias das frases prontas: as 6 fixas (mesmas chaves do app: src/utils/obsPhrases.js) ou o id de uma categoria criada pelo coach
+// (tabela ObservationCategory). Vazio = sem categoria (o app classifica sozinho). Devolve: texto = válida, null = sem categoria, undefined = inválida.
 const OBS_CATEGORIES = ['TECNICA', 'CUIDADOS', 'CONTAGEM', 'COMO_FAZER', 'CARGA', 'OUTRAS'];
-const cleanCategory = (v: any): string | null | undefined => {
+const cleanCategory = async (v: any): Promise<string | null | undefined> => {
   if (v === undefined) return undefined;
   if (v === null || v === '') return null;
-  const c = String(v).toUpperCase();
-  return OBS_CATEGORIES.includes(c) ? c : undefined;
+  if (typeof v !== 'string') return undefined;
+  const up = v.toUpperCase();
+  if (OBS_CATEGORIES.includes(up)) return up;
+  const mine = await prisma.observationCategory.findMany({});
+  return mine.some((c: any) => c.id === v) ? v : undefined;
 };
 
 // BUSCAR TODAS AS OBSERVAÇÕES RÁPIDAS SALVAS
@@ -39,7 +43,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Texto é obrigatório." }, { status: 400 });
     }
 
-    const category = cleanCategory(body.category);
+    const category = await cleanCategory(body.category);
     if (body.category && category === undefined) {
       return NextResponse.json({ error: "Categoria inválida." }, { status: 400 });
     }
@@ -67,7 +71,7 @@ export async function PATCH(req: Request) {
     const { id } = body;
     if (!id) return NextResponse.json({ error: "ID em falta." }, { status: 400 });
 
-    const category = cleanCategory(body.category);
+    const category = await cleanCategory(body.category);
     if (category === undefined) return NextResponse.json({ error: "Categoria inválida." }, { status: 400 });
 
     const preset = await prisma.observationPreset.update({ where: { id }, data: { category } });

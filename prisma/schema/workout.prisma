@@ -211,6 +211,14 @@ model ObservationPreset {
   createdAt DateTime @default(now())
 }
 
+// 🗂️ (27 out 2026) Categorias que o coach cria para as frases prontas do recado (além das 6 fixas). O valor guardado em ObservationPreset.category é o id daqui.
+model ObservationCategory {
+  id        String   @id @default(uuid())
+  name      String
+  color     String?
+  createdAt DateTime @default(now())
+}
+
 model MotorTemplate {
   id          String   @id @default(uuid())
   name        String   
