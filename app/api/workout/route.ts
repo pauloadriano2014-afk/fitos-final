@@ -1,5 +1,6 @@
 // app/api/workout/route.ts
 import { NextResponse } from 'next/server';
+import { timed } from '@/lib/perfLog';
 import prisma from '@/lib/prisma';
 import { Expo } from 'expo-server-sdk';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
@@ -11,7 +12,7 @@ import { recordCoachSave } from '@/lib/ai/genSnapshots';
 const expo = new Expo();
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: Request) {
+async function GETImpl(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
@@ -27,30 +28,36 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "Acesso Negado: Aluno não pertence a você." }, { status: 403 });
     }
 
-    // 🔥 O SEGREDO ESTÁ AQUI: Buscamos o dicionário de exercícios para traduzir as IDs em Nomes 🔥
-    const allExercises = await prisma.exercise.findMany({
-        select: { id: true, name: true, videoUrl: true }
-    });
+    // 🔥 Traduz as IDs das opções de troca em nome + vídeo. ⚡ (27 out 2026) Antes baixava a biblioteca INTEIRA (todos os coaches) a cada chamada só para isso;
+    // agora busca apenas os exercícios que as trocas realmente citam (mesmo resultado, uma consulta pequena).
+    const loadSubs = async (exercises: any[]) => {
+        const ids = [...new Set(exercises.flatMap((ex: any) => (ex.substitutes || []) as string[]).filter(Boolean))];
+        const rows = ids.length ? await prisma.exercise.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, videoUrl: true } }) : [];
+        const byId = new Map(rows.map((r: any) => [r.id, r]));
+        return (subIds: string[]) => (subIds || []).map((subId) => byId.get(subId)).filter(Boolean).map((f: any) => ({ id: f.id, name: f.name, videoUrl: f.videoUrl }));
+    };
 
     if (workoutId) {
-        const workout = await prisma.workout.findUnique({
-            where: { id: workoutId },
-            include: { 
-                exercises: { 
-                    include: { exercise: true, substitute: true },
-                    orderBy: { order: 'asc' } 
-                } 
-            }
-        });
+        // ⚡ o treino e o histórico não dependem um do outro: saem juntos
+        const [workout, history] = await Promise.all([
+            prisma.workout.findUnique({
+                where: { id: workoutId },
+                include: { 
+                    exercises: { 
+                        include: { exercise: true, substitute: true },
+                        orderBy: { order: 'asc' } 
+                    } 
+                }
+            }),
+            prisma.workoutHistory.findMany({
+                where: { userId },
+                orderBy: { date: 'desc' },
+                take: 20,
+                include: { details: true }
+            }),
+        ]);
 
         if (!workout) return NextResponse.json({ error: "Workout not found" }, { status: 404 });
-
-        const history = await prisma.workoutHistory.findMany({
-            where: { userId },
-            orderBy: { date: 'desc' },
-            take: 20,
-            include: { details: true }
-        });
 
         let calculatedLastLog = null;
 
@@ -78,14 +85,8 @@ export async function GET(req: Request) {
         const loadSuggestions = targetUser?.loadSuggestOff ? {} : buildLoadSuggestions(history as any, suggestIds, { step: targetUser?.loadStep ?? null });
 
         // 🔥 TRADUÇÃO DOS SUBSTITUTOS PARA O TREINO ESPECÍFICO 🔥
-        const populatedExercises = workout.exercises.map((ex: any) => {
-            const mappedSubs = (ex.substitutes || []).map((subId: string) => {
-                const found = allExercises.find(e => e.id === subId);
-                return found ? { id: found.id, name: found.name, videoUrl: found.videoUrl } : null;
-            }).filter(Boolean);
-
-            return { ...ex, substitutes: mappedSubs };
-        });
+        const subsOf = await loadSubs(workout.exercises);
+        const populatedExercises = workout.exercises.map((ex: any) => ({ ...ex, substitutes: subsOf(ex.substitutes) }));
 
         return NextResponse.json({ 
             ...workout, 
@@ -111,16 +112,11 @@ export async function GET(req: Request) {
     });
 
     // 🔥 TRADUÇÃO PARA A LISTA GERAL DE TREINOS 🔥
+    const subsOf = await loadSubs(workouts.flatMap((w: any) => w.exercises));
     const populatedWorkouts = workouts.map(w => {
         return {
             ...w,
-            exercises: w.exercises.map((ex: any) => {
-                const mappedSubs = (ex.substitutes || []).map((subId: string) => {
-                    const found = allExercises.find(e => e.id === subId);
-                    return found ? { id: found.id, name: found.name, videoUrl: found.videoUrl } : null;
-                }).filter(Boolean);
-                return { ...ex, substitutes: mappedSubs };
-            })
+            exercises: w.exercises.map((ex: any) => ({ ...ex, substitutes: subsOf(ex.substitutes) }))
         };
     });
 
@@ -131,6 +127,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Erro ao buscar treino" }, { status: 500 });
   }
 }
+export const GET = timed('GET /api/workout', GETImpl);
 
 // 🔥 NOVA ROTA: PILOTO AUTOMÁTICO (MINI-ANAMNESE)
 export async function POST(req: Request) {

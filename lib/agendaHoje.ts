@@ -70,15 +70,27 @@ function capType(tasks: Task[], type: string, moreTitle: (n: number) => string, 
 }
 
 export async function buildHoje(db: Db, coachId: string, now: Date = new Date()) {
-  const unavailable: string[] = [];
   const todayKey = dateKeyBrt(now);
   const startToday = startOfDayBrt(todayKey), endToday = endOfDayBrt(todayKey);
-  const tasks: Task[] = [];
-  const push = (t: Omit<Task, 'count'> & { count?: number }) => tasks.push({ count: 1, ...t } as Task);
+  // ⚡ (27 out 2026) As fontes de pendência não dependem umas das outras: as consultas saem TODAS ao mesmo tempo (antes eram ~25 em fila, uma esperando a outra).
+  // Cada fonte junta as SUAS pendências e os SEUS avisos de "indisponível"; no fim tudo é colado na mesma ordem de antes, então o resultado é idêntico.
+  type Part = { tasks: Task[]; un: string[] };
+  type Push = (t: Omit<Task, 'count'> & { count?: number }) => void;
+  const run = async (fn: (push: Push, unavailable: string[]) => Promise<void> | void): Promise<Part> => {
+    const mine: Task[] = [], un: string[] = [];
+    await fn((t) => { mine.push({ count: 1, ...t } as Task); }, un);
+    return { tasks: mine, un };
+  };
+  const solo = async <T,>(label: string, fn: () => Promise<T>, fallback: T): Promise<{ v: T; un: string[] }> => {
+    const un: string[] = [];
+    const v = await safe(label, un, fn, fallback);
+    return { v, un };
+  };
   const person = (kind: 'student' | 'offline', row: any): Task['person'] => ({ kind, id: row.id, name: row.name || (kind === 'student' ? 'Aluno' : 'Cliente'), phone: row.phone || null });
 
   // ── a agenda de hoje + presença que ficou por marcar ──
   let agendaToday: any[] = [];
+  const pAgenda = run(async (push, unavailable) => {
   await safe('agenda', unavailable, async () => {
     await ensureSeriesWindow(db, coachId, addDaysKey(todayKey, -7), addDaysKey(todayKey, 7));
     const rows: any[] = await db.agendaEvent.findMany({ where: { coachId, startsAt: { gte: startOfDayBrt(addDaysKey(todayKey, -7)), lt: endOfDayBrt(addDaysKey(todayKey, 7)) } }, orderBy: { startsAt: 'asc' } });
@@ -95,17 +107,22 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       }
     }
   }, undefined);
+  });
 
   // ── alunos do coach (uma consulta só; o resto filtra por estes ids) ──
-  const students: any[] = await safe('alunos', unavailable, () => db.user.findMany({
+  const studentsP = solo('alunos', () => db.user.findMany({
     where: { role: 'USER', active: { not: false }, AND: [ownStudentScope(coachId)] },
     select: { id: true, name: true, phone: true, isFinanceActive: true, isTestAccount: true, contractValue: true, paymentDueDate: true, paymentClaimStatus: true, financeCategory: true, nextCheckInDate: true, disableCheckIn: true, frozenAt: true, frozenUntil: true },
-  }), [] as any[]);
-  const real = students.filter((s) => !s.isTestAccount && !s.frozenAt);   // ❄️ aluno com plano congelado não gera pendência
-  const ids = real.map((s) => s.id);
-  const byId = new Map(real.map((s) => [s.id, s]));
+  }), [] as any[]).then(({ v: students, un }) => {
+    const real = students.filter((s) => !s.isTestAccount && !s.frozenAt);   // ❄️ aluno com plano congelado não gera pendência
+    const ids = real.map((s) => s.id);
+    const byId = new Map(real.map((s) => [s.id, s]));
+    return { students, real, ids, byId, un };
+  });
 
   // ── feedback da semana aguardando ──
+  const pSemanal = run(async (push, unavailable) => {
+    const { ids, byId } = await studentsP;
   await safe('feedback da semana', unavailable, async () => {
     if (!ids.length) return;
     const rows: any[] = await db.weeklyFeedback.findMany({ where: { userId: { in: ids }, createdAt: { gte: new Date(now.getTime() - 14 * DAY) }, coachSeenAt: null, coachReplyAt: null }, select: { id: true, userId: true, createdAt: true }, orderBy: { createdAt: 'desc' } });
@@ -113,8 +130,11 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     const oldest = rows.reduce((m, r) => (r.createdAt < m ? r.createdAt : m), rows[0].createdAt);
     push({ key: `semanal:${rows[0].id}`, type: 'semanal', severity: oldest < new Date(now.getTime() - 2 * DAY) ? 'late' : 'today', title: `${rows.length} ${rows.length === 1 ? 'feedback da semana aguardando' : 'feedbacks da semana aguardando'} você`, subtitle: names(rows.map((r) => byId.get(r.userId)?.name)), person: null, dueAt: new Date(oldest).toISOString(), count: rows.length, target: { type: 'weekly' } });
   }, undefined);
+  });
 
   // ── observações de exercício sem resposta ──
+  const pObs = run(async (push, unavailable) => {
+    const { ids, byId } = await studentsP;
   await safe('observações', unavailable, async () => {
     if (!ids.length) return;
     const rows: any[] = await db.studentAlert.findMany({ where: { type: 'EXERCISE_NOTE', isRead: false, userId: { in: ids } }, select: { id: true, userId: true, createdAt: true }, orderBy: { createdAt: 'desc' } });
@@ -122,8 +142,11 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     const oldest = rows.reduce((m, r) => (r.createdAt < m ? r.createdAt : m), rows[0].createdAt);
     push({ key: `obs:${rows[0].id}`, type: 'obs', severity: oldest < new Date(now.getTime() - 2 * DAY) ? 'late' : 'today', title: `${rows.length} ${rows.length === 1 ? 'observação de exercício sem resposta' : 'observações de exercício sem resposta'}`, subtitle: names(rows.map((r) => byId.get(r.userId)?.name)), person: null, dueAt: new Date(oldest).toISOString(), count: rows.length, target: { type: 'feed' } });
   }, undefined);
+  });
 
   // ── avaliações (check-in) sem retorno ──
+  const pAval = run(async (push, unavailable) => {
+    const { ids, byId } = await studentsP;
   await safe('avaliações', unavailable, async () => {
     if (!ids.length) return;
     const rows: any[] = await db.checkIn.findMany({ where: { userId: { in: ids }, coachFeedback: null, createdAt: { gte: new Date(now.getTime() - 30 * DAY) } }, select: { id: true, userId: true, createdAt: true }, orderBy: { createdAt: 'desc' } });
@@ -131,16 +154,22 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     const oldest = rows.reduce((m, r) => (r.createdAt < m ? r.createdAt : m), rows[0].createdAt);
     push({ key: `avaliacao:${rows[0].id}`, type: 'avaliacao', severity: oldest < new Date(now.getTime() - 2 * DAY) ? 'late' : 'today', title: `${rows.length} ${rows.length === 1 ? 'avaliação sem retorno' : 'avaliações sem retorno'}`, subtitle: names(rows.map((r) => byId.get(r.userId)?.name)), person: null, dueAt: new Date(oldest).toISOString(), count: rows.length, target: { type: 'checkins' } });
   }, undefined);
+  });
 
   // ── avaliação marcada para uma data que já passou ──
+  const pCheckin = run(async (push) => {
+    const { real } = await studentsP;
   for (const s of real) {
     if (!s.nextCheckInDate || s.disableCheckIn === true) continue;
     const k = dateKeyBrt(new Date(s.nextCheckInDate)), late = diffDaysKeys(k, todayKey);
     if (late <= 0) continue;
     push({ key: `checkin:${s.id}:${k}`, type: 'checkin', severity: late > 7 ? 'late' : 'today', title: `Avaliação atrasada: ${s.name || 'Aluno'}`, subtitle: `era para ${daysWord(late)} atrás`, person: person('student', s), dueAt: new Date(s.nextCheckInDate).toISOString(), target: { type: 'student', id: s.id } });
   }
+  });
 
   // ── treino vencendo ──
+  const pTreinos = run(async (push, unavailable) => {
+    const { ids, byId } = await studentsP;
   await safe('treinos', unavailable, async () => {
     if (!ids.length) return;
     const ws: any[] = await db.workout.findMany({ where: { userId: { in: ids }, archived: false }, select: { userId: true, endDate: true, createdAt: true }, orderBy: { createdAt: 'desc' } });
@@ -153,17 +182,23 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       push({ key: `treino:${uid}:${k}`, type: 'treino', severity: left < 0 ? 'late' : left === 0 ? 'today' : 'soon', title: left < 0 ? `Treino vencido: ${s.name || 'Aluno'}` : `Treino vence ${left === 0 ? 'hoje' : 'em ' + daysWord(left)}: ${s.name || 'Aluno'}`, subtitle: left < 0 ? `venceu há ${daysWord(-left)}` : null, person: person('student', s), dueAt: new Date(w.endDate).toISOString(), target: { type: 'student', id: s.id } });
     }
   }, undefined);
+  });
 
   // ── ❄️ volta prevista de aluno congelado: chegou o dia (ou passou) e ele ainda está congelado. O aluno NÃO volta sozinho: o coach confirma e descongela ──
+  const pDescongelar = run(async (push) => {
+    const { students } = await studentsP;
   for (const s of students) {
     if (s.isTestAccount || !s.frozenAt || !s.frozenUntil) continue;
     const k = dateKeyBrt(new Date(s.frozenUntil)), late = -diffDaysKeys(todayKey, k);
     if (late < 0) continue;
     push({ key: `descongelar:${s.id}:${k}`, type: 'descongelar', severity: late > 3 ? 'late' : 'today', title: `Hora de descongelar: ${s.name || 'Aluno'}`, subtitle: late === 0 ? 'a volta prevista é hoje' : `a volta prevista era há ${daysWord(late)}`, person: person('student', s), dueAt: new Date(s.frozenUntil).toISOString(), target: { type: 'student', id: s.id } });
   }
+  });
 
   // ── corrida: anamnese respondida sem protocolo (montar) e protocolo concluído (escolher o próximo desafio) ──
   // Some sozinha: ativar um protocolo novo desativa o anterior. Só olha o último mês, para uma anamnese esquecida há muito tempo não virar atraso eterno.
+  const pCorrida = run(async (push, unavailable) => {
+    const { ids, byId } = await studentsP;
   await safe('corrida', unavailable, async () => {
     if (!ids.length) return;
     const since = new Date(now.getTime() - 30 * DAY);
@@ -181,9 +216,12 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       push({ key: `corrida_fim:${s.id}:${k}`, type: 'corrida_fim', severity: 'today', title: `${s.name || 'Aluno'} concluiu o protocolo de ${p.protocolType || '5K'}`, subtitle: 'escolha o próximo desafio', person: person('student', s), dueAt: new Date(p.completedAt).toISOString(), target: { type: 'student', id: s.id, openRunning: true } });
     }
   }, undefined);
+  });
 
   // ── aluno avisou que NÃO deu tempo de fazer o treino todo (pergunta opcional ao finalizar) ──
   // Uma pendência por aluno (a resposta mais recente dos últimos 10 dias). "JÁ TRATEI" (adiar) some com ela; uma nova resposta "não deu tempo" cria outra.
+  const pTempo = run(async (push, unavailable) => {
+    const { ids, byId } = await studentsP;
   await safe('sem tempo no treino', unavailable, async () => {
     if (!ids.length) return;
     const rows: any[] = await db.workoutHistory.findMany({ where: { userId: { in: ids }, timeOk: false, date: { gte: new Date(now.getTime() - 10 * DAY) } }, select: { id: true, userId: true, day: true, workoutId: true, date: true, timeNote: true, duration: true }, orderBy: { date: 'desc' } });
@@ -227,10 +265,13 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       push({ key: `tempo:${r.id}`, type: 'tempo', severity: again ? (ageDays <= 7 ? 'today' : 'soon') : (ageDays <= 3 ? 'today' : 'soon'), title: again ? `${before.length + 1}º aviso de falta de tempo: ${s.name || 'Aluno'}` : `Sem tempo no treino: ${s.name || 'Aluno'}`, subtitle: [dayTxt, timeTxt, note, skipTxt, adjTxt].filter(Boolean).join(' · '), person: person('student', s), dueAt: new Date(r.date).toISOString(), workoutId: r.workoutId || undefined, day: r.day || undefined, historyId: r.id, durationMin: took || undefined, availableMin: has || undefined, ...(again ? { adjustments: before.length, lastAdjustAt: new Date(last.createdAt).toISOString(), lastAdjustLines: lastLines } : {}), target: { type: 'student', id: s.id } });
     }
   }, undefined);
+  });
 
   // ── cobrança (mensal): atrasada, vencendo e "já paguei" ──
   // ── aluno avisou que NÃO tem o aparelho / exercício na academia ──
   // Uma pendência por aviso em aberto. Resolver (RESOLVIDO ou trocar o exercício na ficha) tira da lista; o exercício NUNCA é apagado da biblioteca nem do treino.
+  const pAparelho = run(async (push, unavailable) => {
+    const { ids, byId } = await studentsP;
   await safe('aparelho indisponível', unavailable, async () => {
     if (!ids.length) return;
     const rows: any[] = await db.equipmentReport.findMany({ where: { userId: { in: ids }, status: 'OPEN' }, orderBy: { lastReportedAt: 'desc' }, select: { id: true, userId: true, exerciseId: true, exerciseName: true, workoutId: true, workoutExerciseId: true, day: true, note: true, count: true, lastReportedAt: true } });
@@ -244,11 +285,14 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       push({ key: `aparelho:${r.id}`, type: 'aparelho', severity: ageDays <= 3 ? 'today' : 'soon', title: `${firstName(s.name || 'Aluno')} não tem: ${r.exerciseName}`, subtitle: sub, person: person('student', s), dueAt: new Date(r.lastReportedAt).toISOString(), workoutId: r.workoutId || undefined, day: r.day || undefined, reportId: r.id, exerciseId: r.exerciseId, exerciseName: r.exerciseName, workoutExerciseId: r.workoutExerciseId || undefined, target: { type: 'student', id: s.id } });
     }
   }, undefined);
+  });
 
   // ── 🎥 vídeo de execução que o aluno enviou e o coach ainda não respondeu; e TODO pedido de vídeo que o coach fez e o aluno ainda não atendeu (aparece na hora) ──
   // (inclui a conta de TESTE do coach: vídeo/pedido só existem se alguém os criou de propósito, e é assim que o coach confere o fluxo)
-  const vidIds = students.map((s) => s.id);
-  const vidById = new Map(students.map((s) => [s.id, s]));
+  const pVideos = run(async (push, unavailable) => {
+    const { students } = await studentsP;
+    const vidIds = students.map((s) => s.id);
+    const vidById = new Map(students.map((s) => [s.id, s]));
   await safe('vídeos de execução', unavailable, async () => {
     if (!vidIds.length) return;
     const vids: any[] = await db.executionVideo.findMany({ where: { userId: { in: vidIds }, status: 'READY', createdAt: { gte: new Date(now.getTime() - 30 * DAY) } }, orderBy: { createdAt: 'desc' }, take: 60 });
@@ -273,7 +317,12 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       push({ key: `videopedido:${r.id}`, type: 'videopedido', severity: 'soon', title: `${firstName(s.name || 'Aluno')} ainda não mandou o vídeo pedido`, subtitle: `${r.exerciseName} · ${ageDays <= 0 ? 'pedido hoje' : 'pedido há ' + daysWord(ageDays)}`, person: person('student', s), dueAt: new Date(r.createdAt).toISOString(), exerciseId: r.exerciseId || undefined, exerciseName: r.exerciseName, workoutId: r.workoutId || undefined, day: r.day || undefined, target: { type: 'student', id: s.id } });
     }
   }, undefined);
+  });
 
+  const offlinesP = solo('clientes do financeiro', () => db.offlineClient.findMany({ where: { AND: [ownOfflineScope(coachId)] }, select: { id: true, name: true, phone: true, financeCategory: true, isFinanceActive: true, contractValue: true, paymentDueDate: true } }), [] as any[]);
+  const pCobranca = run(async (push) => {
+    const { real } = await studentsP;
+    const offlines = (await offlinesP).v;
   const money = (kind: 'student' | 'offline', s: any) => {
     if (s.isFinanceActive === false || !(Number(s.contractValue) > 0) || !s.paymentDueDate) return;
     const k = dateKeyBrt(new Date(s.paymentDueDate)), left = diffDaysKeys(todayKey, k);
@@ -285,10 +334,11 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     if (s.paymentClaimStatus === 'PENDING') push({ key: `paguei:${s.id}`, type: 'paguei', severity: 'today', title: `${s.name || 'Aluno'} informou que pagou`, subtitle: 'confirme ou recuse no financeiro', person: person('student', s), dueAt: null, amount: Number(s.contractValue) || 0, target: { type: 'finance' } });
     else money('student', s);
   }
-  const offlines: any[] = await safe('clientes do financeiro', unavailable, () => db.offlineClient.findMany({ where: { AND: [ownOfflineScope(coachId)] }, select: { id: true, name: true, phone: true, financeCategory: true, isFinanceActive: true, contractValue: true, paymentDueDate: true } }), [] as any[]);
-  offlines.forEach((o) => money('offline', o));
+    offlines.forEach((o) => money('offline', o));
+  });
 
   // ── teste grátis (links do treino avulso) ──
+  const pTeste = run(async (push, unavailable) => {
   await safe('teste grátis', unavailable, async () => {
     const shares: any[] = await db.workoutShare.findMany({ where: { trial: true, createdById: coachId, revokedAt: null, createdAt: { gte: new Date(now.getTime() - 21 * DAY) } }, select: { id: true, code: true, displayName: true, viewCount: true, doneCount: true, createdAt: true, expiresAt: true }, orderBy: { createdAt: 'desc' } });
     for (const sh of shares) {
@@ -299,8 +349,12 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       else if (sh.viewCount > 0 && sh.doneCount === 0 && left !== null && left > 0 && left < 2) push({ key: `teste_fim:${sh.id}`, type: 'teste_fim', severity: 'soon', title: `Teste de ${nm} termina em breve sem treino feito`, subtitle: 'chame para saber se travou em alguma coisa', person: null, dueAt: exp!.toISOString(), target: tgt });
     }
   }, undefined);
+  });
 
   // ── personal sem horário na agenda ──
+  const pSemHorario = run(async (push, unavailable) => {
+    const { real } = await studentsP;
+    const offlines = (await offlinesP).v;
   await safe('personais sem horário', unavailable, async () => {
     const wantS = real.filter((s) => PERSONAL.test(s.financeCategory || '') && s.isFinanceActive !== false);
     const wantO = offlines.filter((o) => PERSONAL.test(o.financeCategory || '') && o.isFinanceActive !== false);
@@ -311,8 +365,10 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
     wantS.filter((s) => !hasS.has(s.id)).forEach((s) => push({ key: `semhorario:s${s.id}`, type: 'semhorario', severity: 'info', title: `Sem horário na agenda: ${s.name || 'Aluno'}`, subtitle: 'personal ativo sem atendimento marcado', person: person('student', s), dueAt: null, target: { type: 'agenda_setup', personKind: 'student', personId: s.id } }));
     wantO.filter((o) => !hasO.has(o.id)).forEach((o) => push({ key: `semhorario:o${o.id}`, type: 'semhorario', severity: 'info', title: `Sem horário na agenda: ${o.name || 'Cliente'}`, subtitle: 'personal ativo sem atendimento marcado', person: person('offline', o), dueAt: null, target: { type: 'agenda_setup', personKind: 'offline', personId: o.id } }));
   }, undefined);
+  });
 
   // ── tarefas das anotações por voz do coach (vencida/hoje = A FAZER; data futura = EM BREVE; sem data = hoje) ──
+  const pNotas = run(async (push, unavailable) => {
   await safe('anotações do coach', unavailable, async () => {
     const rows: any[] = await db.coachNote.findMany({ where: { coachId, kind: 'TAREFA', status: 'OPEN' }, orderBy: { createdAt: 'desc' }, take: 100 });
     if (!rows.length) return;
@@ -335,14 +391,20 @@ export async function buildHoje(db: Db, coachId: string, now: Date = new Date())
       });
     }
   }, undefined);
+  });
 
   // ── adiadas ──
-  const snoozed = await safe('adiadas', unavailable, async () => new Set<string>((await db.agendaTaskSnooze.findMany({ where: { coachId, until: { gt: now } }, select: { taskKey: true } })).map((r: any) => r.taskKey)), new Set<string>());
+  const snoozedP = solo('adiadas', async () => new Set<string>((await db.agendaTaskSnooze.findMany({ where: { coachId, until: { gt: now } }, select: { taskKey: true } })).map((r: any) => r.taskKey)), new Set<string>());
 
-  const notes = await safe('anotações', unavailable, async () => new Map<string, { note: string; noteAt: string }>((await db.agendaTaskNote.findMany({ where: { coachId, updatedAt: { gte: new Date(now.getTime() - NOTE_DAYS * DAY) } }, select: { taskKey: true, note: true, updatedAt: true } })).map((r: any) => [r.taskKey, { note: r.note, noteAt: new Date(r.updatedAt).toISOString() }] as [string, { note: string; noteAt: string }])), new Map<string, { note: string; noteAt: string }>());
+  const notesP = solo('anotações', async () => new Map<string, { note: string; noteAt: string }>((await db.agendaTaskNote.findMany({ where: { coachId, updatedAt: { gte: new Date(now.getTime() - NOTE_DAYS * DAY) } }, select: { taskKey: true, note: true, updatedAt: true } })).map((r: any) => [r.taskKey, { note: r.note, noteAt: new Date(r.updatedAt).toISOString() }] as [string, { note: string; noteAt: string }])), new Map<string, { note: string; noteAt: string }>());
 
   // ✅ resolvidas pelo coach (botão RESOLVIDO): somem da lista até ele REABRIR. Uma pendência nova com outra chave (ex.: novo "não deu tempo") aparece normalmente.
-  const resolved = await safe('resolvidas', unavailable, async () => new Set<string>((await db.agendaTaskResolved.findMany({ where: { coachId }, select: { taskKey: true } })).map((r: any) => r.taskKey)), new Set<string>());
+  const resolvedP = solo('resolvidas', async () => new Set<string>((await db.agendaTaskResolved.findMany({ where: { coachId }, select: { taskKey: true } })).map((r: any) => r.taskKey)), new Set<string>());
+
+  const [pa, stu, ps, po, pav, pci, ptr, pde, pco, pte, pap, pvi, off, pcb, ptg, psh, pno, sn, nt, rs] = await Promise.all([pAgenda, studentsP, pSemanal, pObs, pAval, pCheckin, pTreinos, pDescongelar, pCorrida, pTempo, pAparelho, pVideos, offlinesP, pCobranca, pTeste, pSemHorario, pNotas, snoozedP, notesP, resolvedP]);
+  const tasks: Task[] = [pa, ps, po, pav, pci, ptr, pde, pco, pte, pap, pvi, pcb, ptg, psh, pno].flatMap((x) => x.tasks);
+  const unavailable: string[] = [...pa.un, ...stu.un, ...ps.un, ...po.un, ...pav.un, ...pci.un, ...ptr.un, ...pde.un, ...pco.un, ...pte.un, ...pap.un, ...pvi.un, ...off.un, ...pcb.un, ...ptg.un, ...psh.un, ...pno.un, ...sn.un, ...nt.un, ...rs.un];
+  const snoozed = sn.v, notes = nt.v, resolved = rs.v;
 
   let list = tasks.filter((t) => !snoozed.has(t.key) && !resolved.has(t.key));
   list = capType(list, 'presenca', (n) => `+ ${n} atendimentos sem presença marcada`, { type: 'agenda' });

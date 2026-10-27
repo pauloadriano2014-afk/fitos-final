@@ -5,6 +5,9 @@
  "t_adjust_more": [
   "build64.mjs"
  ],
+ "t_admin_data_skip": [
+  "build51.mjs"
+ ],
  "t_agenda": [
   "build51.mjs"
  ],
@@ -164,6 +167,9 @@
  "t_history_order": [
   "build57.mjs"
  ],
+ "t_hoje_paralelo": [
+  "build51.mjs"
+ ],
  "t_ibge_comp": [
   "build22.mjs"
  ],
@@ -237,6 +243,9 @@
  ],
  "t_partner_rules": [
   "profile:partner-lib"
+ ],
+ "t_perf_log": [
+  "build51.mjs"
  ],
  "t_photo_thumb": [
   "build.mjs"
@@ -351,6 +360,9 @@
   "build38.mjs",
   "build71.mjs",
   "build70.mjs"
+ ],
+ "t_workout_subs": [
+  "build_workoutsubs.mjs"
  ],
  "t_workout_templates": [
   "build44.mjs"

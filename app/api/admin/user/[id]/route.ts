@@ -1,5 +1,6 @@
 // app/api/admin/user/[id]/route.ts
 import { NextResponse } from 'next/server';
+import { timed } from '@/lib/perfLog';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, isMasterId, type AuthUser } from '@/lib/auth';
@@ -101,7 +102,7 @@ export async function OPTIONS() {
     return corsResponse({});
 }
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+async function GETImpl(req: Request, { params }: { params: { id: string } }) {
     try {
         const userId = params.id;
         const { searchParams } = new URL(req.url);
@@ -223,6 +224,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         return corsResponse({ error: 'Erro ao buscar usuário' }, 500);
     }
 }
+export const GET = timed('GET /api/admin/user/[id]', GETImpl);
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
     try {

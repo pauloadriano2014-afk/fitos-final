@@ -3,6 +3,7 @@
 //   GET  /api/agenda?coachId=&from=AAAA-MM-DD&to=AAAA-MM-DD  -> os compromissos do período (as séries semanais já viram dias reais aqui) + os ajustes da agenda
 //   POST /api/agenda  { coachId, kind, title?, studentId? | offlineClientId?, date, time, durationMin?, location?, meetUrl?, notes?, repeatWeekly?, weekdays?, endDate?, force? }
 //        Choque de horário responde 409 com a lista (o app pergunta e reenvia com force: true).
+import { timed } from '@/lib/perfLog';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAgendaCoach, UNAVAILABLE } from '@/lib/agendaAuth';
@@ -12,7 +13,7 @@ import { checkWindow, listWindow, createAgenda, getSettings, isMissingTable } fr
 export const dynamic = 'force-dynamic';
 
 
-export async function GET(req: Request) {
+async function GETImpl(req: Request) {
   try {
     const url = new URL(req.url);
     const coachId = url.searchParams.get('coachId');
@@ -20,8 +21,8 @@ export async function GET(req: Request) {
     if ('response' in auth) return auth.response;
     const win = checkWindow(url.searchParams.get('from'), url.searchParams.get('to'));
     if (!win.ok) return NextResponse.json({ error: win.error }, { status: 400 });
-    const events = await listWindow(prisma, coachId!, win.from, win.to);
-    const settings = await getSettings(prisma, coachId!);
+    // ⚡ os compromissos e os ajustes não dependem um do outro: saem juntos
+    const [events, settings] = await Promise.all([listWindow(prisma, coachId!, win.from, win.to), getSettings(prisma, coachId!)]);
     return NextResponse.json({ events, settings, from: win.from, to: win.to });
   } catch (e: any) {
     if (isMissingTable(e)) return NextResponse.json(UNAVAILABLE, { status: 503 });
@@ -29,6 +30,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Erro ao carregar a agenda.' }, { status: 500 });
   }
 }
+export const GET = timed('GET /api/agenda', GETImpl);
 
 export async function POST(req: Request) {
   try {

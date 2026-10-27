@@ -3,6 +3,7 @@
 //   GET  /api/agenda/hoje?coachId=   -> { agenda: compromissos de hoje, tasks: pendências em ordem de urgência, counts, unavailable }
 //   POST /api/agenda/hoje { coachId, taskKey, days?, note? }  -> adia (days) ou marca como tratada (days 30) uma pendência e/ou guarda uma anotação nela
 //     (só `days` ou nenhum dos dois: adia 1 dia; só `note`: só anota; `note` vazia apaga a anotação; `note` + `days`: anota e adia)
+import { timed } from '@/lib/perfLog';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAgendaCoach, UNAVAILABLE } from '@/lib/agendaAuth';
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic';
 const SNOOZE_DAYS = [1, 3, 7, 30];
 const MAX_NOTE = 300;
 
-export async function GET(req: Request) {
+async function GETImpl(req: Request) {
   try {
     const coachId = new URL(req.url).searchParams.get('coachId');
     const auth = requireAgendaCoach(req, coachId);
@@ -25,6 +26,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Erro ao carregar a central HOJE.' }, { status: 500 });
   }
 }
+export const GET = timed('GET /api/agenda/hoje', GETImpl);
 
 export async function POST(req: Request) {
   try {

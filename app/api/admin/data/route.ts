@@ -5,6 +5,7 @@
 //   - BIBLIOTECA DE EXERCÍCIOS: Parceiros herdam a base do Master para não recadastrar exercícios do zero.
 
 import { NextResponse } from 'next/server';
+import { timed } from '@/lib/perfLog';
 import prisma from '@/lib/prisma';
 import { MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, canActAsCoach } from '@/lib/auth';
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 const ADRI_EMAIL = 'adri.personal@hotmail.com';
 
-export async function GET(req: Request) {
+async function GETImpl(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const adminId = searchParams.get('adminId'); 
@@ -123,22 +124,10 @@ export async function GET(req: Request) {
         };
     }
 
-    const rawUsers = await prisma.user.findMany({
-      where: userWhere,
-      orderBy: { name: 'asc' },
-      select: querySelect
-    });
-
-    const finalUsers = rawUsers.filter((u: any) => 
-        !MASTER_IDS.includes(u.id) && 
-        u.id !== adminId && 
-        u.role !== 'ADMIN' && 
-        u.role !== 'COACH' &&
-        u.email !== ADRI_EMAIL
-    );
-
-    const activeUsers = finalUsers.filter((u: any) => u.active !== false);
-    const inactiveUsers = finalUsers.filter((u: any) => u.active === false);
+    // ⚡ (27 out 2026) Estas consultas não dependem umas das outras: saem juntas (antes eram 7 em fila). O app pode pedir `skipExercises=1`
+    // quando a biblioteca que ele guardou ainda está fresca -- aí o servidor nem busca os exercícios (a parte mais pesada da resposta).
+    const skipExercises = searchParams.get('skipExercises') === '1';
+    const isAdri = (requester.email || '').toLowerCase() === ADRI_EMAIL;
 
     // 🔒 3. FEED DE ATIVIDADES: muralha aplicada aos logs
     let logsWhere: any = {};
@@ -162,49 +151,66 @@ export async function GET(req: Request) {
         };
     }
 
-    const recentLogsRaw = await prisma.workoutHistory.findMany({
-      where: logsWhere,
-      take: 50, 
-      orderBy: { date: 'desc' },
-      include: {
-        user: { select: { id: true, name: true, photoUrl: true, coachId: true } },
-        // 💬 só as séries que têm observação do aluno (a observação é repetida em cada série do exercício -> vira uma por exercício abaixo)
-        details: { where: { note: { not: null } }, select: { id: true, exerciseName: true, note: true }, orderBy: { setNumber: 'asc' } },
-      } 
-    });
-    const recentLogs = recentLogsRaw.map((l: any) => withExerciseNotes(l));
-
-    // 💬 observações enviadas na hora (durante o treino) e ainda não resolvidas -- aparecem no feed ao lado dos treinos concluídos
-    const recentNotes = await loadRecentExerciseNotes(prisma, logsWhere.user);
-    // 💜 feedbacks da semana ainda não vistos pelo coach (aba FEED)
-    const recentWeekly = await loadRecentWeeklyFeedbacks(prisma, logsWhere.user);
-
     // 🔒 4. BIBLIOTECA DE EXERCÍCIOS
     // - Parceiros e Adri herdam os exercícios básicos do Paulo para não recadastrar do zero
-    const isAdri = (requester.email || '').toLowerCase() === ADRI_EMAIL;
-    let exerciseWhere: any = { coachId: adminId };
+    const loadExercises = async () => {
+        let exerciseWhere: any = { coachId: adminId };
+        if (isAdri || !isMasterAdmin) {
+            const masterAdmin = await prisma.user.findFirst({
+                where: { role: 'ADMIN', email: { not: ADRI_EMAIL } },
+                select: { id: true }
+            });
 
-    if (isAdri || !isMasterAdmin) {
-        const masterAdmin = await prisma.user.findFirst({
-            where: { role: 'ADMIN', email: { not: ADRI_EMAIL } },
-            select: { id: true }
-        });
-        
-        if (masterAdmin) {
-            exerciseWhere = {
-                OR: [
-                    { coachId: adminId },
-                    // 🙈 parceiro não herda o que o Paulo marcou "só o Paulo vê" (a Adri, que é master, continua vendo tudo)
-                    { coachId: masterAdmin.id, ...notHiddenForCoach(adminId) }
-                ]
-            };
+            if (masterAdmin) {
+                exerciseWhere = {
+                    OR: [
+                        { coachId: adminId },
+                        // 🙈 parceiro não herda o que o Paulo marcou "só o Paulo vê" (a Adri, que é master, continua vendo tudo)
+                        { coachId: masterAdmin.id, ...notHiddenForCoach(adminId) }
+                    ]
+                };
+            }
         }
-    }
+        return prisma.exercise.findMany({
+            where: exerciseWhere,
+            orderBy: { name: 'asc' }
+        });
+    };
 
-    const exercises = await prisma.exercise.findMany({
-        where: exerciseWhere,
-        orderBy: { name: 'asc' }
-    });
+    const [rawUsers, recentLogsRaw, recentNotes, recentWeekly, exercises] = await Promise.all([
+        prisma.user.findMany({
+            where: userWhere,
+            orderBy: { name: 'asc' },
+            select: querySelect
+        }),
+        prisma.workoutHistory.findMany({
+            where: logsWhere,
+            take: 50, 
+            orderBy: { date: 'desc' },
+            include: {
+                user: { select: { id: true, name: true, photoUrl: true, coachId: true } },
+                // 💬 só as séries que têm observação do aluno (a observação é repetida em cada série do exercício -> vira uma por exercício abaixo)
+                details: { where: { note: { not: null } }, select: { id: true, exerciseName: true, note: true }, orderBy: { setNumber: 'asc' } },
+            } 
+        }),
+        // 💬 observações enviadas na hora (durante o treino) e ainda não resolvidas -- aparecem no feed ao lado dos treinos concluídos
+        loadRecentExerciseNotes(prisma, logsWhere.user),
+        // 💜 feedbacks da semana ainda não vistos pelo coach (aba FEED)
+        loadRecentWeeklyFeedbacks(prisma, logsWhere.user),
+        skipExercises ? Promise.resolve(null) : loadExercises(),
+    ]);
+
+    const finalUsers = rawUsers.filter((u: any) => 
+        !MASTER_IDS.includes(u.id) && 
+        u.id !== adminId && 
+        u.role !== 'ADMIN' && 
+        u.role !== 'COACH' &&
+        u.email !== ADRI_EMAIL
+    );
+
+    const activeUsers = finalUsers.filter((u: any) => u.active !== false);
+    const inactiveUsers = finalUsers.filter((u: any) => u.active === false);
+    const recentLogs = recentLogsRaw.map((l: any) => withExerciseNotes(l));
 
     return NextResponse.json({ 
         users: activeUsers, 
@@ -222,3 +228,4 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Erro ao carregar dados admin" }, { status: 500 });
   }
 }
+export const GET = timed('GET /api/admin/data', GETImpl);
