@@ -203,20 +203,36 @@ model PyramidPreset {
 
 // 🔥 NOVO: observações rápidas criadas pelo coach pra inserir com um toque
 // na observação do exercício, além das fixas que já vêm no app (QUICK_OBS).
+// 🗂️ (27 out 2026) Frases prontas do recado do exercício. coachId nulo = lista COMPARTILHADA do time master (Paulo e Adri, como sempre foi);
+// coachId preenchido = lista PRÓPRIA de um coach parceiro (só ele vê e muda).
 model ObservationPreset {
   id        String   @id @default(uuid())
   text      String   @db.Text
-  // 🗂️ (27 out 2026) Categoria da frase pronta (TECNICA, CUIDADOS, CONTAGEM, COMO_FAZER, CARGA, OUTRAS). Opcional: frase antiga sem categoria o app classifica sozinho.
+  // Categoria: no time master, uma das 6 fixas (TECNICA, CUIDADOS, CONTAGEM, COMO_FAZER, CARGA, OUTRAS) ou o id de uma ObservationCategory;
+  // no coach parceiro, sempre o id de uma ObservationCategory dele (nulo = "Sem categoria"). Frase antiga do master sem categoria o app classifica sozinho.
   category  String?
+  coachId   String?
   createdAt DateTime @default(now())
+
+  @@index([coachId])
 }
 
-// 🗂️ (27 out 2026) Categorias que o coach cria para as frases prontas do recado (além das 6 fixas). O valor guardado em ObservationPreset.category é o id daqui.
+// 🗂️ Categorias das frases prontas. Time master: só as que eles criam (as 6 fixas ficam no app). Coach parceiro: TODAS as dele (nascem do padrão e ele edita à vontade).
 model ObservationCategory {
   id        String   @id @default(uuid())
   name      String
   color     String?
+  position  Int      @default(0)
+  coachId   String?
   createdAt DateTime @default(now())
+
+  @@index([coachId])
+}
+
+// Marca que o padrão de categorias/frases já foi entregue a este coach parceiro (entrega uma vez só; apagar o que veio não faz voltar sozinho).
+model ObservationSeed {
+  coachId  String   @id
+  seededAt DateTime @default(now())
 }
 
 model MotorTemplate {

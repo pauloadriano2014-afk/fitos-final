@@ -226,6 +226,9 @@
  "t_obs_categories": [
   "build_obspreset.mjs"
  ],
+ "t_obs_defaults": [
+  "build_obspreset.mjs"
+ ],
  "t_obs_presets": [
   "build_obspreset.mjs"
  ],
