@@ -22,6 +22,8 @@ import { buildFacts, buildCandidates, candidatesText, rotationText, levelPolicy,
 import { buildSubLinks } from '@/lib/ai/subFamily';
 import { cleanOrderStyle, orderDayExercises } from '@/lib/ai/exerciseOrder';
 import { recordGenerated } from '@/lib/ai/genSnapshots';
+import { buildStyleContext } from '@/lib/ai/styleProfile';
+import { canUseStyle, loadCoachStyleWorkouts, STYLE_COACH_NAMES } from '@/lib/ai/styleStore';
 import { pickSwap, isCompatibleSub, nameKey, type LibEx } from '@/lib/exerciseSwap';
 import { levelIssues } from '@/lib/similarStudents';
 import { loadAdminLibrary } from '@/lib/genLibrary';
@@ -376,17 +378,31 @@ FORMATO JSON COMPACTO — sem markdown, sem texto extra. Por exercício escreva 
       ? `IDs usados na rotina anterior: ${Array.from(latestIds).join(', ')} — troque no mínimo 40%.`
       : 'Sem rotina anterior — crie variada.';
 
+    // 🧬 (27 out 2026) ESTILO DO COACH: com `cycleConfig.useMyStyle` ligado (e só para quem está em STYLE_COACH_IDS: por enquanto o Paulo) a mensagem leva o resumo do jeito dele de montar
+    // + 3 treinos reais parecidos com este aluno (lib/ai/styleProfile.ts). É APOIO: a estrutura do ciclo, as regras, o nível e os códigos do banco continuam valendo mais. Qualquer falha = segue sem o estilo.
+    let styleCtx = ''; let styleUsed = false;
+    if (cycleConfig?.useMyStyle === true && canUseStyle(adminId)) {
+      try {
+        const styleWorkouts = await loadCoachStyleWorkouts(adminId);
+        const built = buildStyleContext(styleWorkouts, {
+          gender: String((user as any).gender || cycleConfig?.gender || ''), level: levelInfo ? LEVEL_LABEL[levelInfo.level] : String((user as any).level || ''),
+          goal: String(cycleConfig?.phase || ''), days: Array.isArray(cycleConfig?.days) ? cycleConfig.days.length : undefined, studentId: userId,
+        }, { coachName: STYLE_COACH_NAMES[adminId] || 'o coach', examples: 3 });
+        if (built) { styleCtx = `\n\n${built}\n(O estilo acima é APOIO: a ESTRUTURA do ciclo, as regras, o nível do aluno e os códigos do banco valem mais. Use-o para escolher e ordenar dentro delas.)\n`; styleUsed = true; }
+      } catch (e) { styleCtx = ''; styleUsed = false; }
+    }
+
     // 🧠 modo inteligente: a mensagem leva o nível, o que fazer com cada exercício da rotina anterior e SÓ os candidatos de cada grupo (códigos curtos); o modo antigo segue igual
     const userMessage = smart && cands && levelInfo
       ? `${alunoCtx}
 
 ${rotationText(prevRoutines, facts, book)}
-${cycleCtx}
+${cycleCtx}${styleCtx}
 
 ${levelRules ? `${levelPolicy(levelInfo.level, cycleConfig.phase, repCapCfg).text}\n\n` : ''}${candidatesText(cands, cycleConfig.days, facts, book, trainingEnv || 'UNIVERSAL', pinSet)}
 
 Responda APENAS com JSON válido.`.trim()
-      : `${alunoCtx}${workoutsCtx}${cycleCtx}
+      : `${alunoCtx}${workoutsCtx}${cycleCtx}${styleCtx}
 
 ${variationClause}
 
@@ -715,6 +731,7 @@ Responda APENAS com JSON válido.`.trim();
       body: {
         success: true,
         ...(genSnapshotId ? { genSnapshotId } : {}),
+        ...(styleUsed ? { styleUsed: true } : {}),
         workoutName: parsed.workoutName || `Rotina — ${user.name}`,
         workoutModel: parsed.workoutModel || 'CARGA',
         reasoning: parsed.reasoning || '',
