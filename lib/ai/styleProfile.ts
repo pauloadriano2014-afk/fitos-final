@@ -16,7 +16,10 @@ export interface StyleProfile {
   favorites: { g: string; items: { n: string; students: number }[] }[];
   rotation: { pairs: number; keepRate: number; setsChangedPct: number; byGroup: { g: string; keepRate: number }[]; topSwaps: { from: string; to: string; count: number }[] };
   cardio: { dayPct: number; typical: string };
+  /** Musculação e cardio por tipo de dia: superiores (sem pernas), pernas e dia só de abdômen. */
+  dayTypes: DayType[];
 }
+export interface DayType { kind: 'superiores' | 'pernas' | 'abdomen'; days: number; exAvg: number; exLow: number; exHigh: number; absPct: number; absAvg: number; cardioPct: number; cardio: { min: number; kcal: number; count: number }[] }
 
 const str = (v: any) => String(v ?? '').trim();
 export const norm = (v: any) => str(v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -52,6 +55,9 @@ const strengthDays = (w: StyleWorkout) => Object.values(w.plan).map((l) => l.fil
 const groupRuns = (items: PlanItem[]): string[] => { const out: string[] = []; for (const it of items) { const g = norm(coarse(it.g)); if (g && out[out.length - 1] !== g) out.push(g); } return out; };
 const dispName = (items: PlanItem[], key: string) => (items.find((i) => norm(i.g) === key)?.g || key);
 const dispCoarse = (items: PlanItem[], key: string) => coarse(items.find((i) => norm(coarse(i.g)) === key)?.g || key);
+const quant = (sorted: number[], q: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] : 0);
+/** Tipo do dia pela musculação: só abdômen, com pernas (inclui glúteos) ou superiores. */
+const dayKind = (st: PlanItem[]): DayType['kind'] => (st.every((i) => norm(coarse(i.g)) === 'abdomen') ? 'abdomen' : st.some((i) => norm(coarse(i.g)) === 'pernas') ? 'pernas' : 'superiores');
 const isRealTech = (t: string) => !!t && t.toUpperCase() !== 'NORMAL';
 
 /** O jeito do coach, calculado dos treinos dele (do mais novo para o mais antigo ou em qualquer ordem). */
@@ -66,6 +72,7 @@ export function buildStyleProfile(workoutsIn: StyleWorkout[]): StyleProfile {
   const tech = new Map<string, { exercises: number; workouts: Set<string>; last: number }>();
   const fav = new Map<string, Map<string, { n: string; students: Set<string> }>>();
   let cardioDays = 0; const cardioMinutes: number[] = [];
+  const kinds = new Map<DayType['kind'], { ex: number[]; abs: number[]; cardioDays: number; combos: Map<string, { min: number; kcal: number; count: number }> }>();
 
   let totalEx = 0;
   for (const w of ws) {
@@ -87,6 +94,13 @@ export function buildStyleProfile(workoutsIn: StyleWorkout[]): StyleProfile {
         });
       }
       const cd = items.filter(isCardio); if (cd.length) { cardioDays++; cd.forEach((c) => { if (c.s > 0) cardioMinutes.push(c.s); }); }
+      if (st.length) {
+        const kind = dayKind(st); const k = kinds.get(kind) || { ex: [], abs: [], cardioDays: 0, combos: new Map() }; const absN = st.filter((i) => norm(coarse(i.g)) === 'abdomen').length;
+        // dia de superiores/pernas: o abdômen que vem junto conta à parte (a faixa de musculação é dos outros grupos)
+        if (kind === 'abdomen') k.ex.push(st.length); else { k.ex.push(st.length - absN); if (absN) k.abs.push(absN); }
+        if (cd.length) { k.cardioDays++; const c0 = cd[cd.length - 1]; const kcal = parseInt(String(c0.r), 10); if (c0.s > 0 && kcal > 0) { const key = `${c0.s}|${kcal}`; const e = k.combos.get(key) || { min: c0.s, kcal, count: 0 }; e.count++; k.combos.set(key, e); } }
+        kinds.set(kind, k);
+      }
     }
   }
 
@@ -139,17 +153,27 @@ export function buildStyleProfile(workoutsIn: StyleWorkout[]): StyleProfile {
       topSwaps: Array.from(swaps.values()).sort((a, b) => b.count - a.count).filter((s) => s.count >= 2).slice(0, 8),
     },
     cardio: { dayPct: pct(cardioDays, dayCount + cardioDays), typical: cardioMinutes.length ? `${Math.round(avg(cardioMinutes))} min` : '' },
+    dayTypes: (['superiores', 'pernas', 'abdomen'] as const).filter((kd) => (kinds.get(kd)?.ex.length || 0) >= 3).map((kd) => {
+      const k = kinds.get(kd)!; const sorted = k.ex.slice().sort((a, b) => a - b);
+      return { kind: kd, days: k.ex.length, exAvg: avg(k.ex), exLow: quant(sorted, 0.1), exHigh: quant(sorted, 0.9), absPct: pct(k.abs.length, k.ex.length), absAvg: avg(k.abs), cardioPct: pct(k.cardioDays, k.ex.length), cardio: Array.from(k.combos.values()).sort((a, b) => b.count - a.count).slice(0, 2) };
+    }),
   };
 }
 
 /** Texto curto para a IA ler (português, sem enfeite). `maxChars` corta o final se passar. */
-export function styleProfileText(p: StyleProfile, coachName = 'o coach', maxChars = 2600): string {
+export function styleProfileText(p: StyleProfile, coachName = 'o coach', maxChars = 3400): string {
   if (!p || !p.sample.workouts) return '';
   const L: string[] = [];
   L.push(`ESTILO DE ${coachName.toUpperCase()} (calculado de ${p.sample.workouts} treinos reais de ${p.sample.students} alunos, ${p.sample.days} dias de musculação) — imite este jeito de montar, sem copiar treino de um aluno para outro:`);
   if (p.split.daysPerWorkout.length) L.push(`- Dias por rotina: ${p.split.daysPerWorkout.slice(0, 4).map((d) => `${d.n} dias (${d.pct}%)`).join(', ')}.`);
   if (p.split.dayPatterns.length) L.push(`- Dias mais comuns (grupos na ordem em que aparecem): ${p.split.dayPatterns.slice(0, 6).map((d) => `${d.groups.join(' + ')} (${d.count}x)`).join('; ')}.`);
   L.push(`- Em média ${p.volume.exercisesPerDay} exercícios de musculação por dia.`);
+  const KIND = { superiores: 'Dia de superiores (sem pernas)', pernas: 'Dia de pernas', abdomen: 'Dia só de abdômen' } as const;
+  if (p.dayTypes?.length) {
+    const cv = (t: DayType) => (t.cardioPct >= 70 ? `cardio no fim em ${t.cardioPct}% dos dias` : t.cardioPct >= 25 ? `cardio no fim em ${t.cardioPct}% dos dias (depende do tempo do aluno)` : `cardio raro (${t.cardioPct}%)`) + (t.cardioPct >= 25 && t.cardio.length ? `, em geral ${t.cardio.map((c) => `${c.min} min / ${c.kcal} kcal`).join(' ou ')}` : '');
+    L.push(`- Por tipo de dia: ${p.dayTypes.map((t) => `${KIND[t.kind]}: ${t.exLow === t.exHigh ? t.exLow : `${t.exLow} a ${t.exHigh}`} exercícios${t.kind === 'abdomen' ? ' de abdômen' : ' de musculação'} (média ${t.exAvg})${t.kind !== 'abdomen' && t.absPct >= 25 ? `, mais ~${Math.round(t.absAvg)} de abdômen em ${t.absPct}% dos dias` : ''}, ${cv(t)}`).join('; ')}. Não passe do máximo de cada tipo de dia. Mobilidade e alongamento o coach coloca à mão: não inclua. O cardio configurado na tela manda.`);
+  }
+  if (!p.dayTypes?.length && p.cardio.dayPct > 0) L.push(`- Cardio em ~${p.cardio.dayPct}% dos dias${p.cardio.typical ? `, em geral ${p.cardio.typical}` : ''}.`);
   if (p.volume.byGroup.length) L.push(`- Por grupo, num dia em que o grupo aparece: ${p.volume.byGroup.slice(0, 10).map((g) => `${g.g} ${g.exPerDay} exerc. de ~${g.setsPerEx} séries`).join('; ')}.`);
   if (p.volume.setsPerExercise.length) L.push(`- Séries por exercício: ${p.volume.setsPerExercise.slice(0, 4).map((s) => `${s.n} (${s.pct}%)`).join(', ')}.`);
   if (p.reps.sequences.length) L.push(`- Repetições mais usadas (séries x repetições por série): ${p.reps.sequences.slice(0, 6).map((s) => `${s.sets}x ${s.seq} (${s.pct}%)`).join('; ')}.`);
@@ -160,7 +184,6 @@ export function styleProfileText(p: StyleProfile, coachName = 'o coach', maxChar
     const lowest = p.rotation.byGroup.slice().sort((a, b) => a.keepRate - b.keepRate).slice(0, 3); if (lowest.length) L.push(`- Os grupos que ele mais renova: ${lowest.map((g) => `${g.g} (mantém ${g.keepRate}%)`).join(', ')}.`);
     if (p.rotation.topSwaps.length) L.push(`- Trocas típicas: ${p.rotation.topSwaps.slice(0, 6).map((s) => `${s.from} → ${s.to}`).join('; ')}.`);
   }
-  if (p.cardio.dayPct > 0) L.push(`- Cardio em ~${p.cardio.dayPct}% dos dias${p.cardio.typical ? `, em geral ${p.cardio.typical}` : ''}.`);
   const text = L.join('\n');
   return text.length > maxChars ? text.slice(0, maxChars - 1).replace(/\s+\S*$/, '') + '…' : text;
 }

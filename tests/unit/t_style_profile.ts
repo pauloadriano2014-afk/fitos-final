@@ -72,7 +72,7 @@ t('variação entre ciclos: o mesmo aluno, treino a treino — o que mantém e a
 
 t('texto para a IA: cita a amostra, os dias, as repetições, a técnica, as âncoras e as trocas; respeita o limite; sem treino = vazio', () => {
   const tx = styleProfileText(buildStyleProfile(ALL), 'Paulo');
-  for (const s of ['ESTILO DE PAULO', '9 treinos reais de 4 alunos', '1 dias (78%)', 'Peito + Tríceps', '4x 15/12/10/8', 'DROPSET em 33% dos treinos', 'último exercício do grupo', 'Peito — Medial: Supino reto', 'Supino inclinado → Crucifixo', 'Cardio']) assert.ok(tx.includes(s), 'faltou: ' + s + '\n' + tx);
+  for (const s of ['ESTILO DE PAULO', '9 treinos reais de 4 alunos', '1 dias (78%)', 'Peito + Tríceps', '4x 15/12/10/8', 'DROPSET em 33% dos treinos', 'último exercício do grupo', 'Peito — Medial: Supino reto', 'Supino inclinado → Crucifixo', 'Por tipo de dia: Dia de superiores', 'cardio']) assert.ok(tx.includes(s), 'faltou: ' + s + '\n' + tx);
   assert.ok(styleProfileText(buildStyleProfile(ALL), 'Paulo', 300).length <= 300); assert.equal(styleProfileText(buildStyleProfile([])), '');
 });
 
@@ -90,6 +90,42 @@ t('texto do exemplo e contexto completo', () => {
   const ex = exampleText(w1); assert.ok(ex.includes('Supino reto 4x15/12/10/8') && ex.includes('Tríceps corda 3x12/10/8 [DROPSET]') && ex.includes('Esteira'), ex);
   const ctx = buildStyleContext(ALL, { gender: 'Feminino', level: 'Intermediário', goal: 'Hipertrofia', days: 2 }, { coachName: 'Paulo' });
   assert.ok(ctx.startsWith('ESTILO DE PAULO') && ctx.includes('TREINOS REAIS PARECIDOS') && ctx.includes('Exemplo real'), ctx); assert.equal(buildStyleContext([], {}), '');
+});
+
+// 📅 (28 out 2026) tipos de dia: superiores / pernas / só abdômen, com cardio no fim (minutos / kcal) e abdômen que vem junto contado à parte
+Object.assign(EX, { ab1: { name: 'Abdominal máquina', category: 'Abdômen', subCategory: 'Supra' }, ab2: { name: 'Prancha', category: 'Abdômen', subCategory: 'Core' }, ab3: { name: 'Infra no banco', category: 'Abdômen', subCategory: 'Infra' }, ab4: { name: 'Canivete', category: 'Abdômen', subCategory: 'Completo' } });
+const cardio = (min: number, kcal: number) => plain(min, String(kcal));
+const sup5 = (day: string, o0: number) => ['sup', 'inc', 'cru', 'tri', 'fra'].map((id, i) => r(id, day, o0 + i, plain(3, '12')));
+const wt = W('WT', 'S5', '2026-08-01', 'Feminino', 'Intermediário', 'Hipertrofia', [
+  ...sup5('A', 0), r('ab1', 'A', 5, plain(3, '15')), r('ab2', 'A', 6, plain(3, '15')), r('esteira', 'A', 7, cardio(30, 300)),
+  ...sup5('B', 0), r('esteira', 'B', 5, cardio(20, 200)),
+  ...sup5('C', 0),
+  r('agach', 'D', 0, plain(4, '12')), r('leg', 'D', 1, plain(3, '12')), r('ext', 'D', 2, plain(3, '15')), r('ab1', 'D', 3, plain(3, '15')),
+  r('agach', 'E', 0, plain(4, '12')), r('leg', 'E', 1, plain(3, '12')), r('ext', 'E', 2, plain(3, '15')), r('esteira', 'E', 3, cardio(20, 200)),
+  r('agach', 'F', 0, plain(4, '12')), r('leg', 'F', 1, plain(3, '12')), r('ext', 'F', 2, plain(3, '15')),
+  r('ab1', 'G', 0, plain(3, '15')), r('ab2', 'G', 1, plain(3, '15')), r('ab3', 'G', 2, plain(3, '15')), r('ab4', 'G', 3, plain(3, '15')), r('esteira', 'G', 4, cardio(30, 300)),
+  r('ab1', 'H', 0, plain(3, '15')), r('ab2', 'H', 1, plain(3, '15')), r('ab3', 'H', 2, plain(3, '15')), r('ab4', 'H', 3, plain(3, '15')), r('esteira', 'H', 4, cardio(30, 400)),
+  r('ab1', 'I', 0, plain(3, '15')), r('ab2', 'I', 1, plain(3, '15')), r('ab3', 'I', 2, plain(3, '15')), r('ab4', 'I', 3, plain(3, '15')),
+]);
+t('tipos de dia: superiores, pernas e só abdômen (contagem, abdômen junto à parte, cardio com minutos e kcal)', () => {
+  const p = buildStyleProfile([wt]); const by = (k: string) => p.dayTypes.find((d) => d.kind === k)!;
+  assert.deepEqual(p.dayTypes.map((d) => d.kind), ['superiores', 'pernas', 'abdomen']);
+  const s = by('superiores'); assert.equal(s.days, 3); assert.equal(s.exAvg, 5, 'o abdômen que vem junto NÃO entra na contagem de musculação'); assert.equal(s.exLow, 5); assert.equal(s.exHigh, 5);
+  assert.equal(s.absPct, 33); assert.equal(s.absAvg, 2); assert.equal(s.cardioPct, 67); assert.deepEqual(s.cardio.map((c) => `${c.min}/${c.kcal}`).sort(), ['20/200', '30/300'], 'cardio com minutos e kcal');
+  const l = by('pernas'); assert.equal(l.exAvg, 3); assert.equal(l.cardioPct, 33); assert.equal(l.absPct, 33, 'dia de pernas com abdômen junto não vira dia de abdômen');
+  const a = by('abdomen'); assert.equal(a.days, 3); assert.equal(a.exAvg, 4); assert.equal(a.cardioPct, 67); assert.deepEqual(a.cardio.map((c) => `${c.min}/${c.kcal}`).sort(), ['30/300', '30/400']);
+});
+t('tipos de dia: faixa = do mais curto ao mais cheio (10% a 90%) e a média', () => {
+  const ids = ['sup', 'inc', 'cru', 'pec', 'tri', 'fra']; const wv = W('WV', 'S6', '2026-09-01', 'Masculino', 'Avançado', 'Hipertrofia', ['A', 'B', 'C', 'D'].flatMap((day, di) => ids.slice(0, 3 + di).map((id, i) => r(id, day, i, plain(3, '12')))));
+  const sp = buildStyleProfile([wv]).dayTypes[0]; assert.deepEqual([sp.kind, sp.exLow, sp.exHigh, sp.exAvg], ['superiores', 3, 6, 4.5]);
+});
+t('tipos de dia no texto: faixa, abdômen junto, cardio em geral X min / Y kcal, mobilidade fora, e o texto não corta o final', () => {
+  const txt = styleProfileText(buildStyleProfile([wt]), 'Paulo');
+  assert.ok(txt.includes('Por tipo de dia: Dia de superiores (sem pernas): 5 exercícios de musculação (média 5), mais ~2 de abdômen em 33% dos dias, cardio no fim em 67% dos dias (depende do tempo do aluno), em geral'), txt);
+  assert.ok(txt.includes('mais ~2 de abdômen em') && txt.includes('Dia só de abdômen: 4 exercícios de abdômen (média 4), cardio no fim em 67% dos dias (depende do tempo do aluno), em geral 30 min / 300 kcal ou 30 min / 400 kcal'), txt);
+  assert.ok(txt.includes('Mobilidade e alongamento o coach coloca à mão: não inclua') && txt.includes('O cardio configurado na tela manda'), txt);
+  assert.ok(txt.indexOf('Por tipo de dia') < txt.indexOf('Por grupo'), 'a regra por tipo de dia vem cedo (não é cortada)'); assert.ok(!txt.endsWith('…'), 'sem corte no final');
+  assert.ok(!txt.includes('Cardio em ~'), 'a linha antiga de cardio não repete quando há tipos de dia');
 });
 
 console.log(`\n${ok} ok, ${bad} falhas`); if (bad) process.exit(1);
