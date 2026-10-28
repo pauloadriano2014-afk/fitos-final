@@ -307,6 +307,9 @@
  "t_student_loads": [
   "build32.mjs"
  ],
+ "t_style_profile": [
+  "build75.mjs"
+ ],
  "t_subs": [
   "profile:cp-subs"
  ],

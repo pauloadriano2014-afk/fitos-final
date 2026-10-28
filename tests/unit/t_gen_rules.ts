@@ -1,7 +1,10 @@
 import assert from 'assert';
 import jwt from 'jsonwebtoken';
 import prisma from '@/lib/prisma';
-import { PAULO_ID } from '/home/user/fitos-final/lib/masterIds';
+import { PAULO_ID, ADRI_ID } from '/home/user/fitos-final/lib/masterIds';
+import { toStyleWorkout } from '/home/user/fitos-final/lib/ai/styleProfile';
+import { primeStyleCache, clearStyleCache, loadCoachStyleWorkouts, canUseStyle, STYLE_CACHE_MS } from '/home/user/fitos-final/lib/ai/styleStore';
+import { GET as styleGET } from '/home/user/fitos-final/app/api/gen-style/route';
 import { generateWorkoutPlan } from '/home/user/fitos-final/lib/ai/workoutGen';
 import { suggestImpact, suggestAvoid, pickExtra, cleanExtraPatch, mergeTags, effectiveExtra, EXTRA_KEYS } from '/home/user/fitos-final/lib/exerciseTags';
 import { orderDayExercises, orderedGroupIds, kindOfDay, cleanOrderStyle } from '/home/user/fitos-final/lib/ai/exerciseOrder';
@@ -504,6 +507,49 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     assert.equal((await call(learnGET, C1, { path: '/api/gen-learning' })).json.items.length, 0, 'coach 1 não tem as do Paulo'); assert.equal((await call(learnGET, C1, { path: '/api/gen-learning?coachId=' + PAULO_ID })).status, 403);
     assert.equal((await call(learnGET, P, { path: '/api/gen-learning?coachId=c1' })).json.items.length, 0); assert.equal((await call(learnGET, null, { path: '/api/gen-learning' })).status, 401);
     const keep = (prisma as any).workoutGenSnapshot; (prisma as any).workoutGenSnapshot = undefined; try { assert.deepEqual((await call(learnGET, P, { path: '/api/gen-learning' })).json, { items: [], missingTable: true }); } finally { (prisma as any).workoutGenSnapshot = keep; }
+  });
+
+  // ═════ 5) ESTILO DO PAULO (27 out 2026): o jeito dele de montar entra na mensagem da IA (só para o Paulo, só quando ele liga) ═════
+  const SEX = (id: string, name: string, sub: string) => ({ id, name, category: 'Musculação', subCategory: sub });
+  const sRow = (ex: any, day: string, order: number, sets = 3, reps = '12', technique = '') => ({ exerciseId: ex.id, day, order, sets, reps, technique, exercise: ex });
+  const PEI = SEX('pa', 'ZZ EXEMPLO A', 'PEITO'), PEI2 = SEX('pb', 'ZZ PROPRIO', 'PEITO'), BIC = SEX('ba', 'Rosca ZZ', 'BICEPS');
+  const rawW = (id: string, student: string, date: string, rows: any[]) => ({ id, userId: student, createdAt: date, goal: 'Hipertrofia', level: 'Intermediário', user: { gender: 'Feminino' }, exercises: rows });
+  const styleList = () => [toStyleWorkout(rawW('w-out', 'outra', '2026-05-01', [sRow(PEI, 'A', 0), sRow(BIC, 'A', 1), sRow(BIC, 'A', 2, 3, '10')]))!, toStyleWorkout(rawW('w-own', 's1', '2026-04-01', [sRow(PEI2, 'A', 0), sRow(BIC, 'A', 1), sRow(BIC, 'A', 2)]))!];
+  await t('estilo: só o Paulo (a Adri, coach parceiro e quem não está logado ficam de fora)', () => {
+    assert.equal(canUseStyle(PAULO_ID), true); assert.equal(canUseStyle(ADRI_ID), false); assert.equal(canUseStyle('c1'), false); assert.equal(canUseStyle(null), false); assert.equal(canUseStyle(''), false);
+  });
+  await t('estilo (leitura do banco): busca os treinos do coach, ignora os pequenos, guarda na memória por 10 min e recalcula com fresh', async () => {
+    clearStyleCache(); const calls: any[] = []; let rows = [rawW('w1', 'x', '2026-05-01', [sRow(PEI, 'A', 0), sRow(BIC, 'A', 1), sRow(BIC, 'A', 2)]), rawW('w2', 'y', '2026-05-02', [sRow(PEI, 'A', 0)])];
+    const fake = { workout: { findMany: async (a: any) => { calls.push(a); return rows; } } }; let now = 1_000_000; const clock = () => now;
+    const a = await loadCoachStyleWorkouts('coach-x', { db: fake, now: clock }); assert.equal(a.length, 1, 'o treino de 1 linha não ensina nada'); assert.equal(a[0].id, 'w1');
+    assert.deepEqual(calls[0].where, { user: { coachId: 'coach-x' } }); assert.equal(calls[0].take, 600); assert.deepEqual(calls[0].orderBy, { createdAt: 'desc' });
+    now += 60_000; await loadCoachStyleWorkouts('coach-x', { db: fake, now: clock }); assert.equal(calls.length, 1, 'dentro de 10 min usa a memória');
+    await loadCoachStyleWorkouts('coach-x', { db: fake, now: clock, fresh: true }); assert.equal(calls.length, 2, 'fresh recalcula');
+    now += STYLE_CACHE_MS + 1; rows = []; assert.equal((await loadCoachStyleWorkouts('coach-x', { db: fake, now: clock })).length, 0); assert.equal(calls.length, 3, 'passou de 10 min: busca de novo');
+    await loadCoachStyleWorkouts('outro-coach', { db: fake, now: clock }); assert.equal(calls.length, 4, 'a memória é de cada coach'); assert.deepEqual(calls[3].where, { user: { coachId: 'outro-coach' } }); clearStyleCache();
+  });
+  await t('estilo (rota /api/gen-style): sem login 401; Adri/coach 403 sem dados; o Paulo vê o resumo; com studentId vê o texto exato que a IA recebe; aluno de outro coach 404', async () => {
+    seed(); clearStyleCache(); primeStyleCache(PAULO_ID, styleList());
+    assert.equal((await call(styleGET, null, { path: '/api/gen-style' })).status, 401);
+    for (const who of [tok(ADRI_ID, 'ADMIN'), C1]) { const r = await call(styleGET, who, { path: '/api/gen-style' }); assert.equal(r.status, 403); assert.equal(r.json.enabled, false); assert.ok(!('profile' in r.json), 'nada do perfil vaza'); }
+    const ok1 = await call(styleGET, P, { path: '/api/gen-style' }); assert.equal(ok1.status, 200); assert.equal(ok1.json.enabled, true); assert.equal(ok1.json.coachName, 'Paulo'); assert.equal(ok1.json.profile.sample.workouts, 2); assert.ok(ok1.json.text.startsWith('ESTILO DE PAULO'), ok1.json.text); assert.ok(!('context' in ok1.json));
+    assert.equal((await call(styleGET, P, { path: '/api/gen-style?studentId=s1' })).status, 404, 's1 é de outro coach'); assert.equal((await call(styleGET, P, { path: '/api/gen-style?studentId=nada' })).status, 404);
+    db.user.find((u: any) => u.id === 's1').coachId = PAULO_ID; const ctx = await call(styleGET, P, { path: '/api/gen-style?studentId=s1&days=1' });
+    assert.equal(ctx.status, 200); assert.ok(ctx.json.context.includes('TREINOS REAIS PARECIDOS') && ctx.json.context.includes('ZZ EXEMPLO A'), ctx.json.context); assert.ok(!ctx.json.context.includes('ZZ PROPRIO'), 'o treino do próprio aluno não vira exemplo');
+  });
+  await t('estilo (na geração): só entra com useMyStyle=true e para o Paulo; é apoio (não troca a estrutura); falha do estilo não derruba o treino; o exemplo nunca é do próprio aluno', async () => {
+    seedGen(); clearStyleCache(); primeStyleCache(PAULO_ID, styleList());
+    const off = await gen({}); assert.equal(off.status, 200); assert.ok(!('styleUsed' in off.body)); assert.ok(!lastPrompt().includes('ESTILO DE PAULO'), 'desligado: mensagem igual à de sempre');
+    const str = await gen({ useMyStyle: 'sim' }); assert.equal(str.status, 200); assert.ok(!('styleUsed' in str.body) && !lastPrompt().includes('ESTILO DE PAULO'), 'só o valor true liga');
+    const on = await gen({ useMyStyle: true }); assert.equal(on.status, 200, JSON.stringify(on.body)); assert.equal(on.body.styleUsed, true);
+    const pr = lastPrompt(); assert.ok(pr.includes('ESTILO DE PAULO') && pr.includes('TREINOS REAIS PARECIDOS') && pr.includes('ZZ EXEMPLO A') && pr.includes('APOIO'), pr.slice(0, 400)); assert.ok(!pr.includes('ZZ PROPRIO'), 'treino do próprio aluno fora dos exemplos');
+    assert.ok(pr.indexOf('ESTILO DE PAULO') < pr.lastIndexOf('Responda APENAS com JSON'), 'o estilo vem antes do pedido final'); assert.ok(on.body.exercisesByDay.A && on.body.workoutTabs.length === 2, 'a estrutura do ciclo (A e B) continua mandando');
+    const old = await gen({ smart: false, useMyStyle: true }); assert.equal(old.status, 200); assert.equal(old.body.styleUsed, true); assert.ok(lastPrompt().includes('ESTILO DE PAULO'), 'o modo antigo também leva o estilo');
+    clearStyleCache(); primeStyleCache(PAULO_ID, [{ id: 'quebrado', studentId: 'z', createdAt: '2026-01-01T00:00:00.000Z', plan: null } as any]);
+    const broken = await gen({ useMyStyle: true }); assert.equal(broken.status, 200, 'estilo quebrado não derruba a geração'); assert.ok(!('styleUsed' in broken.body) && !lastPrompt().includes('ESTILO DE PAULO'));
+    clearStyleCache(); primeStyleCache(PAULO_ID, styleList()); primeStyleCache('c1', styleList()); for (const tg of TG) for (let n = 1; n <= 6; n++) db.exercise.push({ id: `c1-${tg}-${n}`, coachId: 'c1', name: `${tg} ${'BDFGHJ'[n - 1]}`, category: 'Musculação', subCategory: tg, videoUrl: 'v', tags: { target: tg, equipment: 'MAQUINA', mechanic: n === 1 ? 'COMPOSTO' : 'ISOLADO', jointRisk: [] }, environments: ['UNIVERSAL'], defaultSubstitutes: [] });
+    const other: any = await quiet(() => generateWorkoutPlan({ userId: 's1', adminId: 'c1', cycleConfig: { selectedAI: 'GEMINI', phase: 'HIPERTROFIA', techniques: [], techniqueScope: 'CYCLE', gender: 'Feminino', trainingEnvironment: 'ACADEMIA_PADRAO', manualExercisesByDay: {}, limitationRules: [], days: groups(), useMyStyle: true } }));
+    assert.equal(other.status, 200, JSON.stringify(other.body)); assert.ok(!('styleUsed' in other.body) && !lastPrompt().includes('ESTILO DE'), 'coach parceiro com useMyStyle ligado: ignorado');
   });
 
   console.log(`\n${ok} verificações dos filtros de exercícios`);
