@@ -552,5 +552,21 @@ const lib = (id: string, name: string, target: string, mech = 'COMPOSTO', eq = '
     assert.equal(other.status, 200, JSON.stringify(other.body)); assert.ok(!('styleUsed' in other.body) && !lastPrompt().includes('ESTILO DE'), 'coach parceiro com useMyStyle ligado: ignorado');
   });
 
+  await t('estilo (repetições): Emagrecimento/Definição com o estilo ligado usam a pirâmide do Paulo (15/12/10), não a da fase (15/15/15 e piso de 12); só para o Paulo; escolha explícita da tela e outras fases ficam como estavam', async () => {
+    seedGen(); clearStyleCache(); primeStyleCache(PAULO_ID, styleList());
+    const repsOf = (r: any) => Object.values<any[]>(r.body.exercisesByDay || (() => { throw new Error('sem treino: ' + r.status + ' ' + JSON.stringify(r.body).slice(0, 300)); })()).flat().filter((e: any) => String(e.subCategory || e.category) !== 'x').map((e: any) => (e.blocks || []).map((b: any) => b.reps).join('/'));
+    const fase = await gen({ phase: "EMAGRECIMENTO" }); assert.equal(fase.status, 200, JSON.stringify(fase.body).slice(0, 300)); assert.ok(fase.body.exercisesByDay, "sem treino: " + JSON.stringify(fase.body).slice(0, 400)); const antes = repsOf(fase);
+    assert.ok(antes.length > 0 && antes.every((x: string) => x.split('/').every((n) => Number(n) >= 12)), 'sem o estilo: o piso da fase é 12: ' + antes.join(' | '));
+    const on = await gen({ phase: 'EMAGRECIMENTO', useMyStyle: true }); assert.equal(on.status, 200); const depois = repsOf(on);
+    assert.ok(depois.includes('15/12/10') && depois.some((x: string) => x === '12/10/8'), 'com o estilo: pirâmide do Paulo (isolado 15/12/10, composto 12/10/8): ' + depois.join(' | '));
+    assert.ok(depois.some((x: string) => x.split('/').some((n) => Number(n) < 12)), 'desce abaixo de 12');
+    const def = await gen({ phase: 'DEFINICAO', useMyStyle: true }); assert.ok(repsOf(def).includes('15/12/10'), 'Definição também: ' + repsOf(def).join(' | '));
+    const forca = await gen({ phase: 'FORCA', useMyStyle: true }); assert.ok(repsOf(forca).every((x: string) => x.split('/').every((n) => Number(n) <= 6)), 'Força continua com a faixa da fase: ' + repsOf(forca).join(' | '));
+    const reta = await gen({ phase: 'EMAGRECIMENTO', useMyStyle: true, repScheme: { mode: 'RETA', flat: 12 } }); assert.ok(repsOf(reta).every((x: string) => x === '12/12/12'), 'a escolha explícita da tela vale mais: ' + repsOf(reta).join(' | '));
+    for (const e of db.exercise.filter((x: any) => x.coachId === PAULO_ID)) db.exercise.push({ ...e, id: 'c1-' + e.id, coachId: 'c1' });
+    const outro: any = await quiet(() => generateWorkoutPlan({ userId: 's1', adminId: 'c1', cycleConfig: { selectedAI: 'GEMINI', phase: 'EMAGRECIMENTO', useMyStyle: true, techniques: [], techniqueScope: 'CYCLE', gender: 'Feminino', trainingEnvironment: 'ACADEMIA_PADRAO', manualExercisesByDay: {}, limitationRules: [], days: groups() } }));
+    assert.ok(!('styleUsed' in outro.body), 'coach parceiro: sem estilo'); assert.ok(repsOf(outro).every((x: string) => x.split('/').every((n) => Number(n) >= 12)), 'coach parceiro continua com a faixa da fase: ' + repsOf(outro).join(' | '));
+  });
+
   console.log(`\n${ok} verificações dos filtros de exercícios`);
 })();
