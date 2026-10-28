@@ -10,19 +10,20 @@ const sections = (html: string) => (html.match(/<h2>\d+\. [^<]+<\/h2>/g) || []).
   const full = await page();
   assert.ok(/<h2>7\. Assinaturas, Pagamentos e Cancelamento<\/h2>/.test(full.html));
   for (const w of [/PIX/, /boleto/, /Asaas/, /renovação automática/, /art\. 49/, /inadimplência/]) assert.ok(w.test(full.html), 'a versão completa mantém ' + w);
-  assert.ok(/Aplicativo para iPhone \(iOS\):<\/strong> não há contratação, assinatura nem pagamento/.test(full.html), 'aviso do iPhone na seção 7');
+  assert.ok(/Aplicativos para iPhone \(iOS\) e Android:<\/strong> não há contratação, assinatura nem pagamento/.test(full.html), 'aviso do iPhone na seção 7');
   assert.deepEqual(sections(full.html).length, 15);
   assert.ok(/WhatsApp \/ Suporte/.test(full.html) && /elitefit_app@outlook\.com/.test(full.html));
   assert.equal(full.r.headers.get('cache-control'), 'no-store');
-  for (const qs of ['?plataforma=web', '?plataforma=android', '?plataforma=', '?outra=ios', '?plataforma=ios2']) { const o = await page(qs); assert.equal(o.html, full.html, 'qualquer outro valor devolve a versão completa: ' + qs); }
+  for (const qs of ['?plataforma=web', '?plataforma=', '?outra=ios', '?plataforma=ios2']) { const o = await page(qs); assert.equal(o.html, full.html, 'qualquer outro valor devolve a versão completa: ' + qs); }
   console.log('OK  termos (sem parâmetro): texto completo da seção 7 + aviso de que o app do iPhone não tem contratação nem pagamento; sem cache');
 
   // versão do app de iPhone: sem nenhuma palavra de compra/pagamento
-  for (const qs of ['?plataforma=ios', '?plataforma=IOS', '?foo=1&plataforma=ios']) {
+  for (const qs of ['?plataforma=ios', '?plataforma=IOS', '?foo=1&plataforma=ios', '?plataforma=android', '?plataforma=ANDROID']) {
     const ios = await page(qs);
     for (const w of PAYMENT_WORDS) assert.ok(!w.test(ios.html), `a versão iOS não pode conter ${w} (${qs})`);
     assert.ok(/<h2>7\. Acesso ao Serviço<\/h2>/.test(ios.html));
-    assert.ok(/não oferece contratação, assinatura nem pagamento de planos ou serviços/.test(ios.html), 'diz o que o app do iPhone não faz');
+    assert.ok(/não oferece contratação, assinatura nem pagamento de planos ou serviços/.test(ios.html), 'diz o que o app não faz');
+    assert.ok(qs.toLowerCase().includes('android') ? /aplicativo para Android não oferece/.test(ios.html) : /aplicativo para iPhone \(iOS\) não oferece/.test(ios.html), 'cita a plataforma certa');
     assert.ok(/liberado pelo seu coach/.test(ios.html));
     assert.ok(/em caso de uso indevido do conteúdo/.test(ios.html), 'suspensão sem "inadimplência"');
     const secs = sections(ios.html);

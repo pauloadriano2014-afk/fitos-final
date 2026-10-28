@@ -184,6 +184,9 @@ export async function generateWorkoutPlan({ userId, adminId, cycleConfig, guard 
     // rotina anterior (manter a âncora, trocar o acessório), candidatos já filtrados no lugar da biblioteca inteira e revisão depois da IA. `cycleConfig.smart === false` volta ao modo antigo;
     // `cycleConfig.levelRules === false` desliga só as regras de nível.
     const repCapCfg: number | null = Number.isFinite(Number(cycleConfig?.maxReps)) && Number(cycleConfig?.maxReps) > 0 ? Number(cycleConfig.maxReps) : null;   // teto de repetições escolhido pelo coach (padrão REP_CAP)
+    // 🧬 (28 out 2026) Com "Usar o meu estilo" ligado, Emagrecimento e Definição usam as repetições do Paulo (pirâmide 15/12/10/8, faixa 8 a 15): a faixa da fase (12 a 20) não deixava a IA descer de 12 e saía 15/12/12/12.
+    // Só vale para as REPETIÇÕES; a fase continua igual para o resto (texto da fase, cardio...). Escolha explícita do coach na tela (Leve, Pesada, Reta, Faixa) continua mandando mais.
+    const repPhase: string = cycleConfig?.useMyStyle === true && canUseStyle(adminId) && ['EMAGRECIMENTO', 'DEFINICAO'].includes(String(cycleConfig?.phase || '').toUpperCase()) ? 'HIPERTROFIA' : cycleConfig?.phase;
     const smart = !!hasCycleConfig && !hasManualOnly && cycleConfig.smart !== false;
     const levelRules = smart && cycleConfig.levelRules !== false;
     let levelInfo: LevelInfo | null = null;
@@ -399,7 +402,7 @@ FORMATO JSON COMPACTO — sem markdown, sem texto extra. Por exercício escreva 
 ${rotationText(prevRoutines, facts, book)}
 ${cycleCtx}${styleCtx}
 
-${levelRules ? `${levelPolicy(levelInfo.level, cycleConfig.phase, repCapCfg).text}\n\n` : ''}${candidatesText(cands, cycleConfig.days, facts, book, trainingEnv || 'UNIVERSAL', pinSet)}
+${levelRules ? `${levelPolicy(levelInfo.level, repPhase, repCapCfg).text}\n\n` : ''}${candidatesText(cands, cycleConfig.days, facts, book, trainingEnv || 'UNIVERSAL', pinSet)}
 
 Responda APENAS com JSON válido.`.trim()
       : `${alunoCtx}${workoutsCtx}${cycleCtx}${styleCtx}
@@ -622,7 +625,7 @@ Responda APENAS com JSON válido.`.trim();
           // 🔥 Corrige GVT: garante exatamente 10 blocos de 1x10 com 60s, mesmo se a IA mandou só 1 bloco
           rawBlocks = expandBlocksForTechnique(rawBlocks);
           // 🔺 séries todas com a mesma repetição viram pirâmide da fase (modo inteligente faz o mesmo na revisão; aqui cobre o modo antigo)
-          rawBlocks = shapeReps(rawBlocks, { phase: cycleConfig?.phase, range: repRange(cycleConfig?.phase, null, repCapCfg), compound: String((dbEx as any).tags?.mechanic || '').toUpperCase() === 'COMPOSTO', idx: exIdx, choice: cleanRepChoice(cycleConfig?.repScheme) });
+          rawBlocks = shapeReps(rawBlocks, { phase: repPhase, range: repRange(repPhase, null, repCapCfg), compound: String((dbEx as any).tags?.mechanic || '').toUpperCase() === 'COMPOSTO', idx: exIdx, choice: cleanRepChoice(cycleConfig?.repScheme) });
 
           return {
             exerciseId: ex.exerciseId, title: dbEx.name, videoUrl: dbEx.videoUrl || '',
@@ -641,7 +644,7 @@ Responda APENAS com JSON válido.`.trim();
       const loaded = new Set<string>();
       for (const h of history as any[]) for (const dd of h.details || []) if (Number(dd.weight) > 0) loaded.add(dd.exerciseId);
       const r = refineWorkout(rawDays as Record<string, GenEx[]>, {
-        days: cycleConfig.days, phase: String(cycleConfig.phase || ''), level: levelInfo.level, levelRules,
+        days: cycleConfig.days, phase: String(repPhase || ''), level: levelInfo.level, levelRules,
         lib: exerciseMap as unknown as Map<string, LibEx>, pool: adminExercises as unknown as LibEx[], cands, facts, hasPrev: prevRoutines.length > 0,
         env: trainingEnv || 'UNIVERSAL', jointRisks: excludeRisks, unavailable: bannedIds, loaded, pins: pinSet, repChoice: cleanRepChoice(cycleConfig?.repScheme), repCap: repCapCfg, subLinks: buildSubLinks(adminExercises),
         makeEx: (e, blocks) => ({ exerciseId: e.id, title: e.name, videoUrl: e.videoUrl || '', category: e.category, subCategory: e.subCategory, observation: '', substitute: subFor(e.id), blocks }),
