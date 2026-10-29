@@ -27,22 +27,25 @@ export function describeLoad(totalKg: number, perSide: boolean): string {
     return perSide ? `${fmt(sideValue(totalKg))} kg cada lado` : `${fmt(Number(totalKg))} kg`;
 }
 
-type DetailRow = { exerciseId: string; setNumber: number; weight: number; perSide?: boolean | null };
+type DetailRow = { exerciseId: string; setNumber: number; weight: number; perSide?: boolean | null; repsDone?: number | null };
 type HistoryRow = { details?: DetailRow[] | null };
 
 /**
  * "Última carga por exercício/série" a partir do histórico (do mais novo para o mais velho, como o banco devolve): vence a mais recente.
  * `weights` segue exatamente como antes (total, em kg); `modes` diz se aquela série foi anotada "cada lado".
  */
-export function buildLastLoads(history: HistoryRow[]): { weights: Record<string, Record<number, number>>; modes: Record<string, Record<number, boolean>> } {
+export function buildLastLoads(history: HistoryRow[]): { weights: Record<string, Record<number, number>>; modes: Record<string, Record<number, boolean>>; reps: Record<string, Record<number, number>> } {
     const weights: Record<string, Record<number, number>> = {};
     const modes: Record<string, Record<number, boolean>> = {};
+    // 🔢 (29 out 2026) repetições que o aluno fez na última vez, da mesma linha que deu a carga (para o "Na última vez: 40 kg × 12"); série sem número não aparece
+    const reps: Record<string, Record<number, number>> = {};
     history.slice().reverse().forEach((h) => {
         (h.details || []).forEach((d) => {
-            if (!weights[d.exerciseId]) { weights[d.exerciseId] = {}; modes[d.exerciseId] = {}; }
+            if (!weights[d.exerciseId]) { weights[d.exerciseId] = {}; modes[d.exerciseId] = {}; reps[d.exerciseId] = {}; }
             weights[d.exerciseId][d.setNumber] = d.weight;
             modes[d.exerciseId][d.setNumber] = d.perSide === true;
+            if (typeof d.repsDone === 'number' && d.repsDone > 0) reps[d.exerciseId][d.setNumber] = d.repsDone; else delete reps[d.exerciseId][d.setNumber];
         });
     });
-    return { weights, modes };
+    return { weights, modes, reps };
 }

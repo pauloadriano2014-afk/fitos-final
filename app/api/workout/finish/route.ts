@@ -12,6 +12,7 @@ import { autoClientKey, cleanDay, cleanWorkoutId, findExistingFinish, isUniqueVi
 import { cleanDuration, cleanCardio } from '@/lib/workoutDuration';
 import { closeSessions } from '@/lib/workoutSessions';
 import { cleanEffort } from '@/lib/loadSuggest';
+import { cleanRepsDone } from '@/lib/repsDone';
 import { phaseOf } from '@/lib/loadPhase';
 import { cleanExerciseStatus, cleanLoggedAt, notDoneNames } from '@/lib/exerciseStatus';
 
@@ -136,6 +137,7 @@ export async function POST(req: Request) {
                                 weight: cleanWeight(s.weight), // <--- USO DA FUNÇÃO DE LIMPEZA (sempre o TOTAL: "20 cada lado" já chega aqui como 40)
                                 perSide: isPerSide(s),         // ⚖️ (3 out 2026) o aluno anotou "cada lado" (só para mostrar do jeito dele)
                                 reps: String(s.reps || "0"),
+                                repsDone: cleanRepsDone(s.repsDone),   // 🔢 (29 out 2026) quantas repetições o aluno fez (nulo = não informou)
                                 // 🚴 cardio feito de verdade (cardio guiado ou digitado): tempo em segundos e calorias; nulo quando não é cardio
                                 ...cleanCardio(s),
                                 loggedAt: cleanLoggedAt(s.at, now),   // 🕒 quando a série foi marcada no app (nulo se o app não mandou)

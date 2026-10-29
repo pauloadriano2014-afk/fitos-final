@@ -2,7 +2,10 @@
 // 🏋️ (7 out 2026) SUGESTÃO DE CARGA: na hora de anotar a série o app mostra "Hoje tente 42 kg" quando o histórico do aluno diz que já está na hora de subir.
 //
 // COMO DECIDE (regras simples, sem IA, e o aluno sempre pode ignorar):
-//   • O app NÃO guarda quantas repetições o aluno fez (só a carga de cada série e se ele marcou a série como feita). Por isso o gatilho é:
+//   • (29 out 2026) O aluno passou a anotar as REPETIÇÕES FEITAS (`repsDone`, opcional; nulo = não informou = fez o combinado). Com o número na mão:
+//       - carga repetida nos 2 treinos E bateu o topo da meta em todas as séries nos dois -> SOBE (motivo REPS_HIT);
+//       - carga repetida mas ficou ABAIXO da meta na metade ou mais das séries do último treino -> MANTÉM (motivo BELOW).
+//     Sem número nenhum, tudo segue como antes. O gatilho base continua sendo:
 //       - "como foi?" que o aluno marca ao terminar o exercício: FÁCIL, NA MEDIDA ou PESADO (campo `effort`, opcional); e
 //       - a CARGA REPETIDA nos 2 últimos treinos daquele exercício.
 //   • FÁCIL no último treino            -> SOBE (um treino já basta).
@@ -19,6 +22,7 @@
 // Este arquivo é PURO (sem banco): recebe o histórico já lido e devolve a sugestão. O texto que o aluno lê é montado no app (a partir de `reason`).
 
 import { isNormalPhase } from '@/lib/loadPhase';
+import { repsVerdict } from '@/lib/repsDone';
 
 export const EFFORTS = ['FACIL', 'OK', 'PESADO'] as const;
 export type Effort = (typeof EFFORTS)[number];
@@ -30,10 +34,10 @@ export const LONG_BREAK_DAYS = 42;
 const SAME_TOLERANCE = 0.01;
 
 export type Action = 'UP' | 'HOLD' | 'DOWN';
-export type Reason = 'EASY' | 'REPEATED' | 'HEAVY' | 'HEAVY_TWICE' | 'REDUCED' | 'BREAK';
+export type Reason = 'EASY' | 'REPEATED' | 'REPS_HIT' | 'BELOW' | 'HEAVY' | 'HEAVY_TWICE' | 'REDUCED' | 'BREAK';
 
 export type SessionSet = { setNumber: number; weight: number; perSide: boolean };
-export type Session = { date: Date | string; sets: SessionSet[]; effort: Effort | null };
+export type Session = { date: Date | string; sets: SessionSet[]; effort: Effort | null; reps?: { known: number; hitAll: boolean; missed: boolean } };
 
 export type Suggestion = {
     action: Action;
@@ -54,6 +58,7 @@ export type Suggestion = {
 type DetailRow = {
     exerciseId: string; setNumber: number; weight: number;
     perSide?: boolean | null; effort?: string | null;
+    reps?: string | null; repsDone?: number | null;
     cardioSeconds?: number | null; cardioKcal?: number | null;
 };
 type HistoryRow = { date: Date | string; loadPhase?: string | null; details?: DetailRow[] | null };
@@ -101,7 +106,7 @@ export function sessionsOf(history: HistoryRow[], exerciseId: string): Session[]
             .map((d) => ({ setNumber: d.setNumber, weight: Number(d.weight), perSide: d.perSide === true }))
             .sort((a, b) => a.setNumber - b.setNumber);
         if (sets.length === 0) continue;
-        out.push({ date: h.date, sets, effort: cleanEffort(rows.find((d) => cleanEffort(d.effort))?.effort) });
+        out.push({ date: h.date, sets, effort: cleanEffort(rows.find((d) => cleanEffort(d.effort))?.effort), reps: repsVerdict(rows.filter((d) => Number(d.weight) > 0)) });
     }
     return out;
 }
@@ -159,7 +164,12 @@ export function suggestLoad(sessions: Session[], opts: { now?: Date; step?: numb
     }
     if (last.effort === 'FACIL') return make('UP', 'EASY', step);
     if (reduced) return make('HOLD', 'REDUCED', 0);
-    if (prev && same && prev.effort !== 'PESADO') return make('UP', 'REPEATED', step);
+    if (prev && same && prev.effort !== 'PESADO') {
+        // 🔢 com as repetições na mão: ficou abaixo da meta -> firma a carga; bateu o topo da meta nos dois treinos -> sobe com motivo próprio
+        if (last.reps?.missed) return make('HOLD', 'BELOW', 0);
+        if (last.reps?.hitAll && prev.reps?.hitAll) return make('UP', 'REPS_HIT', step);
+        return make('UP', 'REPEATED', step);
+    }
     return null;
 }
 

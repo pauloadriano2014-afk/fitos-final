@@ -76,7 +76,7 @@ async function GETImpl(req: Request) {
 
         // ⚖️ (3 out 2026) `lastWeights` segue igual (carga TOTAL em kg, por exercício/série). `lastWeightModes` é novo: true = aquela série foi
         // anotada "cada lado". O app usa só para já abrir o exercício no mesmo modo da última vez (app antigo ignora o campo).
-        const { weights: lastWeightsMap, modes: lastWeightModesMap } = buildLastLoads(history);
+        const { weights: lastWeightsMap, modes: lastWeightModesMap, reps: lastRepsMap } = buildLastLoads(history);
 
         // 🏋️ (7 out 2026) SUGESTÃO DE CARGA: por exercício do treino (e por cada opção de troca, que tem o próprio histórico). Vazio quando o coach desligou para este
         // aluno ou quando não há nada a sugerir; app antigo ignora o campo. Regras em lib/loadSuggest.ts.
@@ -93,6 +93,7 @@ async function GETImpl(req: Request) {
             exercises: populatedExercises, 
             lastWeights: lastWeightsMap,
             lastWeightModes: lastWeightModesMap,
+            lastReps: lastRepsMap,   // 🔢 (29 out 2026) repetições feitas na última vez, por exercício/série (app antigo ignora)
             loadSuggestions,
             // false = o coach desligou para este aluno (o app também deixa de perguntar "como foi?" ao terminar o exercício)
             loadSuggestEnabled: !targetUser?.loadSuggestOff,

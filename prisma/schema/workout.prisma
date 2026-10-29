@@ -361,6 +361,10 @@ model ExerciseHistory {
   // (lib/loadSuggest.ts). Gravado igual em todas as séries do exercício, como a `note`. Coluna nova opcional: só adiciona (`npx prisma db push`).
   effort           String?
 
+  // 🔢 (29 out 2026) REPETIÇÕES QUE O ALUNO FEZ nesta série (ou nesta parte da série: carga principal, drop, depois da pausa...). `reps` acima continua sendo a META do coach (texto, ex.: "8-10").
+  // O app já mostra a meta preenchida e só manda este número quando o aluno mexeu; nulo = não informou (conta como "fez o combinado", nunca como zero). Coluna nova opcional: só adiciona (`npx prisma db push`).
+  repsDone         Int?
+
   // 🕒 (7 out 2026) O instante em que a série foi marcada no app (relógio do aparelho, validado no servidor). Dá o ritmo real do aluno e o minuto em que ele
   // parou de registrar. Nulo = treino antigo / app antigo. Coluna nova opcional: só adiciona (`npx prisma db push`).
   loggedAt         DateTime?

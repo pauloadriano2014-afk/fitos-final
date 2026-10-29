@@ -20,12 +20,12 @@ export const RAISE_MAX_DAYS = 35;
 
 type DetailRow = {
   exerciseId: string; exerciseName?: string | null; setNumber: number; weight: number; reps?: string | null;
-  perSide?: boolean | null; effort?: string | null; cardioSeconds?: number | null; cardioKcal?: number | null;
+  perSide?: boolean | null; effort?: string | null; cardioSeconds?: number | null; cardioKcal?: number | null; repsDone?: number | null;
 };
 export type HistoryRow = { date: Date | string; loadPhase?: string | null; intensityApplied?: number | null; details?: DetailRow[] | null };
 
 // `reps` (25 out 2026): as repetições que o aluno anotou na série (texto, ex.: "10"); ausente em dado antigo. Só o Montar treino lê (gaveta Histórico).
-export type RefSet = { setNumber: number; weight: number; perSide: boolean; reps?: string };
+export type RefSet = { setNumber: number; weight: number; perSide: boolean; reps?: string; repsDone?: number };   // `repsDone` (29 out 2026): o que o aluno fez; ausente = não informou
 /** `sets`/`top` = o que o aluno de fato levantou (deload e choque já multiplicados); `baseTop` = a maior carga equivalente à base (o que o histórico guarda). Na fase normal são iguais. */
 export type PhaseRef = { date: string; sets: RefSet[]; top: number; baseTop: number; perSide: boolean; effort: string | null; multiplier: number };
 export type SeriesPoint = { date: string; phase: LoadPhase; top: number; perSide: boolean };
@@ -52,7 +52,7 @@ function sessionOf(h: HistoryRow, exerciseId: string): { ref: PhaseRef; phase: L
   const m = phase !== 'NORMAL' && Number(h.intensityApplied) > 0 ? Number(h.intensityApplied) : 1;
   const raw = rows
     .filter((d) => Number(d.weight) > 0)
-    .map((d) => ({ setNumber: d.setNumber, weight: Number(d.weight), perSide: d.perSide === true, ...(String(d.reps ?? '').trim() ? { reps: String(d.reps).trim().slice(0, 12) } : {}) }))
+    .map((d) => ({ setNumber: d.setNumber, weight: Number(d.weight), perSide: d.perSide === true, ...(String(d.reps ?? '').trim() ? { reps: String(d.reps).trim().slice(0, 12) } : {}), ...(typeof d.repsDone === 'number' && d.repsDone > 0 ? { repsDone: d.repsDone } : {}) }))
     .sort((a, b) => a.setNumber - b.setNumber);
   if (raw.length === 0) return null;
   const sets = raw.map((s) => ({ ...s, weight: m === 1 ? s.weight : round1(s.weight * m) }));
