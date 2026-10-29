@@ -9,12 +9,13 @@
 // Sem carência. Os ganchos de revogação também ficam no webhook do Asaas e no bloqueio do master; a checagem aqui é a rede de segurança.
 //
 // Recebe o `db` (Prisma) por parâmetro para testar sem banco. Se as tabelas ainda não existem (antes do `npx prisma db push`), tudo responde "sem recurso" em vez de quebrar.
-export const FEATURE_KEYS = ['execVideo', 'notasVoz', 'perguntasVoz', 'treinoAvulso', 'iaTreino', 'iaDieta', 'protocoloCorrida', 'exames'] as const;
+export const FEATURE_KEYS = ['execVideo', 'notasVoz', 'perguntasVoz', 'treinoAvulso', 'iaTreino', 'iaDieta', 'protocoloCorrida', 'exames', 'repsFeitas'] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 export const FEATURE_LABELS: Record<FeatureKey, string> = {
   execVideo: 'Vídeo de execução', notasVoz: 'Notas por voz', perguntasVoz: 'Perguntas livres por voz (IA)',
-  treinoAvulso: 'Treino avulso (link)', iaTreino: 'Montar treino por IA (com limite)', iaDieta: 'Montar dieta por IA (com limite)', protocoloCorrida: 'Protocolo de corrida', exames: 'Exames do aluno',
+  treinoAvulso: 'Treino avulso (link)', iaTreino: 'Montar treino por IA (com limite)', iaDieta: 'Montar dieta por IA (com limite)', protocoloCorrida: 'Protocolo de corrida', exames: 'Exames do aluno', repsFeitas: 'Repetições feitas (o aluno anota)',
 };
+// (29 out 2026) `repsFeitas`: o aluno anota quantas repetições fez em cada série (lib/repsFeitas.ts). Não é de Fundador. Time master = sempre (então os alunos do Paulo e da Adri já têm); chave geral = todos; ou o master liga coach a coach. Cada aluno ainda pode ter a própria chave (User.repsMode).
 // (20 out 2026) Os 4 últimos nasceram do pedido do Paulo ("adicione os recursos que eles não têm acesso, que eu decido"). Nenhum deles é de Fundador: só o master liga, coach a coach (ou a chave geral).
 // `iaTreino` e `iaDieta` gastam IA: mesmo ligados, valem o limite mensal e as regras de qualidade de lib/coachAi.ts.
 // (25 out 2026) `exames`: o aluno envia exame/laudo ao profissional (dado de saúde). Não é de Fundador: só o master liga, coach a coach (ou a chave geral). Vale para o personal E para o nutri do aluno.

@@ -6,6 +6,7 @@ import { Expo } from 'expo-server-sdk';
 import { requireAuth, canAccessStudent } from '@/lib/auth';
 import { buildLastLoads } from '@/lib/exerciseLoad';
 import { buildLoadSuggestions } from '@/lib/loadSuggest';
+import { repsAccessFor } from '@/lib/repsFeitas';
 import { sendPushToUser } from '@/app/utils/sendNotification';
 import { recordCoachSave } from '@/lib/ai/genSnapshots';
 
@@ -23,7 +24,7 @@ async function GETImpl(req: Request) {
     // 🔒 Só o próprio aluno, o coach dono dele, ou o time master.
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true, loadSuggestOff: true, loadStep: true } });
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true, loadSuggestOff: true, loadStep: true, repsMode: true } });
     if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
         return NextResponse.json({ error: "Acesso Negado: Aluno não pertence a você." }, { status: 403 });
     }
@@ -88,11 +89,15 @@ async function GETImpl(req: Request) {
         const subsOf = await loadSubs(workout.exercises);
         const populatedExercises = workout.exercises.map((ex: any) => ({ ...ex, substitutes: subsOf(ex.substitutes) }));
 
+        // 🔢 (29 out 2026) o aluno pode anotar as repetições feitas? (chave do aluno > chave do coach / geral; lib/repsFeitas.ts). App antigo ignora o campo.
+        const repsAccess = await repsAccessFor(prisma, { id: userId, coachId: targetUser?.coachId, repsMode: targetUser?.repsMode });
+
         return NextResponse.json({ 
             ...workout, 
             exercises: populatedExercises, 
             lastWeights: lastWeightsMap,
             lastWeightModes: lastWeightModesMap,
+            repsEnabled: repsAccess.on,
             lastReps: lastRepsMap,   // 🔢 (29 out 2026) repetições feitas na última vez, por exercício/série (app antigo ignora)
             loadSuggestions,
             // false = o coach desligou para este aluno (o app também deixa de perguntar "como foi?" ao terminar o exercício)

@@ -13,6 +13,7 @@ import { cleanDuration, cleanCardio } from '@/lib/workoutDuration';
 import { closeSessions } from '@/lib/workoutSessions';
 import { cleanEffort } from '@/lib/loadSuggest';
 import { cleanRepsDone } from '@/lib/repsDone';
+import { repsAccessFor } from '@/lib/repsFeitas';
 import { phaseOf } from '@/lib/loadPhase';
 import { cleanExerciseStatus, cleanLoggedAt, notDoneNames } from '@/lib/exerciseStatus';
 
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
     // 🔒 Só o próprio aluno pode finalizar o treino dele (ou coach/master).
     const auth = requireAuth(req);
     if ('response' in auth) return auth.response;
-    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true } });
+    const targetUser = await prisma.user.findUnique({ where: { id: userId }, select: { coachId: true, repsMode: true } });
     if (!canAccessStudent(auth.user, userId, targetUser?.coachId)) {
       return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
     }
@@ -36,6 +37,15 @@ export async function POST(req: Request) {
     // `cleanWeight` (vírgula -> ponto, garante número) e `isPerSide` ficam em lib/exerciseLoad.ts. `weight` é SEMPRE a carga TOTAL; `perSide` só marca que o aluno anotou "cada lado".
 
     const exercises: any[] = Array.isArray(exercisesData) ? exercisesData : [];
+
+    // 🔢 (29 out 2026) repetições feitas só são gravadas para quem tem a chave ligada (chave do aluno > chave do coach / geral; lib/repsFeitas.ts). Sem a chave, o `repsDone` que vier é ignorado
+    // (app antigo, rascunho de antes de desligar, chamada direta). Consulta só quando veio algum número, e se ela falhar o dado do aluno NÃO se perde.
+    let repsAllowed = true;
+    const sentReps = exercises.some((ex: any) => Array.isArray(ex?.sets) && ex.sets.some((s: any) => s && cleanRepsDone(s.repsDone) !== null));
+    if (sentReps) {
+        const acc = await repsAccessFor(prisma, { id: userId, coachId: targetUser?.coachId, repsMode: targetUser?.repsMode });
+        repsAllowed = acc.error ? true : acc.on;
+    }
 
     // 🔒 (1 out 2026) NÃO DUPLICAR: o mesmo treino finalizado várias vezes (internet lenta + vários toques, ou reenvio depois de falha) grava UM só.
     // Ver lib/finishWorkout.ts. Mesma chave = devolve o resultado do que já foi gravado, sem XP, sem aviso ao coach, sem nova contagem.
@@ -137,7 +147,7 @@ export async function POST(req: Request) {
                                 weight: cleanWeight(s.weight), // <--- USO DA FUNÇÃO DE LIMPEZA (sempre o TOTAL: "20 cada lado" já chega aqui como 40)
                                 perSide: isPerSide(s),         // ⚖️ (3 out 2026) o aluno anotou "cada lado" (só para mostrar do jeito dele)
                                 reps: String(s.reps || "0"),
-                                repsDone: cleanRepsDone(s.repsDone),   // 🔢 (29 out 2026) quantas repetições o aluno fez (nulo = não informou)
+                                repsDone: repsAllowed ? cleanRepsDone(s.repsDone) : null,   // 🔢 (29 out 2026) quantas repetições o aluno fez (nulo = não informou)
                                 // 🚴 cardio feito de verdade (cardio guiado ou digitado): tempo em segundos e calorias; nulo quando não é cardio
                                 ...cleanCardio(s),
                                 loggedAt: cleanLoggedAt(s.at, now),   // 🕒 quando a série foi marcada no app (nulo se o app não mandou)

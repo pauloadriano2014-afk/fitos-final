@@ -1,7 +1,7 @@
 // Banco em memória do "finalizar treino": WorkoutHistory com ÍNDICE ÚNICO (userId, clientKey) como no Postgres (null não conflita),
 // $transaction([...]) com desfazer se algum item falhar, e operações "preguiçosas" (só rodam dentro da transação, como no Prisma de verdade).
 const tick = () => new Promise((r) => setTimeout(r, 0));
-const state = { users: new Map(), histories: [], sessions: [], workouts: [], workoutFail: false, nextId: 1, failUserUpdateOnce: false, sessionFail: null };
+const state = { featureGlobal: [], coachFeature: [], users: new Map(), histories: [], sessions: [], workouts: [], workoutFail: false, nextId: 1, failUserUpdateOnce: false, sessionFail: null };
 const clone = (o) => JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\dT/.test(v) ? new Date(v) : v));
 const lazy = (fn) => ({ __run: (ctx) => fn(ctx || { undo: [] }), then: (a, b) => fn({ undo: [] }).then(a, b), catch: (b) => fn({ undo: [] }).catch(b) });
 const matches = (row, w) => Object.entries(w || {}).every(([k, v]) => {
@@ -72,8 +72,11 @@ const sessionApi = {
 };
 // 🏷️ Workout: só a leitura da ficha (multiplicador de intensidade) que o finalizar usa para gravar a fase da carga (deload/choque/normal)
 const workoutApi = { async findUnique({ where, select }) { await tick(); if (state.workoutFail) throw new Error('banco fora'); const w = state.workouts.find((x) => x.id === where.id); return w ? pick(w, select) : null; } };
+// 🔢 chaves de recursos (lib/coachFeatures.ts): chave geral e concessões por coach, só leitura (o teste das repetições feitas liga/desliga mexendo em state)
+const featureGlobalApi = { async findMany() { return state.featureGlobal.map(clone); } };
+const coachFeatureApi = { async findMany({ where }) { return state.coachFeature.filter((r) => (r.coachId === where.coachId) && (where.revokedAt === null ? !r.revokedAt : true)).map(clone); }, async updateMany() { return { count: 0 }; } };
 const base = {
-  user: userApi, workoutHistory: historyApi, workoutSession: sessionApi, workout: workoutApi,
+  user: userApi, workoutHistory: historyApi, workoutSession: sessionApi, workout: workoutApi, featureGlobal: featureGlobalApi, coachFeature: coachFeatureApi,
   async $transaction(ops) {
     const ctx = { undo: [] };   // desfaz só o que ESTA transação fez (como o banco de verdade; as outras transações seguem)
     const out = [];
@@ -83,7 +86,7 @@ const base = {
 };
 module.exports = base; module.exports.default = base;
 module.exports.__state = state;
-module.exports.__reset = () => { state.users.clear(); state.histories.length = 0; state.sessions.length = 0; state.workouts.length = 0; state.workoutFail = false; state.sessionFail = null; state.nextId = 1; state.failUserUpdateOnce = false; globalThis.__pushes = []; globalThis.__analyze = 0; };
+module.exports.__reset = () => { state.featureGlobal.length = 0; state.coachFeature.length = 0; state.users.clear(); state.histories.length = 0; state.sessions.length = 0; state.workouts.length = 0; state.workoutFail = false; state.sessionFail = null; state.nextId = 1; state.failUserUpdateOnce = false; globalThis.__pushes = []; globalThis.__analyze = 0; };
 module.exports.__addUser = (u) => { state.users.set(u.id, { role: 'USER', currentXP: 0, name: u.id, coachId: null, ...u }); };
 
 module.exports.__addWorkout = (w) => { state.workouts.push({ intensityMultiplier: 1, intensityEndDate: null, ...w }); };

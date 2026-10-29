@@ -141,6 +141,10 @@ model User {
   // mensal e o servidor recusa o relatório DELE (o coach sempre vê o do aluno). Coluna nova: só adiciona (`npx prisma db push`); padrão = desligado.
   monthlyReportOn Boolean   @default(false)
 
+  // 🔢 (29 out 2026) REPETIÇÕES FEITAS: chave PRÓPRIA do aluno (lib/repsFeitas.ts). 'ON' = liga só para ele, 'OFF' = desliga só para ele, nulo = segue a chave do coach / a chave geral.
+  // Coluna nova e opcional: só adiciona (`npx prisma db push`).
+  repsMode        String?
+
   // 🧠 (18 out 2026) QUEM ENTRA NAS ANÁLISES do assistente (lib/insightsScope.ts: alunos parecidos, comparação de treinos).
   // `insightsMode` (no ALUNO): 'INCLUDE' = entra sempre, 'EXCLUDE' = nunca entra, nulo = decide a regra automática (ativo, com gênero e 6+ treinos feitos).
   // `insightsIncludeInactive` (no COACH): liga para também usar alunos inativados com muitos treinos. Colunas novas e opcionais: só adicionam (`npx prisma db push`).

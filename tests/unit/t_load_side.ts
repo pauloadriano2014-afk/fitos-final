@@ -25,7 +25,7 @@ const ago = (n: number) => new Date(Date.now() - n * 86400000);
   const ll = buildLastLoads(hist as any);
   assert.deepEqual(ll.weights, { e1: { 1: 100, 2: 110, 3: 60 }, e2: { 1: 30 } }, 'a mais recente vence por série; o resto continua do histórico antigo');
   assert.deepEqual(ll.modes, { e1: { 1: true, 2: true, 3: false }, e2: { 1: false } }, 'null/ausente = total');
-  assert.deepEqual(buildLastLoads([]), { weights: {}, modes: {} }); assert.deepEqual(buildLastLoads([{ details: null }, {}] as any), { weights: {}, modes: {} });
+  assert.deepEqual(buildLastLoads([]), { weights: {}, modes: {}, reps: {} }); assert.deepEqual(buildLastLoads([{ details: null }, {}] as any), { weights: {}, modes: {}, reps: {} });
   console.log('OK  ajudantes: limpeza do número, só "true" vale, metade do total, texto "cada lado", última carga por série + modo');
 
   // ── 2. finalizar: total fica em `weight`, `perSide` só marca o jeito de anotar ──

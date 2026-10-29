@@ -6,6 +6,7 @@ import { MASTER_IDS } from '@/lib/masterIds';
 import { requireAuth, isMasterId, type AuthUser } from '@/lib/auth';
 import { lockedByFeature } from '@/lib/coachAi';
 import { cleanStep } from '@/lib/loadSuggest';
+import { cleanRepsMode, repsAccessFor } from '@/lib/repsFeitas';
 import { findOwnedActiveCoachPlan, studentFieldsFromCoachPlan, coachPlanInfoFor } from '@/lib/coachPlanLink';
 
 // 🔒 A ownership agora é decidida pelo usuário REAL do token (authUser), nunca
@@ -57,6 +58,8 @@ function sanitizeUpdateData(rawBody: any, { isSelfEdit }: { isSelfEdit: boolean 
     if (Object.prototype.hasOwnProperty.call(body, 'loadSuggestOff')) body.loadSuggestOff = body.loadSuggestOff === true;
     // 📅 (8 out 2026) relatório do mês liberado ao aluno: sempre verdadeiro/falso e, como o de cima, só o coach dele (ou o master) muda (não está em SELF_EDIT_ALLOWED_FIELDS)
     if (Object.prototype.hasOwnProperty.call(body, 'monthlyReportOn')) body.monthlyReportOn = body.monthlyReportOn === true;
+    // 🔢 (29 out 2026) chave PRÓPRIA do aluno para as repetições feitas: 'ON' / 'OFF' / nulo (segue a chave do coach ou a geral). Não está nos campos do próprio aluno; no PATCH só o time master muda.
+    if (Object.prototype.hasOwnProperty.call(body, 'repsMode')) body.repsMode = cleanRepsMode(body.repsMode);
 
     if (!isSelfEdit) return body; // coach/master editando outra pessoa: sem mudança de comportamento
 
@@ -156,6 +159,7 @@ async function GETImpl(req: Request, { params }: { params: { id: string } }) {
             loadSuggestOff: true,
             loadStep: true,
             monthlyReportOn: true,
+            repsMode: true,
             onboardingCompleted: true,
             onboardingStep:      true,
             coachPlan:           true,
@@ -212,8 +216,12 @@ async function GETImpl(req: Request, { params }: { params: { id: string } }) {
         // linha, e tira o objeto aninhado "coach" da resposta (só usamos o
         // plano dele, sem necessidade de expor mais nada do coach aqui).
         const { coach: linkedCoach, ...userResponse } = user as any;
+        // 🔢 as repetições feitas valem para este aluno? (`repsMode` é a chave dele; `repsEnabled`/`repsSource` mostram o resultado final, para a tela do coach)
+        const repsAccess = await repsAccessFor(prisma, { id: (user as any).id, coachId: (user as any).coachId, repsMode: (user as any).repsMode });
         return corsResponse({
             ...userResponse,
+            repsEnabled: repsAccess.on,
+            repsSource: repsAccess.source,
             assignedCoachPlan: linkedCoach?.coachPlan ?? null,
             // 🧩 nome/descrição/módulos do plano que o coach parceiro deu pro aluno (o Perfil mostra isso no lugar de "ELITE"/"PERFORMANCE")
             coachPlanInfo: await coachPlanInfoFor((userResponse as any).coachPlanId),
@@ -241,6 +249,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             const locked = await lockedByFeature(prisma, auth.user, 'protocoloCorrida', 'O protocolo de corrida');
             if (locked) return corsResponse(await locked.json(), 403);
         }
+        // 🔢 (29 out 2026) a chave por aluno das repetições feitas é do time master (o master decide quem recebe o recurso; coach parceiro usa a chave do coach, no painel RECURSOS POR COACH)
+        if (Object.prototype.hasOwnProperty.call(body, 'repsMode') && !isMasterId(auth.user.id)) {
+            return corsResponse({ error: 'Só o time master liga ou desliga esta chave.' }, 403);
+        }
         const planErr = await applyCoachPlanToBody(userId, body, auth.user);
         if (planErr.error) return corsResponse({ error: planErr.error }, planErr.status || 400);
         const dataToUpdate = sanitizeUpdateData(body, { isSelfEdit: auth.user.id === userId });
@@ -267,6 +279,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         if (auth.user.id !== userId && Object.prototype.hasOwnProperty.call(body, 'runningModule')) {
             const locked = await lockedByFeature(prisma, auth.user, 'protocoloCorrida', 'O protocolo de corrida');
             if (locked) return corsResponse(await locked.json(), 403);
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'repsMode') && !isMasterId(auth.user.id)) {
+            return corsResponse({ error: 'Só o time master liga ou desliga esta chave.' }, 403);
         }
         const planErr = await applyCoachPlanToBody(userId, body, auth.user);
         if (planErr.error) return corsResponse({ error: planErr.error }, planErr.status || 400);

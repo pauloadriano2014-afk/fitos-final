@@ -42,8 +42,8 @@ const dietBody = (anamnese: any = GOOD) => post({ anamnese, dayType: 'TREINO', p
 
 (async () => {
   // ── chaves ──
-  await t('as 8 chaves existem e o master liga as novas coach a coach', async () => {
-    assert.deepStrictEqual([...CF.FEATURE_KEYS], ['execVideo', 'notasVoz', 'perguntasVoz', 'treinoAvulso', 'iaTreino', 'iaDieta', 'protocoloCorrida', 'exames']);
+  await t('as 9 chaves existem e o master liga as novas coach a coach', async () => {
+    assert.deepStrictEqual([...CF.FEATURE_KEYS], ['execVideo', 'notasVoz', 'perguntasVoz', 'treinoAvulso', 'iaTreino', 'iaDieta', 'protocoloCorrida', 'exames', 'repsFeitas']);
     assert.deepStrictEqual([...CF.FOUNDER_KEYS], ['execVideo', 'notasVoz'], 'Fundador NÃO ganha as novas sozinho');
     coach('c1');
     for (const k of ['treinoAvulso', 'iaTreino', 'iaDieta', 'protocoloCorrida']) {

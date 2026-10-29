@@ -1,5 +1,5 @@
 // Banco em memória da SUGESTÃO DE CARGA: usuários (com loadSuggestOff/loadStep), exercícios, treinos e o histórico de treinos com os detalhes por série.
-const state = { users: new Map(), exercises: [], workouts: [], histories: [] };
+const state = { users: new Map(), exercises: [], workouts: [], histories: [], featureGlobal: [], coachFeature: [] };
 const clone = (o) => JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\dT/.test(v) ? new Date(v) : v));
 const pick = (row, select) => { if (!select) return clone(row); const o = {}; Object.keys(select).forEach((k) => { if (select[k]) o[k] = row[k] === undefined ? null : row[k]; }); return clone(o); };
 const userApi = {
@@ -35,7 +35,10 @@ const historyApi = {
   },
 };
 const checkInApi = { async findMany() { return []; } };
-const base = { user: userApi, exercise: exerciseApi, workout: workoutApi, workoutHistory: historyApi, checkIn: checkInApi };
+// chaves de recursos (lib/coachFeatures.ts), só leitura: o teste das repetições feitas mexe em state
+const featureGlobalApi = { async findMany() { return state.featureGlobal.map(clone); } };
+const coachFeatureApi = { async findMany({ where }) { return state.coachFeature.filter((r) => r.coachId === where.coachId && (where.revokedAt === null ? !r.revokedAt : true)).map(clone); }, async updateMany() { return { count: 0 }; } };
+const base = { user: userApi, exercise: exerciseApi, workout: workoutApi, workoutHistory: historyApi, checkIn: checkInApi, featureGlobal: featureGlobalApi, coachFeature: coachFeatureApi };
 module.exports = base; module.exports.default = base; module.exports.__state = state;
-module.exports.__reset = () => { state.users.clear(); state.exercises.length = 0; state.workouts.length = 0; state.histories.length = 0; };
+module.exports.__reset = () => { state.featureGlobal.length = 0; state.coachFeature.length = 0; state.users.clear(); state.exercises.length = 0; state.workouts.length = 0; state.histories.length = 0; };
 module.exports.__addUser = (u) => { state.users.set(u.id, { role: 'USER', coachId: null, nutritionistId: null, loadSuggestOff: false, loadStep: null, monthlyReportOn: false, ...u }); };
