@@ -86,7 +86,7 @@ const sug = (h: any[]) => LS.suggestLoad(LS.sessionsOf(h, 'e1'), { now: NOW });
     assert.deepStrictEqual(r.e1.refs.NORMAL!.sets.map((x: any) => [x.reps, x.repsDone]), [['12', 12], ['12', undefined], ['12', 10], ['12', 9]]);
   });
 
-  // ───── a CHAVE (29 out 2026): aluno > coach / geral; Paulo e Adri sempre ─────
+  // ───── a CHAVE (29 out 2026): aluno > coach / geral; tudo nasce desligado ─────
   const fakeDb = (o: { global?: Record<string, boolean>; grants?: any[]; coach?: any; fail?: boolean } = {}) => ({
     featureGlobal: { findMany: async () => { if (o.fail) throw new Error('banco fora do ar'); return Object.entries(o.global || {}).map(([feature, enabled]) => ({ feature, enabled })); } },
     coachFeature: { findMany: async () => (o.grants || []).map((g) => ({ revokedAt: null, ...g })), updateMany: async () => ({ count: 0 }) },
@@ -101,11 +101,14 @@ const sug = (h: any[]) => LS.suggestLoad(LS.sessionsOf(h, 'e1'), { now: NOW });
     assert.deepStrictEqual(await RF.repsAccessFor(fakeDb({ global: { repsFeitas: true } }), { id: 's', coachId: 'parceiro', repsMode: 'OFF' }), { on: false, source: 'STUDENT' }, 'chave geral ligada, mas o aluno está OFF');
     assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: 's', coachId: PAULO_ID, repsMode: 'OFF' }), { on: false, source: 'STUDENT' }, 'aluno do Paulo desligado');
   });
-  await block('chave: sem chave do aluno, valem Paulo/Adri (sempre), a chave GERAL e a concessão a um coach; coach parceiro sozinho não tem', async () => {
-    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: 's', coachId: PAULO_ID }), { on: true, source: 'MASTER' }, 'aluno do Paulo');
-    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: 's', coachId: ADRI_ID }), { on: true, source: 'MASTER' }, 'aluna da Adri');
-    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: 's', coachId: null }), { on: true, source: 'MASTER' }, 'aluno sem coach = do time master');
-    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: PAULO_ID, coachId: 'x' }), { on: true, source: 'MASTER' }, 'o próprio Paulo treinando');
+  await block('chave: nasce DESLIGADA (inclusive Paulo/Adri e aluno sem coach); liga com a chave do aluno, a GERAL ou a concessão a um coach', async () => {
+    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: 's', coachId: PAULO_ID }), { on: false, source: null }, 'aluno do Paulo nasce desligado');
+    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: 's', coachId: ADRI_ID }), { on: false, source: null }, 'aluna da Adri nasce desligada');
+    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: 's', coachId: null }), { on: false, source: null }, 'aluno sem coach nasce desligado');
+    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: PAULO_ID, coachId: 'x' }), { on: false, source: null }, 'o próprio Paulo treinando também');
+    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: PAULO_ID, coachId: null, repsMode: 'ON' }), { on: true, source: 'STUDENT' }, 'Paulo liga a própria chave');
+    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb({ global: { repsFeitas: true } }), { id: 's', coachId: PAULO_ID }), { on: true, source: 'GLOBAL' }, 'geral liga até para alunos do Paulo');
+    assert.deepStrictEqual(await RF.repsAccessFor(fakeDb({ grants: [{ coachId: PAULO_ID, feature: 'repsFeitas' }] }), { id: 's', coachId: PAULO_ID }), { on: true, source: 'GRANT' }, 'concessão ao Paulo liga os alunos dele');
     assert.deepStrictEqual(await RF.repsAccessFor(fakeDb(), { id: 's', coachId: 'parceiro' }), { on: false, source: null });
     assert.deepStrictEqual(await RF.repsAccessFor(fakeDb({ global: { repsFeitas: true } }), { id: 's', coachId: 'parceiro' }), { on: true, source: 'GLOBAL' });
     assert.deepStrictEqual(await RF.repsAccessFor(fakeDb({ global: { execVideo: true } }), { id: 's', coachId: 'parceiro' }), { on: false, source: null }, 'outra chave geral não vale');
@@ -133,8 +136,9 @@ const sug = (h: any[]) => LS.suggestLoad(LS.sessionsOf(h, 'e1'), { now: NOW });
     P.__reset(); P.__addUser({ id: 'c1', role: 'COACH' }); P.__addUser({ id: 's1', name: 'Ana', coachId: 'c1', repsMode: 'ON' });
     await fin(setsR({})); assert.strictEqual((S.histories[0].details as any[])[0].repsDone, 11, 'aluno ON, sem concessão');
   });
-  await block('finalizar: aluno do Paulo / da Adri / sem coach grava sempre (time master); sem nenhuma reps no corpo nem consulta a chave', async () => {
-    for (const coachId of [PAULO_ID, ADRI_ID, null]) { P.__reset(); P.__addUser({ id: 's1', name: 'Ana', coachId }); await fin(setsR({})); assert.strictEqual((S.histories[0].details as any[])[0].repsDone, 11, String(coachId)); }
+  await block('finalizar: aluno do Paulo / da Adri / sem coach NÃO grava reps sem a chave; sem nenhuma reps no corpo nem consulta a chave', async () => {
+    for (const coachId of [PAULO_ID, ADRI_ID, null]) { P.__reset(); P.__addUser({ id: 's1', name: 'Ana', coachId }); await fin(setsR({})); assert.strictEqual((S.histories[0].details as any[])[0].repsDone, null, String(coachId)); }
+    P.__reset(); P.__addUser({ id: 's1', name: 'Ana', coachId: PAULO_ID, repsMode: 'ON' }); await fin(setsR({})); assert.strictEqual((S.histories[0].details as any[])[0].repsDone, 11, 'Paulo liga a chave do aluno');
     P.__reset(); P.__addUser({ id: 'c1', role: 'COACH' }); P.__addUser({ id: 's1', name: 'Ana', coachId: 'c1' });
     const r = await fin([{ exerciseId: 'e1', name: 'Extensora', sets: [{ index: 1, weight: '40', reps: '12' }] }]); assert.strictEqual(r.status, 200); assert.strictEqual((S.histories[0].details as any[])[0].repsDone, null);
   });

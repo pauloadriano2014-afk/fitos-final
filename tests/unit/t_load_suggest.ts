@@ -256,15 +256,16 @@ const block = async (name: string, fn: () => Promise<void> | void) => { try { P.
     assert.strictEqual((await historyGET(new Request('http://x/h', { headers: { authorization: 'Bearer ' + tok('c2', 'COACH') } }), { params: { id: 's1' } })).status, 403);
   });
 
-  // 🔢 (29 out 2026) a rota do treino diz se o aluno pode anotar as repetições feitas (chave do aluno > Paulo/Adri; lib/repsFeitas.ts) e devolve as da última vez
-  await block('rota do treino: repsEnabled segue a chave (aluno ON/OFF, aluno de master) e lastReps vem junto', async () => {
+  // 🔢 (29 out 2026) a rota do treino diz se o aluno pode anotar as repetições feitas (chave do aluno > coach/geral; nasce desligada; lib/repsFeitas.ts) e devolve as da última vez
+  await block('rota do treino: repsEnabled segue a chave (aluno ON/OFF, nasce desligada) e lastReps vem junto', async () => {
     setupWorkout();
     S.histories.length = 0; S.histories.push(hist(2, [row('e1', 1, 40, { repsDone: 12 }), row('e1', 2, 40, { repsDone: 11 }), row('e1', 3, 40)], 'h2'));
     const flag = async (u: any) => { P.__addUser({ id: 's1', coachId: 'c1', ...u }); S.workouts[0].userId = 's1'; const r = await get('s1', 'userId=s1&workoutId=w1'); return r.json; };
     assert.strictEqual((await flag({ repsMode: 'ON' })).repsEnabled, true, 'aluno ON');
     assert.strictEqual((await flag({ repsMode: 'OFF', coachId: '3c82f763-66b4-48da-836e-16817d4f57c0' })).repsEnabled, false, 'aluno do Paulo, mas OFF');
-    assert.strictEqual((await flag({ repsMode: null, coachId: '3c82f763-66b4-48da-836e-16817d4f57c0' })).repsEnabled, true, 'aluno do Paulo');
-    assert.strictEqual((await flag({ repsMode: null, coachId: 'b7c0c181-41fd-4156-b8fe-963a267759a3' })).repsEnabled, true, 'aluna da Adri');
+    assert.strictEqual((await flag({ repsMode: null, coachId: '3c82f763-66b4-48da-836e-16817d4f57c0' })).repsEnabled, false, 'aluno do Paulo nasce desligado');
+    assert.strictEqual((await flag({ repsMode: null, coachId: 'b7c0c181-41fd-4156-b8fe-963a267759a3' })).repsEnabled, false, 'aluna da Adri nasce desligada');
+    assert.strictEqual((await flag({ repsMode: 'ON', coachId: '3c82f763-66b4-48da-836e-16817d4f57c0' })).repsEnabled, true, 'aluno do Paulo com a chave ligada');
     const j = await flag({ repsMode: null, coachId: 'c1' }); assert.strictEqual(j.repsEnabled, false, 'coach parceiro sem a chave'); assert.deepStrictEqual(j.lastReps, { e1: { 1: 12, 2: 11 } });
   });
   console.log(`\nTOTAL ${passed} ok, ${fails} falhas`);
