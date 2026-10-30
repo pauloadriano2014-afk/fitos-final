@@ -313,6 +313,9 @@
  "t_style_profile": [
   "build75.mjs"
  ],
+ "t_obs_habits": [
+  "build75.mjs"
+ ],
  "t_subs": [
   "profile:cp-subs"
  ],
